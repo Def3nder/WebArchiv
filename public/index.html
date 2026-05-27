@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebArchiv</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="#/" class="site-logo">
+        <span class="logo-mark">W</span>
+        <span class="logo-text">ebArchiv</span>
+      </a>
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input
+          id="search-input"
+          type="search"
+          placeholder="Suche nach Artikel, Autor, Kategorie…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="search-clear" class="search-clear" aria-label="Suche löschen">✕</button>
+      </div>
+      <div class="header-count" id="article-count"></div>
+      <button id="reindex-btn" class="reindex-btn" title="Archiv neu einlesen">↺</button>
+    </div>
+  </header>
+
+  <!-- Filter bar -->
+  <div class="filter-bar" id="filter-bar">
+    <div class="filter-bar-inner">
+      <div class="filter-group">
+        <label class="filter-label">Autor</label>
+        <select id="filter-author" class="filter-select">
+          <option value="">Alle Autoren</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Jahr</label>
+        <select id="filter-year" class="filter-select">
+          <option value="">Alle Jahre</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Kategorie</label>
+        <select id="filter-category" class="filter-select">
+          <option value="">Alle Kategorien</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Ansicht</label>
+        <select id="filter-layout" class="filter-select">
+          <option value="square">Quadratisch</option>
+          <option value="tall" selected>Länglich</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Pro Seite</label>
+        <select id="filter-limit" class="filter-select">
+          <option value="12">12</option>
+          <option value="24" selected>24</option>
+          <option value="48">48</option>
+          <option value="96">96</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Schrift</label>
+        <select id="filter-font" class="filter-select">
+          <option value="editorial">Editorial</option>
+          <option value="classic">Klassisch</option>
+          <option value="modern">Modern</option>
+          <option value="system" selected>System</option>
+        </select>
+      </div>
+      <button id="reset-filters" class="reset-btn">Zurücksetzen</button>
+    </div>
+  </div>
+
+  <!-- Main content area -->
+  <main id="app">
+    <!-- Rendered by app.js -->
+  </main>
+
+  <!-- Article detail overlay -->
+  <div id="article-overlay" class="overlay" role="dialog" aria-modal="true" hidden>
+    <div class="overlay-backdrop" id="overlay-backdrop"></div>
+    <button class="overlay-nav overlay-prev" id="overlay-prev" aria-label="Vorheriger Artikel">‹</button>
+    <button class="overlay-nav overlay-next" id="overlay-next" aria-label="Nächster Artikel">›</button>
+    <div class="overlay-panel">
+      <button class="overlay-close" id="overlay-close" aria-label="Schließen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
+      <div id="article-detail"></div>
+    </div>
+  </div>
+
+  <!-- Image fullscreen overlay -->
+  <div id="img-fullscreen" class="img-fullscreen" hidden>
+    <button class="img-fullscreen-close" id="img-fullscreen-close" aria-label="Vollbild schließen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+      </svg>
+    </button>
+    <img id="img-fullscreen-img" src="" alt="" />
+  </div>
+
+  <!-- Loading spinner -->
+  <div id="loading" class="loading-screen" hidden>
+    <div class="spinner"></div>
+    <p>Archiv wird geladen…</p>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

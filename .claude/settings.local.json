@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\ralfb\\\\Documents\\\\Code\\\\WebArchiv\" -Recurse -Force)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Recurse \"C:\\\\Users\\\\ralfb\\\\Documents\\\\Code\\\\WebArchiv\\\\www\\\\Joe_Turan_Archiv\" -Filter \"*.md\")",
+      "Bash(Measure-Object)",
+      "Bash(Select-Object Count)"
+    ]
+  }
+}
