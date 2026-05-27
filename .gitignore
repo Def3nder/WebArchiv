@@ -1,6 +1,10 @@
 # Media files #
 ###################
-/www/
+/www/Infografiken/2*
+/www/Joe Turan/2*
+/www/PDF/2*
+/www/Stefan Hiene/2*
+/www/Videos/2*
 /node_modules/
 
 # Compiled source #
