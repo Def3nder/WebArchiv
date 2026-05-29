@@ -1,0 +1,3 @@
+Erstelle eine präzise Zusammenfassung (ein Markdown-Dokument) unseres bisherigen Bearbeitungsstandes, der wichtigsten Architektur-Entscheidungen und der nächsten offenen Aufgaben. Ergänze die vorhandene Datei session-context.md, die ich Dir zu Begin dieser Session gegeben habe
+
+Analysiere die angehängte Datei session-context.md, um den Kontext unserer vorherigen Arbeit zu verstehen. Übernimm diesen als Arbeitsgrundlage und warte auf meine nächste Anweisung.
