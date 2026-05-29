@@ -32,6 +32,7 @@ const $filterLimit    = document.getElementById('filter-limit');
 const $resetFilters   = document.getElementById('reset-filters');
 const $filterFont     = document.getElementById('filter-font');
 const $reindexBtn     = document.getElementById('reindex-btn');
+const $themeBtn       = document.getElementById('theme-btn');
 const $overlay        = document.getElementById('article-overlay');
 const $overlayClose   = document.getElementById('overlay-close');
 const $overlayBdrop   = document.getElementById('overlay-backdrop');
@@ -72,6 +73,21 @@ async function navigateArticle(dir) {
 function applyFont(value) {
   document.body.dataset.font = value;
   localStorage.setItem('wa-font', value);
+}
+
+const SVG_SUN  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
+const SVG_MOON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+
+function applyTheme(value) {
+  document.body.dataset.theme = value;
+  localStorage.setItem('wa-theme', value);
+  if (value === 'light') {
+    $themeBtn.innerHTML = SVG_MOON;
+    $themeBtn.title = 'Dunkel-Modus';
+  } else {
+    $themeBtn.innerHTML = SVG_SUN;
+    $themeBtn.title = 'Hell-Modus';
+  }
 }
 
 function authorClass(author) {
@@ -538,6 +554,10 @@ $filterLimit.addEventListener('change', () => {
 
 $filterFont.addEventListener('change', () => applyFont($filterFont.value));
 
+$themeBtn.addEventListener('click', () => {
+  applyTheme(document.body.dataset.theme === 'light' ? 'dark' : 'light');
+});
+
 $resetFilters.addEventListener('click', () => {
   $searchInput.value = '';
   $searchClear.classList.remove('visible');
@@ -552,16 +572,31 @@ $resetFilters.addEventListener('click', () => {
 });
 
 $reindexBtn.addEventListener('click', async () => {
-  if (!confirm('Archiv neu indizieren? Das kann einige Sekunden dauern.')) return;
+  if (!confirm('Archiv neu indizieren?')) return;
   $reindexBtn.disabled = true;
   $reindexBtn.textContent = '…';
   try {
     const r = await fetch('/api/reindex', { method: 'POST' });
-    const { articles } = await r.json();
+    const data = await r.json();
+    if (!data.started) {
+      alert('Re-Index läuft bereits.');
+      return;
+    }
+    await new Promise(resolve => {
+      const poll = setInterval(async () => {
+        try {
+          const sr = await fetch('/api/reindex/status');
+          const status = await sr.json();
+          if (status.processed) {
+            $count.textContent = `${status.processed.toLocaleString('de-DE')} Artikel verarbeitet…`;
+          }
+          if (status.done) { clearInterval(poll); resolve(); }
+        } catch { clearInterval(poll); resolve(); }
+      }, 600);
+    });
     await loadMeta();
     state.page = 1;
     await loadArticles();
-    $count.textContent = `${articles.toLocaleString('de-DE')} Artikel`;
   } finally {
     $reindexBtn.disabled = false;
     $reindexBtn.textContent = '↺';
@@ -673,6 +708,9 @@ async function init() {
   const deepId = hash.startsWith('#/article/')
     ? decodeURIComponent(hash.slice('#/article/'.length))
     : null;
+
+  const savedTheme = localStorage.getItem('wa-theme') || 'dark';
+  applyTheme(savedTheme);
 
   const savedFont = localStorage.getItem('wa-font') || 'system';
   $filterFont.value = savedFont;

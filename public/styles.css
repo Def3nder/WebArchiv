@@ -18,6 +18,7 @@
   --radius-lg:   12px;
   --shadow:      0 2px 16px rgba(0,0,0,.5);
   --shadow-lg:   0 8px 48px rgba(0,0,0,.7);
+  --header-bg:   rgba(15,14,11,0.92);
   --font-head:   'Playfair Display', Georgia, serif;
   --font-body:   'Lora', Georgia, serif;
   --transition:  160ms cubic-bezier(.4,0,.2,1);
@@ -35,6 +36,27 @@ body[data-font="modern"] {
 body[data-font="system"] {
   --font-head: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-body: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ── Light theme ─────────────────────────────────────────────────────────── */
+body[data-theme="light"] {
+  --bg:          #faf8f4;
+  --surface:     #f2efe8;
+  --surface-2:   #e8e4da;
+  --border:      #d4cfc3;
+  --border-hi:   #bfb9aa;
+  --text:        #1c1a17;
+  --text-muted:  #6b6458;
+  --text-dim:    #9c9284;
+  --accent:      #9a6f1a;
+  --accent-dim:  #7a5814;
+  --accent-glow: rgba(154,111,26,0.12);
+  --author-1:    #2a7a71;
+  --author-2:    #7a3898;
+  --red:         #b03030;
+  --shadow:      0 2px 16px rgba(0,0,0,.08);
+  --shadow-lg:   0 8px 48px rgba(0,0,0,.12);
+  --header-bg:   rgba(250,248,244,0.92);
 }
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
@@ -59,7 +81,7 @@ select { font: inherit; color: inherit; }
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(15, 14, 11, 0.92);
+  background: var(--header-bg);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
 }
@@ -222,6 +244,22 @@ select { font: inherit; color: inherit; }
 }
 .reindex-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
 .reindex-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.theme-btn {
+  font-size: 1rem;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+.theme-btn svg { width: 16px; height: 16px; stroke: currentColor; }
+.theme-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
 
 @media (max-width: 600px) {
   .filter-bar-inner { padding: 8px 12px; gap: 8px 10px; }

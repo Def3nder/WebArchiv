@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { marked } = require('marked');
+const Fuse = require('fuse.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,6 +10,8 @@ const WWW_DIR = path.join(__dirname, 'www');
 
 let articles = [];
 let meta = { authors: [], years: [], categories: [] };
+let fuseIndex = null;
+let reindexState = { running: false, processed: 0, articles: 0, done: true };
 
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
@@ -179,10 +182,10 @@ function findSibling(dir, basename, exts) {
   return null;
 }
 
-function scanDir(dirPath, author, year, collector) {
+async function scanDir(dirPath, author, year, collector) {
   let entries;
   try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
   } catch {
     return;
   }
@@ -191,7 +194,7 @@ function scanDir(dirPath, author, year, collector) {
     const fullPath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
       const nextYear = /^\d{4}$/.test(entry.name) ? entry.name : year;
-      scanDir(fullPath, author, nextYear, collector);
+      await scanDir(fullPath, author, nextYear, collector);
       continue;
     }
     if (!entry.name.endsWith('.md')) continue;
@@ -201,7 +204,7 @@ function scanDir(dirPath, author, year, collector) {
     const id = [author, relDir, basename].filter(Boolean).join('/').replace(/\\/g, '/');
 
     try {
-      const content = fs.readFileSync(fullPath, 'utf8');
+      const content = await fs.promises.readFile(fullPath, 'utf8');
       const parsed = parseArticle(content, fullPath);
 
       const imgPath = findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'])
@@ -242,27 +245,30 @@ function scanDir(dirPath, author, year, collector) {
         episodeNum: parsed.episodeNum,
         filePath: fullPath,
       });
+      reindexState.processed++;
     } catch (err) {
       // skip unparseable files silently
     }
   }
 }
 
-function buildIndex() {
+async function buildIndex() {
   console.log('Building article index…');
   const t0 = Date.now();
+  reindexState = { running: true, processed: 0, articles: 0, done: false };
   const collector = [];
 
   let authorDirs;
   try {
-    authorDirs = fs.readdirSync(WWW_DIR, { withFileTypes: true }).filter(d => d.isDirectory());
+    authorDirs = (await fs.promises.readdir(WWW_DIR, { withFileTypes: true })).filter(d => d.isDirectory());
   } catch (err) {
     console.error('Cannot read www directory:', err.message);
+    reindexState = { running: false, processed: 0, articles: 0, done: true };
     return;
   }
 
   for (const dir of authorDirs) {
-    scanDir(path.join(WWW_DIR, dir.name), dir.name, null, collector);
+    await scanDir(path.join(WWW_DIR, dir.name), dir.name, null, collector);
   }
 
   // Deduplicate by id (orig/ subdirs may duplicate files)
@@ -285,6 +291,20 @@ function buildIndex() {
     categories: [...catsSet].filter(Boolean).sort((a, b) => a.localeCompare(b, 'de')),
   };
 
+  fuseIndex = new Fuse(articles, {
+    keys: [
+      { name: 'title',      weight: 3 },
+      { name: 'author',     weight: 1.5 },
+      { name: 'categories', weight: 1 },
+      { name: 'excerpt',    weight: 0.8 },
+    ],
+    threshold: 0.35,
+    includeScore: true,
+    ignoreLocation: true,
+    minMatchCharLength: 2,
+  });
+
+  reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
   console.log(`✓ ${articles.length} articles indexed in ${Date.now() - t0}ms`);
 }
 
@@ -296,9 +316,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/meta', (_req, res) => res.json(meta));
 
+app.get('/api/reindex/status', (_req, res) => res.json(reindexState));
+
 app.post('/api/reindex', (_req, res) => {
-  buildIndex();
-  res.json({ ok: true, articles: articles.length });
+  if (reindexState.running) return res.json({ started: false, reason: 'already running' });
+  buildIndex().catch(console.error);
+  res.json({ started: true });
 });
 
 app.get('/api/articles', (req, res) => {
@@ -309,15 +332,10 @@ app.get('/api/articles', (req, res) => {
   if (year) filtered = filtered.filter(a => a.year === year);
   if (category) filtered = filtered.filter(a => a.categories.includes(category));
 
-  if (q) {
-    const ql = q.toLowerCase();
-    filtered = filtered.filter(a =>
-      a.title.toLowerCase().includes(ql) ||
-      a.excerpt.toLowerCase().includes(ql) ||
-      a.author.toLowerCase().includes(ql) ||
-      a.date?.includes(ql) ||
-      a.categories.some(c => c.toLowerCase().includes(ql))
-    );
+  if (q && fuseIndex) {
+    const filteredIds = new Set(filtered.map(a => a.id));
+    const results = fuseIndex.search(q, { limit: 2000 });
+    filtered = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
   }
 
   const total = filtered.length;
@@ -346,7 +364,7 @@ app.get('/api/articles/*', (req, res) => {
 
 // ─── Start ─────────────────────────────────────────────────────────────────
 
-buildIndex();
+buildIndex().catch(console.error);
 app.listen(PORT, () => {
   console.log(`WebArchiv → http://localhost:${PORT}`);
 });
