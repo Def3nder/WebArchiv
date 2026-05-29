@@ -1,6 +1,6 @@
 # WebArchiv — Session-Kontext & Bearbeitungsstand
 
-_Stand: 2026-05-27 (3. Aktualisierung)_
+_Stand: 2026-05-29 (4. Aktualisierung)_
 
 ---
 
@@ -16,10 +16,13 @@ WebArchiv/
 └── public/
     ├── index.html      ← SPA-Shell
     ├── styles.css      ← Design-System (CSS-Variablen, Layout, Komponenten)
-    └── app.js          ← Frontend: Routing, Suche, Rendering
+    ├── app.js          ← Frontend: Routing, Suche, Rendering
+    └── pdfjs/          ← PDF.js Viewer (manuell von GitHub herunterladen)
+        ├── web/viewer.html
+        └── build/pdf.mjs …
 ```
 
-**Tech-Stack:** Node.js 18+ · Express 4 · `marked` (Markdown→HTML) · Vanilla HTML/CSS/JS
+**Tech-Stack:** Node.js 18+ · Express 4 · `marked` (Markdown→HTML) · Vanilla HTML/CSS/JS · PDF.js (PDF-Viewer)
 
 ---
 
@@ -27,10 +30,12 @@ WebArchiv/
 
 | Autor-Ordner | Format | Besonderheiten |
 |---|---|---|
-| `Joe_Turan_Archiv/` | `.md` pro Artikel | Artikel-Bild: gleichnamige `.jpg/.jpeg`, Fallback: `standard.jpg` im Root |
+| `Joe_Turan_Archiv/` | `.md` pro Artikel | Bild: gleichnamige `.jpg/.jpeg`, Fallback: `standard.jpg` im Root |
 | `Stefan_Hiene/` | `.md` pro Artikel | Audio: gleichnamige `.mp3`, Bild: gleichnamige `.jpg/.jpeg`, Fallback: `standard.jpg` |
+| `Videos/` | `.md` pro Artikel | Video: gleichnamige `.mp4`, Bild: gleichnamige `.jpg/.jpeg`, Fallback: `standard.jpg` |
+| `PDF/` | `.md` pro Artikel | PDF: gleichnamige `.pdf`, Bild: gleichnamige `.jpg/.jpeg`, Fallback: `standard.jpg` |
 
-Neue Autoren werden automatisch erkannt — einfach neuen Ordner unter `www/` anlegen.
+Neue Autoren werden automatisch erkannt — einfach neuen Ordner unter `www/` anlegen. Nach dem Anlegen neuer Autoren/Dateien: **Re-Index-Button** im UI klicken.
 
 ---
 
@@ -40,7 +45,7 @@ Neue Autoren werden automatisch erkannt — einfach neuen Ordner unter `www/` an
 
 **1. In-Memory-Index** — kein Datenbank-Layer. Beim Start (und auf `/api/reindex`) werden alle `.md`-Dateien rekursiv gescannt und in einem Array `articles[]` gehalten. ~6.500 Dateien indexieren in ca. 1–2 s.
 
-**2. Einheitlicher Parser `parseArticle(content, filePath)`** — ersetzt die früheren `parseJoeTuran()` und `parseStefanHiene()`. Verarbeitet beliebige Autoren nach einem gemeinsamen MD-Format:
+**2. Einheitlicher Parser `parseArticle(content, filePath)`** — Verarbeitet beliebige Autoren nach einem gemeinsamen MD-Format:
 
 ```
 Titel-Zeile(n)               ← alles vor "Datum:" (Markdown-Marker werden entfernt)
@@ -54,33 +59,55 @@ Artikeltext (Body)
 ```
 
 - Alle Metadaten-Schlüsselwörter werden **case-insensitive** erkannt
-- `**`, `_`, `#`-Dekorationen werden beim Keyword-Matching ignoriert (wichtig für Joe-Turan-Format)
-- Separator `****` oder `----` wird gegen `raw.trim()` geprüft (nicht gegen `clean`, da `'****'.replace(/\*\*/g,'')` → `''`)
+- `**`, `_`, `#`-Dekorationen werden beim Keyword-Matching ignoriert
+- Separator `****` oder `----` wird gegen `raw.trim()` geprüft (nicht gegen `clean`)
 - Kein `****`: Body beginnt nach der letzten Metadaten-Zeile (Stefan-Hiene-Muster)
 
 **3. Getrennte Felder für Kategorien und Tags:**
 
-- `categories[]` = einheitliche Taxonomie-Labels (12 Buckets, keyword-basiert, alle Autoren) → für Filterung
-- `tags[]` = rohe `Kategorien:`-Keywords aus der MD-Datei (bis 10, nur für Anzeige im Detail-Overlay)
-- `summary` = Zusammenfassungs-Prosa (alle Autoren, `null` wenn nicht vorhanden)
+- `categories[]` = einheitliche Taxonomie-Labels (12 Buckets, keyword-basiert) → für Filterung
+- `tags[]` = rohe `Kategorien:`-Keywords (bis 10, nur für Anzeige im Detail-Overlay)
+- `summary` = Zusammenfassungs-Prosa (`null` wenn nicht vorhanden)
 - `excerpt` = für Volltextsuche (bevorzugt `summary`, Fallback: Body-Anfang)
 - `preview` = erste ~200 Zeichen des Body (für Kachel-Vorschau)
 
-**4. Auto-Kategorisierung** (`autoCategorize(text)`) — 12 deutsche Themen-Buckets mit Schlüsselwörtern, gibt top-5 Matches zurück. Keine externe Library, ~0 ms Overhead.
+**4. Auto-Kategorisierung** (`autoCategorize(text)`) — 12 deutsche Themen-Buckets, top-5 Matches.
 
-**5. Standard-Bild-Fallback** — `findSibling()` sucht erst nach artikel-spezifischem Bild, dann nach `standard.jpg` im Autor-Root.
+**5. `findSibling(dir, basename, exts)`** — sucht Geschwisterdateien nach Basename + Extension-Liste. Wird für alle Medientypen genutzt:
 
-**6. Detail-Route rendert nur den Body** — `GET /api/articles/*` re-parst die Datei und rendert nur `parsed.body` via `marked.parse()`.
+```js
+findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'])  // Bild (+ standard.jpg Fallback)
+findSibling(dirPath, basename, ['.mp3'])                   // Audio
+findSibling(dirPath, basename, ['.mp4'])                   // Video  ← neu
+findSibling(dirPath, basename, ['.pdf'])                   // PDF    ← neu
+```
 
-**7. `POST /api/reindex`** — löst `buildIndex()` erneut aus (synchron), antwortet mit `{ ok, articles: N }`.
+**6. Artikel-Objekt** — vollständige Felder nach `scanDir()`:
+
+```js
+{
+  id, author, year, title, date,
+  categories[], tags[], excerpt, summary, preview,
+  imageUrl,   // /files/… oder null
+  audioUrl,   // /files/… oder null
+  videoUrl,   // /files/… oder null  ← neu
+  pdfUrl,     // /files/… oder null  ← neu
+  episodeNum,
+  filePath    // wird vor API-Response entfernt
+}
+```
+
+**7. Detail-Route** — `GET /api/articles/*` re-parst die Datei, rendert nur `parsed.body` via `marked.parse()`, merged mit dem gecachten Artikel-Objekt (`{ ...rest, bodyHtml }`). Alle Felder inkl. `videoUrl`/`pdfUrl` werden zurückgegeben.
+
+**8. `POST /api/reindex`** — löst `buildIndex()` erneut aus (synchron), antwortet mit `{ ok, articles: N }`.
 
 ---
 
 ### Frontend
 
-**8. Hash-basiertes SPA-Routing** — `#/` (Liste), `#/article/:id` (Detail-Overlay). Back-Button via `popstate`.
+**9. Hash-basiertes SPA-Routing** — `#/` (Liste), `#/article/:id` (Detail-Overlay). Back-Button via `popstate`.
 
-**9. State-Objekt** — zentrales `state`-Objekt:
+**10. State-Objekt** — zentrales `state`-Objekt:
 ```js
 { q, author, year, category, page, limit, total, pages, loading,
   currentItems,       // Artikel-Objekte der aktuellen Seite
@@ -88,9 +115,9 @@ Artikeltext (Body)
 }
 ```
 
-**10. Layout-Modus** — CSS-Klasse `body.layout-tall` steuert Kachel-Form. Standard: länglich. Per Dropdown umschaltbar.
+**11. Layout-Modus** — CSS-Klasse `body.layout-tall` steuert Kachel-Form. Per Dropdown umschaltbar.
 
-**11. Schriftart-Auswahl** — Dropdown in der Filter-Leiste mit 4 Presets, gespeichert in `localStorage`. Standard: **System**. Reset-Button ändert die Schriftwahl **nicht**.
+**12. Schriftart-Auswahl** — 4 Presets in `localStorage`. Standard: **System**. Reset-Button ändert Schriftwahl **nicht**.
 
 | Preset | Heading | Body |
 |---|---|---|
@@ -99,24 +126,61 @@ Artikeltext (Body)
 | Modern | Inter | Inter |
 | System (Standard) | system-ui | system-ui |
 
-Implementiert via `body[data-font="…"]` CSS-Overrides auf `--font-head` / `--font-body`.
-
-**12. Artikel-Navigation im Overlay** — Wechsel zwischen Artikeln (gefilterte Menge):
+**13. Artikel-Navigation im Overlay** — Wechsel zwischen Artikeln (gefilterte Menge):
 - `←` / `→` Pfeiltasten
-- Swipe links/rechts auf Touch-Displays (Schwelle: 60 px)
-- `‹` / `›` Buttons an den Seiten des Overlays
+- Swipe links/rechts (Schwelle: 60 px) — zoom-aware (siehe Punkt 18)
+- `‹` / `›` Buttons an den Seiten
 - Seitenübergang automatisch: am Seitenende wird die nächste Seite geladen
 
-**13. `loadMeta()` ist idempotent** — vor dem Befüllen der Dropdowns werden alle dynamischen Optionen entfernt.
+**14. Bild-Vollbild-Ansicht** (`#img-fullscreen`, z-index 500):
+- Expand-Button (SVG, 4 Pfeile außen) + **Download-Button** ← neu, beide links oben auf dem Hero-Bild
+- `.detail-hero-expand` bei `left: 12px`, `.detail-hero-download` bei `left: 56px`
+- Compress-Icon links oben im Vollbild-Overlay; Klick/ESC/Hintergrund schließt Vollbild
+- `openArticle()` aktualisiert das Vollbild-Bild wenn es offen ist
 
-**14. Bild-Vollbild-Ansicht** — Klick auf das Hero-Bild oder den Expand-Button (links oben im Bild) öffnet ein Vollbild-Overlay:
-- `#img-fullscreen` (z-index 500, über dem Artikel-Overlay mit z-index 200)
-- Expand-Icon (SVG, 4 Pfeile nach außen) absolut positioniert, links oben auf dem Hero-Bild
-- Compress-Icon (SVG, 4 Pfeile nach innen) links oben im Vollbild-Overlay; Klick schließt Vollbild
-- Klick auf das Bild selbst oder den dunklen Hintergrund schließt ebenfalls das Vollbild
-- ESC-Prioritätskette: zuerst Vollbild schließen, dann (zweites ESC) Artikel-Overlay
-- Artikel-Navigation (Tastatur ← / →, Swipe) funktioniert auch im Vollbild-Modus
-- `openArticle()` aktualisiert das Vollbild-Bild wenn es offen ist; kein Bild → Vollbild wird automatisch geschlossen
+**15. Video-Player** (`renderVideoPlayer(videoUrl)`) — nativer HTML5 `<video>`-Player:
+- `<video controls preload="metadata" class="detail-video">` innerhalb `.detail-content`, nach Audio-Player
+- `stopVideo()` pausiert und leert `src` beim Artikel-Wechsel
+- Kachel zeigt `.card-video-badge` wenn `article.videoUrl` vorhanden
+
+**16. PDF-Viewer** (`renderPdfEmbed(pdfUrl)`) — **PDF.js Viewer** via iframe:
+- `<iframe src="/pdfjs/web/viewer.html?file=<encoded_url>">` — mobile-kompatibel (iOS Safari)
+- PDF.js liegt unter `public/pdfjs/` (manuell von GitHub herunterladen: `pdfjs-X.X.X-dist.zip`)
+- Viewer bietet: Seiten-Navigation, Zoom, Thumbnails — auf allen Plattformen
+- Fallback-Link "PDF in neuem Tab öffnen ↗" darunter
+- Kachel zeigt `.card-pdf-badge` wenn `article.pdfUrl` vorhanden
+- PDF erscheint nach dem Artikel-Body (innerhalb `.detail-content`)
+
+**17. Detail-Overlay Aufbau** (Reihenfolge im DOM):
+```
+<div class="detail-hero">        ← Hero-Bild + Expand-Button + Download-Button
+<div class="detail-content">
+  meta (Autor, Episode)
+  <h1> Titel
+  categories / tags
+  Datum
+  Zusammenfassung
+  <div class="detail-divider">
+  Audio-Player (wenn audioUrl)   ← renderAudioPlayer()
+  Video-Player (wenn videoUrl)   ← renderVideoPlayer()
+  <div class="detail-body">      ← Artikel-Body (bodyHtml)
+  PDF-Viewer (wenn pdfUrl)       ← renderPdfEmbed()
+```
+
+**18. Zoom-aware Swipe-Navigation** — `swipeAllowed(delta)` — neu:
+```js
+function swipeAllowed(delta) {
+  const scale = window.visualViewport?.scale ?? 1;
+  if (scale <= 1) return true;          // nicht gezoomt → immer erlaubt
+  const vp = window.visualViewport;
+  const atLeft  = vp.offsetLeft < 2;
+  const atRight = (vp.offsetLeft + vp.width) >= (document.documentElement.clientWidth - 2);
+  if (delta < 0) return atRight;        // wisch links → nur bei rechtem Bildrand
+  if (delta > 0) return atLeft;         // wisch rechts → nur bei linkem Bildrand
+  return false;
+}
+```
+Zusätzlich: `touchStartMulti`-Flag verhindert Navigation nach Pinch-Zoom-Geste (Multi-Touch-Start).
 
 ---
 
@@ -136,13 +200,18 @@ Implementiert via `body[data-font="…"]` CSS-Overrides auf `--font-head` / `--f
 | Detail-Overlay: Bild, Titel, Kategorien, Tags | ✅ |
 | Detail-Overlay: Datum, Zusammenfassung (kursiv), Body | ✅ |
 | Detail-Overlay: kein Header-Müll im Body | ✅ |
-| Audio-Player | ✅ |
+| Audio-Player (custom styled, Progress-Bar) | ✅ |
+| Video-Player (nativer HTML5, `.mp4`) | ✅ neu |
+| PDF-Viewer (PDF.js, mobile-kompatibel, `.pdf`) | ✅ neu |
+| Kachel-Badges: Audio / Video / PDF | ✅ neu |
+| Bild-Download-Button im Hero | ✅ neu |
 | Responsive Filter-Leiste (flex-wrap) | ✅ |
 | ↺ Re-Index-Button mit Bestätigungsdialog | ✅ |
 | Schriftart-Auswahl (4 Presets, localStorage) | ✅ |
 | Artikel-Navigation per Tastatur & Swipe | ✅ |
 | Bild-Vollbild (Expand/Compress, Klick, ESC) | ✅ |
 | Navigation (Tastatur/Swipe) im Vollbild-Modus | ✅ |
+| Zoom-aware Swipe (kein Artikel-Wechsel beim Panning) | ✅ neu |
 
 ---
 
@@ -152,9 +221,9 @@ Implementiert via `body[data-font="…"]` CSS-Overrides auf `--font-head` / `--f
 |---|---|---|
 | `GET` | `/api/meta` | `{ authors, years, categories }` für Dropdowns |
 | `GET` | `/api/articles` | Paginierte Liste; Query: `page`, `limit`, `author`, `year`, `category`, `q` |
-| `GET` | `/api/articles/:id` | Einzelartikel mit `bodyHtml` (nur Body, kein Header) |
+| `GET` | `/api/articles/:id` | Einzelartikel mit `bodyHtml`, inkl. `videoUrl`, `pdfUrl` |
 | `POST` | `/api/reindex` | Neu-Indizierung; antwortet mit `{ ok, articles: N }` |
-| `GET` | `/files/*` | Statische Dateien aus `www/` (Bilder, Audio) |
+| `GET` | `/files/*` | Statische Dateien aus `www/` (Bilder, Audio, Video, PDF) |
 
 ---
 
@@ -177,10 +246,12 @@ Implementiert via `body[data-font="…"]` CSS-Overrides auf `--font-head` / `--f
 ## Bekannte Eigenheiten / Constraints
 
 - **Synchroner Index-Build** blockiert den Event-Loop kurz (~1–2 s). Für Admin-Funktion akzeptabel.
-- **Keine Persistenz** — der Index lebt nur im RAM. Nach Server-Neustart wird automatisch neu indiziert.
+- **Keine Persistenz** — der Index lebt nur im RAM. Nach Server-Neustart wird automatisch neu indiziert. Neue Dateien erfordern Re-Index-Button-Klick.
 - **Volltextsuche** ist einfaches `Array.filter` + `includes` — ausreichend für ~6.500 Artikel, aber keine Fuzzy-Suche oder Relevanz-Ranking.
-- **Parser-Robustheit:** Metadaten-Zeilen werden mit `**`, `_`, `#`-Dekorationen korrekt erkannt; Separator `****` wird gegen `raw.trim()` geprüft (kritisch — `clean` würde `****` zu `''` reduzieren). `_Keyword:_`-Muster erfordern `.trim()` vor dem `_`-Stripping (Reihenfolge: `replace(**) → replace(#) → trim() → replace(_) → trim()`).
-- **Vollbild-Navigation:** Swipe-Listener sind sowohl auf `.overlay-panel` als auch auf `#img-fullscreen` registriert, damit Touch-Gesten auch dann erkannt werden, wenn sie auf dem Vollbild-Layer beginnen.
+- **Parser-Robustheit:** Separator `****` wird gegen `raw.trim()` geprüft (kritisch — `clean` würde `****` zu `''` reduzieren).
+- **Vollbild-Navigation:** Swipe-Listener auf `.overlay-panel` UND `#img-fullscreen`. Zoom-Schutz via `visualViewport.scale` + Edge-Detection.
+- **PDF.js muss manuell bereitgestellt werden** — `public/pdfjs/` ist nicht im Repo, da das Paket ~10 MB groß ist. Download von `https://github.com/mozilla/pdf.js/releases` → `pdfjs-X.X.X-dist.zip` entpacken nach `public/pdfjs/`.
+- **Video/PDF-Erkennung:** `findSibling()` findet nur exakt gleichnamige Dateien (Basename identisch zur `.md`-Datei). Case-sensitiv auf Linux, case-insensitiv auf Windows.
 
 ---
 
@@ -193,4 +264,6 @@ Implementiert via `body[data-font="…"]` CSS-Overrides auf `--font-head` / `--f
 5. **Mobile Detail-Overlay** — Overlay-Panel auf kleinen Screens als Full-Screen statt schmalem Panel
 6. **Zusammenfassung in Kachel-Vorschau** — `summary` statt `preview` anzeigen, wenn vorhanden
 7. **Lesezeichen / Favoriten** — clientseitig in localStorage, kein Server-Eingriff nötig
-8. **Vollbild-Bildergalerie** — mehrere Bilder pro Artikel (sofern vorhanden) im Vollbild-Modus durchblättern
+8. **Vollbild-Bildergalerie** — mehrere Bilder pro Artikel im Vollbild-Modus durchblättern
+9. **PDF.js in Repo integrieren** — `pdfjs/` per npm-Script oder Download-Script automatisch bereitstellen (z.B. via `npm run setup`)
+10. **Video-Thumbnail / Poster** — Artikel-Bild als `poster`-Attribut beim `<video>`-Element nutzen, falls vorhanden
