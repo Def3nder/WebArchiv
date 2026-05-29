@@ -1,0 +1,23 @@
+{
+  "_comment": "Kopiere diese Datei als 'users.json', trage die gewuenschten Kennwoerter im Feld 'password' ein und fuehre dann 'node scripts/hash-passwords.js' aus. Die Datei 'users.json' ist in .gitignore eingetragen und landet nicht im Repository.",
+  "users": [
+    {
+      "email": "Ralf.Bruechmann@web.de",
+      "password": "BITTE_ERSETZEN",
+      "role": "admin",
+      "allowedAuthors": null
+    },
+    {
+      "email": "Mandy.Lauermann@web.de",
+      "password": "BITTE_ERSETZEN",
+      "role": "user",
+      "allowedAuthors": null
+    },
+    {
+      "email": "test@test.com",
+      "password": "BITTE_ERSETZEN",
+      "role": "user",
+      "allowedAuthors": ["Infografiken"]
+    }
+  ]
+}

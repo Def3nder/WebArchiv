@@ -15,7 +15,8 @@ const WWW_DIR = path.join(__dirname, 'www');
 const USERS_FILE = path.join(__dirname, 'users.json');
 let users = [];
 try {
-  users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+  const parsed = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+  users = Array.isArray(parsed) ? parsed : (parsed.users || []);
 } catch (err) {
   console.error('WARNING: users.json nicht geladen —', err.message);
 }
