@@ -18,6 +18,7 @@ const state = {
 let authorIndex = {};   // author name → index for CSS class
 let audioEl = null;     // shared audio element
 let currentAudioBtn = null;
+let currentUser = null; // { email, role, allowedAuthors }
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
 const $app            = document.getElementById('app');
@@ -33,11 +34,20 @@ const $resetFilters   = document.getElementById('reset-filters');
 const $filterFont     = document.getElementById('filter-font');
 const $reindexBtn     = document.getElementById('reindex-btn');
 const $themeBtn       = document.getElementById('theme-btn');
+const $logoutBtn      = document.getElementById('logout-btn');
 const $overlay        = document.getElementById('article-overlay');
 const $overlayClose   = document.getElementById('overlay-close');
 const $overlayBdrop   = document.getElementById('overlay-backdrop');
 const $detail         = document.getElementById('article-detail');
 const $loading        = document.getElementById('loading');
+const $loginOverlay   = document.getElementById('login-overlay');
+const $loginForm      = document.getElementById('login-form');
+const $loginEmail     = document.getElementById('login-email');
+const $loginPassword  = document.getElementById('login-password');
+const $loginError     = document.getElementById('login-error');
+const $loginSubmit    = document.getElementById('login-submit');
+const $loginBtnText   = document.getElementById('login-btn-text');
+const $loginSpinner   = document.getElementById('login-spinner');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function openImageFullscreen(src) {
@@ -112,9 +122,90 @@ function esc(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Auth ───────────────────────────────────────────────────────────────────
+function showLogin(errorMsg) {
+  $loginOverlay.hidden = false;
+  document.body.style.overflow = 'hidden';
+  $loginEmail.value = '';
+  $loginPassword.value = '';
+  $loginError.hidden = !errorMsg;
+  if (errorMsg) $loginError.textContent = errorMsg;
+  requestAnimationFrame(() => $loginEmail.focus());
+}
+
+function hideLogin() {
+  $loginOverlay.hidden = true;
+  document.body.style.overflow = '';
+  $loginError.hidden = true;
+}
+
+function applyUserUI(user) {
+  $reindexBtn.hidden = !(user && user.role === 'admin');
+  $logoutBtn.hidden  = !user;
+}
+
+async function login(email, password) {
+  $loginSubmit.disabled = true;
+  $loginBtnText.textContent = '…';
+  $loginSpinner.hidden = false;
+  $loginError.hidden = true;
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      $loginError.textContent = data.error || 'Anmeldung fehlgeschlagen.';
+      $loginError.hidden = false;
+      $loginEmail.focus();
+      return;
+    }
+    currentUser = data;
+    hideLogin();
+    applyUserUI(currentUser);
+    await loadMeta();
+    await loadArticles();
+    const deepId = location.hash.startsWith('#/article/')
+      ? decodeURIComponent(location.hash.slice('#/article/'.length))
+      : null;
+    if (deepId) openArticle(deepId);
+  } catch {
+    $loginError.textContent = 'Netzwerkfehler. Bitte erneut versuchen.';
+    $loginError.hidden = false;
+  } finally {
+    $loginSubmit.disabled = false;
+    $loginBtnText.textContent = 'Anmelden';
+    $loginSpinner.hidden = true;
+  }
+}
+
+async function logout() {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
+  currentUser = null;
+  applyUserUI(null);
+  $app.innerHTML = '';
+  [$filterAuthor, $filterYear, $filterCategory].forEach(sel => {
+    while (sel.options.length > 1) sel.remove(1);
+  });
+  showLogin();
+}
+
 // ── API calls ──────────────────────────────────────────────────────────────
+async function apiFetch(url, options) {
+  const r = await fetch(url, options);
+  if (r.status === 401) {
+    currentUser = null;
+    applyUserUI(null);
+    showLogin('Ihre Sitzung ist abgelaufen. Bitte erneut anmelden.');
+    throw new Error('Session expired');
+  }
+  return r;
+}
+
 async function fetchMeta() {
-  const r = await fetch('/api/meta');
+  const r = await apiFetch('/api/meta');
   return r.json();
 }
 
@@ -126,12 +217,12 @@ async function fetchArticles(params = {}) {
   if (params.category) qs.set('category', params.category);
   qs.set('page',  params.page  || 1);
   qs.set('limit', params.limit || 24);
-  const r = await fetch(`/api/articles?${qs}`);
+  const r = await apiFetch(`/api/articles?${qs}`);
   return r.json();
 }
 
 async function fetchArticle(id) {
-  const r = await fetch(`/api/articles/${id}`);
+  const r = await apiFetch(`/api/articles/${id}`);
   if (!r.ok) throw new Error('Not found');
   return r.json();
 }
@@ -558,6 +649,18 @@ $themeBtn.addEventListener('click', () => {
   applyTheme(document.body.dataset.theme === 'light' ? 'dark' : 'light');
 });
 
+$loginForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const email    = $loginEmail.value.trim();
+  const password = $loginPassword.value;
+  if (!email || !password) return;
+  login(email, password);
+});
+
+$logoutBtn.addEventListener('click', () => {
+  if (confirm('Wirklich abmelden?')) logout();
+});
+
 $resetFilters.addEventListener('click', () => {
   $searchInput.value = '';
   $searchClear.classList.remove('visible');
@@ -576,7 +679,7 @@ $reindexBtn.addEventListener('click', async () => {
   $reindexBtn.disabled = true;
   $reindexBtn.textContent = '…';
   try {
-    const r = await fetch('/api/reindex', { method: 'POST' });
+    const r = await apiFetch('/api/reindex', { method: 'POST' });
     const data = await r.json();
     if (!data.started) {
       alert('Re-Index läuft bereits.');
@@ -585,7 +688,7 @@ $reindexBtn.addEventListener('click', async () => {
     await new Promise(resolve => {
       const poll = setInterval(async () => {
         try {
-          const sr = await fetch('/api/reindex/status');
+          const sr = await apiFetch('/api/reindex/status');
           const status = await sr.json();
           if (status.processed) {
             $count.textContent = `${status.processed.toLocaleString('de-DE')} Artikel verarbeitet…`;
@@ -703,12 +806,6 @@ async function init() {
   $loading.hidden = false;
   document.body.classList.toggle('layout-tall', $filterLayout.value === 'tall');
 
-  // Check for article deep-link in hash
-  const hash = location.hash;
-  const deepId = hash.startsWith('#/article/')
-    ? decodeURIComponent(hash.slice('#/article/'.length))
-    : null;
-
   const savedTheme = localStorage.getItem('wa-theme') || 'dark';
   applyTheme(savedTheme);
 
@@ -716,14 +813,29 @@ async function init() {
   $filterFont.value = savedFont;
   applyFont(savedFont);
 
+  // Check for existing session
+  try {
+    const r = await fetch('/api/me');
+    if (r.ok) currentUser = await r.json();
+  } catch { /* network error — treat as not logged in */ }
+
+  $loading.hidden = true;
+  applyUserUI(currentUser);
+
+  if (!currentUser) {
+    showLogin();
+    return;
+  }
+
+  // Check for article deep-link in hash
+  const deepId = location.hash.startsWith('#/article/')
+    ? decodeURIComponent(location.hash.slice('#/article/'.length))
+    : null;
+
   await loadMeta();
   await loadArticles();
 
-  $loading.hidden = true;
-
-  if (deepId) {
-    openArticle(deepId);
-  }
+  if (deepId) openArticle(deepId);
 }
 
 init();

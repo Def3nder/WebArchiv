@@ -1,0 +1,470 @@
+# session-context.md
+
+# Projekt
+
+Bereitstellung einer ressourcenschonenden, öffentlich erreichbaren Node.js-Anwendung in einem Proxmox-LXC-Container.
+
+---
+
+# Zielarchitektur
+
+```text
+Internet
+    │
+    ▼
+Reverse Proxy (später)
+    │
+    ▼
+LXC Container (Debian 13)
+    │
+    ├── OpenSSH
+    ├── Node.js 24 LTS
+    ├── Express
+    ├── systemd-Service
+    └── Datenverzeichnis auf externer Disk
+```
+
+---
+
+# Infrastruktur
+
+## Plattform
+
+* Proxmox VE
+* LXC Container
+* Debian 13
+* Node.js 24.15.0
+
+## Ressourcen
+
+Empfohlen:
+
+* 1 vCPU
+* 256–512 MB RAM
+* 4–8 GB Root-Disk
+
+---
+
+# Node.js
+
+## Installation
+
+Node.js wurde erfolgreich installiert.
+
+Version:
+
+```text
+Node.js v24.15.0
+```
+
+---
+
+# SSH
+
+## OpenSSH
+
+OpenSSH wurde installiert.
+
+### Ziel
+
+* WinSCP
+* SCP
+* SSH-Terminal
+* Deployment
+
+---
+
+## SSH-Key Problem
+
+### Symptom
+
+WinSCP meldete:
+
+```text
+Die Gegenstelle hat unseren Schlüssel abgelehnt
+```
+
+### Ursache
+
+Der Inhalt von:
+
+```text
+/root/.ssh/authorized_keys
+```
+
+war im SSH2/RFC4716-Format gespeichert:
+
+```text
+---- BEGIN SSH2 PUBLIC KEY ----
+Comment: "eddsa-key-20260529"
+...
+---- END SSH2 PUBLIC KEY ----
+```
+
+OpenSSH akzeptiert dieses Format nicht.
+
+### Korrektes Format
+
+```text
+ssh-ed25519 AAAA.... kommentar
+```
+
+in einer einzigen Zeile.
+
+---
+
+## Verzeichnisrechte
+
+```bash
+chmod 700 /root/.ssh
+chmod 600 /root/.ssh/authorized_keys
+```
+
+---
+
+# Anwendung
+
+## Verzeichnis
+
+```text
+/opt/nodeapp
+```
+
+---
+
+# systemd
+
+## Service
+
+Datei:
+
+```text
+/etc/systemd/system/nodeapp.service
+```
+
+Aktivierung:
+
+```bash
+systemctl enable --now nodeapp
+```
+
+---
+
+# Fehleranalyse Node.js
+
+## Ursprüngliches Symptom
+
+```text
+nodeapp.service
+Active: activating (auto-restart)
+```
+
+---
+
+## Analyse
+
+journalctl zeigte:
+
+```text
+Error: Cannot find module 'express'
+```
+
+vollständiger Fehler:
+
+```text
+Error: Cannot find module 'express'
+Require stack:
+- /opt/nodeapp/server.js
+```
+
+---
+
+## Ursache
+
+Die Anwendung verwendet:
+
+```js
+const express = require('express');
+```
+
+Das Paket wurde jedoch noch nicht installiert.
+
+---
+
+## Geplante Lösung
+
+```bash
+cd /opt/nodeapp
+
+npm init -y
+npm install express
+```
+
+anschließend:
+
+```bash
+systemctl restart nodeapp
+```
+
+---
+
+# Datenablage
+
+## Externe Disk
+
+Eine externe Disk wurde in den Container eingebunden.
+
+Mountpunkt:
+
+```text
+/opt/nodeapp/www
+```
+
+---
+
+## Besonderheit
+
+Das Dateisystem enthält:
+
+```text
+lost+found
+```
+
+Eigentümer:
+
+```text
+nobody:nobody
+```
+
+---
+
+## Problem
+
+Folgender Befehl:
+
+```bash
+chown -R www-data:www-data /opt/nodeapp
+```
+
+liefert:
+
+```text
+Permission denied
+```
+
+für:
+
+```text
+/opt/nodeapp/www/lost+found
+```
+
+---
+
+## Wahrscheinliche Ursache
+
+Die Disk wurde auf dem Proxmox-Host eingebunden und per Bind-Mount in den LXC durchgereicht.
+
+Dadurch gelten die Host-Dateirechte.
+
+Bei einem unprivilegierten LXC gilt:
+
+```text
+root im Container != root auf dem Host
+```
+
+Container-Root kann daher möglicherweise nicht alle Dateien ändern.
+
+---
+
+## Erkenntnis
+
+Das Verzeichnis:
+
+```text
+lost+found
+```
+
+wird von ext4 automatisch angelegt.
+
+Es wird von der Anwendung nicht benötigt.
+
+Es sollte nicht verändert oder gelöscht werden.
+
+---
+
+## Empfohlene Struktur
+
+```text
+/opt/nodeapp/www
+│
+├── lost+found
+└── data
+```
+
+Anwendungsdaten ausschließlich in:
+
+```text
+/opt/nodeapp/www/data
+```
+
+---
+
+# Noch offene technische Analyse
+
+## Mount-Konfiguration prüfen
+
+Im Container:
+
+```bash
+mount | grep nodeapp
+```
+
+Auf dem Proxmox-Host:
+
+```bash
+pct config <CTID>
+```
+
+Ziel:
+
+* UID/GID-Mapping verstehen
+* Schreibrechte verifizieren
+* spätere Probleme vermeiden
+
+---
+
+# Sicherheitsarchitektur
+
+## Geplant
+
+### SSH
+
+* Key-basierte Anmeldung
+* Passwort-Login deaktivieren
+* Root-Login später deaktivieren
+
+Ziel:
+
+```text
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+```
+
+---
+
+### Updates
+
+Automatische Sicherheitsupdates:
+
+```bash
+apt install unattended-upgrades
+```
+
+---
+
+### Reverse Proxy
+
+Später:
+
+* Caddy
+* oder Nginx
+
+für:
+
+* HTTPS
+* Zertifikate
+* Domain-Anbindung
+
+---
+
+# Offene Aufgaben
+
+## Priorität 1
+
+SSH-Zugang vollständig testen.
+
+* WinSCP Anmeldung prüfen
+* Key-Login bestätigen
+
+---
+
+## Priorität 2
+
+Express installieren.
+
+```bash
+npm install express
+```
+
+---
+
+## Priorität 3
+
+Node-Service erneut starten.
+
+```bash
+systemctl restart nodeapp
+systemctl status nodeapp
+```
+
+---
+
+## Priorität 4
+
+Anwendung lokal testen.
+
+```bash
+curl http://127.0.0.1:3000
+```
+
+---
+
+## Priorität 5
+
+Mount-Konfiguration analysieren.
+
+Ermitteln:
+
+```bash
+mount | grep nodeapp
+```
+
+und
+
+```bash
+pct config <CTID>
+```
+
+---
+
+## Priorität 6
+
+Reverse Proxy und HTTPS einrichten.
+
+Später:
+
+* Caddy
+* DNS
+* TLS
+* Firewall-Regeln
+
+---
+
+# Aktueller Gesamtstatus
+
+## Erfolgreich
+
+* Debian-LXC erstellt
+* Node.js installiert
+* SSH eingerichtet
+* Ursache des WinSCP-Problems identifiziert
+* systemd-Service erstellt
+* Ursache des Node-Startfehlers identifiziert
+
+## Noch offen
+
+* Express installieren
+* Anwendung erfolgreich starten
+* Schreibrechte auf gemounteter Disk verifizieren
+* Reverse Proxy und HTTPS aufbauen
