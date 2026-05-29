@@ -33,7 +33,14 @@
       </div>
       <div class="header-count" id="article-count"></div>
       <button id="theme-btn" class="theme-btn" title="Hell-Modus"></button>
-      <button id="reindex-btn" class="reindex-btn" title="Archiv neu einlesen">↺</button>
+      <button id="reindex-btn" class="reindex-btn" title="Archiv neu einlesen" hidden>↺</button>
+      <button id="logout-btn" class="logout-btn" title="Abmelden" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
     </div>
   </header>
 
@@ -121,6 +128,34 @@
   <div id="loading" class="loading-screen" hidden>
     <div class="spinner"></div>
     <p>Archiv wird geladen…</p>
+  </div>
+
+  <!-- Login overlay (z-index 300) -->
+  <div id="login-overlay" class="login-overlay" hidden>
+    <div class="login-backdrop"></div>
+    <div class="login-panel" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <div class="login-logo">
+        <span class="logo-mark">W</span><span class="logo-text">ebArchiv</span>
+      </div>
+      <h2 class="login-title" id="login-title">Anmelden</h2>
+      <form id="login-form" class="login-form" novalidate>
+        <div class="login-field">
+          <label for="login-email" class="login-label">E-Mail</label>
+          <input id="login-email" type="email" class="login-input"
+            autocomplete="username" placeholder="name@beispiel.de" required />
+        </div>
+        <div class="login-field">
+          <label for="login-password" class="login-label">Passwort</label>
+          <input id="login-password" type="password" class="login-input"
+            autocomplete="current-password" placeholder="••••••••" required />
+        </div>
+        <p id="login-error" class="login-error" hidden></p>
+        <button id="login-submit" type="submit" class="login-btn">
+          <span id="login-btn-text">Anmelden</span>
+          <span id="login-spinner" class="login-btn-spinner" hidden></span>
+        </button>
+      </form>
+    </div>
   </div>
 
   <script src="app.js"></script>

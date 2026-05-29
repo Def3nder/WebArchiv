@@ -3,10 +3,22 @@ const fs = require('fs');
 const path = require('path');
 const { marked } = require('marked');
 const Fuse = require('fuse.js');
+const session = require('express-session');
+const bcrypt  = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const WWW_DIR = path.join(__dirname, 'www');
+
+// ─── Users ─────────────────────────────────────────────────────────────────
+
+const USERS_FILE = path.join(__dirname, 'users.json');
+let users = [];
+try {
+  users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+} catch (err) {
+  console.error('WARNING: users.json nicht geladen —', err.message);
+}
 
 let articles = [];
 let meta = { authors: [], years: [], categories: [] };
@@ -308,28 +320,110 @@ async function buildIndex() {
   console.log(`✓ ${articles.length} articles indexed in ${Date.now() - t0}ms`);
 }
 
+// ─── Auth helpers ──────────────────────────────────────────────────────────
+
+function findUser(email) {
+  return users.find(u => u.email.toLowerCase() === (email || '').toLowerCase());
+}
+
+function canAccessAuthor(sessionUser, author) {
+  if (!sessionUser) return false;
+  if (sessionUser.allowedAuthors === null) return true;
+  return sessionUser.allowedAuthors.includes(author);
+}
+
+function requireAuth(req, res, next) {
+  if (req.session?.user) return next();
+  res.status(401).json({ error: 'Not authenticated' });
+}
+
+function requireAdmin(req, res, next) {
+  if (req.session?.user?.role === 'admin') return next();
+  res.status(403).json({ error: 'Admin only' });
+}
+
 // ─── API ───────────────────────────────────────────────────────────────────
 
 app.use(express.json());
-app.use('/files', express.static(WWW_DIR));
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'webarchiv-dev-secret-change-in-prod',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax' },
+}));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/meta', (_req, res) => res.json(meta));
+// ─── Auth routes (public) ──────────────────────────────────────────────────
 
-app.get('/api/reindex/status', (_req, res) => res.json(reindexState));
+app.get('/api/me', (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json(req.session.user);
+});
 
-app.post('/api/reindex', (_req, res) => {
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body || {};
+  const user = findUser(email);
+  if (!user || !(await bcrypt.compare(password || '', user.passwordHash || ''))) {
+    return res.status(401).json({ error: 'Ungültige E-Mail oder Passwort' });
+  }
+  req.session.user = { email: user.email, role: user.role, allowedAuthors: user.allowedAuthors };
+  res.json(req.session.user);
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy(() => { res.clearCookie('connect.sid'); res.json({ ok: true }); });
+});
+
+// ─── Authenticated file handler (replaces express.static for /files) ───────
+
+app.get('/files/*', requireAuth, (req, res) => {
+  const relPath = req.params[0];
+  const author  = relPath.split('/')[0];
+  if (!canAccessAuthor(req.session.user, author)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const absPath = path.resolve(path.join(WWW_DIR, relPath));
+  if (!absPath.startsWith(WWW_DIR + path.sep)) {
+    return res.status(403).end();
+  }
+  res.sendFile(absPath, err => { if (err && !res.headersSent) res.status(404).end(); });
+});
+
+// ─── Protected API routes ──────────────────────────────────────────────────
+
+app.get('/api/meta', requireAuth, (req, res) => {
+  const user = req.session.user;
+  const authors = user.allowedAuthors === null
+    ? meta.authors
+    : meta.authors.filter(a => user.allowedAuthors.includes(a));
+  res.json({ authors, years: meta.years, categories: meta.categories });
+});
+
+app.get('/api/reindex/status', requireAuth, (_req, res) => res.json(reindexState));
+
+app.post('/api/reindex', requireAdmin, (req, res) => {
   if (reindexState.running) return res.json({ started: false, reason: 'already running' });
   buildIndex().catch(console.error);
   res.json({ started: true });
 });
 
-app.get('/api/articles', (req, res) => {
+app.get('/api/articles', requireAuth, (req, res) => {
   const { q, author, year, category, page = '1', limit = '24' } = req.query;
+  const user = req.session.user;
   let filtered = articles;
 
-  if (author) filtered = filtered.filter(a => a.author === author);
-  if (year) filtered = filtered.filter(a => a.year === year);
+  // ACL pre-filter: restrict to allowed authors
+  if (user.allowedAuthors !== null) {
+    filtered = filtered.filter(a => user.allowedAuthors.includes(a.author));
+  }
+
+  if (author) {
+    if (!canAccessAuthor(user, author)) {
+      return res.json({ total: 0, page: 1, limit: 24, pages: 0, items: [] });
+    }
+    filtered = filtered.filter(a => a.author === author);
+  }
+  if (year)     filtered = filtered.filter(a => a.year === year);
   if (category) filtered = filtered.filter(a => a.categories.includes(category));
 
   if (q && fuseIndex) {
@@ -346,10 +440,14 @@ app.get('/api/articles', (req, res) => {
   res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
 });
 
-app.get('/api/articles/*', (req, res) => {
+app.get('/api/articles/*', requireAuth, (req, res) => {
   const id = req.params[0];
   const article = articles.find(a => a.id === id);
   if (!article) return res.status(404).json({ error: 'Not found' });
+
+  if (!canAccessAuthor(req.session.user, article.author)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
 
   try {
     const content = fs.readFileSync(article.filePath, 'utf8');

@@ -1,0 +1,20 @@
+[
+  {
+    "email": "Ralf.Bruechmann@web.de",
+    "password": "BITTE_ERSETZEN",
+    "role": "admin",
+    "allowedAuthors": null
+  },
+  {
+    "email": "Mandy.Lauermann@web.de",
+    "password": "BITTE_ERSETZEN",
+    "role": "user",
+    "allowedAuthors": null
+  },
+  {
+    "email": "test@test.com",
+    "password": "BITTE_ERSETZEN",
+    "role": "user",
+    "allowedAuthors": ["Infografiken"]
+  }
+]
