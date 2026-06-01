@@ -35,6 +35,8 @@ const $filterFont     = document.getElementById('filter-font');
 const $reindexBtn     = document.getElementById('reindex-btn');
 const $themeBtn       = document.getElementById('theme-btn');
 const $logoutBtn      = document.getElementById('logout-btn');
+const $loginBtn       = document.getElementById('login-btn');
+const $loginClose     = document.getElementById('login-close');
 const $overlay        = document.getElementById('article-overlay');
 const $overlayClose   = document.getElementById('overlay-close');
 const $overlayBdrop   = document.getElementById('overlay-backdrop');
@@ -140,8 +142,10 @@ function hideLogin() {
 }
 
 function applyUserUI(user) {
+  const isGuest = !user || user.role === 'guest';
   $reindexBtn.hidden = !(user && user.role === 'admin');
-  $logoutBtn.hidden  = !user;
+  $logoutBtn.hidden  = isGuest;
+  $loginBtn.hidden   = !isGuest;
 }
 
 async function login(email, password) {
@@ -183,13 +187,29 @@ async function login(email, password) {
 
 async function logout() {
   try { await fetch('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
-  currentUser = null;
-  applyUserUI(null);
+  // Auf Guest-User umstellen (oder null, falls keine Public-Autoren konfiguriert)
+  try {
+    const r = await fetch('/api/me');
+    currentUser = r.ok ? await r.json() : null;
+  } catch { currentUser = null; }
+  applyUserUI(currentUser);
   $app.innerHTML = '';
   [$filterAuthor, $filterYear, $filterCategory].forEach(sel => {
     while (sel.options.length > 1) sel.remove(1);
   });
-  showLogin();
+  state.page = 1;
+  state.author = '';
+  state.year = '';
+  state.category = '';
+  $filterAuthor.value = '';
+  $filterYear.value = '';
+  $filterCategory.value = '';
+  if (currentUser) {
+    await loadMeta();
+    await loadArticles();
+  } else {
+    showLogin();
+  }
 }
 
 // ── API calls ──────────────────────────────────────────────────────────────
@@ -710,6 +730,9 @@ $logoutBtn.addEventListener('click', () => {
   if (confirm('Wirklich abmelden?')) logout();
 });
 
+$loginBtn.addEventListener('click', () => showLogin());
+$loginClose?.addEventListener('click', () => hideLogin());
+
 $resetFilters.addEventListener('click', () => {
   $searchInput.value = '';
   $searchClear.classList.remove('visible');
@@ -765,7 +788,10 @@ document.getElementById('img-fullscreen').addEventListener('click', closeImageFu
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (!document.getElementById('img-fullscreen').hidden) { closeImageFullscreen(); return; }
-    if (!$overlay.hidden) closeOverlay();
+    if (!$overlay.hidden) { closeOverlay(); return; }
+    // Login-Dialog nur per ESC schließen, wenn Guest oder eingeloggt — nicht bei
+    // initialem Pflicht-Login (kein currentUser).
+    if (!$loginOverlay.hidden && currentUser) { hideLogin(); return; }
     return;
   }
   if ($overlay.hidden) return;
@@ -894,7 +920,7 @@ async function init() {
   $filterFont.value = savedFont;
   applyFont(savedFont);
 
-  // Check for existing session
+  // Check for existing session (or anonymous guest with public-authors whitelist)
   try {
     const r = await fetch('/api/me');
     if (r.ok) currentUser = await r.json();
@@ -903,6 +929,8 @@ async function init() {
   $loading.hidden = true;
   applyUserUI(currentUser);
 
+  // Wenn weder Session noch Public-Autoren konfiguriert → 401 fällt nicht mehr,
+  // sondern /api/me liefert weiterhin guest. Wenn /api/me wirklich fehlschlug → Login.
   if (!currentUser) {
     showLogin();
     return;

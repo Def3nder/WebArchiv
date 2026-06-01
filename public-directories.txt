@@ -1,0 +1,8 @@
+{
+  "public-directories": 
+    [ 
+      "Videos",
+      "PDF",
+      "Infografiken"
+    ]
+}

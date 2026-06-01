@@ -21,6 +21,17 @@ try {
   console.error('WARNING: users.json nicht geladen —', err.message);
 }
 
+const PUBLIC_DIRS_FILE = path.join(__dirname, 'public-directories.txt');
+let publicAuthors = [];
+try {
+  const parsed = JSON.parse(fs.readFileSync(PUBLIC_DIRS_FILE, 'utf8'));
+  publicAuthors = Array.isArray(parsed['public-directories'])
+    ? parsed['public-directories'] : [];
+  console.log(`Public-Autoren: ${publicAuthors.length ? publicAuthors.join(', ') : '(keine)'}`);
+} catch (err) {
+  console.warn('public-directories.txt nicht geladen —', err.message);
+}
+
 let articles = [];
 let meta = { authors: [], years: [], categories: [] };
 let fuseIndex = null;
@@ -28,10 +39,25 @@ let reindexState = { running: false, processed: 0, articles: 0, done: true };
 
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
+function normalizeDate(raw) {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  // ISO yyyy-mm-dd
+  const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // German dd.mm.yyyy
+  const de = s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if (de) return `${de[3]}-${de[2].padStart(2, '0')}-${de[1].padStart(2, '0')}`;
+  // Slash dd/mm/yyyy
+  const sl = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (sl) return `${sl[3]}-${sl[2].padStart(2, '0')}-${sl[1].padStart(2, '0')}`;
+  return '';
+}
+
 function extractDate(lines, filename) {
   for (const line of lines.slice(0, 12)) {
-    const m = line.match(/(\d{4}-\d{2}-\d{2})/);
-    if (m) return m[1];
+    const d = normalizeDate(line);
+    if (d) return d;
   }
   const fm = path.basename(filename).match(/^(\d{4}-\d{2}-\d{2})/);
   return fm ? fm[1] : '';
@@ -94,22 +120,27 @@ function extractSourceUrl(clean) {
 function parseArticle(content, filePath) {
   const lines = content.split('\n');
 
-  // Find Datum line (case-insensitive, ignore ** wrappers)
+  // Find Datum line (case-insensitive, ignore **, *, _ wrappers)
   let datumIdx = -1;
   let date = '';
   for (let i = 0; i < Math.min(lines.length, 20); i++) {
-    const clean = lines[i].replace(/\*\*/g, '').replace(/^#+\s*/, '').trim().replace(/^_+|_+$/g, '').trim();
+    const clean = lines[i]
+      .replace(/\*\*/g, '')
+      .replace(/^#+\s*/, '')
+      .replace(/^\*|\*$/g, '')
+      .trim()
+      .replace(/^_+|_+$/g, '')
+      .trim();
     if (/^datum:/i.test(clean)) {
       datumIdx = i;
-      date = clean.replace(/^datum:\s*/i, '').trim();
-      if (!date) {
-        const m = lines[i].match(/(\d{4}-\d{2}-\d{2})/);
-        if (m) date = m[1];
-      }
+      const raw = clean.replace(/^datum:\s*/i, '').trim();
+      date = normalizeDate(raw) || normalizeDate(lines[i]) || '';
       break;
     }
   }
-  if (!date) date = extractDate(lines, filePath);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    date = extractDate(lines, filePath);
+  }
 
   // Title: non-empty lines before Datum, strip markdown markers
   // Optional "Quelle: <URL>" line is extracted separately and excluded from title.
@@ -367,6 +398,21 @@ function requireAdmin(req, res, next) {
   res.status(403).json({ error: 'Admin only' });
 }
 
+function getEffectiveUser(req) {
+  if (req.session?.user) return req.session.user;
+  return { email: null, role: 'guest', allowedAuthors: publicAuthors };
+}
+
+// Soft auth: attaches req.user (session user or anonymous guest with public-author whitelist).
+// Returns 401 only when no session AND no public authors are configured.
+function attachUser(req, res, next) {
+  req.user = getEffectiveUser(req);
+  if (req.user.role === 'guest' && publicAuthors.length === 0) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  next();
+}
+
 // ─── API ───────────────────────────────────────────────────────────────────
 
 app.use(express.json());
@@ -391,8 +437,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 // ─── Auth routes (public) ──────────────────────────────────────────────────
 
 app.get('/api/me', (req, res) => {
-  if (!req.session?.user) return res.status(401).json({ error: 'Not authenticated' });
-  res.json(req.session.user);
+  res.json(getEffectiveUser(req));
 });
 
 app.post('/api/login', async (req, res) => {
@@ -411,10 +456,10 @@ app.post('/api/logout', (req, res) => {
 
 // ─── Authenticated file handler (replaces express.static for /files) ───────
 
-app.get('/files/*', requireAuth, (req, res) => {
+app.get('/files/*', attachUser, (req, res) => {
   const relPath = req.params[0];
   const author  = relPath.split('/')[0];
-  if (!canAccessAuthor(req.session.user, author)) {
+  if (!canAccessAuthor(req.user, author)) {
     return res.status(403).json({ error: 'Access denied' });
   }
   const absPath = path.resolve(path.join(WWW_DIR, relPath));
@@ -426,8 +471,8 @@ app.get('/files/*', requireAuth, (req, res) => {
 
 // ─── Protected API routes ──────────────────────────────────────────────────
 
-app.get('/api/meta', requireAuth, (req, res) => {
-  const user = req.session.user;
+app.get('/api/meta', attachUser, (req, res) => {
+  const user = req.user;
   const authors = user.allowedAuthors === null
     ? meta.authors
     : meta.authors.filter(a => user.allowedAuthors.includes(a));
@@ -436,7 +481,7 @@ app.get('/api/meta', requireAuth, (req, res) => {
 
 app.get('/api/reindex/status', requireAuth, (_req, res) => res.json(reindexState));
 
-app.get('/api/infografik-prompt', requireAuth, (_req, res) => {
+app.get('/api/infografik-prompt', attachUser, (_req, res) => {
   try {
     const txt = fs.readFileSync(path.join(__dirname, 'infografik-prompt.txt'), 'utf8');
     res.type('text/plain').send(txt);
@@ -451,9 +496,9 @@ app.post('/api/reindex', requireAdmin, (req, res) => {
   res.json({ started: true });
 });
 
-app.get('/api/articles', requireAuth, (req, res) => {
+app.get('/api/articles', attachUser, (req, res) => {
   const { q, author, year, category, page = '1', limit = '24' } = req.query;
-  const user = req.session.user;
+  const user = req.user;
   let filtered = articles;
 
   // ACL pre-filter: restrict to allowed authors
@@ -484,12 +529,12 @@ app.get('/api/articles', requireAuth, (req, res) => {
   res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
 });
 
-app.get('/api/articles/*', requireAuth, (req, res) => {
+app.get('/api/articles/*', attachUser, (req, res) => {
   const id = req.params[0];
   const article = articles.find(a => a.id === id);
   if (!article) return res.status(404).json({ error: 'Not found' });
 
-  if (!canAccessAuthor(req.session.user, article.author)) {
+  if (!canAccessAuthor(req.user, article.author)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 

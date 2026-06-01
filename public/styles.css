@@ -1051,6 +1051,21 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   box-shadow: var(--shadow-lg);
   animation: slideUp .25s cubic-bezier(.4,0,.2,1);
 }
+.login-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition), background var(--transition);
+}
+.login-close:hover { color: var(--text); background: var(--surface-2); }
 @media (max-width: 440px) {
   .login-panel { padding: 32px 20px 28px; margin: 0 16px; }
 }
