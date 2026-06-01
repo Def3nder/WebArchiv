@@ -377,9 +377,13 @@ app.use(session({
   cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax' },
 }));
 app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  lastModified: false,
   setHeaders: (res, filePath) => {
     if (/\.(html|css|js)$/i.test(filePath)) {
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
     }
   },
 }));
@@ -431,6 +435,15 @@ app.get('/api/meta', requireAuth, (req, res) => {
 });
 
 app.get('/api/reindex/status', requireAuth, (_req, res) => res.json(reindexState));
+
+app.get('/api/infografik-prompt', requireAuth, (_req, res) => {
+  try {
+    const txt = fs.readFileSync(path.join(__dirname, 'infografik-prompt.txt'), 'utf8');
+    res.type('text/plain').send(txt);
+  } catch {
+    res.status(404).end();
+  }
+});
 
 app.post('/api/reindex', requireAdmin, (req, res) => {
   if (reindexState.running) return res.json({ started: false, reason: 'already running' });

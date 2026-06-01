@@ -821,6 +821,18 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   stroke: currentColor;
   flex-shrink: 0;
 }
+.detail-copy-icon,
+.detail-copy-text {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.detail-copy-icon {
+  padding-right: 6px;
+  border-right: 1px solid var(--border);
+}
+.detail-copy-icon:hover { color: var(--accent); }
+.detail-copy-text:hover { color: var(--accent); }
 .detail-copy-btn.copied {
   border-color: var(--accent);
   color: var(--accent);

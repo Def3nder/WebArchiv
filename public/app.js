@@ -435,10 +435,12 @@ function renderDetail(article) {
   const hasBody = !!(article.bodyHtml && article.bodyHtml.trim());
   const copyBtnHtml = hasBody
     ? `<button class="detail-cat-pill detail-copy-btn" id="detail-copy-btn" aria-label="Titel und Text kopieren">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="9" y="9" width="11" height="11" rx="2"/>
-          <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
-        </svg><span>copy</span>
+        <span class="detail-copy-icon" data-copy-zone="prompt" title="Mit Infografik-Prompt kopieren">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="11" height="11" rx="2"/>
+            <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+          </svg>
+        </span><span class="detail-copy-text" data-copy-zone="plain" title="Titel + Text kopieren">copy</span>
       </button>`
     : '';
   const dateHtml = (article.date || copyBtnHtml)
@@ -493,13 +495,26 @@ function renderDetail(article) {
     });
   });
 
-  // Copy-Button → Titel + \n + Body in Clipboard
+  // Copy-Button → zwei Klick-Zonen:
+  //   Icon  → Inhalt von infografik-prompt.txt vorangestellt
+  //   "copy" → nur Titel + Body
   document.getElementById('detail-copy-btn')?.addEventListener('click', async e => {
     e.stopPropagation();
     const btn = e.currentTarget;
+    const zone = e.target.closest('[data-copy-zone]');
+    const withPrompt = zone?.dataset.copyZone === 'prompt'
+                    || (!zone && !!e.target.closest('svg'));
     const bodyText = $detail.querySelector('.detail-body')?.innerText?.trim() || '';
+    const articleText = `${article.title}\n\n---\n\n${bodyText}`;
+    let prefix = '';
+    if (withPrompt) {
+      try {
+        const r = await fetch('/api/infografik-prompt');
+        if (r.ok) prefix = (await r.text()).trim() + '\n\n';
+      } catch { /* Fallback ohne Prefix */ }
+    }
     try {
-      await navigator.clipboard.writeText(`${article.title}\n\n---\n\n${bodyText}`);
+      await navigator.clipboard.writeText(prefix + articleText);
       btn.classList.add('copied');
       setTimeout(() => btn.classList.remove('copied'), 1000);
     } catch (err) {
