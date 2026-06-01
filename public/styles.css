@@ -603,9 +603,10 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: rgba(0,0,0,.55);
+  background: rgba(0,0,0,.6);
   backdrop-filter: blur(4px);
-  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  color: #fff;
   font-size: 1.5rem;
   display: flex;
   align-items: center;
@@ -633,9 +634,10 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition);
+  opacity: 0.5;
+  transition: opacity var(--transition), background var(--transition);
 }
-.overlay-close:hover { background: rgba(0,0,0,.9); }
+.overlay-close:hover { opacity: 1; background: rgba(0,0,0,.85); }
 .overlay-close svg { width: 18px; height: 18px; stroke: #fff; }
 
 /* Article detail inner */
@@ -666,9 +668,10 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition);
+  opacity: 0.5;
+  transition: opacity var(--transition), background var(--transition);
 }
-.detail-hero-expand:hover { background: rgba(0,0,0,.85); }
+.detail-hero-expand:hover { opacity: 1; background: rgba(0,0,0,.85); }
 .detail-hero-expand svg { width: 18px; height: 18px; stroke: #fff; fill: none; }
 .detail-hero-download {
   position: absolute;
@@ -681,10 +684,11 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 8px rgba(0,0,0,.4);
   display: flex; align-items: center; justify-content: center;
-  transition: background var(--transition);
+  opacity: 0.5;
+  transition: opacity var(--transition), background var(--transition);
   text-decoration: none;
 }
-.detail-hero-download:hover { background: rgba(0,0,0,.85); }
+.detail-hero-download:hover { opacity: 1; background: rgba(0,0,0,.85); }
 .detail-hero-download svg { width: 18px; height: 18px; stroke: #fff; }
 
 /* Image fullscreen overlay */
@@ -798,17 +802,24 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
 .detail-date-row .detail-date-block { margin: 0; }
 .detail-copy-btn {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
   gap: 6px;
   line-height: 1;
+  white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+  margin-left: auto;
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-muted);
   font-family: inherit;
 }
 .detail-copy-btn svg {
+  display: inline-block;
   width: 12px; height: 12px;
   stroke: currentColor;
+  flex-shrink: 0;
 }
 .detail-copy-btn.copied {
   border-color: var(--accent);

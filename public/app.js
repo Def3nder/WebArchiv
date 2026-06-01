@@ -770,32 +770,64 @@ function swipeAllowed(delta) {
   return false;
 }
 
+// Swipe threshold: horizontal delta must exceed this AND dominate over vertical movement
+const SWIPE_MIN_X = 80;
+const SWIPE_X_DOMINANCE = 1.5;
+const SWIPE_MAX_DURATION = 500; // ms — länger zählt als Long-Press / Selektions-Geste
+
+function hasActiveSelection() {
+  const sel = window.getSelection();
+  return !!(sel && !sel.isCollapsed && sel.toString().trim());
+}
+
 // Touch swipe on overlay panel
 let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
 let touchStartMulti = false;
 const $overlayPanel = $overlay.querySelector('.overlay-panel');
 $overlayPanel.addEventListener('touchstart', e => {
   touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+  touchStartTime = Date.now();
   touchStartMulti = e.touches.length > 1;
 }, { passive: true });
 $overlayPanel.addEventListener('touchend', e => {
   if (touchStartMulti) return;
-  const delta = e.changedTouches[0].clientX - touchStartX;
-  if (Math.abs(delta) > 60 && swipeAllowed(delta)) navigateArticle(delta < 0 ? +1 : -1);
+  if (hasActiveSelection()) return;
+  if (Date.now() - touchStartTime > SWIPE_MAX_DURATION) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (Math.abs(dx) > SWIPE_MIN_X
+      && Math.abs(dx) > Math.abs(dy) * SWIPE_X_DOMINANCE
+      && swipeAllowed(dx)) {
+    navigateArticle(dx < 0 ? +1 : -1);
+  }
 }, { passive: true });
 
 // Touch swipe on fullscreen image overlay
 let fsTouchStartX = 0;
+let fsTouchStartY = 0;
+let fsTouchStartTime = 0;
 let fsTouchStartMulti = false;
 const $imgFs = document.getElementById('img-fullscreen');
 $imgFs.addEventListener('touchstart', e => {
   fsTouchStartX = e.touches[0].clientX;
+  fsTouchStartY = e.touches[0].clientY;
+  fsTouchStartTime = Date.now();
   fsTouchStartMulti = e.touches.length > 1;
 }, { passive: true });
 $imgFs.addEventListener('touchend', e => {
   if (fsTouchStartMulti) return;
-  const delta = e.changedTouches[0].clientX - fsTouchStartX;
-  if (Math.abs(delta) > 60 && swipeAllowed(delta)) navigateArticle(delta < 0 ? +1 : -1);
+  if (hasActiveSelection()) return;
+  if (Date.now() - fsTouchStartTime > SWIPE_MAX_DURATION) return;
+  const dx = e.changedTouches[0].clientX - fsTouchStartX;
+  const dy = e.changedTouches[0].clientY - fsTouchStartY;
+  if (Math.abs(dx) > SWIPE_MIN_X
+      && Math.abs(dx) > Math.abs(dy) * SWIPE_X_DOMINANCE
+      && swipeAllowed(dx)) {
+    navigateArticle(dx < 0 ? +1 : -1);
+  }
 }, { passive: true });
 
 // Handle back button
