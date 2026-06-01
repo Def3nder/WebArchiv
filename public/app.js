@@ -354,6 +354,9 @@ async function loadArticles() {
 async function openArticle(id) {
   $overlay.hidden = false;
   document.body.style.overflow = 'hidden';
+  // Beim Artikel-Wechsel laufende Medien stoppen
+  stopAudio();
+  stopVideo();
   $detail.innerHTML = `<div style="padding:80px 40px;text-align:center;color:var(--text-muted)"><div class="spinner" style="margin:0 auto"></div></div>`;
 
   // Update hash without triggering popstate
@@ -429,11 +432,26 @@ function renderDetail(article) {
   const videoHtml = article.videoUrl ? renderVideoPlayer(article.videoUrl) : '';
   const pdfHtml   = article.pdfUrl   ? renderPdfEmbed(article.pdfUrl)     : '';
 
-  const dateHtml = article.date
-    ? `<div class="detail-date-block">${esc(formatDate(article.date))}</div>`
+  const hasBody = !!(article.bodyHtml && article.bodyHtml.trim());
+  const copyBtnHtml = hasBody
+    ? `<button class="detail-cat-pill detail-copy-btn" id="detail-copy-btn" aria-label="Titel und Text kopieren">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="11" height="11" rx="2"/>
+          <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+        </svg><span>copy</span>
+      </button>`
+    : '';
+  const dateHtml = (article.date || copyBtnHtml)
+    ? `<div class="detail-date-row">
+        <span class="detail-date-block">${article.date ? esc(formatDate(article.date)) : ''}</span>
+        ${copyBtnHtml}
+      </div>`
     : '';
   const summaryHtml = article.summary
     ? `<div class="detail-summary"><span class="detail-summary-label">Zusammenfassung:</span> ${esc(article.summary)}</div>`
+    : '';
+  const sourceHtml = article.sourceUrl
+    ? `<div class="detail-source"><em>Quelle: <a href="${esc(article.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(article.sourceUrl)}</a></em></div>`
     : '';
 
   $detail.innerHTML = `
@@ -446,6 +464,7 @@ function renderDetail(article) {
       <h1 class="detail-title">${esc(article.title)}</h1>
       ${(cats || tagPills) ? `<div class="detail-categories">${cats}${tagPills ? `<span style="color:var(--text-dim);font-size:.7rem;align-self:center;margin-left:4px">|</span>${tagPills}` : ''}</div>` : ''}
       ${dateHtml}
+      ${sourceHtml}
       ${summaryHtml}
       <div class="detail-divider"></div>
       ${audioHtml}
@@ -461,16 +480,31 @@ function renderDetail(article) {
     document.getElementById('detail-hero-img')?.addEventListener('click', openFs);
   }
 
-  // Category pill → filter
-  $detail.querySelectorAll('.detail-cat-pill').forEach(pill => {
+  // Category pill → filter (Copy-Button ausschließen)
+  $detail.querySelectorAll('.detail-cat-pill:not(.detail-copy-btn)').forEach(pill => {
     pill.addEventListener('click', () => {
       const cat = pill.dataset.cat;
+      if (!cat) return;
       closeOverlay();
       $filterCategory.value = cat;
       state.category = cat;
       state.page = 1;
       loadArticles();
     });
+  });
+
+  // Copy-Button → Titel + \n + Body in Clipboard
+  document.getElementById('detail-copy-btn')?.addEventListener('click', async e => {
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    const bodyText = $detail.querySelector('.detail-body')?.innerText?.trim() || '';
+    try {
+      await navigator.clipboard.writeText(`${article.title}\n\n---\n\n${bodyText}`);
+      btn.classList.add('copied');
+      setTimeout(() => btn.classList.remove('copied'), 1000);
+    } catch (err) {
+      console.warn('Clipboard write failed', err);
+    }
   });
 
   // Wire up audio player
@@ -736,32 +770,64 @@ function swipeAllowed(delta) {
   return false;
 }
 
+// Swipe threshold: horizontal delta must exceed this AND dominate over vertical movement
+const SWIPE_MIN_X = 80;
+const SWIPE_X_DOMINANCE = 1.5;
+const SWIPE_MAX_DURATION = 500; // ms — länger zählt als Long-Press / Selektions-Geste
+
+function hasActiveSelection() {
+  const sel = window.getSelection();
+  return !!(sel && !sel.isCollapsed && sel.toString().trim());
+}
+
 // Touch swipe on overlay panel
 let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
 let touchStartMulti = false;
 const $overlayPanel = $overlay.querySelector('.overlay-panel');
 $overlayPanel.addEventListener('touchstart', e => {
   touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+  touchStartTime = Date.now();
   touchStartMulti = e.touches.length > 1;
 }, { passive: true });
 $overlayPanel.addEventListener('touchend', e => {
   if (touchStartMulti) return;
-  const delta = e.changedTouches[0].clientX - touchStartX;
-  if (Math.abs(delta) > 60 && swipeAllowed(delta)) navigateArticle(delta < 0 ? +1 : -1);
+  if (hasActiveSelection()) return;
+  if (Date.now() - touchStartTime > SWIPE_MAX_DURATION) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (Math.abs(dx) > SWIPE_MIN_X
+      && Math.abs(dx) > Math.abs(dy) * SWIPE_X_DOMINANCE
+      && swipeAllowed(dx)) {
+    navigateArticle(dx < 0 ? +1 : -1);
+  }
 }, { passive: true });
 
 // Touch swipe on fullscreen image overlay
 let fsTouchStartX = 0;
+let fsTouchStartY = 0;
+let fsTouchStartTime = 0;
 let fsTouchStartMulti = false;
 const $imgFs = document.getElementById('img-fullscreen');
 $imgFs.addEventListener('touchstart', e => {
   fsTouchStartX = e.touches[0].clientX;
+  fsTouchStartY = e.touches[0].clientY;
+  fsTouchStartTime = Date.now();
   fsTouchStartMulti = e.touches.length > 1;
 }, { passive: true });
 $imgFs.addEventListener('touchend', e => {
   if (fsTouchStartMulti) return;
-  const delta = e.changedTouches[0].clientX - fsTouchStartX;
-  if (Math.abs(delta) > 60 && swipeAllowed(delta)) navigateArticle(delta < 0 ? +1 : -1);
+  if (hasActiveSelection()) return;
+  if (Date.now() - fsTouchStartTime > SWIPE_MAX_DURATION) return;
+  const dx = e.changedTouches[0].clientX - fsTouchStartX;
+  const dy = e.changedTouches[0].clientY - fsTouchStartY;
+  if (Math.abs(dx) > SWIPE_MIN_X
+      && Math.abs(dx) > Math.abs(dy) * SWIPE_X_DOMINANCE
+      && swipeAllowed(dx)) {
+    navigateArticle(dx < 0 ? +1 : -1);
+  }
 }, { passive: true });
 
 // Handle back button
