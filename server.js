@@ -82,6 +82,15 @@ function autoCategorize(text) {
     .map(s => s.label);
 }
 
+function extractSourceUrl(clean) {
+  const stripTrail = u => u.trim().replace(/[*_)\].,;\s]+$/, '');
+  const md = clean.match(/\[[^\]]*\]\(([^)]+)\)/);
+  if (md) return stripTrail(md[1]);
+  const bare = clean.match(/(https?:\/\/\S+)/);
+  if (bare) return stripTrail(bare[1]);
+  return null;
+}
+
 function parseArticle(content, filePath) {
   const lines = content.split('\n');
 
@@ -103,16 +112,24 @@ function parseArticle(content, filePath) {
   if (!date) date = extractDate(lines, filePath);
 
   // Title: non-empty lines before Datum, strip markdown markers
+  // Optional "Quelle: <URL>" line is extracted separately and excluded from title.
   const titleLines = [];
+  let sourceUrl = null;
   const limitIdx = datumIdx >= 0 ? datumIdx : Math.min(lines.length, 5);
   for (let i = 0; i < limitIdx; i++) {
     const s = lines[i]
       .replace(/^#+\s*/, '')
       .replace(/\*\*/g, '')
+      .replace(/^\*|\*$/g, '')
       .replace(/^_+|_+$/g, '')
       .replace(/[»«]/g, '')
       .trim();
-    if (s) titleLines.push(s);
+    if (!s) continue;
+    if (/^quelle:/i.test(s)) {
+      if (!sourceUrl) sourceUrl = extractSourceUrl(s.replace(/^quelle:\s*/i, ''));
+      continue;
+    }
+    titleLines.push(s);
   }
 
   // Parse header section after Datum: collect episode, tags, summary until ****
@@ -157,6 +174,12 @@ function parseArticle(content, filePath) {
       continue;
     }
 
+    if (/^quelle:/i.test(clean)) {
+      if (!sourceUrl) sourceUrl = extractSourceUrl(clean.replace(/^quelle:\s*/i, ''));
+      lastMetaIdx = i;
+      continue;
+    }
+
     if (/^zusammenfassung:/i.test(clean)) {
       inSummary = true;
       lastMetaIdx = i;
@@ -182,7 +205,7 @@ function parseArticle(content, filePath) {
   const title = titleLines.join(' ').trim()
     || path.basename(filePath, '.md').replace(/_/g, ' ').replace(/^\d{4}-\d{2}-\d{2}\s+/, '');
 
-  return { title, date, summary, tags, episodeNum, categories: [], body };
+  return { title, date, sourceUrl, summary, tags, episodeNum, categories: [], body };
 }
 
 // ─── File scanner ──────────────────────────────────────────────────────────
@@ -250,6 +273,7 @@ async function scanDir(dirPath, author, year, collector) {
         tags,
         excerpt,
         summary: parsed.summary || null,
+        sourceUrl: parsed.sourceUrl || null,
         preview: bodyExcerpt(parsed.body).slice(0, 200),
         imageUrl: relImg   ? `/files/${relImg}`   : null,
         audioUrl: relAudio ? `/files/${relAudio}` : null,
@@ -352,7 +376,13 @@ app.use(session({
   saveUninitialized: false,
   cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax' },
 }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (/\.(html|css|js)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  },
+}));
 
 // ─── Auth routes (public) ──────────────────────────────────────────────────
 

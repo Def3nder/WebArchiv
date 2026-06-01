@@ -435,6 +435,9 @@ function renderDetail(article) {
   const summaryHtml = article.summary
     ? `<div class="detail-summary"><span class="detail-summary-label">Zusammenfassung:</span> ${esc(article.summary)}</div>`
     : '';
+  const sourceHtml = article.sourceUrl
+    ? `<div class="detail-source"><em>Quelle: <a href="${esc(article.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(article.sourceUrl)}</a></em></div>`
+    : '';
 
   $detail.innerHTML = `
     ${heroHtml}
@@ -446,6 +449,7 @@ function renderDetail(article) {
       <h1 class="detail-title">${esc(article.title)}</h1>
       ${(cats || tagPills) ? `<div class="detail-categories">${cats}${tagPills ? `<span style="color:var(--text-dim);font-size:.7rem;align-self:center;margin-left:4px">|</span>${tagPills}` : ''}</div>` : ''}
       ${dateHtml}
+      ${sourceHtml}
       ${summaryHtml}
       <div class="detail-divider"></div>
       ${audioHtml}

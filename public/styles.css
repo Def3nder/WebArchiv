@@ -88,8 +88,8 @@ select { font: inherit; color: inherit; }
 .header-inner {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 0 24px;
-  height: 64px;
+  padding: 0 16px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   gap: 20px;
@@ -262,6 +262,30 @@ select { font: inherit; color: inherit; }
 .theme-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
 
 @media (max-width: 600px) {
+  .header-inner {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto;
+    grid-template-rows: auto auto;
+    height: auto;
+    min-height: 56px;
+    padding: 8px 16px;
+    gap: 8px 10px;
+    align-items: center;
+  }
+  .site-logo    { grid-column: 1; grid-row: 1; }
+  .header-count { grid-column: 2; grid-row: 1; font-size: 0.7rem; }
+  .theme-btn    { grid-column: 3; grid-row: 1; }
+  .reindex-btn  { grid-column: 4; grid-row: 1; }
+  .logout-btn   { grid-column: 5; grid-row: 1; }
+  .search-wrap {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .filter-bar { top: 100px; }
   .filter-bar-inner { padding: 8px 12px; gap: 8px 10px; }
   .filter-label { display: none; }
   .filter-select { max-width: 120px; font-size: 0.78rem; }
@@ -756,6 +780,7 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
 .detail-date-block {
   color: var(--text);
   font-size: 1rem;
+  font-weight: 600;
   margin: 8px 0 4px;
 }
 
@@ -767,6 +792,21 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
 }
 .detail-summary-label {
   font-weight: 600;
+}
+
+.detail-source {
+  font-style: italic;
+  color: var(--text-dim);
+  margin: 6px 0 12px;
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+.detail-source a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.detail-source a:hover {
+  text-decoration: none;
 }
 
 .detail-divider {
