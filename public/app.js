@@ -354,6 +354,9 @@ async function loadArticles() {
 async function openArticle(id) {
   $overlay.hidden = false;
   document.body.style.overflow = 'hidden';
+  // Beim Artikel-Wechsel laufende Medien stoppen
+  stopAudio();
+  stopVideo();
   $detail.innerHTML = `<div style="padding:80px 40px;text-align:center;color:var(--text-muted)"><div class="spinner" style="margin:0 auto"></div></div>`;
 
   // Update hash without triggering popstate
@@ -429,8 +432,20 @@ function renderDetail(article) {
   const videoHtml = article.videoUrl ? renderVideoPlayer(article.videoUrl) : '';
   const pdfHtml   = article.pdfUrl   ? renderPdfEmbed(article.pdfUrl)     : '';
 
-  const dateHtml = article.date
-    ? `<div class="detail-date-block">${esc(formatDate(article.date))}</div>`
+  const hasBody = !!(article.bodyHtml && article.bodyHtml.trim());
+  const copyBtnHtml = hasBody
+    ? `<button class="detail-cat-pill detail-copy-btn" id="detail-copy-btn" aria-label="Titel und Text kopieren">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="11" height="11" rx="2"/>
+          <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+        </svg><span>copy</span>
+      </button>`
+    : '';
+  const dateHtml = (article.date || copyBtnHtml)
+    ? `<div class="detail-date-row">
+        <span class="detail-date-block">${article.date ? esc(formatDate(article.date)) : ''}</span>
+        ${copyBtnHtml}
+      </div>`
     : '';
   const summaryHtml = article.summary
     ? `<div class="detail-summary"><span class="detail-summary-label">Zusammenfassung:</span> ${esc(article.summary)}</div>`
@@ -465,16 +480,31 @@ function renderDetail(article) {
     document.getElementById('detail-hero-img')?.addEventListener('click', openFs);
   }
 
-  // Category pill → filter
-  $detail.querySelectorAll('.detail-cat-pill').forEach(pill => {
+  // Category pill → filter (Copy-Button ausschließen)
+  $detail.querySelectorAll('.detail-cat-pill:not(.detail-copy-btn)').forEach(pill => {
     pill.addEventListener('click', () => {
       const cat = pill.dataset.cat;
+      if (!cat) return;
       closeOverlay();
       $filterCategory.value = cat;
       state.category = cat;
       state.page = 1;
       loadArticles();
     });
+  });
+
+  // Copy-Button → Titel + \n + Body in Clipboard
+  document.getElementById('detail-copy-btn')?.addEventListener('click', async e => {
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    const bodyText = $detail.querySelector('.detail-body')?.innerText?.trim() || '';
+    try {
+      await navigator.clipboard.writeText(`${article.title}\n\n---\n\n${bodyText}`);
+      btn.classList.add('copied');
+      setTimeout(() => btn.classList.remove('copied'), 1000);
+    } catch (err) {
+      console.warn('Clipboard write failed', err);
+    }
   });
 
   // Wire up audio player
