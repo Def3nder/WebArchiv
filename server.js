@@ -39,6 +39,24 @@ let reindexState = { running: false, processed: 0, articles: 0, done: true };
 
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
+function parseDateQuery(q) {
+  const s = (q || '').trim();
+  if (!s) return null;
+  // Voll: ISO yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return { kind: 'exact', value: s };
+  // Voll: deutsch dd.mm.yyyy
+  let m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (m) return { kind: 'exact', value: `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` };
+  // Monat: ISO yyyy-mm
+  if (/^\d{4}-\d{2}$/.test(s)) return { kind: 'prefix', value: s };
+  // Monat: deutsch mm.yyyy
+  m = s.match(/^(\d{1,2})\.(\d{4})$/);
+  if (m) return { kind: 'prefix', value: `${m[2]}-${m[1].padStart(2,'0')}` };
+  // Jahr: yyyy
+  if (/^\d{4}$/.test(s)) return { kind: 'prefix', value: s };
+  return null;
+}
+
 function normalizeDate(raw) {
   if (!raw) return '';
   const s = String(raw).trim();
@@ -505,10 +523,17 @@ app.get('/api/articles', attachUser, (req, res) => {
   if (year)     filtered = filtered.filter(a => a.year === year);
   if (category) filtered = filtered.filter(a => a.categories.includes(category));
 
-  if (q && fuseIndex) {
-    const filteredIds = new Set(filtered.map(a => a.id));
-    const results = fuseIndex.search(q, { limit: 2000 });
-    filtered = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
+  if (q) {
+    const dq = parseDateQuery(q);
+    if (dq) {
+      filtered = dq.kind === 'exact'
+        ? filtered.filter(a => a.date === dq.value)
+        : filtered.filter(a => a.date && a.date.startsWith(dq.value));
+    } else if (fuseIndex) {
+      const filteredIds = new Set(filtered.map(a => a.id));
+      const results = fuseIndex.search(q, { limit: 2000 });
+      filtered = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
+    }
   }
 
   const total = filtered.length;
