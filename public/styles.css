@@ -697,22 +697,22 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   inset: 0;
   z-index: 500;
   background: rgba(0,0,0,.95);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   cursor: zoom-out;
   animation: fadeIn .2s ease;
 }
 .img-fullscreen[hidden] { display: none; }
 .img-fullscreen img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  display: block;
+  width: 100%;
+  height: auto;
   cursor: zoom-out;
   box-shadow: 0 8px 64px rgba(0,0,0,.8);
 }
 .img-fullscreen-close {
-  position: absolute;
+  position: fixed;
   top: 16px;
   left: 16px;
   z-index: 510;
@@ -836,6 +836,49 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
 .detail-copy-btn.copied {
   border-color: var(--accent);
   color: var(--accent);
+}
+.detail-copy-wrap {
+  position: relative;
+  margin-left: auto;
+  display: inline-flex;
+}
+.copy-prompt-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+.copy-prompt-menu[hidden] { display: none; }
+.copy-prompt-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  border-radius: calc(var(--radius) - 3px);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition), background var(--transition);
+}
+.copy-prompt-item:hover {
+  color: var(--accent);
+  background: var(--surface);
+}
+.copy-prompt-item.is-article {
+  margin-bottom: 4px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
 }
 
 .detail-summary {

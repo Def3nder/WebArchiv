@@ -489,9 +489,39 @@ app.get('/api/meta', attachUser, (req, res) => {
 
 app.get('/api/reindex/status', requireAuth, (_req, res) => res.json(reindexState));
 
-app.get('/api/infografik-prompt', attachUser, (_req, res) => {
+const PROMPTS_DIR = path.join(__dirname, 'prompts');
+
+// Liste der verfügbaren Prompt-Dateien; Zahlen-Präfix steuert Reihenfolge
+// und wird aus dem Label entfernt (z. B. "1_Infografik-Prompt-ChatGPT.txt").
+app.get('/api/prompts', attachUser, (_req, res) => {
   try {
-    const txt = fs.readFileSync(path.join(__dirname, 'infografik-prompt.txt'), 'utf8');
+    const prompts = fs.readdirSync(PROMPTS_DIR)
+      .filter(f => f.toLowerCase().endsWith('.txt'))
+      .map(file => {
+        const stem = file.slice(0, -4);
+        const m = stem.match(/^(\d+)_(.*)$/);
+        return {
+          file,
+          label: m ? m[2] : stem,
+          order: m ? parseInt(m[1], 10) : Infinity,
+        };
+      })
+      .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
+      .map(({ file, label }) => ({ file, label }));
+    res.json(prompts);
+  } catch {
+    res.json([]);
+  }
+});
+
+// Inhalt einer einzelnen Prompt-Datei (Path-Traversal-Schutz wie /files/*)
+app.get('/api/prompts/:file', attachUser, (req, res) => {
+  const file = path.basename(req.params.file);
+  if (!file.toLowerCase().endsWith('.txt')) return res.status(400).end();
+  const absPath = path.resolve(path.join(PROMPTS_DIR, file));
+  if (!absPath.startsWith(PROMPTS_DIR + path.sep)) return res.status(400).end();
+  try {
+    const txt = fs.readFileSync(absPath, 'utf8');
     res.type('text/plain').send(txt);
   } catch {
     res.status(404).end();

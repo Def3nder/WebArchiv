@@ -454,14 +454,17 @@ function renderDetail(article) {
 
   const hasBody = !!(article.bodyHtml && article.bodyHtml.trim());
   const copyBtnHtml = hasBody
-    ? `<button class="detail-cat-pill detail-copy-btn" id="detail-copy-btn" aria-label="Titel und Text kopieren">
-        <span class="detail-copy-icon" data-copy-zone="prompt" title="Mit Infografik-Prompt kopieren">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="9" y="9" width="11" height="11" rx="2"/>
-            <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
-          </svg>
-        </span><span class="detail-copy-text" data-copy-zone="plain" title="Titel + Text kopieren">copy</span>
-      </button>`
+    ? `<div class="detail-copy-wrap">
+        <button class="detail-cat-pill detail-copy-btn" id="detail-copy-btn" aria-label="Titel und Text kopieren">
+          <span class="detail-copy-icon" data-copy-zone="prompt" title="Prompt auswählen" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="11" height="11" rx="2"/>
+              <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+            </svg>
+          </span><span class="detail-copy-text" data-copy-zone="plain" title="Titel + Text kopieren">copy</span>
+        </button>
+        <div class="copy-prompt-menu" id="copy-prompt-menu" role="menu" hidden></div>
+      </div>`
     : '';
   const dateHtml = (article.date || copyBtnHtml)
     ? `<div class="detail-date-row">
@@ -516,31 +519,83 @@ function renderDetail(article) {
   });
 
   // Copy-Button → zwei Klick-Zonen:
-  //   Icon  → Inhalt von infografik-prompt.txt vorangestellt
+  //   Icon  → öffnet Menü mit Prompt-Varianten (vorangestellt)
   //   "copy" → nur Titel + Body
-  document.getElementById('detail-copy-btn')?.addEventListener('click', async e => {
-    e.stopPropagation();
-    const btn = e.currentTarget;
-    const zone = e.target.closest('[data-copy-zone]');
-    const withPrompt = zone?.dataset.copyZone === 'prompt'
-                    || (!zone && !!e.target.closest('svg'));
-    const bodyText = $detail.querySelector('.detail-body')?.innerText?.trim() || '';
-    const articleText = `${article.title}\n\n---\n\n${bodyText}`;
-    let prefix = '';
-    if (withPrompt) {
+  const $copyBtn  = document.getElementById('detail-copy-btn');
+  const $copyMenu = document.getElementById('copy-prompt-menu');
+  const $copyIcon = $copyBtn?.querySelector('.detail-copy-icon');
+
+  if ($copyBtn) {
+    // Kopiert Artikel, optional mit vorangestelltem Prompt-Text
+    const copyArticle = async (promptText = '') => {
+      const bodyText = $detail.querySelector('.detail-body')?.innerText?.trim() || '';
+      const articleText = `${article.title}\n\n---\n\n${bodyText}`;
+      const prefix = promptText.trim() ? promptText.trim() + '\n\n' : '';
       try {
-        const r = await fetch('/api/infografik-prompt');
-        if (r.ok) prefix = (await r.text()).trim() + '\n\n';
-      } catch { /* Fallback ohne Prefix */ }
-    }
-    try {
-      await navigator.clipboard.writeText(prefix + articleText);
-      btn.classList.add('copied');
-      setTimeout(() => btn.classList.remove('copied'), 1000);
-    } catch (err) {
-      console.warn('Clipboard write failed', err);
-    }
-  });
+        await navigator.clipboard.writeText(prefix + articleText);
+        $copyBtn.classList.add('copied');
+        setTimeout(() => $copyBtn.classList.remove('copied'), 1000);
+      } catch (err) {
+        console.warn('Clipboard write failed', err);
+      }
+    };
+
+    let promptsLoaded = false;
+    const closeMenu = () => {
+      $copyMenu.hidden = true;
+      $copyIcon?.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', onOutside, true);
+      document.removeEventListener('keydown', onEsc, true);
+    };
+    const onOutside = ev => { if (!$copyMenu.contains(ev.target) && ev.target !== $copyIcon && !$copyIcon.contains(ev.target)) closeMenu(); };
+    const onEsc = ev => { if (ev.key === 'Escape') { ev.stopPropagation(); closeMenu(); } };
+
+    const buildMenu = async () => {
+      if (promptsLoaded) return;
+      promptsLoaded = true;
+      // Erster Eintrag: nur Artikel
+      const items = [{ file: null, label: 'Artikel' }];
+      try {
+        const r = await fetch('/api/prompts');
+        if (r.ok) items.push(...await r.json());
+      } catch { /* nur "Artikel" anbieten */ }
+      $copyMenu.innerHTML = items.map((it, i) =>
+        `<button type="button" role="menuitem" class="copy-prompt-item${i === 0 ? ' is-article' : ''}" data-prompt-file="${it.file ? esc(it.file) : ''}">${esc(it.label)}</button>`
+      ).join('');
+      $copyMenu.querySelectorAll('.copy-prompt-item').forEach(item => {
+        item.addEventListener('click', async ev => {
+          ev.stopPropagation();
+          const file = item.dataset.promptFile;
+          let promptText = '';
+          if (file) {
+            try {
+              const r = await fetch(`/api/prompts/${encodeURIComponent(file)}`);
+              if (r.ok) promptText = await r.text();
+            } catch { /* Fallback: Artikel ohne Prompt */ }
+          }
+          closeMenu();
+          copyArticle(promptText);
+        });
+      });
+    };
+
+    $copyBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const zone = e.target.closest('[data-copy-zone]');
+      const wantsMenu = zone?.dataset.copyZone === 'prompt'
+                     || (!zone && !!e.target.closest('svg'));
+      if (wantsMenu) {
+        if (!$copyMenu.hidden) { closeMenu(); return; }
+        await buildMenu();
+        $copyMenu.hidden = false;
+        $copyIcon?.setAttribute('aria-expanded', 'true');
+        document.addEventListener('click', onOutside, true);
+        document.addEventListener('keydown', onEsc, true);
+      } else {
+        copyArticle('');
+      }
+    });
+  }
 
   // Wire up audio player
   if (article.audioUrl) {
