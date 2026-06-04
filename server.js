@@ -554,14 +554,27 @@ app.get('/api/articles', attachUser, (req, res) => {
   if (category) filtered = filtered.filter(a => a.categories.includes(category));
 
   if (q) {
-    const dq = parseDateQuery(q);
-    if (dq) {
+    // Query in Tokens zerlegen: Datums-Tokens → Datumsfilter, Rest → Fuse-Text.
+    // So sind Text-Suche und Datumseingrenzung kombinierbar ("Achtsamkeit 2025").
+    const tokens = q.trim().split(/\s+/);
+    const dateConstraints = [];
+    const textTokens = [];
+    for (const t of tokens) {
+      const dq = parseDateQuery(t);
+      if (dq) dateConstraints.push(dq);
+      else textTokens.push(t);
+    }
+    // Datums-Tokens als Filter anwenden (AND)
+    for (const dq of dateConstraints) {
       filtered = dq.kind === 'exact'
         ? filtered.filter(a => a.date === dq.value)
         : filtered.filter(a => a.date && a.date.startsWith(dq.value));
-    } else if (fuseIndex) {
+    }
+    // Restlicher Text über Fuse, auf die datums-gefilterte Teilmenge eingeschränkt
+    const text = textTokens.join(' ').trim();
+    if (text && fuseIndex) {
       const filteredIds = new Set(filtered.map(a => a.id));
-      const results = fuseIndex.search(q, { limit: 2000 });
+      const results = fuseIndex.search(text, { limit: 2000 });
       filtered = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
     }
   }
