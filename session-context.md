@@ -1,6 +1,6 @@
 # WebArchiv — Session-Kontext & Bearbeitungsstand
 
-_Stand: 2026-06-02 (6. Aktualisierung — vollständig gegen den Code abgeglichen)_
+_Stand: 2026-06-04 (7. Aktualisierung — vier neue Features: Prompt-Menü, Fullscreen-Bilder, kombinierte Suche, Cache-Busting)_
 
 ---
 
@@ -16,7 +16,9 @@ WebArchiv/
 ├── users.json               ← Benutzer (bcrypt-Hashes, Rollen, ACL)
 ├── example-users.json       ← Vorlage für users.json
 ├── public-directories.txt   ← JSON: öffentliche Autoren für Gastzugriff
-├── infografik-prompt.txt    ← Text-Prefix für Copy-Button (Infografik-Prompt)
+├── prompts/                 ← Prompt-Vorlagen (Zahlen-Präfix steuert Reihenfolge)
+│   ├── 1_Infografik-Prompt-ChatGPT.txt
+│   └── 2_Infografik-Prompt-Gemini.txt
 ├── session-context.md
 ├── scripts/
 │   └── hash-passwords.js    ← bcrypt-Hashing der Klartext-Passwörter in users.json
@@ -111,22 +113,26 @@ findSibling(dirPath, basename, ['.pdf'])                   // PDF
 {
   id, author, year, title, date,
   categories[], tags[], excerpt, summary, sourceUrl, preview,
-  imageUrl, audioUrl, videoUrl, pdfUrl,   // /files/… oder null
+  imageUrl, audioUrl, videoUrl, pdfUrl,   // /files/…?v=<mtime> oder null
   episodeNum,
   filePath    // wird vor jeder API-Response entfernt
 }
 ```
+Medien-URLs tragen mtime-basierte Versionierung (`?v=<mtimeMs>`), damit
+ausgetauschte Dateien (gleicher Name, neuer Inhalt) nach Server-Neustart/Re-Index
+vom Browser neu geladen werden statt aus dem Cache serviert.
 
 **7. Fuzzy-Suche mit Fuse.js** — `fuseIndex` wird in `buildIndex()` aufgebaut,
 gewichtete Keys: `title` (3), `author` (1.5), `categories` (1), `excerpt` (0.8);
 `threshold: 0.35`, `ignoreLocation: true`, `minMatchCharLength: 2`.
 
-**8. Datums-Such-Filter `parseDateQuery(q)`** — erkennt datumsähnliche
-Eingaben im Suchfeld und filtert direkt über `date` statt Fuse:
-- `2024-01-15` / `15.01.2024` → exakter Tag
-- `2024-01` / `01.2024` → ganzer Monat (`date.startsWith`)
-- `2024` → ganzes Jahr (`date.startsWith`)
-- andere Eingaben → Fuse-Fuzzy-Suche
+**8. Kombinierte Text- + Datums-Suche** — Query wird in Whitespace-Tokens
+zerlegt; pro Token `parseDateQuery()`:
+- Datums-Tokens (`2024-01-15`, `15.01.2024`, `2024-01`, `01.2024`, `2024`)
+  → `date`-Filter anwenden (AND)
+- Restliche Text-Tokens → Fuse-Fuzzy-Suche auf der gefilterten Teilmenge
+- Bsp. `Achtsamkeit 2025` → all Fuzzy-Treffer nur aus 2025; reine Datums- oder
+  Text-Eingaben funktionieren wie bisher (Rückwärtskompatibilität)
 
 **9. Asynchrones Re-Indexing** — `POST /api/reindex` startet `buildIndex()`
 non-blocking und antwortet sofort mit `{ started: true }`. Fortschritt über
@@ -233,14 +239,21 @@ und nach Login aufgelöst (Artikel öffnet direkt).
 - Gilt für `.overlay-panel` UND `#img-fullscreen`
 
 **25. Bild-Vollbild-Ansicht** (`#img-fullscreen`):
-- Hero hat Expand-Button + Download-Button (`<a download>`)
-- Compress-Button schließt; Klick/ESC/Hintergrund schließt
+- Layout: volle Bildschirmbreite, von oben startend, vertikal scrollbar
+  (`display: block`, `overflow-y: auto`, `-webkit-overflow-scrolling: touch`)
+- Bild: `width: 100%; height: auto` (responsive, nicht zentriert)
+- Schließen-Button: `position: fixed` (bleibt beim Scrollen sichtbar)
+- Klick/ESC/Hintergrund schließt; Swipe-Navigation wechselt Artikel
 - `openArticle()` aktualisiert das Vollbild-Bild bei Navigation
 
-**26. Copy-Button mit zwei Klick-Zonen** (`detail-copy-btn`, nur wenn Body):
-- Icon-Zone (`data-copy-zone="prompt"`) → Inhalt von `infografik-prompt.txt`
-  (via `GET /api/infografik-prompt`) + Leerzeile vorangestellt
-- Text-Zone „copy" (`data-copy-zone="plain"`) → nur `Titel\n\n---\n\nBody`
+**26. Copy-Button mit dynamischem Prompt-Menü** (`detail-copy-btn`, nur wenn Body):
+- Text-Zone „copy" (`data-copy-zone="plain"`) → sofort nur `Titel\n\n---\n\nBody`
+- Icon-Zone (`data-copy-zone="prompt"`, aria-haspopup) → öffnet Menü:
+  - Erster Eintrag: „Artikel" (= Text ohne Prompt)
+  - Pro Prompt-Datei aus `prompts/` ein Eintrag (Label = Dateiname ohne Präfix/Endung)
+  - Reihenfolge per Zahlen-Präfix (`1_`, `2_`, …)
+  - Klick → `GET /api/prompts/<file>`, Inhalt vorangestellt + Artikel kopiert
+- Menü schließt via Auswahl, ESC, Außenklick; Fuse-Fehler → Fallback Artikel ohne Prompt
 - `copied`-Highlight für 1 s; iOS-tauglich (kein Doppeltap/Long-Press)
 
 **27. Quelle-Anzeige** — `sourceUrl` als kursiver, klickbarer Link unter dem
@@ -276,9 +289,10 @@ detail-content
 | `POST` | `/api/login` | — | Login (`email`, `password`); setzt Session |
 | `POST` | `/api/logout` | — | Zerstört Session |
 | `GET` | `/api/meta` | Soft-Auth | `{ authors, years, categories }` (ACL-gefiltert) |
-| `GET` | `/api/articles` | Soft-Auth | Paginierte Liste; Query `q`, `author`, `year`, `category`, `page`, `limit` (Datums-Suche erkannt) |
-| `GET` | `/api/articles/:id` | Soft-Auth | Einzelartikel mit `bodyHtml`, `sourceUrl`, `videoUrl`, `pdfUrl` |
-| `GET` | `/api/infografik-prompt` | Soft-Auth | Inhalt `infografik-prompt.txt` (für Copy-Button) |
+| `GET` | `/api/articles` | Soft-Auth | Paginierte Liste; Query `q`, `author`, `year`, `category`, `page`, `limit` (kombinierte Text+Datums-Suche) |
+| `GET` | `/api/articles/:id` | Soft-Auth | Einzelartikel mit `bodyHtml`, `sourceUrl`, `videoUrl`, `pdfUrl`, Medien-URLs mit mtime-Versionierung |
+| `GET` | `/api/prompts` | Soft-Auth | Liste verfügbarer Prompts: `[{ file, label }]` (aus `prompts/` mit Zahlen-Präfix sortiert) |
+| `GET` | `/api/prompts/:file` | Soft-Auth | Inhalt einer Prompt-Datei (Path-Traversal-Schutz) |
 | `GET` | `/api/reindex/status` | requireAuth | `{ running, processed, articles, done }` |
 | `POST` | `/api/reindex` | requireAdmin | Startet Re-Index async, `{ started: true }` |
 | `GET` | `/files/*` | Soft-Auth | Statische Medien aus `www/` (ACL pro Autor, Path-Traversal-Schutz) |
@@ -291,7 +305,7 @@ detail-content
 |---|---|
 | Artikel-Kacheln (Grid), Quadratisch/Länglich | ✅ |
 | Fuzzy-Volltextsuche (Fuse.js, gewichtet, 300 ms Debounce) | ✅ |
-| Datums-Suche im Suchfeld (Tag / Monat / Jahr, ISO & deutsch) | ✅ |
+| Kombinierte Text- + Datums-Suche ("Achtsamkeit 2025") | ✅ |
 | Filter: Autor, Jahr, Kategorie; Seitengröße; Paginierung | ✅ |
 | Auto-Kategorisierung (12 Buckets) | ✅ |
 | Datumsformat-Normalisierung (DD.MM.YYYY, Slash, ISO) | ✅ |
@@ -300,8 +314,8 @@ detail-content
 | Detail-Overlay (Bild, Titel, Kategorien, Tags, Datum, Summary, Body) | ✅ |
 | Audio-Player (custom) / Video (HTML5) / PDF (PDF.js) | ✅ |
 | Kachel-Badges: Audio / Video / PDF | ✅ |
-| Copy-Button mit zwei Zonen (Prompt / Plain) | ✅ |
-| Bild-Vollbild (Expand/Download/Compress) | ✅ |
+| Copy-Button mit dynamischem Prompt-Menü (Text-Zone = sofort kopieren) | ✅ |
+| Bild-Vollbild: volle Breite, von oben, scrollbar (iPad-fix) | ✅ |
 | Artikel-Navigation: Tastatur, Buttons, Swipe (zoom-/selektions-aware) | ✅ |
 | Hash-Routing + Deep-Links (`#/article/:id`) | ✅ |
 | Session-Auth (bcrypt), Rollen (admin/user) + ACL | ✅ |
@@ -309,6 +323,7 @@ detail-content
 | Soft-Auth-Middleware + getEffectiveUser() | ✅ |
 | Logon/Logout-Toggle, schließbarer Login-Dialog | ✅ |
 | Async Re-Index mit Fortschritts-Polling | ✅ |
+| Cache-Busting für ausgetauschte Medien (mtime-basiert) | ✅ |
 | Dark/Light-Mode-Toggle (localStorage) | ✅ |
 | Schriftart-Auswahl (4 Presets, localStorage) | ✅ |
 
@@ -352,16 +367,25 @@ Light-Mode über `body[data-theme="light"]`-Overrides der CSS-Variablen.
 
 ---
 
-## Letzte Änderungen (Session 5–6: 2026-06-02)
+## Letzte Änderungen (Session 7: 2026-06-04)
 
-**Feature-Branch:** `feature/default-user-und-logon-dialog` → in `main`
-gemergt. Relevante Commits:
-- `3c4c12e` — Anonymer Gastzugriff + Logon-Button + Soft-Auth-Middleware
-- `9579d90` — No-Cache-Header entfernt (Performance: ETag/304)
-- `f60bae4` — Datums-Suche im Suchfeld
+**Feature-Branch:** `search` (von `main` abgezweigt). Neue Commits:
 
-Zusätzlich in dieser Phase: Datumsformat-Normalisierung (deutsche Daten in
-Infografiken), Login-Dialog mit Schließen-Button/ESC, Logout → Guest-Mode.
+1. **`26f12fb`** — Copy-Button für mehrere Prompts + Fullscreen in Seitenbreite
+   - Dynamisches Prompt-Menü im Copy-Button (Unterordner `prompts/` mit Zahlen-Präfix)
+   - Neue APIs: `GET /api/prompts`, `GET /api/prompts/:file`
+   - Vollbild-Bilder: volle Bildschirmbreite, von oben, scrollbar (iPad-Fix)
+   - `styles.css`: `.img-fullscreen` → `block + overflow-y:auto`
+
+2. **`aafb032`** — Kombinierte Text- und Datums-Suche im Suchfeld
+   - Query-Tokens zerlegen: Datums-Tokens → `date`-Filter, Text → Fuse-Suche
+   - z.B. "Achtsamkeit 2025" kombiniert Fuzzy mit Jahr-Filter
+   - Rückwärtskompatibel: reine Datumseingabe/Text-Eingabe funktioniert wie bisher
+
+3. **`b61fb25`** — Cache-Busting für ausgetauschte Bilder/Medien
+   - Medien-URLs tragen mtime als `?v=<mtimeMs>`
+   - Ausgetauschtes Bild (gleicher Name, neue mtime) wird nach Neustart neu geladen
+   - Helper `fileUrl(relPath, absPath)` stellt Versionsnummern bereit
 
 ---
 
