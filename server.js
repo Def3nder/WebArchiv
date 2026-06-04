@@ -267,6 +267,14 @@ function findSibling(dir, basename, exts) {
   return null;
 }
 
+// Cache-Busting: mtime der Datei als Versions-Query an die /files-URL hängen,
+// damit ein ausgetauschtes Bild (gleicher Name) im Browser neu geladen wird.
+function fileUrl(relPath, absPath) {
+  let v = '';
+  try { v = '?v=' + Math.floor(fs.statSync(absPath).mtimeMs); } catch { /* Datei weg */ }
+  return `/files/${relPath}${v}`;
+}
+
 async function scanDir(dirPath, author, year, collector) {
   let entries;
   try {
@@ -324,10 +332,10 @@ async function scanDir(dirPath, author, year, collector) {
         summary: parsed.summary || null,
         sourceUrl: parsed.sourceUrl || null,
         preview: bodyExcerpt(parsed.body).slice(0, 200),
-        imageUrl: relImg   ? `/files/${relImg}`   : null,
-        audioUrl: relAudio ? `/files/${relAudio}` : null,
-        videoUrl: relVideo ? `/files/${relVideo}` : null,
-        pdfUrl:   relPdf   ? `/files/${relPdf}`   : null,
+        imageUrl: relImg   ? fileUrl(relImg, imgPath)     : null,
+        audioUrl: relAudio ? fileUrl(relAudio, audioPath) : null,
+        videoUrl: relVideo ? fileUrl(relVideo, videoPath) : null,
+        pdfUrl:   relPdf   ? fileUrl(relPdf, pdfPath)     : null,
         episodeNum: parsed.episodeNum,
         filePath: fullPath,
       });
