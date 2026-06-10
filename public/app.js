@@ -968,7 +968,7 @@ async function init() {
   $loading.hidden = false;
   document.body.classList.toggle('layout-tall', $filterLayout.value === 'tall');
 
-  const savedTheme = localStorage.getItem('wa-theme') || 'dark';
+  const savedTheme = localStorage.getItem('wa-theme') || 'light';
   applyTheme(savedTheme);
 
   const savedFont = localStorage.getItem('wa-font') || 'system';
