@@ -527,8 +527,45 @@ function renderDetail(article) {
 
   if ($copyBtn) {
     // Kopiert Artikel, optional mit vorangestelltem Prompt-Text
+    // Eigene Text-Extraktion, weil innerText bei <ol> die Nummerierung verschluckt.
+    const extractBodyText = (root) => {
+      if (!root) return '';
+      const blocks = [];
+      for (const node of root.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const t = node.textContent.replace(/\s+/g, ' ').trim();
+          if (t) blocks.push(t);
+          continue;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        const tag = node.tagName;
+        if (tag === 'OL') {
+          const start = parseInt(node.getAttribute('start') || '1', 10);
+          let i = 0;
+          for (const li of node.children) {
+            if (li.tagName === 'LI') {
+              const t = (li.innerText || li.textContent || '').trim();
+              if (t) blocks.push(`${start + i}. ${t}`);
+              i++;
+            }
+          }
+        } else if (tag === 'UL') {
+          for (const li of node.children) {
+            if (li.tagName === 'LI') {
+              const t = (li.innerText || li.textContent || '').trim();
+              if (t) blocks.push(`- ${t}`);
+            }
+          }
+        } else {
+          const t = (node.innerText || node.textContent || '').trim();
+          if (t) blocks.push(t);
+        }
+      }
+      return blocks.join('\n\n');
+    };
+
     const copyArticle = async (promptText = '') => {
-      const bodyText = $detail.querySelector('.detail-body')?.innerText?.trim() || '';
+      const bodyText = extractBodyText($detail.querySelector('.detail-body')).trim();
       const articleText = `${article.title}\n\n---\n\n${bodyText}`;
       const prefix = promptText.trim() ? promptText.trim() + '\n\n' : '';
       try {
