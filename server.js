@@ -373,7 +373,12 @@ async function buildIndex() {
     return true;
   });
 
-  articles.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const isInfografik = a => (a.author === 'Infografiken' ? 1 : 0);
+  articles.sort((a, b) =>
+    (b.date || '').localeCompare(a.date || '') ||
+    (a.title || '').localeCompare(b.title || '', 'de', { sensitivity: 'base' }) ||
+    isInfografik(a) - isInfografik(b)
+  );
 
   const authorsSet = new Set(articles.map(a => a.author));
   const yearsSet = new Set(articles.map(a => a.year).filter(Boolean));
