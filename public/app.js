@@ -6,6 +6,7 @@ const state = {
   author: '',
   year: '',
   category: '',
+  telegram: false,
   page: 1,
   limit: 24,
   total: 0,
@@ -34,6 +35,7 @@ const $resetFilters   = document.getElementById('reset-filters');
 const $filterFont     = document.getElementById('filter-font');
 const $reindexBtn     = document.getElementById('reindex-btn');
 const $themeBtn       = document.getElementById('theme-btn');
+const $telegramBtn    = document.getElementById('telegram-btn');
 const $logoutBtn      = document.getElementById('logout-btn');
 const $loginBtn       = document.getElementById('login-btn');
 const $loginClose     = document.getElementById('login-close');
@@ -100,6 +102,12 @@ function applyTheme(value) {
     $themeBtn.innerHTML = SVG_SUN;
     $themeBtn.title = 'Hell-Modus';
   }
+}
+
+function setTelegram(on) {
+  state.telegram = on;
+  $telegramBtn.classList.toggle('active', on);
+  $telegramBtn.setAttribute('aria-pressed', String(on));
 }
 
 function authorClass(author) {
@@ -235,6 +243,7 @@ async function fetchArticles(params = {}) {
   if (params.author)   qs.set('author', params.author);
   if (params.year)     qs.set('year', params.year);
   if (params.category) qs.set('category', params.category);
+  if (params.telegram) qs.set('telegram', '1');
   qs.set('page',  params.page  || 1);
   qs.set('limit', params.limit || 24);
   const r = await apiFetch(`/api/articles?${qs}`);
@@ -333,6 +342,7 @@ async function loadArticles() {
       author:   state.author,
       year:     state.year,
       category: state.category,
+      telegram: state.telegram,
       page:     state.page,
       limit:    state.limit,
     });
@@ -778,6 +788,7 @@ $searchClear.addEventListener('click', () => {
 
 $filterAuthor.addEventListener('change', () => {
   state.author = $filterAuthor.value;
+  if (state.author === 'Telegram') setTelegram(true);
   state.page = 1;
   loadArticles();
 });
@@ -810,6 +821,12 @@ $themeBtn.addEventListener('click', () => {
   applyTheme(document.body.dataset.theme === 'light' ? 'dark' : 'light');
 });
 
+$telegramBtn.addEventListener('click', () => {
+  setTelegram(!state.telegram);
+  state.page = 1;
+  loadArticles();
+});
+
 $loginForm.addEventListener('submit', e => {
   e.preventDefault();
   const email    = $loginEmail.value.trim();
@@ -834,7 +851,8 @@ $resetFilters.addEventListener('click', () => {
   $filterLayout.value = 'tall';
   document.body.classList.add('layout-tall');
   $filterLimit.value = '24';
-  Object.assign(state, { q:'', author:'', year:'', category:'', page:1, limit:24 });
+  setTelegram(false);
+  Object.assign(state, { q:'', author:'', year:'', category:'', telegram:false, page:1, limit:24 });
   loadArticles();
 });
 

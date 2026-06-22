@@ -548,13 +548,19 @@ app.post('/api/reindex', requireAdmin, (req, res) => {
 });
 
 app.get('/api/articles', attachUser, (req, res) => {
-  const { q, author, year, category, page = '1', limit = '24' } = req.query;
+  const { q, author, year, category, page = '1', limit = '24', telegram } = req.query;
   const user = req.user;
   let filtered = articles;
 
   // ACL pre-filter: restrict to allowed authors
   if (user.allowedAuthors !== null) {
     filtered = filtered.filter(a => user.allowedAuthors.includes(a.author));
+  }
+
+  // "Telegram"-Artikel standardmäßig ausblenden; einbeziehen bei telegram=1
+  // oder wenn explizit nach Autor "Telegram" gefiltert wird.
+  if (telegram !== '1' && author !== 'Telegram') {
+    filtered = filtered.filter(a => a.author !== 'Telegram');
   }
 
   if (author) {
