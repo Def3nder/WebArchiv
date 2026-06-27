@@ -283,7 +283,7 @@ function renderCard(article, idx) {
   const epNum = article.episodeNum ? `<span class="episode-num">#${article.episodeNum}</span>` : '';
 
   return `
-    <article class="card" data-id="${esc(article.id)}" style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(article.title)}">
+    <article class="card" data-id="${esc(article.id)}" data-author="${esc(article.author)}" style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(article.title)}">
       <div class="card-image">
         ${imageHtml}
         ${audioBadge}${videoBadge}${pdfBadge}
