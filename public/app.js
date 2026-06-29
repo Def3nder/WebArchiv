@@ -286,7 +286,9 @@ function renderCard(article, idx) {
     <article class="card" data-id="${esc(article.id)}" data-author="${esc(article.author)}" style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(article.title)}">
       <div class="card-image">
         ${imageHtml}
-        ${audioBadge}${videoBadge}${pdfBadge}
+        ${audioBadge || videoBadge || pdfBadge
+          ? `<div class="card-badges">${audioBadge}${videoBadge}${pdfBadge}</div>`
+          : ''}
       </div>
       <div class="card-body">
         <div class="card-meta">

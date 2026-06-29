@@ -379,10 +379,21 @@ select { font: inherit; color: inherit; }
   opacity: 0.4;
 }
 
-.card-audio-badge {
+/* Medien-Badges unten rechts gestapelt (Audio unten, darüber Video/PDF) */
+.card-badges {
   position: absolute;
   bottom: 10px;
   right: 10px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+  /* Helles Gold auf dunklem Badge-Hintergrund (themenunabhängig gut lesbar) */
+  color: #f0d98a;
+}
+
+.card-audio-badge {
   background: rgba(0,0,0,.75);
   border-radius: 20px;
   padding: 4px 10px 4px 8px;
@@ -390,24 +401,18 @@ select { font: inherit; color: inherit; }
   align-items: center;
   gap: 5px;
   font-size: 0.72rem;
-  color: var(--accent);
   backdrop-filter: blur(4px);
 }
 .card-audio-badge svg { width: 12px; height: 12px; }
 
 .card-video-badge,
 .card-pdf-badge {
-  position: absolute;
   background: rgba(0,0,0,.75);
   border-radius: 20px;
   padding: 4px 10px;
   font-size: 0.72rem;
-  color: var(--accent);
   backdrop-filter: blur(4px);
-  pointer-events: none;
 }
-.card-video-badge { bottom: 38px; right: 10px; }
-.card-pdf-badge   { bottom: 66px; right: 10px; }
 
 /* Video player in detail overlay */
 .video-player { margin: 0 0 1.25rem; }
