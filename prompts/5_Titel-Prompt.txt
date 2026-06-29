@@ -1,0 +1,4 @@
+Was wäre die passende Überschrift für den folgenden Text ?
+
+Bitte überlege Dir einen passenden Titel und gib als Ausgabe lediglich den Titel aus !
+ 

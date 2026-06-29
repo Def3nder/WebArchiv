@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles.css?v=7" />
 </head>
 <body>
 
@@ -25,7 +25,7 @@
         <input
           id="search-input"
           type="search"
-          placeholder="Suche nach Artikel, Autor, Kategorie…"
+          placeholder="Suche nach Artikel, Autor, Kategorie, Datum…"
           autocomplete="off"
           spellcheck="false"
         />
@@ -33,6 +33,11 @@
       </div>
       <div class="header-count" id="article-count"></div>
       <button id="theme-btn" class="theme-btn" title="Hell-Modus"></button>
+      <button id="telegram-btn" class="telegram-btn" title="Telegram" aria-pressed="false" aria-label="Telegram-Artikel anzeigen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
+        </svg>
+      </button>
       <button id="reindex-btn" class="reindex-btn" title="Archiv neu einlesen" hidden>↺</button>
       <button id="login-btn" class="logout-btn" title="Anmelden" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -171,6 +176,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

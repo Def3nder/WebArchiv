@@ -261,10 +261,28 @@ select { font: inherit; color: inherit; }
 .theme-btn svg { width: 16px; height: 16px; stroke: currentColor; }
 .theme-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
 
+.telegram-btn {
+  font-size: 1rem;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+.telegram-btn svg { width: 16px; height: 16px; stroke: currentColor; }
+.telegram-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+.telegram-btn.active,
+.telegram-btn.active:hover { color: #229ED9; border-color: #229ED9; }
+
 @media (max-width: 600px) {
   .header-inner {
     display: grid;
-    grid-template-columns: 1fr auto auto auto auto;
+    grid-template-columns: 1fr auto auto auto auto auto;
     grid-template-rows: auto auto;
     height: auto;
     min-height: 56px;
@@ -275,8 +293,9 @@ select { font: inherit; color: inherit; }
   .site-logo    { grid-column: 1; grid-row: 1; }
   .header-count { grid-column: 2; grid-row: 1; font-size: 0.7rem; }
   .theme-btn    { grid-column: 3; grid-row: 1; }
-  .reindex-btn  { grid-column: 4; grid-row: 1; }
-  .logout-btn   { grid-column: 5; grid-row: 1; }
+  .telegram-btn { grid-column: 4; grid-row: 1; }
+  .reindex-btn  { grid-column: 5; grid-row: 1; }
+  .logout-btn   { grid-column: 6; grid-row: 1; }
   .search-wrap {
     grid-column: 1 / -1;
     grid-row: 2;
@@ -344,6 +363,7 @@ select { font: inherit; color: inherit; }
   transition: transform .5s ease;
 }
 .card:hover .card-image img { transform: scale(1.04); }
+.card[data-author="Infografiken"] .card-image img { object-position: top; }
 .card-image-placeholder {
   width: 100%;
   height: 100%;
@@ -359,10 +379,21 @@ select { font: inherit; color: inherit; }
   opacity: 0.4;
 }
 
-.card-audio-badge {
+/* Medien-Badges unten rechts gestapelt (Audio unten, darüber Video/PDF) */
+.card-badges {
   position: absolute;
   bottom: 10px;
   right: 10px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+  /* Helles Gold auf dunklem Badge-Hintergrund (themenunabhängig gut lesbar) */
+  color: #f0d98a;
+}
+
+.card-audio-badge {
   background: rgba(0,0,0,.75);
   border-radius: 20px;
   padding: 4px 10px 4px 8px;
@@ -370,24 +401,18 @@ select { font: inherit; color: inherit; }
   align-items: center;
   gap: 5px;
   font-size: 0.72rem;
-  color: var(--accent);
   backdrop-filter: blur(4px);
 }
 .card-audio-badge svg { width: 12px; height: 12px; }
 
 .card-video-badge,
 .card-pdf-badge {
-  position: absolute;
   background: rgba(0,0,0,.75);
   border-radius: 20px;
   padding: 4px 10px;
   font-size: 0.72rem;
-  color: var(--accent);
   backdrop-filter: blur(4px);
-  pointer-events: none;
 }
-.card-video-badge { bottom: 38px; right: 10px; }
-.card-pdf-badge   { bottom: 66px; right: 10px; }
 
 /* Video player in detail overlay */
 .video-player { margin: 0 0 1.25rem; }
@@ -710,6 +735,21 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   height: auto;
   cursor: zoom-out;
   box-shadow: 0 8px 64px rgba(0,0,0,.8);
+}
+/* Desktop (Maus): gesamtes Bild in den Viewport einpassen, zentriert */
+@media (hover: hover) and (pointer: fine) {
+  .img-fullscreen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .img-fullscreen img {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100vh;
+  }
 }
 .img-fullscreen-close {
   position: fixed;

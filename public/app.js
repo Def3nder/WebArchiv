@@ -6,6 +6,7 @@ const state = {
   author: '',
   year: '',
   category: '',
+  telegram: false,
   page: 1,
   limit: 24,
   total: 0,
@@ -34,6 +35,7 @@ const $resetFilters   = document.getElementById('reset-filters');
 const $filterFont     = document.getElementById('filter-font');
 const $reindexBtn     = document.getElementById('reindex-btn');
 const $themeBtn       = document.getElementById('theme-btn');
+const $telegramBtn    = document.getElementById('telegram-btn');
 const $logoutBtn      = document.getElementById('logout-btn');
 const $loginBtn       = document.getElementById('login-btn');
 const $loginClose     = document.getElementById('login-close');
@@ -100,6 +102,12 @@ function applyTheme(value) {
     $themeBtn.innerHTML = SVG_SUN;
     $themeBtn.title = 'Hell-Modus';
   }
+}
+
+function setTelegram(on) {
+  state.telegram = on;
+  $telegramBtn.classList.toggle('active', on);
+  $telegramBtn.setAttribute('aria-pressed', String(on));
 }
 
 function authorClass(author) {
@@ -235,6 +243,7 @@ async function fetchArticles(params = {}) {
   if (params.author)   qs.set('author', params.author);
   if (params.year)     qs.set('year', params.year);
   if (params.category) qs.set('category', params.category);
+  if (params.telegram) qs.set('telegram', '1');
   qs.set('page',  params.page  || 1);
   qs.set('limit', params.limit || 24);
   const r = await apiFetch(`/api/articles?${qs}`);
@@ -274,10 +283,12 @@ function renderCard(article, idx) {
   const epNum = article.episodeNum ? `<span class="episode-num">#${article.episodeNum}</span>` : '';
 
   return `
-    <article class="card" data-id="${esc(article.id)}" style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(article.title)}">
+    <article class="card" data-id="${esc(article.id)}" data-author="${esc(article.author)}" style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(article.title)}">
       <div class="card-image">
         ${imageHtml}
-        ${audioBadge}${videoBadge}${pdfBadge}
+        ${audioBadge || videoBadge || pdfBadge
+          ? `<div class="card-badges">${audioBadge}${videoBadge}${pdfBadge}</div>`
+          : ''}
       </div>
       <div class="card-body">
         <div class="card-meta">
@@ -333,6 +344,7 @@ async function loadArticles() {
       author:   state.author,
       year:     state.year,
       category: state.category,
+      telegram: state.telegram,
       page:     state.page,
       limit:    state.limit,
     });
@@ -527,8 +539,45 @@ function renderDetail(article) {
 
   if ($copyBtn) {
     // Kopiert Artikel, optional mit vorangestelltem Prompt-Text
+    // Eigene Text-Extraktion, weil innerText bei <ol> die Nummerierung verschluckt.
+    const extractBodyText = (root) => {
+      if (!root) return '';
+      const blocks = [];
+      for (const node of root.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const t = node.textContent.replace(/\s+/g, ' ').trim();
+          if (t) blocks.push(t);
+          continue;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        const tag = node.tagName;
+        if (tag === 'OL') {
+          const start = parseInt(node.getAttribute('start') || '1', 10);
+          let i = 0;
+          for (const li of node.children) {
+            if (li.tagName === 'LI') {
+              const t = (li.innerText || li.textContent || '').trim();
+              if (t) blocks.push(`${start + i}. ${t}`);
+              i++;
+            }
+          }
+        } else if (tag === 'UL') {
+          for (const li of node.children) {
+            if (li.tagName === 'LI') {
+              const t = (li.innerText || li.textContent || '').trim();
+              if (t) blocks.push(`- ${t}`);
+            }
+          }
+        } else {
+          const t = (node.innerText || node.textContent || '').trim();
+          if (t) blocks.push(t);
+        }
+      }
+      return blocks.join('\n\n');
+    };
+
     const copyArticle = async (promptText = '') => {
-      const bodyText = $detail.querySelector('.detail-body')?.innerText?.trim() || '';
+      const bodyText = extractBodyText($detail.querySelector('.detail-body')).trim();
       const articleText = `${article.title}\n\n---\n\n${bodyText}`;
       const prefix = promptText.trim() ? promptText.trim() + '\n\n' : '';
       try {
@@ -633,7 +682,11 @@ function renderVideoPlayer(videoUrl) {
 }
 
 function renderPdfEmbed(pdfUrl) {
-  const viewerUrl = '/pdfjs/web/viewer.html?file=' + encodeURIComponent(pdfUrl);
+  // pdf.js behandelt den ?v=-Cache-Buster fälschlich als Teil des Dateinamens
+  // (kodiert "?" zu "%3F") → 404. Für den Viewer-Parameter daher die Query
+  // entfernen; der "neuer Tab"-Link behält die volle URL inkl. Cache-Buster.
+  const fileParam = pdfUrl.split('?')[0];
+  const viewerUrl = '/pdfjs/web/viewer.html?file=' + encodeURIComponent(fileParam);
   return `<div class="pdf-player">
     <iframe src="${viewerUrl}" class="detail-pdf" title="PDF-Dokument"></iframe>
     <a class="pdf-hint" href="${esc(pdfUrl)}" target="_blank" rel="noopener">
@@ -741,6 +794,7 @@ $searchClear.addEventListener('click', () => {
 
 $filterAuthor.addEventListener('change', () => {
   state.author = $filterAuthor.value;
+  if (state.author === 'Telegram') setTelegram(true);
   state.page = 1;
   loadArticles();
 });
@@ -773,6 +827,12 @@ $themeBtn.addEventListener('click', () => {
   applyTheme(document.body.dataset.theme === 'light' ? 'dark' : 'light');
 });
 
+$telegramBtn.addEventListener('click', () => {
+  setTelegram(!state.telegram);
+  state.page = 1;
+  loadArticles();
+});
+
 $loginForm.addEventListener('submit', e => {
   e.preventDefault();
   const email    = $loginEmail.value.trim();
@@ -797,7 +857,8 @@ $resetFilters.addEventListener('click', () => {
   $filterLayout.value = 'tall';
   document.body.classList.add('layout-tall');
   $filterLimit.value = '24';
-  Object.assign(state, { q:'', author:'', year:'', category:'', page:1, limit:24 });
+  setTelegram(false);
+  Object.assign(state, { q:'', author:'', year:'', category:'', telegram:false, page:1, limit:24 });
   loadArticles();
 });
 
@@ -968,7 +1029,7 @@ async function init() {
   $loading.hidden = false;
   document.body.classList.toggle('layout-tall', $filterLayout.value === 'tall');
 
-  const savedTheme = localStorage.getItem('wa-theme') || 'dark';
+  const savedTheme = localStorage.getItem('wa-theme') || 'light';
   applyTheme(savedTheme);
 
   const savedFont = localStorage.getItem('wa-font') || 'system';

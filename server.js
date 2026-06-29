@@ -267,6 +267,14 @@ function findSibling(dir, basename, exts) {
   return null;
 }
 
+// Cache-Busting: mtime der Datei als Versions-Query an die /files-URL hängen,
+// damit ein ausgetauschtes Bild (gleicher Name) im Browser neu geladen wird.
+function fileUrl(relPath, absPath) {
+  let v = '';
+  try { v = '?v=' + Math.floor(fs.statSync(absPath).mtimeMs); } catch { /* Datei weg */ }
+  return `/files/${relPath}${v}`;
+}
+
 async function scanDir(dirPath, author, year, collector) {
   let entries;
   try {
@@ -324,10 +332,10 @@ async function scanDir(dirPath, author, year, collector) {
         summary: parsed.summary || null,
         sourceUrl: parsed.sourceUrl || null,
         preview: bodyExcerpt(parsed.body).slice(0, 200),
-        imageUrl: relImg   ? `/files/${relImg}`   : null,
-        audioUrl: relAudio ? `/files/${relAudio}` : null,
-        videoUrl: relVideo ? `/files/${relVideo}` : null,
-        pdfUrl:   relPdf   ? `/files/${relPdf}`   : null,
+        imageUrl: relImg   ? fileUrl(relImg, imgPath)     : null,
+        audioUrl: relAudio ? fileUrl(relAudio, audioPath) : null,
+        videoUrl: relVideo ? fileUrl(relVideo, videoPath) : null,
+        pdfUrl:   relPdf   ? fileUrl(relPdf, pdfPath)     : null,
         episodeNum: parsed.episodeNum,
         filePath: fullPath,
       });
@@ -365,7 +373,12 @@ async function buildIndex() {
     return true;
   });
 
-  articles.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const isInfografik = a => (a.author === 'Infografiken' ? 1 : 0);
+  articles.sort((a, b) =>
+    (b.date || '').localeCompare(a.date || '') ||
+    (a.title || '').localeCompare(b.title || '', 'de', { sensitivity: 'base' }) ||
+    isInfografik(a) - isInfografik(b)
+  );
 
   const authorsSet = new Set(articles.map(a => a.author));
   const yearsSet = new Set(articles.map(a => a.year).filter(Boolean));
@@ -535,13 +548,19 @@ app.post('/api/reindex', requireAdmin, (req, res) => {
 });
 
 app.get('/api/articles', attachUser, (req, res) => {
-  const { q, author, year, category, page = '1', limit = '24' } = req.query;
+  const { q, author, year, category, page = '1', limit = '24', telegram } = req.query;
   const user = req.user;
   let filtered = articles;
 
   // ACL pre-filter: restrict to allowed authors
   if (user.allowedAuthors !== null) {
     filtered = filtered.filter(a => user.allowedAuthors.includes(a.author));
+  }
+
+  // "Telegram"-Artikel standardmäßig ausblenden; einbeziehen bei telegram=1
+  // oder wenn explizit nach Autor "Telegram" gefiltert wird.
+  if (telegram !== '1' && author !== 'Telegram') {
+    filtered = filtered.filter(a => a.author !== 'Telegram');
   }
 
   if (author) {
@@ -554,14 +573,27 @@ app.get('/api/articles', attachUser, (req, res) => {
   if (category) filtered = filtered.filter(a => a.categories.includes(category));
 
   if (q) {
-    const dq = parseDateQuery(q);
-    if (dq) {
+    // Query in Tokens zerlegen: Datums-Tokens → Datumsfilter, Rest → Fuse-Text.
+    // So sind Text-Suche und Datumseingrenzung kombinierbar ("Achtsamkeit 2025").
+    const tokens = q.trim().split(/\s+/);
+    const dateConstraints = [];
+    const textTokens = [];
+    for (const t of tokens) {
+      const dq = parseDateQuery(t);
+      if (dq) dateConstraints.push(dq);
+      else textTokens.push(t);
+    }
+    // Datums-Tokens als Filter anwenden (AND)
+    for (const dq of dateConstraints) {
       filtered = dq.kind === 'exact'
         ? filtered.filter(a => a.date === dq.value)
         : filtered.filter(a => a.date && a.date.startsWith(dq.value));
-    } else if (fuseIndex) {
+    }
+    // Restlicher Text über Fuse, auf die datums-gefilterte Teilmenge eingeschränkt
+    const text = textTokens.join(' ').trim();
+    if (text && fuseIndex) {
       const filteredIds = new Set(filtered.map(a => a.id));
-      const results = fuseIndex.search(q, { limit: 2000 });
+      const results = fuseIndex.search(text, { limit: 2000 });
       filtered = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
     }
   }

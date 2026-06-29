@@ -1,4 +1,4 @@
-Bitte erstelle eine deutsche Infografik über das nach den Anweisungen beschriebene Thema:
+Bitte erstelle eine detaillierte Infografik über das nach den Anweisungen beschriebene Thema. Verwende dabei bitte ausschließlich deutsche Sprach und keine Phantasieworte.
 #####################
 STIL & ÄSTHETIK:
 Moderne, illustrative Wissens-Infografik kombiniert mit tiefgründiger psychologisch-spiritueller Konzept-Ästhetik und Metapher-Visualisierung.
@@ -51,7 +51,7 @@ ILLUSTRATIONEN:
 stark metaphorische 3D/2D-Illustrationen (z. B. Gehirn im Käfig)
 leuchtende, semi-transparente menschliche Silhouetten
 fließende, sanfte Energieströme
-stilisierte funktionale Icons (Schloss, Krone, Warnschild, Wolke, Zahnräder)
+stilisierte funktionale Icons (z.B.: Schloss, Krone, Warnschild, Wolke, Zahnräder)
 kleine, unterstützende Charakter-Illustrationen
 abstrakte Energiewirbel und Lichtpunkte
 
@@ -62,9 +62,8 @@ keine reinen, flachen 2D-Icons (Tiefe und Licht sind wichtig)
 nicht zu abstrakt, die Metaphern müssen sofort verständlich bleiben
 
 QUALITÄT:
-highly detailed educational infographic, premium conceptual digital art, split-screen dualism visualization, ethereal and luminous lighting effects, crisp graphic design elements mixed with soft glowing digital painting, perfect layout balance, ultra sharp text resolution, masterpiece
+detaillierte pädagogische Infografik, hochwertige konzeptionelle digitale Kunst, Split-Screen-Dualismus-Visualisierung, ätherische und leuchtende Lichteffekte, klare grafische Designelemente gemischt mit sanft leuchtender digitaler Malerei, perfekte Layout-Balance, ultrascharfe Textauflösung, Meisterwerk
 
 ##################### 
 
 Thema:
-
