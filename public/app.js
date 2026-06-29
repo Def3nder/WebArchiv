@@ -680,7 +680,11 @@ function renderVideoPlayer(videoUrl) {
 }
 
 function renderPdfEmbed(pdfUrl) {
-  const viewerUrl = '/pdfjs/web/viewer.html?file=' + encodeURIComponent(pdfUrl);
+  // pdf.js behandelt den ?v=-Cache-Buster fälschlich als Teil des Dateinamens
+  // (kodiert "?" zu "%3F") → 404. Für den Viewer-Parameter daher die Query
+  // entfernen; der "neuer Tab"-Link behält die volle URL inkl. Cache-Buster.
+  const fileParam = pdfUrl.split('?')[0];
+  const viewerUrl = '/pdfjs/web/viewer.html?file=' + encodeURIComponent(fileParam);
   return `<div class="pdf-player">
     <iframe src="${viewerUrl}" class="detail-pdf" title="PDF-Dokument"></iframe>
     <a class="pdf-hint" href="${esc(pdfUrl)}" target="_blank" rel="noopener">
