@@ -877,6 +877,24 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   border-color: var(--accent);
   color: var(--accent);
 }
+.detail-share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: inherit;
+}
+.detail-share-btn svg {
+  width: 13px; height: 13px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
 .detail-copy-wrap {
   position: relative;
   margin-left: auto;

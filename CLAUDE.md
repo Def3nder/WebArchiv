@@ -13,7 +13,7 @@ code comments, and content are German.
 ## Commands
 
 ```bash
-npm install            # install deps (express, marked, fuse.js, express-session, bcryptjs)
+npm install            # install deps (express, marked, fuse.js, express-session, bcryptjs, sharp)
 npm start              # run server.js → http://localhost:3000 (PORT env overrides)
 node scripts/hash-passwords.js   # hash plaintext passwords in users.json (see Auth below)
 ```
@@ -70,6 +70,11 @@ object in `app.js`.
   `path.basename` + prefix-check guard.
 - The `Telegram` author is special-cased: hidden from listings unless `?telegram=1` or explicitly
   filtered by `author=Telegram`.
+- **Link-preview exception:** `GET /a/<id>` (Open-Graph HTML for social crawlers, redirects humans
+  to `#/article/<id>`) and `GET /og-image/<id>` (sharp-downscaled preview image) are **intentionally
+  unauthenticated** — they expose title/description/image of *any* article to anyone with the link,
+  by design. `/og-image/*` still enforces the same path-traversal guard as `/files/*`. `sharp` output
+  is cached in-memory per file mtime.
 
 ## Content & data conventions
 

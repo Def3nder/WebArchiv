@@ -5,8 +5,12 @@ const { marked } = require('marked');
 const Fuse = require('fuse.js');
 const session = require('express-session');
 const bcrypt  = require('bcryptjs');
+const sharp   = require('sharp');
 
 const app = express();
+// Hinter dem Reverse-Proxy (Caddy/HTTPS) X-Forwarded-Proto/Host respektieren,
+// damit absolute og:*-URLs (Link-Vorschau) korrekt https:// und Host tragen.
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 const WWW_DIR = path.join(__dirname, 'www');
 
@@ -488,6 +492,117 @@ app.get('/files/*', attachUser, (req, res) => {
     return res.status(403).end();
   }
   res.sendFile(absPath, err => { if (err && !res.headersSent) res.status(404).end(); });
+});
+
+// ─── Link-Vorschau (Open Graph) ────────────────────────────────────────────
+// Crawler (WhatsApp, Signal, Telegram …) führen kein JS aus und ignorieren
+// den #-Teil der URL. Deshalb liefert /a/<id> serverseitig og:*-Meta-Tags und
+// leitet echte Besucher per JS/meta-refresh in den SPA (#/article/<id>) weiter.
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// imageUrl ("/files/<relPath>?v=…") → absoluter Dateipfad unter WWW_DIR.
+// Gibt null zurück, wenn kein Bild oder der Pfad WWW_DIR verlässt (Traversal).
+function resolveArticleImagePath(article) {
+  if (!article || !article.imageUrl) return null;
+  const rel = article.imageUrl.replace(/^\/files\//, '').split('?')[0];
+  const absPath = path.resolve(path.join(WWW_DIR, rel));
+  if (!absPath.startsWith(WWW_DIR + path.sep)) return null;
+  return absPath;
+}
+
+function ogDescription(article) {
+  const raw = (article.summary || article.excerpt || '').replace(/\s+/g, ' ').trim();
+  return raw.length > 200 ? raw.slice(0, 197).trimEnd() + '…' : raw;
+}
+
+app.get('/a/*', (req, res) => {
+  const id = req.params[0];
+  const article = articles.find(a => a.id === id);
+  const base = `${req.protocol}://${req.get('host')}`;
+  const canonical = base + '/a/' + encodeURIComponent(id);
+
+  let tags;
+  if (article) {
+    const title = escapeHtml(article.title || 'WebArchiv');
+    const desc  = escapeHtml(ogDescription(article));
+    const img   = article.imageUrl ? base + '/og-image/' + encodeURIComponent(id) : '';
+    tags = `
+    <title>${title}</title>
+    <meta name="description" content="${desc}" />
+    <meta property="og:site_name" content="WebArchiv" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${desc}" />
+    <meta property="og:url" content="${escapeHtml(canonical)}" />
+    ${img ? `<meta property="og:image" content="${escapeHtml(img)}" />` : ''}
+    <meta name="twitter:card" content="${img ? 'summary_large_image' : 'summary'}" />
+    <meta name="twitter:title" content="${title}" />
+    <meta name="twitter:description" content="${desc}" />
+    ${img ? `<meta name="twitter:image" content="${escapeHtml(img)}" />` : ''}`;
+  } else {
+    tags = `
+    <title>WebArchiv</title>
+    <meta property="og:site_name" content="WebArchiv" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="WebArchiv" />
+    <meta property="og:url" content="${escapeHtml(base + '/')}" />`;
+  }
+
+  // JS-Weiterleitung für Menschen; Crawler lesen nur die Meta-Tags oben.
+  const target = '/#/article/' + encodeURIComponent(id);
+  res.type('html').send(`<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="refresh" content="0; url=${escapeHtml(target)}" />${tags}
+</head>
+<body>
+    <p>Weiterleitung … <a href="${escapeHtml(target)}">Zum Artikel</a></p>
+    <script>location.replace(${JSON.stringify(target)});</script>
+</body>
+</html>`);
+});
+
+// Auth-freie, heruntergerechnete Bild-Auslieferung nur für die Link-Vorschau.
+// Bewusst ohne canAccessAuthor: die Vorschau-Metadaten aller Artikel sind
+// öffentlich (Nutzer-Entscheidung). Bild wird auf max. 1200px/JPEG skaliert,
+// damit nie die Originalauflösung geteilt wird. Ergebnis pro mtime gecacht.
+const ogImageCache = new Map(); // key: absPath+':'+mtime → Buffer
+
+app.get('/og-image/*', async (req, res) => {
+  const id = req.params[0];
+  const article = articles.find(a => a.id === id);
+  const absPath = resolveArticleImagePath(article);
+  if (!absPath) return res.status(404).end();
+
+  let mtime = 0;
+  try { mtime = Math.floor(fs.statSync(absPath).mtimeMs); } catch { return res.status(404).end(); }
+
+  const key = absPath + ':' + mtime;
+  res.set('Cache-Control', 'public, max-age=86400');
+
+  const cached = ogImageCache.get(key);
+  if (cached) return res.type('image/jpeg').send(cached);
+
+  try {
+    const buf = await sharp(absPath)
+      .resize({ width: 1200, withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    // Cache begrenzen (einfaches FIFO), um Speicher im kleinen LXC zu schonen.
+    if (ogImageCache.size >= 200) ogImageCache.delete(ogImageCache.keys().next().value);
+    ogImageCache.set(key, buf);
+    res.type('image/jpeg').send(buf);
+  } catch (err) {
+    // Fallback: Original ausliefern, damit die Vorschau funktionsfähig bleibt.
+    res.sendFile(absPath, e => { if (e && !res.headersSent) res.status(404).end(); });
+  }
 });
 
 // ─── Protected API routes ──────────────────────────────────────────────────

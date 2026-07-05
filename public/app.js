@@ -252,7 +252,11 @@ async function fetchArticles(params = {}) {
 
 async function fetchArticle(id) {
   const r = await apiFetch(`/api/articles/${id}`);
-  if (!r.ok) throw new Error('Not found');
+  if (!r.ok) {
+    const err = new Error('Not found');
+    err.status = r.status;
+    throw err;
+  }
   return r.json();
 }
 
@@ -273,7 +277,7 @@ function renderCard(article, idx) {
     ? `<div class="card-video-badge">&#9654; Video</div>`
     : '';
   const pdfBadge = article.pdfUrl
-    ? `<div class="card-pdf-badge">&#8659; PDF</div>`
+    ? `<div class="card-pdf-badge">&#9993; PDF</div>`
     : '';
 
   const catPills = cats.map(c =>
@@ -410,6 +414,16 @@ async function openArticle(id) {
       }
     }
   } catch (err) {
+    // Geschützter Artikel + Gast (403) → Anmeldung anbieten statt "nicht gefunden".
+    // Overlay ausblenden, aber Deep-Link im Hash lassen, damit die Anmeldung den
+    // Artikel danach automatisch öffnet (siehe login()).
+    if (err && err.status === 403 && (!currentUser || currentUser.role === 'guest')) {
+      $overlay.hidden = true;
+      stopAudio();
+      stopVideo();
+      showLogin('Dieser Artikel ist geschützt. Bitte melden Sie sich an.');
+      return;
+    }
     $detail.innerHTML = `<div style="padding:40px"><p>Artikel nicht gefunden.</p></div>`;
   }
 }
@@ -478,12 +492,12 @@ function renderDetail(article) {
         <div class="copy-prompt-menu" id="copy-prompt-menu" role="menu" hidden></div>
       </div>`
     : '';
-  const dateHtml = (article.date || copyBtnHtml)
-    ? `<div class="detail-date-row">
+  const shareBtnHtml = `<button class="detail-cat-pill detail-share-btn" id="detail-share-btn" aria-label="Link teilen" title="Link zum Artikel teilen">${svgShare()}<span class="detail-share-text">Teilen</span></button>`;
+  const dateHtml = `<div class="detail-date-row">
         <span class="detail-date-block">${article.date ? esc(formatDate(article.date)) : ''}</span>
         ${copyBtnHtml}
-      </div>`
-    : '';
+        ${shareBtnHtml}
+      </div>`;
   const summaryHtml = article.summary
     ? `<div class="detail-summary"><span class="detail-summary-label">Zusammenfassung:</span> ${esc(article.summary)}</div>`
     : '';
@@ -529,6 +543,25 @@ function renderDetail(article) {
       loadArticles();
     });
   });
+
+  // Teilen-Button → Vorschau-fähigen Link (/a/<id>) teilen bzw. kopieren.
+  // navigator.share (mobil) öffnet direkt das System-Teilen-Menü (z. B. WhatsApp),
+  // sonst wird der Link in die Zwischenablage kopiert.
+  const $shareBtn = document.getElementById('detail-share-btn');
+  if ($shareBtn) {
+    $shareBtn.addEventListener('click', async () => {
+      const url = `${location.origin}/a/${sanitizeForId(article.id)}`;
+      if (navigator.share) {
+        try { await navigator.share({ title: article.title, url }); } catch { /* abgebrochen */ }
+        return;
+      }
+      const $txt = $shareBtn.querySelector('.detail-share-text');
+      try {
+        await navigator.clipboard.writeText(url);
+        if ($txt) { const orig = $txt.textContent; $txt.textContent = 'Kopiert!'; setTimeout(() => { $txt.textContent = orig; }, 1500); }
+      } catch { /* Zwischenablage nicht verfügbar */ }
+    });
+  }
 
   // Copy-Button → zwei Klick-Zonen:
   //   Icon  → öffnet Menü mit Prompt-Varianten (vorangestellt)
@@ -1022,6 +1055,9 @@ function svgExpand() {
 }
 function svgSearch() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`;
+}
+function svgShare() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 3.9M15.4 6.6 8.6 10.5"/></svg>`;
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────
