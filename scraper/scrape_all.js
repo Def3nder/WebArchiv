@@ -56,7 +56,7 @@ const LOG_FILE = path.join(SCRIPT_DIR, "scrape_all.log");
 
 // Gemeinsame Abbruchschwelle: nach so vielen bereits vorhandenen Artikeln wird
 // die jeweilige Quelle beendet.
-const SKIP_LIMIT = 5;
+const SKIP_LIMIT = 3;
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
@@ -1499,10 +1499,13 @@ export {
 // Nur bei Direktaufruf (node scrape_all.js …) ausführen, nicht beim Import.
 const _isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (_isMain) {
+  // Kein process.exit(): sonst kann Node bei einer stdout-Pipe (spawn) die
+  // letzten Zeilen (Zusammenfassung) abschneiden. exitCode setzen und den
+  // Prozess natürlich auslaufen lassen -> stdout wird vollständig geleert.
   main(process.argv.slice(2))
-    .then((code) => process.exit(code))
+    .then((code) => { process.exitCode = code; })
     .catch((exc) => {
       logger.error(`Unerwarteter Fehler: ${exc && exc.stack ? exc.stack : exc}`);
-      process.exit(1);
+      process.exitCode = 1;
     });
 }

@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=8" />
+  <link rel="stylesheet" href="styles.css?v=9" />
 </head>
 <body>
 
@@ -182,6 +182,22 @@
     </div>
   </div>
 
-  <script src="app.js?v=8"></script>
+  <!-- Scrape-Ergebnis overlay (Admin, z-index 300) -->
+  <div id="scrape-overlay" class="scrape-overlay" hidden>
+    <div class="scrape-backdrop" id="scrape-backdrop"></div>
+    <div class="scrape-panel" role="dialog" aria-modal="true" aria-labelledby="scrape-title">
+      <button type="button" id="scrape-close" class="login-close" aria-label="Schließen" title="Schließen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <h2 class="login-title" id="scrape-title">Scrapen</h2>
+      <p id="scrape-status" class="scrape-status"></p>
+      <pre id="scrape-output" class="scrape-output"></pre>
+    </div>
+  </div>
+
+  <script src="app.js?v=9"></script>
 </body>
 </html>

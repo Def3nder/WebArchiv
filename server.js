@@ -693,12 +693,23 @@ app.post('/api/scrape', requireAdmin, (req, res) => {
     startedAt: Date.now(),
     done: false,
     error: null,
+    output: '',
   };
   console.log(`Scrape gestartet: ${scrapeState.sources.join(', ')}`);
 
+  // Ausgabe des Kindprozesses für die Live-Anzeige im Web-UI sammeln (gekappt
+  // auf die letzten ~20 000 Zeichen, damit ein großer Erstlauf den Speicher
+  // nicht sprengt). Die Zusammenfassung des Scrapers steht am Ende.
+  const captureOutput = (chunk) => {
+    scrapeState.output += chunk.toString();
+    if (scrapeState.output.length > 20000) {
+      scrapeState.output = scrapeState.output.slice(-20000);
+    }
+  };
+
   const child = spawn(process.execPath, args, { cwd: path.join(__dirname, 'scraper') });
-  child.stdout.on('data', d => process.stdout.write(`[scrape] ${d}`));
-  child.stderr.on('data', d => process.stderr.write(`[scrape] ${d}`));
+  child.stdout.on('data', d => { process.stdout.write(`[scrape] ${d}`); captureOutput(d); });
+  child.stderr.on('data', d => { process.stderr.write(`[scrape] ${d}`); captureOutput(d); });
   child.on('error', err => {
     console.error('Scrape konnte nicht gestartet werden:', err.message);
     scrapeState = { ...scrapeState, running: false, done: true, exitCode: -1, error: err.message };

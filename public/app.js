@@ -35,6 +35,11 @@ const $resetFilters   = document.getElementById('reset-filters');
 const $filterFont     = document.getElementById('filter-font');
 const $reindexBtn     = document.getElementById('reindex-btn');
 const $scrapeBtn      = document.getElementById('scrape-btn');
+const $scrapeOverlay  = document.getElementById('scrape-overlay');
+const $scrapeBackdrop = document.getElementById('scrape-backdrop');
+const $scrapeClose    = document.getElementById('scrape-close');
+const $scrapeStatus   = document.getElementById('scrape-status');
+const $scrapeOutput   = document.getElementById('scrape-output');
 const $themeBtn       = document.getElementById('theme-btn');
 const $telegramBtn    = document.getElementById('telegram-btn');
 const $logoutBtn      = document.getElementById('logout-btn');
@@ -929,34 +934,57 @@ $reindexBtn.addEventListener('click', async () => {
   }
 });
 
+function openScrapeModal() {
+  $scrapeOverlay.hidden = false;
+  document.body.style.overflow = 'hidden';
+  $scrapeOutput.textContent = '';
+  $scrapeStatus.textContent = 'Scrape läuft …';
+}
+function closeScrapeModal() {
+  $scrapeOverlay.hidden = true;
+  document.body.style.overflow = '';
+}
+$scrapeClose.addEventListener('click', closeScrapeModal);
+$scrapeBackdrop.addEventListener('click', closeScrapeModal);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$scrapeOverlay.hidden) closeScrapeModal();
+});
+
 $scrapeBtn.addEventListener('click', async () => {
   if (!confirm('Neue Beiträge scrapen (Blog, Facebook, Telegram)? Das kann einige Minuten dauern.')) return;
+  const origLabel = $scrapeBtn.textContent;
   $scrapeBtn.disabled = true;
   $scrapeBtn.textContent = '…';
+  openScrapeModal();
   try {
     const r = await apiFetch('/api/scrape', { method: 'POST' });
     const data = await r.json();
     if (!data.started) {
-      alert(data.reason === 'reindex running'
+      $scrapeStatus.textContent = data.reason === 'reindex running'
         ? 'Re-Index läuft gerade – bitte kurz warten.'
-        : 'Ein Scrape-Lauf läuft bereits.');
+        : 'Ein Scrape-Lauf läuft bereits.';
       return;
     }
-    // 1) Auf das Ende des Scrape-Laufs warten.
-    const scrapeResult = await new Promise(resolve => {
+    // 1) Scrape-Lauf: Ausgabe live anzeigen, bis fertig.
+    const result = await new Promise(resolve => {
       const poll = setInterval(async () => {
         try {
           const sr = await apiFetch('/api/scrape/status');
           const s = await sr.json();
+          if (typeof s.output === 'string') {
+            $scrapeOutput.textContent = s.output;
+            $scrapeOutput.scrollTop = $scrapeOutput.scrollHeight;
+          }
           if (s.done) { clearInterval(poll); resolve(s); }
         } catch { clearInterval(poll); resolve(null); }
-      }, 1500);
+      }, 1000);
     });
-    if (scrapeResult && scrapeResult.exitCode === -1) {
-      alert('Scraper konnte nicht gestartet werden: ' + (scrapeResult.error || 'unbekannt'));
+    if (result && result.exitCode === -1) {
+      $scrapeStatus.textContent = 'Fehler: Scraper konnte nicht gestartet werden — ' + (result.error || 'unbekannt');
       return;
     }
-    // 2) Auf den anschließenden, serverseitig angestoßenen Reindex warten.
+    // 2) Anschließender, serverseitig angestoßener Reindex.
+    $scrapeStatus.textContent = `Scrape fertig (Exit ${result ? result.exitCode : '?'}) — Index wird aktualisiert …`;
     await new Promise(resolve => {
       const poll = setInterval(async () => {
         try {
@@ -972,9 +1000,12 @@ $scrapeBtn.addEventListener('click', async () => {
     await loadMeta();
     state.page = 1;
     await loadArticles();
+    $scrapeStatus.textContent = 'Fertig. Der Index wurde aktualisiert.';
+  } catch (e) {
+    $scrapeStatus.textContent = 'Abgebrochen: ' + ((e && e.message) || e);
   } finally {
     $scrapeBtn.disabled = false;
-    $scrapeBtn.textContent = '🡇';
+    $scrapeBtn.textContent = origLabel;
   }
 });
 
