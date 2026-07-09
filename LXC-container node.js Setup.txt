@@ -468,3 +468,243 @@ Später:
 * Anwendung erfolgreich starten
 * Schreibrechte auf gemounteter Disk verifizieren
 * Reverse Proxy und HTTPS aufbauen
+
+---
+
+# Scraper (Blog / Facebook / Telegram)
+
+## Verzeichnis
+
+```text
+/opt/nodeapp/scraper
+```
+
+Eigenständiger Node-Scraper (ESM, eigenes `package.json` mit `"type":"module"`
+und eigenem `node_modules`) — damit playwright/Chromium NICHT in die
+App-Abhängigkeiten (`/opt/nodeapp/package.json`) wandern. Der Server kann ihn
+bei Bedarf als eigenen Prozess starten.
+
+Ausgabe (ein Verzeichnis je Quelle, Jahresordner):
+
+```text
+/opt/nodeapp/www/Joe Turan/<Jahr>/    (Blog)
+/opt/nodeapp/www/Telegram/<Jahr>/     (Telegram)
+/opt/nodeapp/www/Facebook/<Jahr>/     (Facebook)
+```
+
+Private Eingaben für Facebook (im scraper/-Verzeichnis, per .gitignore ausgenommen):
+
+```text
+/opt/nodeapp/scraper/cookies.txt         (Netscape-Format)
+/opt/nodeapp/scraper/Abonenten-URL.txt
+```
+
+---
+
+## Installation
+
+```bash
+cd /opt/nodeapp/scraper
+npm install
+npx playwright install --with-deps chromium
+```
+
+`--with-deps` installiert die von Chromium benötigten System-Bibliotheken
+(libnspr4, libnss3, …) per apt gleich mit.
+
+### Symptom bei fehlenden System-Libs
+
+```text
+chrome-headless-shell: error while loading shared libraries:
+libnspr4.so: cannot open shared object file: No such file or directory
+```
+
+→ behoben durch `npx playwright install --with-deps chromium` (als root).
+
+---
+
+## Chromium-Ablage (PLAYWRIGHT_BROWSERS_PATH)
+
+Chromium landet standardmäßig unter `~/.cache/ms-playwright` des installierenden
+Users. Läuft der Dienst als anderer User (`ralf`) als der Installierende (`root`),
+findet er den Browser nicht ("Executable doesn't exist").
+
+Lösung: gemeinsamen Pfad verwenden.
+
+```bash
+sudo mkdir -p /opt/ms-playwright
+sudo PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright bash -lc \
+  'cd /opt/nodeapp/scraper && npx playwright install chromium'
+sudo chmod -R a+rX /opt/ms-playwright
+```
+
+Variable dauerhaft setzen (drei getrennte Kontexte!):
+
+* **systemd-Service** (liest `/etc/environment` NICHT): im Unit unter `[Service]`
+  ```ini
+  Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+  ```
+* **interaktive Shells / manuelle Läufe**: systemweit in `/etc/environment`
+  ```text
+  PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+  ```
+  (keine Anführungszeichen, kein `export`; erst nach erneutem Login aktiv)
+* **Cron**: liest weder `/etc/environment` noch `.profile` → im Skript/Crontab setzen.
+
+---
+
+# systemd-Service als unprivilegierter User (ralf)
+
+## Ziel
+
+Dienst wird als root verwaltet, der Node-Prozess läuft aber als `ralf:ralf` —
+so gehören alle erzeugten Dateien (www/, cookies, logs) `ralf:ralf`.
+
+## Unit-Datei
+
+```text
+/etc/systemd/system/nodeapp.service
+```
+
+```ini
+[Unit]
+Description=Node.js App (WebArchiv)
+After=network.target
+
+[Service]
+Type=simple
+User=ralf
+Group=ralf
+WorkingDirectory=/opt/nodeapp
+ExecStart=/usr/bin/node /opt/nodeapp/server.js
+Environment=NODE_ENV=production
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## Aktivieren
+
+```bash
+sudo chown -R ralf:ralf /opt/nodeapp
+sudo systemctl daemon-reload
+sudo systemctl restart nodeapp
+```
+
+## Hinweis: Steuern erfordert root
+
+```text
+Failed to execute /usr/bin/pkttyagent: No such file or directory
+Failed to start nodeapp.service: Access denied
+```
+
+Ein System-Service kann von `ralf` nur mit `sudo` gestartet/gestoppt werden
+(polkit/pkttyagent nicht installiert). Also:
+
+```bash
+sudo systemctl start|restart|status nodeapp
+```
+
+Unter welchem User läuft der Dienst?
+
+```bash
+ps -o user= -p $(systemctl show -p MainPID --value nodeapp)   # -> ralf
+```
+
+---
+
+# Scrape per Klick (Web-UI, Admin)
+
+Server-Route `POST /api/scrape` (Admin) startet den Scraper als Kindprozess und
+reindexiert danach automatisch (`buildIndex()`); Button „⬇" im Header (nur für
+Admin sichtbar). Lauf-Status über `GET /api/scrape/status`.
+
+Voraussetzung: Scraper installiert (siehe oben) und `PLAYWRIGHT_BROWSERS_PATH` im
+Unit gesetzt — der Kindprozess erbt Umgebung und User (`ralf`) des Dienstes.
+
+---
+
+# Täglicher Scrape per Cron
+
+## Wrapper-Skript
+
+```text
+/opt/nodeapp/scraper/run-scrape.sh
+```
+
+```bash
+#!/usr/bin/env bash
+export PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+cd /opt/nodeapp/scraper
+/usr/bin/node scrape_all.js >> /opt/nodeapp/scraper/cron-scrape.log 2>&1
+echo "$(date '+%F %T') Scraper exit $?" >> /opt/nodeapp/scraper/cron-scrape.log
+sudo /usr/bin/systemctl restart nodeapp
+```
+
+```bash
+chmod +x /opt/nodeapp/scraper/run-scrape.sh
+```
+
+Kein `set -e`: bei Teil-Fehlern (z. B. FB-Cookies abgelaufen) endet der Scraper
+mit Exit 1; die anderen Quellen sind trotzdem gespeichert und sollen indexiert
+werden. Nur bestimmte Quellen: Flags anhängen (`--blog --telegram`).
+
+## Crontab (als ralf)
+
+```bash
+crontab -e
+```
+
+```cron
+30 4 * * * /opt/nodeapp/scraper/run-scrape.sh
+```
+
+Server läuft auf **UTC** → 04:30 = 04:30 UTC.
+
+## Reindex ohne Passwort (sudoers)
+
+Damit `sudo systemctl restart nodeapp` in Cron ohne Passwort läuft:
+
+```bash
+echo 'ralf ALL=(root) NOPASSWD: /usr/bin/systemctl restart nodeapp' \
+  | sudo tee /etc/sudoers.d/nodeapp-restart
+sudo chmod 440 /etc/sudoers.d/nodeapp-restart
+sudo visudo -c
+```
+
+## Prüfen
+
+```bash
+/opt/nodeapp/scraper/run-scrape.sh
+tail -n 30 /opt/nodeapp/scraper/cron-scrape.log
+crontab -l
+grep CRON /var/log/syslog | tail
+```
+
+---
+
+# Stolperfalle: CRLF in Shell-Skripten
+
+Von Windows kopierte Skripte tragen CRLF-Zeilenenden. Symptom:
+
+```text
+env: 'bash\r': No such file or directory
+```
+
+Fix:
+
+```bash
+sed -i 's/\r$//' /opt/nodeapp/scraper/run-scrape.sh
+# oder: sudo apt install dos2unix && dos2unix datei.sh
+```
+
+Kontrolle (CRLF zeigt `^M`):
+
+```bash
+cat -A datei.sh | head -1
+```
+
+Für `scrape_all.js` (Node) ist CRLF unkritisch — nur Shell-Shebangs stören.
