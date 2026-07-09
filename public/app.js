@@ -16,7 +16,7 @@ const state = {
   currentArticleIdx: -1,
 };
 
-let authorIndex = {};   // author name → index for CSS class
+let authorHueMap = {};  // author name → hue (0..359), gesetzt in loadMeta()
 let audioEl = null;     // shared audio element
 let currentAudioBtn = null;
 let currentUser = null; // { email, role, allowedAuthors }
@@ -116,11 +116,14 @@ function setTelegram(on) {
   $telegramBtn.setAttribute('aria-pressed', String(on));
 }
 
-function authorClass(author) {
-  if (!(author in authorIndex)) {
-    authorIndex[author] = Object.keys(authorIndex).length;
-  }
-  return `author-${authorIndex[author] % 4}`;
+function authorHue(author) {
+  // Bevorzugt der in loadMeta() gleichmäßig über den Farbkreis verteilte Wert
+  // (maximal unterscheidbar). Fallback (Meta noch nicht geladen / unbekannter
+  // Autor): stabiler Namens-Hash, damit trotzdem ein Farb-Badge entsteht.
+  if (author in authorHueMap) return authorHueMap[author];
+  let h = 0;
+  for (let i = 0; i < author.length; i++) h = (h * 31 + author.charCodeAt(i)) >>> 0;
+  return h % 360;
 }
 
 function formatDate(d) {
@@ -269,7 +272,7 @@ async function fetchArticle(id) {
 
 // ── Rendering ──────────────────────────────────────────────────────────────
 function renderCard(article, idx) {
-  const ac = authorClass(article.author);
+  const hue = authorHue(article.author);
   const cats = (article.categories || []).slice(0, 5);
   const delay = Math.min(idx * 30, 300);
 
@@ -303,7 +306,7 @@ function renderCard(article, idx) {
       </div>
       <div class="card-body">
         <div class="card-meta">
-          <span class="author-badge ${ac}">${esc(article.author.replace(/_/g,' '))}</span>
+          <span class="author-badge" style="--author-hue:${hue}">${esc(article.author.replace(/_/g,' '))}</span>
           <span class="card-date">${esc(formatDate(article.date))}</span>
           ${epNum}
         </div>
@@ -460,7 +463,7 @@ function stopAudio() {
 }
 
 function renderDetail(article) {
-  const ac = authorClass(article.author);
+  const hue = authorHue(article.author);
 
   const heroHtml = article.imageUrl
     ? `<div class="detail-hero">
@@ -516,7 +519,7 @@ function renderDetail(article) {
     ${heroHtml}
     <div class="detail-content">
       <div class="detail-meta">
-        <span class="author-badge ${ac}">${esc(article.author.replace(/_/g,' '))}</span>
+        <span class="author-badge" style="--author-hue:${hue}">${esc(article.author.replace(/_/g,' '))}</span>
         ${article.episodeNum ? `<span class="detail-episode">#${article.episodeNum}</span>` : ''}
       </div>
       <h1 class="detail-title">${esc(article.title)}</h1>
@@ -789,7 +792,12 @@ async function loadMeta() {
     while (sel.options.length > 1) sel.remove(1);
   });
 
-  authors.forEach(a => {
+  // Badge-Farbton je Autor gleichmäßig über den Farbkreis verteilen (Reihenfolge
+  // = alphabetische Serverliste) -> jeder Autor gut sichtbar und unterscheidbar.
+  authorHueMap = {};
+  const hueStep = 360 / (authors.length || 1);
+  authors.forEach((a, i) => {
+    authorHueMap[a] = Math.round(i * hueStep);
     const opt = document.createElement('option');
     opt.value = a;
     opt.textContent = a.replace(/_/g, ' ');
