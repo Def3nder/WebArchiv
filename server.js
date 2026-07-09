@@ -6,6 +6,7 @@ const Fuse = require('fuse.js');
 const session = require('express-session');
 const bcrypt  = require('bcryptjs');
 const sharp   = require('sharp');
+const { spawn } = require('child_process');
 
 const app = express();
 // Hinter dem Reverse-Proxy (Caddy/HTTPS) X-Forwarded-Proto/Host respektieren,
@@ -40,6 +41,7 @@ let articles = [];
 let meta = { authors: [], years: [], categories: [] };
 let fuseIndex = null;
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
+let scrapeState = { running: false, sources: null, exitCode: null, startedAt: null, done: true, error: null };
 
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
@@ -660,6 +662,55 @@ app.post('/api/reindex', requireAdmin, (req, res) => {
   if (reindexState.running) return res.json({ started: false, reason: 'already running' });
   buildIndex().catch(console.error);
   res.json({ started: true });
+});
+
+// ─── Scrape (Admin): externen Scraper starten, danach automatisch reindexen ──
+//
+// Startet scraper/scrape_all.js als eigenen Node-Prozess (self-contained mit
+// eigenen node_modules; playwright bleibt aus den App-Abhängigkeiten heraus).
+// Läuft im Hintergrund; der Fortschritt wird über /api/scrape/status gepollt.
+
+app.get('/api/scrape/status', requireAuth, (_req, res) => res.json(scrapeState));
+
+app.post('/api/scrape', requireAdmin, (req, res) => {
+  if (scrapeState.running) return res.json({ started: false, reason: 'already running' });
+  if (reindexState.running) return res.json({ started: false, reason: 'reindex running' });
+
+  // Optionale Quellenauswahl: { sources: ["blog","facebook","telegram"] }.
+  // Ohne Angabe laufen alle drei (Reihenfolge bestimmt der Scraper selbst).
+  const allowed = ['blog', 'facebook', 'telegram'];
+  const sources = Array.isArray(req.body?.sources)
+    ? req.body.sources.filter(s => allowed.includes(s))
+    : [];
+
+  const scriptPath = path.join(__dirname, 'scraper', 'scrape_all.js');
+  const args = [scriptPath, ...sources.map(s => `--${s}`)];
+
+  scrapeState = {
+    running: true,
+    sources: sources.length ? sources : allowed,
+    exitCode: null,
+    startedAt: Date.now(),
+    done: false,
+    error: null,
+  };
+  console.log(`Scrape gestartet: ${scrapeState.sources.join(', ')}`);
+
+  const child = spawn(process.execPath, args, { cwd: path.join(__dirname, 'scraper') });
+  child.stdout.on('data', d => process.stdout.write(`[scrape] ${d}`));
+  child.stderr.on('data', d => process.stderr.write(`[scrape] ${d}`));
+  child.on('error', err => {
+    console.error('Scrape konnte nicht gestartet werden:', err.message);
+    scrapeState = { ...scrapeState, running: false, done: true, exitCode: -1, error: err.message };
+  });
+  child.on('close', code => {
+    console.log(`Scrape beendet (exit ${code}) — Reindex …`);
+    scrapeState = { ...scrapeState, running: false, done: true, exitCode: code };
+    // Auch bei Teil-Fehler (exit 1) reindexen: bereits gespeicherte Artikel aufnehmen.
+    if (!reindexState.running) buildIndex().catch(console.error);
+  });
+
+  res.json({ started: true, sources: scrapeState.sources });
 });
 
 app.get('/api/articles', attachUser, (req, res) => {

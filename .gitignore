@@ -6,9 +6,19 @@
 /www/Stefan Hiene/2*
 /www/Videos/2*
 /www/Telegram/2*
+/www/Facebook/2*
 /download/
+
+# Node Modules #
+###################
 /node_modules/
+/scraper/node_modules/
+
+# private Data #
+###################
 users.json
+/scraper/cookies.txt
+/scraper/Abonenten-URL.txt
 
 # Compiled source #
 ###################

@@ -34,6 +34,7 @@ const $filterLimit    = document.getElementById('filter-limit');
 const $resetFilters   = document.getElementById('reset-filters');
 const $filterFont     = document.getElementById('filter-font');
 const $reindexBtn     = document.getElementById('reindex-btn');
+const $scrapeBtn      = document.getElementById('scrape-btn');
 const $themeBtn       = document.getElementById('theme-btn');
 const $telegramBtn    = document.getElementById('telegram-btn');
 const $logoutBtn      = document.getElementById('logout-btn');
@@ -152,6 +153,7 @@ function hideLogin() {
 function applyUserUI(user) {
   const isGuest = !user || user.role === 'guest';
   $reindexBtn.hidden = !(user && user.role === 'admin');
+  $scrapeBtn.hidden  = !(user && user.role === 'admin');
   $logoutBtn.hidden  = isGuest;
   $loginBtn.hidden   = !isGuest;
 }
@@ -924,6 +926,55 @@ $reindexBtn.addEventListener('click', async () => {
   } finally {
     $reindexBtn.disabled = false;
     $reindexBtn.textContent = '↺';
+  }
+});
+
+$scrapeBtn.addEventListener('click', async () => {
+  if (!confirm('Neue Beiträge scrapen (Blog, Facebook, Telegram)? Das kann einige Minuten dauern.')) return;
+  $scrapeBtn.disabled = true;
+  $scrapeBtn.textContent = '…';
+  try {
+    const r = await apiFetch('/api/scrape', { method: 'POST' });
+    const data = await r.json();
+    if (!data.started) {
+      alert(data.reason === 'reindex running'
+        ? 'Re-Index läuft gerade – bitte kurz warten.'
+        : 'Ein Scrape-Lauf läuft bereits.');
+      return;
+    }
+    // 1) Auf das Ende des Scrape-Laufs warten.
+    const scrapeResult = await new Promise(resolve => {
+      const poll = setInterval(async () => {
+        try {
+          const sr = await apiFetch('/api/scrape/status');
+          const s = await sr.json();
+          if (s.done) { clearInterval(poll); resolve(s); }
+        } catch { clearInterval(poll); resolve(null); }
+      }, 1500);
+    });
+    if (scrapeResult && scrapeResult.exitCode === -1) {
+      alert('Scraper konnte nicht gestartet werden: ' + (scrapeResult.error || 'unbekannt'));
+      return;
+    }
+    // 2) Auf den anschließenden, serverseitig angestoßenen Reindex warten.
+    await new Promise(resolve => {
+      const poll = setInterval(async () => {
+        try {
+          const sr = await apiFetch('/api/reindex/status');
+          const st = await sr.json();
+          if (st.processed) {
+            $count.textContent = `${st.processed.toLocaleString('de-DE')} Artikel verarbeitet…`;
+          }
+          if (st.done) { clearInterval(poll); resolve(); }
+        } catch { clearInterval(poll); resolve(); }
+      }, 600);
+    });
+    await loadMeta();
+    state.page = 1;
+    await loadArticles();
+  } finally {
+    $scrapeBtn.disabled = false;
+    $scrapeBtn.textContent = '🡇';
   }
 });
 
