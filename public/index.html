@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=10" />
+  <link rel="stylesheet" href="styles.css?v=12" />
 </head>
 <body>
 
@@ -43,8 +43,15 @@
           <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
         </svg>
       </button>
-      <button id="scrape-btn" class="reindex-btn" title="Neue Beiträge scrapen" hidden>🡇</button>
-      <button id="reindex-btn" class="reindex-btn" title="Archiv neu einlesen" hidden>↺</button>
+      <div class="header-menu">
+        <button id="reindex-btn" class="reindex-btn" title="Aktionen"
+                aria-haspopup="true" aria-expanded="false" hidden>↺</button>
+        <div id="admin-menu" class="header-menu-dropdown" role="menu" hidden>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="reindex">Archiv neu einlesen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="scrape">Neue Beiträge scrapen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="log">Scrape-Log anzeigen</button>
+        </div>
+      </div>
       <button id="login-btn" class="logout-btn" title="Anmelden" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
@@ -198,6 +205,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

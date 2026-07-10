@@ -724,6 +724,23 @@ app.post('/api/scrape', requireAdmin, (req, res) => {
   res.json({ started: true, sources: scrapeState.sources });
 });
 
+// Letzte 100 Zeilen des Scraper-Logs (für die "Scrape-Log anzeigen"-Ansicht).
+app.get('/api/scrape/log', requireAdmin, (_req, res) => {
+  const logPath = path.join(__dirname, 'scraper', 'scrape_all.log');
+  try {
+    const stat = fs.statSync(logPath);
+    const start = Math.max(0, stat.size - 256 * 1024);  // nur den Tail lesen (Log rotiert nicht)
+    const buf = Buffer.alloc(stat.size - start);
+    const fd = fs.openSync(logPath, 'r');
+    fs.readSync(fd, buf, 0, buf.length, start);
+    fs.closeSync(fd);
+    const text = buf.toString('utf8').split(/\r?\n/).slice(-100).join('\n');
+    res.json({ text });
+  } catch {
+    res.json({ text: '(keine Logdatei gefunden)' });
+  }
+});
+
 app.get('/api/articles', attachUser, (req, res) => {
   const { q, author, year, category, page = '1', limit = '24', telegram } = req.query;
   const user = req.user;

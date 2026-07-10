@@ -107,8 +107,9 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
   [{ "email": "a@b.de", "passwordHash": "<bcrypt>", "role": "admin", "allowedAuthors": null }]
   ```
   - `passwordHash`: bcrypt (siehe `scripts/hash-passwords.js`).
-  - `role`: `admin` sieht die Admin-Buttons (Reindex ↺, Scrape ⬇) und darf
-    `/api/reindex` + `/api/scrape` auslösen.
+  - `role`: `admin` sieht das Aktions-Menü hinter dem **↺-Button** (Archiv neu
+    einlesen, Neue Beiträge scrapen, Scrape-Log anzeigen) und darf `/api/reindex`,
+    `/api/scrape` + `/api/scrape/log` nutzen.
   - `allowedAuthors`: `null` = alle Autoren; sonst Whitelist von Autor-Ordnern (ACL).
 - **Gäste** (ohne Login) bekommen die Rolle `guest` mit den in
   **`public-directories.txt`** gelisteten öffentlichen Autoren:
@@ -142,6 +143,7 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
 | `POST /api/reindex` | Admin | Index neu aufbauen (`buildIndex()`) |
 | `GET /api/scrape/status` | Auth | Status + Live-Ausgabe des Scrape-Laufs |
 | `POST /api/scrape` | Admin | Scraper starten (`{sources?}`), danach Auto-Reindex |
+| `GET /api/scrape/log` | Admin | Letzte 100 Zeilen von `scraper/scrape_all.log` |
 
 „Soft" = `attachUser`: eingeloggt oder Gast mit Public-Autoren; sonst 401.
 
@@ -176,11 +178,14 @@ scraper/scrape_all.js  →  ../www/Joe Turan | ../www/Telegram | ../www/Facebook
 Details/CLI: siehe `scraper/README.md`. Zwei Auslöse-Wege:
 
 1. **CLI**: `cd scraper && node scrape_all.js [--blog|--facebook|--telegram] [--visible]`
-2. **Web-UI (Admin)**: Button **⬇** im Header → `POST /api/scrape`. Der Server
-   startet `scrape_all.js` als Kindprozess, sammelt dessen Ausgabe in
-   `scrapeState.output` und zeigt sie **live in einem Modal** an (endet mit der
-   Zusammenfassung `gespeichert=… bereits vorhanden=…`). Nach dem Lauf wird
-   automatisch `buildIndex()` (Reindex) angestoßen.
+2. **Web-UI (Admin)**: Aktions-Menü hinter dem **↺-Button** im Header mit drei
+   Einträgen — *Archiv neu einlesen* (`POST /api/reindex`), *Neue Beiträge scrapen*
+   (`POST /api/scrape`) und *Scrape-Log anzeigen* (`GET /api/scrape/log`). Beim
+   Scrapen startet der Server `scrape_all.js` als Kindprozess, sammelt dessen
+   Ausgabe in `scrapeState.output` und zeigt sie **live in einem Modal** an (endet
+   mit der Zusammenfassung `gespeichert=… bereits vorhanden=…`); danach wird
+   automatisch `buildIndex()` (Reindex) angestoßen. *Scrape-Log anzeigen* öffnet
+   dasselbe Modal mit den letzten 100 Log-Zeilen, bereits ans untere Ende gescrollt.
 
 Voraussetzungen für den Scrape: installierte Playwright-Browser + System-Libs und
 gesetztes `PLAYWRIGHT_BROWSERS_PATH` (siehe `LXC-container node.js Setup.txt`).
@@ -195,7 +200,7 @@ server.js                     Express-App (gesamter Backend-Code)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp
 public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
-├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Reindex, Scrape)
+├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Admin-Menü: Reindex/Scrape/Log)
 ├── styles.css                Styles (Light/Dark, Layouts)
 └── pdfjs/                    PDF-Anzeige
 scripts/hash-passwords.js     bcrypt-Hashes für users.json erzeugen

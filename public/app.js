@@ -34,10 +34,11 @@ const $filterLimit    = document.getElementById('filter-limit');
 const $resetFilters   = document.getElementById('reset-filters');
 const $filterFont     = document.getElementById('filter-font');
 const $reindexBtn     = document.getElementById('reindex-btn');
-const $scrapeBtn      = document.getElementById('scrape-btn');
+const $adminMenu      = document.getElementById('admin-menu');
 const $scrapeOverlay  = document.getElementById('scrape-overlay');
 const $scrapeBackdrop = document.getElementById('scrape-backdrop');
 const $scrapeClose    = document.getElementById('scrape-close');
+const $scrapeTitle    = document.getElementById('scrape-title');
 const $scrapeStatus   = document.getElementById('scrape-status');
 const $scrapeOutput   = document.getElementById('scrape-output');
 const $themeBtn       = document.getElementById('theme-btn');
@@ -161,7 +162,6 @@ function hideLogin() {
 function applyUserUI(user) {
   const isGuest = !user || user.role === 'guest';
   $reindexBtn.hidden = !(user && user.role === 'admin');
-  $scrapeBtn.hidden  = !(user && user.role === 'admin');
   $logoutBtn.hidden  = isGuest;
   $loginBtn.hidden   = !isGuest;
 }
@@ -910,7 +910,7 @@ $resetFilters.addEventListener('click', () => {
   loadArticles();
 });
 
-$reindexBtn.addEventListener('click', async () => {
+async function runReindex() {
   if (!confirm('Archiv neu indizieren?')) return;
   $reindexBtn.disabled = true;
   $reindexBtn.textContent = '…';
@@ -940,13 +940,14 @@ $reindexBtn.addEventListener('click', async () => {
     $reindexBtn.disabled = false;
     $reindexBtn.textContent = '↺';
   }
-});
+}
 
-function openScrapeModal() {
+function openScrapeModal(title) {
   $scrapeOverlay.hidden = false;
   document.body.style.overflow = 'hidden';
+  if ($scrapeTitle) $scrapeTitle.textContent = title || 'Scrapen';
   $scrapeOutput.textContent = '';
-  $scrapeStatus.textContent = 'Scrape läuft …';
+  $scrapeStatus.textContent = '';
 }
 function closeScrapeModal() {
   $scrapeOverlay.hidden = true;
@@ -958,12 +959,12 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$scrapeOverlay.hidden) closeScrapeModal();
 });
 
-$scrapeBtn.addEventListener('click', async () => {
+async function runScrape() {
   if (!confirm('Neue Beiträge scrapen (Blog, Facebook, Telegram)? Das kann einige Minuten dauern.')) return;
-  const origLabel = $scrapeBtn.textContent;
-  $scrapeBtn.disabled = true;
-  $scrapeBtn.textContent = '…';
-  openScrapeModal();
+  $reindexBtn.disabled = true;
+  $reindexBtn.textContent = '…';
+  openScrapeModal('Scrapen');
+  $scrapeStatus.textContent = 'Scrape läuft …';
   try {
     const r = await apiFetch('/api/scrape', { method: 'POST' });
     const data = await r.json();
@@ -1012,9 +1013,68 @@ $scrapeBtn.addEventListener('click', async () => {
   } catch (e) {
     $scrapeStatus.textContent = 'Abgebrochen: ' + ((e && e.message) || e);
   } finally {
-    $scrapeBtn.disabled = false;
-    $scrapeBtn.textContent = origLabel;
+    $reindexBtn.disabled = false;
+    $reindexBtn.textContent = '↺';
   }
+}
+
+async function showScrapeLog() {
+  openScrapeModal('Scrape-Log (letzte 100 Zeilen)');
+  $scrapeStatus.textContent = 'Lade …';
+  try {
+    const r = await apiFetch('/api/scrape/log');
+    const ct = r.headers.get('content-type') || '';
+    if (!r.ok || !ct.includes('application/json')) {
+      // Kein JSON -> vermutlich läuft eine ältere Server-Version ohne diese Route.
+      $scrapeOutput.textContent =
+        `Log-Endpoint nicht verfügbar (HTTP ${r.status}).\n` +
+        `Vermutlich läuft eine ältere Server-Version — bitte die aktuelle server.js ` +
+        `deployen und den Dienst neu starten (sudo systemctl restart nodeapp).`;
+      $scrapeStatus.textContent = 'Fehler';
+    } else {
+      const data = await r.json();
+      $scrapeOutput.textContent = data.text || '(leer)';
+      $scrapeStatus.textContent = 'scraper/scrape_all.log';
+    }
+  } catch (e) {
+    $scrapeOutput.textContent = 'Konnte das Log nicht laden: ' + ((e && e.message) || e);
+    $scrapeStatus.textContent = 'Fehler';
+  }
+  // Beim Öffnen ans untere Ende scrollen (neueste Zeilen), nach oben scrollbar.
+  requestAnimationFrame(() => { $scrapeOutput.scrollTop = $scrapeOutput.scrollHeight; });
+}
+
+// ── Aktions-Menü hinter dem ↺-Button ───────────────────────────────────────
+function closeAdminMenu() {
+  $adminMenu.hidden = true;
+  $reindexBtn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', onAdminOutside, true);
+  document.removeEventListener('keydown', onAdminEsc, true);
+}
+function onAdminOutside(ev) {
+  if (!$adminMenu.contains(ev.target) && ev.target !== $reindexBtn && !$reindexBtn.contains(ev.target)) {
+    closeAdminMenu();
+  }
+}
+function onAdminEsc(ev) {
+  if (ev.key === 'Escape') { ev.stopPropagation(); closeAdminMenu(); }
+}
+$reindexBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  if (!$adminMenu.hidden) { closeAdminMenu(); return; }
+  $adminMenu.hidden = false;
+  $reindexBtn.setAttribute('aria-expanded', 'true');
+  document.addEventListener('click', onAdminOutside, true);
+  document.addEventListener('keydown', onAdminEsc, true);
+});
+$adminMenu.addEventListener('click', ev => {
+  const item = ev.target.closest('[data-action]');
+  if (!item) return;
+  closeAdminMenu();
+  const action = item.dataset.action;
+  if (action === 'reindex') runReindex();
+  else if (action === 'scrape') runScrape();
+  else if (action === 'log') showScrapeLog();
 });
 
 $overlayClose.addEventListener('click', closeOverlay);
