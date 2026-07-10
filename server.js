@@ -14,6 +14,8 @@ const app = express();
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 const WWW_DIR = path.join(__dirname, 'www');
+const INFOGRAPHICS_AUTHOR = 'Infografiken';
+const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 
 // ─── Users ─────────────────────────────────────────────────────────────────
 
@@ -425,6 +427,149 @@ function canAccessAuthor(sessionUser, author) {
   return sessionUser.allowedAuthors.includes(author);
 }
 
+function isPublicAuthor(author) {
+  return publicAuthors.includes(author);
+}
+
+function canUploadInfographic(sessionUser, article) {
+  return !!(
+    sessionUser?.role === 'admin' &&
+    article &&
+    canAccessAuthor(sessionUser, article.author) &&
+    article.author !== INFOGRAPHICS_AUTHOR &&
+    !isPublicAuthor(article.author)
+  );
+}
+
+function imageExtensionFromContentType(contentType) {
+  const type = String(contentType || '').split(';')[0].trim().toLowerCase();
+  if (type === 'image/png') return '.png';
+  if (type === 'image/jpeg') return '.jpg';
+  return null;
+}
+
+function resolveUnder(root, ...segments) {
+  const absPath = path.resolve(path.join(root, ...segments));
+  if (absPath !== root && !absPath.startsWith(root + path.sep)) return null;
+  return absPath;
+}
+
+function infographicStemExists(dir, stem) {
+  return ['.md', '.jpg', '.jpeg', '.png'].some(ext => fs.existsSync(path.join(dir, stem + ext)));
+}
+
+function getInfographicTarget(article, imageExt) {
+  const year = article.year || (article.date ? article.date.slice(0, 4) : '');
+  if (!/^\d{4}$/.test(year)) return null;
+
+  const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
+  if (!dir) return null;
+
+  const baseStem = path.basename(article.filePath, '.md');
+  for (let ordinal = 1; ordinal < 1000; ordinal++) {
+    const stem = ordinal === 1 ? baseStem : `${baseStem}_${ordinal}`;
+    if (!infographicStemExists(dir, stem)) {
+      return {
+        dir,
+        year,
+        ordinal,
+        stem,
+        mdPath: path.join(dir, stem + '.md'),
+        imagePath: path.join(dir, stem + imageExt),
+        id: [INFOGRAPHICS_AUTHOR, year, stem].join('/'),
+      };
+    }
+  }
+  return null;
+}
+
+function appendOrdinalToMarkdownTitle(lines, ordinal) {
+  if (ordinal <= 1) return lines;
+  const appendSuffix = (line) => {
+    const suffix = ` (${ordinal})`;
+    const trailingWhitespace = line.match(/\s*$/)?.[0] || '';
+    const core = line.slice(0, line.length - trailingWhitespace.length);
+    for (const marker of ['**', '*', '__', '_']) {
+      if (core.endsWith(marker)) return core.slice(0, -marker.length) + suffix + marker + trailingWhitespace;
+    }
+    return core + suffix + trailingWhitespace;
+  };
+
+  let datumIdx = -1;
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    const clean = lines[i]
+      .replace(/\*\*/g, '')
+      .replace(/^#+\s*/, '')
+      .replace(/^\*|\*$/g, '')
+      .trim()
+      .replace(/^_+|_+$/g, '')
+      .trim();
+    if (/^datum:/i.test(clean)) {
+      datumIdx = i;
+      break;
+    }
+  }
+
+  const limitIdx = datumIdx >= 0 ? datumIdx : Math.min(lines.length, 5);
+  for (let i = limitIdx - 1; i >= 0; i--) {
+    const clean = lines[i].replace(/^#+\s*/, '').replace(/\*\*/g, '').trim();
+    if (!clean || /^quelle:/i.test(clean)) continue;
+    lines[i] = appendSuffix(lines[i]);
+    break;
+  }
+  return lines;
+}
+
+function buildInfographicMarkdown(content, ordinal) {
+  const eol = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+
+  let datumIdx = -1;
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    const clean = lines[i]
+      .replace(/\*\*/g, '')
+      .replace(/^#+\s*/, '')
+      .replace(/^\*|\*$/g, '')
+      .trim()
+      .replace(/^_+|_+$/g, '')
+      .trim();
+    if (/^datum:/i.test(clean)) {
+      datumIdx = i;
+      break;
+    }
+  }
+
+  let inSummary = false;
+  let lastMetaIdx = datumIdx >= 0 ? datumIdx : -1;
+  let separatorIdx = -1;
+
+  for (let i = (datumIdx >= 0 ? datumIdx + 1 : 0); i < lines.length; i++) {
+    const raw = lines[i];
+    const clean = raw.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim().replace(/^_+|_+$/g, '').trim();
+
+    if (/^\*{4,}$|^-{4,}$/.test(raw.trim())) {
+      inSummary = false;
+      separatorIdx = i;
+      break;
+    }
+    if (inSummary) continue;
+
+    if (/^audioquickie:/i.test(clean) || /^kategorien:/i.test(clean) || /^quelle:/i.test(clean)) {
+      lastMetaIdx = i;
+      continue;
+    }
+    if (/^zusammenfassung:/i.test(clean)) {
+      inSummary = true;
+      lastMetaIdx = i;
+    }
+  }
+
+  const cutIdx = separatorIdx >= 0 ? separatorIdx : (lastMetaIdx >= 0 ? lastMetaIdx + 1 : lines.length);
+  const keptLines = appendOrdinalToMarkdownTitle(lines.slice(0, cutIdx), ordinal);
+  while (keptLines.length && keptLines[keptLines.length - 1].trim() === '') keptLines.pop();
+  return keptLines.join(eol) + eol;
+}
+
 function requireAuth(req, res, next) {
   if (req.session?.user) return next();
   res.status(401).json({ error: 'Not authenticated' });
@@ -664,6 +809,74 @@ app.post('/api/reindex', requireAdmin, (req, res) => {
   res.json({ started: true });
 });
 
+app.post(
+  '/api/infographics/*',
+  requireAdmin,
+  express.raw({ type: ['image/png', 'image/jpeg'], limit: INFOGRAPHIC_MAX_BYTES }),
+  async (req, res) => {
+    const id = req.params[0];
+    const article = articles.find(a => a.id === id);
+    if (!article) return res.status(404).json({ error: 'Artikel nicht gefunden.' });
+
+    if (!canUploadInfographic(req.session.user, article)) {
+      return res.status(403).json({ error: 'Für diesen Artikel ist kein Infografik-Upload erlaubt.' });
+    }
+
+    const imageExt = imageExtensionFromContentType(req.get('content-type'));
+    if (!imageExt) {
+      return res.status(415).json({ error: 'Nur PNG- und JPG-Bilder sind erlaubt.' });
+    }
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: 'Keine Bilddatei empfangen.' });
+    }
+
+    let parsed;
+    let originalContent;
+    try {
+      originalContent = await fs.promises.readFile(article.filePath, 'utf8');
+      parsed = parseArticle(originalContent, article.filePath);
+    } catch {
+      return res.status(500).json({ error: 'Artikeldatei konnte nicht gelesen werden.' });
+    }
+
+    if (!parsed.sourceUrl) {
+      return res.status(400).json({ error: 'Der Artikel enthält keine Quelle-Zeile.' });
+    }
+    if (!parsed.date) {
+      return res.status(400).json({ error: 'Der Artikel enthält kein gültiges Datum.' });
+    }
+
+    const target = getInfographicTarget({ ...article, date: parsed.date, year: parsed.date.slice(0, 4) }, imageExt);
+    if (!target) {
+      return res.status(400).json({ error: 'Kein gültiger Zielpfad für die Infografik gefunden.' });
+    }
+
+    try {
+      await fs.promises.mkdir(target.dir, { recursive: true });
+      await fs.promises.writeFile(target.mdPath, buildInfographicMarkdown(originalContent, target.ordinal), { flag: 'wx' });
+      try {
+        await fs.promises.writeFile(target.imagePath, req.body, { flag: 'wx' });
+      } catch (err) {
+        await fs.promises.unlink(target.mdPath).catch(() => {});
+        throw err;
+      }
+
+      await buildIndex();
+      res.json({
+        ok: true,
+        id: target.id,
+        filename: path.basename(target.imagePath),
+        ordinal: target.ordinal,
+      });
+    } catch (err) {
+      if (err.code === 'EEXIST') {
+        return res.status(409).json({ error: 'Eine Infografik mit diesem Namen existiert bereits. Bitte erneut versuchen.' });
+      }
+      res.status(500).json({ error: err.message || 'Infografik konnte nicht gespeichert werden.' });
+    }
+  }
+);
+
 // ─── Scrape (Admin): externen Scraper starten, danach automatisch reindexen ──
 //
 // Startet scraper/scrape_all.js als eigenen Node-Prozess (self-contained mit
@@ -814,13 +1027,20 @@ app.get('/api/articles/*', attachUser, (req, res) => {
     const parsed = parseArticle(content, article.filePath);
     const bodyHtml = marked.parse(parsed.body);
     const { filePath, ...rest } = article;
-    res.json({ ...rest, bodyHtml });
+    res.json({ ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ─── Start ─────────────────────────────────────────────────────────────────
+
+app.use((err, _req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Die Bilddatei ist größer als 10 MB.' });
+  }
+  next(err);
+});
 
 buildIndex().catch(console.error);
 app.listen(PORT, () => {

@@ -20,6 +20,7 @@ let authorHueMap = {};  // author name → hue (0..359), gesetzt in loadMeta()
 let audioEl = null;     // shared audio element
 let currentAudioBtn = null;
 let currentUser = null; // { email, role, allowedAuthors }
+const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
 const $app            = document.getElementById('app');
@@ -270,6 +271,26 @@ async function fetchArticle(id) {
   return r.json();
 }
 
+async function uploadInfographic(article, file) {
+  const lowerName = file.name.toLowerCase();
+  const isPng = file.type === 'image/png' || lowerName.endsWith('.png');
+  const isJpeg = file.type === 'image/jpeg' || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg');
+  const contentType = isPng ? 'image/png' : (isJpeg ? 'image/jpeg' : '');
+
+  if (!contentType) throw new Error('Bitte eine PNG- oder JPG-Datei auswählen.');
+  if (file.size > INFOGRAPHIC_MAX_BYTES) throw new Error('Die Bilddatei ist größer als 10 MB.');
+
+  const r = await apiFetch(`/api/infographics/${sanitizeForId(article.id)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': contentType },
+    body: file,
+  });
+  let data = {};
+  try { data = await r.json(); } catch { /* ignore */ }
+  if (!r.ok) throw new Error(data.error || 'Infografik konnte nicht gespeichert werden.');
+  return data;
+}
+
 // ── Rendering ──────────────────────────────────────────────────────────────
 function renderCard(article, idx) {
   const hue = authorHue(article.author);
@@ -503,10 +524,20 @@ function renderDetail(article) {
       </div>`
     : '';
   const shareBtnHtml = `<button class="detail-cat-pill detail-share-btn" id="detail-share-btn" aria-label="Link teilen" title="Link zum Artikel teilen">${svgShare()}<span class="detail-share-text">Teilen</span></button>`;
+  const infographicBtnHtml = article.canUploadInfographic
+    ? `<div class="detail-infographic-wrap">
+        <button type="button" class="detail-cat-pill detail-infographic-btn" id="detail-infographic-btn" aria-label="Neue Infografik hochladen" title="Neue Infografik hochladen">neue Grafik</button>
+        <input type="file" id="detail-infographic-file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden />
+        <span class="detail-infographic-status" id="detail-infographic-status" aria-live="polite"></span>
+      </div>`
+    : '';
   const dateHtml = `<div class="detail-date-row">
         <span class="detail-date-block">${article.date ? esc(formatDate(article.date)) : ''}</span>
-        ${copyBtnHtml}
-        ${shareBtnHtml}
+        <div class="detail-action-row">
+          ${infographicBtnHtml}
+          ${copyBtnHtml}
+          ${shareBtnHtml}
+        </div>
       </div>`;
   const summaryHtml = article.summary
     ? `<div class="detail-summary"><span class="detail-summary-label">Zusammenfassung:</span> ${esc(article.summary)}</div>`
@@ -576,6 +607,41 @@ function renderDetail(article) {
   // Copy-Button → zwei Klick-Zonen:
   //   Icon  → öffnet Menü mit Prompt-Varianten (vorangestellt)
   //   "copy" → nur Titel + Body
+  const $infographicBtn = document.getElementById('detail-infographic-btn');
+  const $infographicFile = document.getElementById('detail-infographic-file');
+  const $infographicStatus = document.getElementById('detail-infographic-status');
+  if ($infographicBtn && $infographicFile) {
+    const setUploadStatus = (text, kind = '') => {
+      if (!$infographicStatus) return;
+      $infographicStatus.textContent = text;
+      $infographicStatus.dataset.kind = kind;
+    };
+
+    $infographicBtn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      $infographicFile.value = '';
+      $infographicFile.click();
+    });
+
+    $infographicFile.addEventListener('change', async () => {
+      const file = $infographicFile.files?.[0];
+      if (!file) return;
+      $infographicBtn.disabled = true;
+      $infographicBtn.setAttribute('aria-busy', 'true');
+      setUploadStatus('Wird hochgeladen ...');
+      try {
+        await uploadInfographic(article, file);
+        setUploadStatus('Gespeichert.', 'success');
+        loadArticles().catch(err => console.warn('Artikel-Liste konnte nicht aktualisiert werden', err));
+      } catch (err) {
+        setUploadStatus(err.message || 'Upload fehlgeschlagen.', 'error');
+      } finally {
+        $infographicBtn.disabled = false;
+        $infographicBtn.removeAttribute('aria-busy');
+      }
+    });
+  }
+
   const $copyBtn  = document.getElementById('detail-copy-btn');
   const $copyMenu = document.getElementById('copy-prompt-menu');
   const $copyIcon = $copyBtn?.querySelector('.detail-copy-icon');
