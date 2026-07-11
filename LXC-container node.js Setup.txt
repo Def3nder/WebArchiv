@@ -641,7 +641,11 @@ export PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 cd /opt/nodeapp/scraper
 /usr/bin/node scrape_all.js >> /opt/nodeapp/scraper/cron-scrape.log 2>&1
 echo "$(date '+%F %T') Scraper exit $?" >> /opt/nodeapp/scraper/cron-scrape.log
-sudo /usr/bin/systemctl restart nodeapp
+
+# Reindex OHNE Neustart (bestehende Sessions bleiben erhalten): SIGHUP an den
+# laufenden Node-Prozess. Läuft als ralf ohne sudo, da der Dienst als ralf läuft.
+PID=$(systemctl show -p MainPID --value nodeapp)
+[ "${PID:-0}" -gt 0 ] && kill -HUP "$PID"
 ```
 
 ```bash
@@ -664,16 +668,22 @@ crontab -e
 
 Server läuft auf **UTC** → 04:30 = 04:30 UTC.
 
-## Reindex ohne Passwort (sudoers)
+## Reindex per SIGHUP (kein Neustart, kein sudo)
 
-Damit `sudo systemctl restart nodeapp` in Cron ohne Passwort läuft:
+Der Server hat einen `SIGHUP`-Handler (server.js), der `buildIndex()` auslöst,
+**ohne den Prozess zu beenden** — bestehende Anmeldungen/Sessions bleiben also
+erhalten. Da Dienst und Cron beide als `ralf` laufen, darf `ralf` das Signal
+ohne `sudo` senden:
 
 ```bash
-echo 'ralf ALL=(root) NOPASSWD: /usr/bin/systemctl restart nodeapp' \
-  | sudo tee /etc/sudoers.d/nodeapp-restart
-sudo chmod 440 /etc/sudoers.d/nodeapp-restart
-sudo visudo -c
+kill -HUP "$(systemctl show -p MainPID --value nodeapp)"
 ```
+
+`systemctl show -p MainPID` ist eine reine Leseabfrage (kein root nötig).
+Alternativ ohne systemd: `pkill -HUP -u ralf -f '/opt/nodeapp/server.js'`.
+
+> Eine sudoers-Regel für `systemctl restart` ist damit **nicht mehr nötig**.
+> Der frühere Neustart-Ansatz hätte alle offenen Sessions getrennt.
 
 ## Prüfen
 

@@ -158,9 +158,10 @@ hinter dem Reverse Proxy.
 ## Index (Reindex)
 
 `buildIndex()` scannt `www/` rekursiv, parst alle `.md`, ermittelt Begleitdateien,
-Kategorien und baut den Fuse-Index. Läuft **beim Serverstart** und auf
-`POST /api/reindex` (Admin). Da der Index im Speicher liegt, werden **neu
-hinzugefügte Dateien erst nach einem Reindex sichtbar** (oder nach Neustart).
+Kategorien und baut den Fuse-Index. Läuft **beim Serverstart**, auf
+`POST /api/reindex` (Admin) und bei **`SIGHUP`** (für Cron/Automation ohne
+Neustart — offene Sessions bleiben erhalten). Da der Index im Speicher liegt,
+werden **neu hinzugefügte Dateien erst nach einem Reindex sichtbar**.
 
 ---
 
@@ -258,8 +259,41 @@ npx playwright install --with-deps chromium
 - `www/` liegt auf einer eingebundenen externen Disk.
 - Reverse Proxy (Caddy/Nginx) für HTTPS ist vorgesehen; der Server ist mit
   `trust proxy` darauf vorbereitet.
-- Täglicher Scrape per **cron** möglich (Wrapper-Skript + `PLAYWRIGHT_BROWSERS_PATH`),
-  danach Service-Restart für den Reindex.
+- **Reindex ohne Neustart**: der Server hat einen `SIGHUP`-Handler, der
+  `buildIndex()` auslöst, ohne den Prozess zu beenden — offene Sessions bleiben
+  erhalten. Auslösen (als `ralf`, ohne sudo):
+  `kill -HUP "$(systemctl show -p MainPID --value nodeapp)"`.
+- Täglicher Scrape **und** Reindex per **cron** (als `ralf`) — siehe unten.
+
+### Täglicher Scrape per Cron
+
+Wrapper `/opt/nodeapp/scraper/run-scrape.sh` (als `ralf`, danach `chmod +x`):
+
+```bash
+#!/usr/bin/env bash
+export PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+cd /opt/nodeapp/scraper
+/usr/bin/node scrape_all.js >> /opt/nodeapp/scraper/cron-scrape.log 2>&1
+echo "$(date '+%F %T') Scraper exit $?" >> /opt/nodeapp/scraper/cron-scrape.log
+
+# Reindex OHNE Neustart (Sessions bleiben erhalten): SIGHUP an den Node-Prozess
+PID=$(systemctl show -p MainPID --value nodeapp)
+[ "${PID:-0}" -gt 0 ] && kill -HUP "$PID"
+```
+
+Crontab von `ralf` (`crontab -e`), täglich 04:30 (Server läuft auf **UTC**):
+
+```cron
+30 4 * * * /opt/nodeapp/scraper/run-scrape.sh
+```
+
+Kein `sudo`/Passwort nötig: Dienst und Cron laufen beide als `ralf`,
+`systemctl show -p MainPID` ist eine reine Leseabfrage, und `ralf` darf den
+eigenen Prozess signalisieren. Kein `set -e` im Wrapper — bei Teil-Fehlern (z. B.
+abgelaufene FB-Cookies) endet der Scraper mit Exit 1, die übrigen Quellen sind
+trotzdem gespeichert und werden indexiert. Nur bestimmte Quellen: Flags anhängen
+(`--blog --telegram`).
 
 Alle Schritte, Fehlerbilder und Befehle (systemd, Rechte, Playwright-Systemlibs,
-cron, CRLF-Stolperfalle) stehen ausführlich in **`LXC-container node.js Setup.txt`**.
+`SIGHUP`-Reindex, cron, CRLF-Stolperfalle) stehen ausführlich in
+**`LXC-container node.js Setup.txt`**.

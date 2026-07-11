@@ -1042,6 +1042,15 @@ app.use((err, _req, res, next) => {
   next(err);
 });
 
+// Reindex ohne Neustart: SIGHUP löst einen Index-Neuaufbau aus – der Prozess
+// läuft weiter, bestehende Sessions bleiben erhalten. Aus Cron als derselbe
+// User (ralf) ohne sudo aufrufbar:
+//   kill -HUP "$(systemctl show -p MainPID --value nodeapp)"
+process.on('SIGHUP', () => {
+  console.log('SIGHUP empfangen → Reindex');
+  if (!reindexState.running) buildIndex().catch(console.error);
+});
+
 buildIndex().catch(console.error);
 app.listen(PORT, () => {
   console.log(`WebArchiv → http://localhost:${PORT}`);
