@@ -517,12 +517,62 @@ function appendOrdinalToMarkdownTitle(lines, ordinal) {
 
   const limitIdx = datumIdx >= 0 ? datumIdx : Math.min(lines.length, 5);
   for (let i = limitIdx - 1; i >= 0; i--) {
-    const clean = lines[i].replace(/^#+\s*/, '').replace(/\*\*/g, '').trim();
+    const clean = lines[i]
+      .replace(/^#+\s*/, '')
+      .replace(/\*\*/g, '')
+      .replace(/^\*|\*$/g, '')
+      .trim()
+      .replace(/^_+|_+$/g, '')
+      .trim();
     if (!clean || /^quelle:/i.test(clean)) continue;
     lines[i] = appendSuffix(lines[i]);
     break;
   }
   return lines;
+}
+
+function validateInfographicHeader(content) {
+  const lines = content.split(/\r?\n/);
+  let datumIdx = -1;
+  let date = '';
+
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    const clean = lines[i]
+      .replace(/\*\*/g, '')
+      .replace(/^#+\s*/, '')
+      .replace(/^\*|\*$/g, '')
+      .trim()
+      .replace(/^_+|_+$/g, '')
+      .trim();
+    if (!/^datum:/i.test(clean)) continue;
+
+    datumIdx = i;
+    const raw = clean.replace(/^datum:\s*/i, '').trim();
+    date = normalizeDate(raw) || normalizeDate(lines[i]) || '';
+    break;
+  }
+
+  let hasTitle = false;
+  if (datumIdx >= 0) {
+    for (let i = 0; i < datumIdx; i++) {
+      const clean = lines[i]
+        .replace(/^#+\s*/, '')
+        .replace(/\*\*/g, '')
+        .replace(/^\*|\*$/g, '')
+        .replace(/^_+|_+$/g, '')
+        .replace(/[»«]/g, '')
+        .trim();
+      if (clean && !/^quelle:/i.test(clean)) {
+        hasTitle = true;
+        break;
+      }
+    }
+  }
+
+  return {
+    hasTitle,
+    date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '',
+  };
 }
 
 function buildInfographicMarkdown(content, ordinal) {
@@ -835,23 +885,22 @@ app.post(
       return res.status(400).json({ error: 'Keine Bilddatei empfangen.' });
     }
 
-    let parsed;
     let originalContent;
     try {
       originalContent = await fs.promises.readFile(article.filePath, 'utf8');
-      parsed = parseArticle(originalContent, article.filePath);
     } catch {
       return res.status(500).json({ error: 'Artikeldatei konnte nicht gelesen werden.' });
     }
 
-    if (!parsed.sourceUrl) {
-      return res.status(400).json({ error: 'Der Artikel enthält keine Quelle-Zeile.' });
+    const header = validateInfographicHeader(originalContent);
+    if (!header.hasTitle) {
+      return res.status(400).json({ error: 'Der Artikel enthält keinen Titel.' });
     }
-    if (!parsed.date) {
-      return res.status(400).json({ error: 'Der Artikel enthält kein gültiges Datum.' });
+    if (!header.date) {
+      return res.status(400).json({ error: 'Der Artikel enthält keine gültige Datum-Zeile.' });
     }
 
-    const target = getInfographicTarget({ ...article, date: parsed.date, year: parsed.date.slice(0, 4) }, imageExt);
+    const target = getInfographicTarget({ ...article, date: header.date, year: header.date.slice(0, 4) }, imageExt);
     if (!target) {
       return res.status(400).json({ error: 'Kein gültiger Zielpfad für die Infografik gefunden.' });
     }
