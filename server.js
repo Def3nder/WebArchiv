@@ -258,7 +258,12 @@ function parseArticle(content, filePath) {
     bodyLines = lines.slice(start);
   }
 
-  const body = bodyLines.join('\n').trim();
+  let body = bodyLines.join('\n').trim();
+  // Manche Quellen (z. B. Facebook, Telegram) trennen Kopf und Text mit einer
+  // einzelnen "---"-Zeile (3 Bindestriche). Da der Separator oben nur 4+ Zeichen
+  // erkennt, bliebe diese Zeile sonst am Body-Anfang stehen und erschiene als
+  // literales "---" in der Kachel sowie als zusätzliche <hr> unter dem Divider.
+  body = body.replace(/^(?:-{3,}|\*{3,}|_{3,})[ \t]*(?:\r?\n|$)/, '').trimStart();
   const title = titleLines.join(' ').trim()
     || path.basename(filePath, '.md').replace(/_/g, ' ').replace(/^\d{4}-\d{2}-\d{2}\s+/, '');
 
