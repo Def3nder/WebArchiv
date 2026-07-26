@@ -7,7 +7,8 @@
     "scrape-all": "./scrape_all.js"
   },
   "scripts": {
-    "start": "node scrape_all.js"
+    "start": "node scrape_all.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"

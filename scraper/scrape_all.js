@@ -186,6 +186,36 @@ function stripLeadingIntro(text) {
   return lines.join("\n");
 }
 
+function normalizeLeadingTitleLine(line) {
+  let value = line.trim().replace(/^#{1,6}\s+/, "");
+  for (;;) {
+    const unwrapped = value
+      .replace(/^\*\*([\s\S]*)\*\*$/, "$1")
+      .replace(/^__([\s\S]*)__$/, "$1")
+      .replace(/^\*([\s\S]*)\*$/, "$1")
+      .replace(/^_([\s\S]*)_$/, "$1")
+      .replace(/^`([\s\S]*)`$/, "$1")
+      .trim();
+    if (unwrapped === value) break;
+    value = unwrapped;
+  }
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** Entfernt am Textanfang wiederholte Überschriften, die dem Seitentitel entsprechen. */
+function stripLeadingDuplicateTitle(text, title) {
+  const titleNorm = normalizeLeadingTitleLine(title);
+  if (!titleNorm) return text;
+
+  const lines = splitlines(text);
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && normalizeLeadingTitleLine(lines[0]) === titleNorm) {
+    lines.shift();
+    while (lines.length && !lines[0].trim()) lines.shift();
+  }
+  return lines.join("\n");
+}
+
 // Steuertexte, die Facebook an aufgeklappte Beiträge anhängt ("… Mehr/Weniger anzeigen").
 const _FB_UI_TAIL_RE =
   /\s*(?:…|\.\.\.)?\s*(?:weniger anzeigen|mehr anzeigen|mehr ansehen|see more|see less)\s*$/i;
@@ -534,6 +564,7 @@ function extractContentMarkdown($, title) {
     if (md) chunks.push(md);
   });
   let result = chunks.join("\n\n").trim();
+  result = stripLeadingDuplicateTitle(result, title);
   result = stripLeadingIntro(result);
   result = stripCtaBlockParagraphs(result);
   return stripSignature(result);
@@ -1490,6 +1521,7 @@ export {
   firstSentence,
   buildFilename,
   splitlines,
+  stripLeadingDuplicateTitle,
   stripLeadingIntro,
   stripTrailingGreeting,
   stripSignature,
