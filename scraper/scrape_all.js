@@ -2,11 +2,9 @@
 /**
  * scrape_all.js — Konsolidierter Scraper für Blog, Facebook und Telegram.
  *
- * Node.js-Portierung von scrape_all.py. Führt drei Quellen als Ablaufplan
- * NACHEINANDER aus (Default-Reihenfolge):
- *   1. Blog      -> joeturan.com/blog          -> Joe_Turan_Archiv/
- *   2. Facebook  -> login-pflichtige FB-Seite  -> Joe_Turan_Facebook/
- *   3. Telegram  -> t.me/s/<channel>           -> Joe_Turan_Telegram/
+ * Führt die in scraper-config.json eingetragenen Quellen als Ablaufplan
+ * NACHEINANDER aus (Default-Reihenfolge: Blog -> Facebook -> Telegram).
+ * Mehrere Einträge eines Quellentyps werden ebenfalls nacheinander verarbeitet.
  *
  * Pro Beitrag wird eine Markdown-Datei in einen Jahresordner geschrieben; Blog und
  * Facebook laden zusätzlich das Titel-/Hauptbild mit identischem Dateinamen-Stamm.
@@ -19,8 +17,8 @@
  *   node scrape_all.js --blog --facebook
  *   node scrape_all.js --visible       # Browser sichtbar
  *
- * Bei einem Fehler in einer Quelle wird protokolliert und mit der nächsten Quelle
- * fortgefahren; am Ende folgt eine Zusammenfassung je Quelle.
+ * Bei einem Fehler wird protokolliert und mit dem nächsten konfigurierten Eintrag
+ * fortgefahren; am Ende folgt eine Zusammenfassung je Quellentyp.
  */
 
 import fs from "node:fs";
@@ -43,15 +41,10 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.join(SCRIPT_DIR, "..");
 
 const CHANNEL_DISPLAY_NAME = "Joe Turan";
-const DEFAULT_CHANNEL = "joeturan";
-const DEFAULT_BASE_URL = "https://www.joeturan.com/blog";
-
-const BLOG_OUTPUT_DIR = path.join(PROJECT_ROOT, "www", "Joe Turan");
-const FB_OUTPUT_DIR = path.join(PROJECT_ROOT, "www", "Facebook");
-const TELEGRAM_OUTPUT_DIR = path.join(PROJECT_ROOT, "www", "Telegram");
+const WWW_DIR = path.join(PROJECT_ROOT, "www");
 
 const COOKIES_FILE = path.join(SCRIPT_DIR, "cookies.txt");
-const URL_FILE = path.join(SCRIPT_DIR, "Abonenten-URL.txt");
+const CONFIG_FILE = path.join(SCRIPT_DIR, "scraper-config.json");
 const LOG_FILE = path.join(SCRIPT_DIR, "scrape_all.log");
 
 // Gemeinsame Abbruchschwelle: nach so vielen bereits vorhandenen Artikeln wird
@@ -74,6 +67,74 @@ const TITLE_SUFFIX_RE = /\s*\/\s*Blog\s*\|\s*www\.joeturan\.com\s*$/i;
 const EXCLUDE_RE = /kuschel[\s\-_]*workshop/i;
 
 const CANONICAL_ORDER = ["blog", "facebook", "telegram"];
+
+const CONFIG_SECTIONS = {
+  blog: "Blog",
+  facebook: "Facebook",
+  telegram: "Telegram",
+};
+
+// Die bisherigen Verzeichnisse Facebook/Telegram enthalten Joe-Turan-Dateien
+// mit "Joe Turan" im Dateinamen. Diese Zuordnung verhindert beim Umstieg auf
+// die Config doppelte Dateien; neue Quellen verwenden ihren konfigurierten Namen.
+const LEGACY_POST_AUTHORS = {
+  facebook: { Facebook: CHANNEL_DISPLAY_NAME },
+  telegram: { Telegram: CHANNEL_DISPLAY_NAME },
+};
+
+function sourceOutputDir(outputPath) {
+  if (!outputPath || path.isAbsolute(outputPath)) {
+    throw new Error(`OutputPath muss relativ zum Scraper-Script sein: ${outputPath}`);
+  }
+  const outputDir = path.resolve(SCRIPT_DIR, outputPath);
+  const outputRoot = path.resolve(WWW_DIR);
+  if (outputDir === outputRoot || !outputDir.startsWith(outputRoot + path.sep)) {
+    throw new Error(`OutputPath liegt außerhalb von www/: ${outputPath}`);
+  }
+  return outputDir;
+}
+
+function loadScraperConfig(configPath = CONFIG_FILE) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch (exc) {
+    throw new Error(`Scraper-Config konnte nicht gelesen werden (${configPath}): ${exc.message}`);
+  }
+
+  const config = {};
+  for (const [type, section] of Object.entries(CONFIG_SECTIONS)) {
+    const entries = parsed[section];
+    if (!Array.isArray(entries)) {
+      throw new Error(`Scraper-Config: "${section}" muss ein Array sein.`);
+    }
+    config[type] = entries.map((entry, index) => {
+      const name = typeof entry?.Name === "string" ? entry.Name.trim() : "";
+      const url = typeof entry?.URL === "string" ? entry.URL.trim() : "";
+      const outputPath = typeof entry?.OutputPath === "string" ? entry.OutputPath.trim() : "";
+      if (!name || !url || !outputPath) {
+        throw new Error(
+          `Scraper-Config: ${section}[${index}] benötigt Name, URL und OutputPath.`
+        );
+      }
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        throw new Error(`Scraper-Config: ungültige URL in ${section}[${index}]: ${url}`);
+      }
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        throw new Error(`Scraper-Config: nur HTTP(S)-URLs sind erlaubt: ${url}`);
+      }
+      return { name, url, outputDir: sourceOutputDir(outputPath) };
+    });
+  }
+  return config;
+}
+
+function postAuthorName(type, sourceName) {
+  return LEGACY_POST_AUTHORS[type]?.[sourceName] || sourceName;
+}
 
 // ---------------------------------------------------------------------------
 // Logging (ein Logger, eine Datei)
@@ -231,43 +292,44 @@ function stripFbUiText(text) {
 }
 
 /**
- * Entfernt den abschließenden Autoren-/Social-Media-Abspann, behält nur 'Joe Turan'.
+ * Entfernt den abschließenden Autoren-/Social-Media-Abspann und behält den
+ * konfigurierten Autorennamen.
  *
- * 1. Alle Zeilen sammeln, die unscharf auf 'Joe Turan' passen (ratio >= 0.75).
- * 2. Die *erste* solche Zeile wählen, der innerhalb der nächsten 3 Zeilen
- *    'joeturan.com' folgt – das ist der verlässliche Beginn des Abspanns.
- * 3. Fällt kein 'joeturan.com'-Anker an, die *letzte* Treffer-Zeile nehmen.
- * 4. Ab der gewählten Zeile bis zum Ende abschneiden und ein sauberes
- *    'Joe Turan' anhängen.
+ * 1. Alle Zeilen sammeln, die unscharf auf den Autorennamen passen.
+ * 2. Falls konfiguriert, einen nachfolgenden Website-Anker bevorzugen.
+ * 3. Ohne Anker-Treffer die letzte passende Autorenzeile nehmen.
+ * 4. Ab dort abschneiden und den sauberen Autorennamen anhängen.
  */
-function stripSignature(mdText) {
+function stripSignature(mdText, displayName = CHANNEL_DISPLAY_NAME, websiteAnchor = "joeturan.com") {
   const lines = splitlines(mdText);
-  const target = "joe turan";
+  const target = displayName.toLowerCase();
 
-  const joeIndices = [];
+  const authorIndices = [];
   for (let i = 0; i < lines.length; i++) {
     const normalized = lines[i].replace(/[*_[\]`]/g, "").trim().toLowerCase();
     if (!normalized) continue;
     if (new difflib.SequenceMatcher(null, normalized, target).ratio() >= 0.75) {
-      joeIndices.push(i);
+      authorIndices.push(i);
     }
   }
 
-  if (joeIndices.length === 0) return mdText;
+  if (authorIndices.length === 0) return mdText;
 
   let footerStart = null;
-  for (const idx of joeIndices) {
-    const window = lines.slice(idx + 1, idx + 4);
-    if (window.some((wline) => wline.toLowerCase().includes("joeturan.com"))) {
-      footerStart = idx;
-      break;
+  if (websiteAnchor) {
+    for (const idx of authorIndices) {
+      const window = lines.slice(idx + 1, idx + 4);
+      if (window.some((wline) => wline.toLowerCase().includes(websiteAnchor.toLowerCase()))) {
+        footerStart = idx;
+        break;
+      }
     }
   }
 
-  if (footerStart === null) footerStart = joeIndices[joeIndices.length - 1];
+  if (footerStart === null) footerStart = authorIndices[authorIndices.length - 1];
 
   const trimmed = lines.slice(0, footerStart).join("\n").replace(/\s+$/, "");
-  return `${trimmed}\n\nJoe Turan`;
+  return `${trimmed}\n\n${displayName}`;
 }
 
 // Werbe-/Call-to-Action-Trigger. String = Substring-Treffer;
@@ -315,6 +377,17 @@ function stripCtaBlockLines(text) {
   return kept.join("\n");
 }
 
+function cleanFacebookText(rawText, displayName) {
+  let text = stripFbUiText(rawText);
+  text = stripLeadingIntro(text);
+  text = stripTrailingGreeting(text);
+  if (displayName === CHANNEL_DISPLAY_NAME) {
+    text = stripCtaBlockLines(text);
+    text = stripSignature(text);
+  }
+  return text;
+}
+
 /** Gibt den ersten Satz bis zum ersten Satzzeichen zurück. */
 function firstSentence(text) {
   const stripped = text.trim();
@@ -346,9 +419,24 @@ function slugify(sentence, maxLen = SLUG_MAX_LEN) {
   return rstripChars(slug, "_ ");
 }
 
-/** Dateiname für Telegram-/Facebook-Beiträge: '<date>_Joe Turan - <slug>.md'. */
-function buildFilename(dateStr, slug) {
-  return `${dateStr}_${CHANNEL_DISPLAY_NAME} - ${slug}.md`;
+/** Dateiname für Telegram-/Facebook-Beiträge: '<date>_<Autor> - <slug>.md'. */
+function buildFilename(dateStr, slug, displayName = CHANNEL_DISPLAY_NAME) {
+  return `${dateStr}_${displayName} - ${slug}.md`;
+}
+
+function resolvePostOutputPath(yearDir, dateStr, slug, displayName) {
+  const preferred = path.join(yearDir, buildFilename(dateStr, slug, displayName));
+  if (fs.existsSync(preferred) || !fs.existsSync(yearDir)) return preferred;
+
+  // Kompatibilität mit vorhandenen Dateien, deren Autorenpräfix vor der
+  // Config-Umstellung anders lautete. Datum und Slug sind innerhalb eines
+  // Autorenverzeichnisses die stabilen Bestandteile.
+  const prefix = `${dateStr}_`;
+  const suffix = ` - ${slug}.md`;
+  const existing = fs.readdirSync(yearDir).find(
+    (name) => name.startsWith(prefix) && name.endsWith(suffix)
+  );
+  return existing ? path.join(yearDir, existing) : preferred;
 }
 
 /** Markdown-Layout für Telegram- und Facebook-Beiträge (mit ----Trenner). */
@@ -546,7 +634,7 @@ function _normalizeForCompare(text) {
   return text.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function extractContentMarkdown($, title) {
+function extractContentMarkdown($, title, displayName = CHANNEL_DISPLAY_NAME) {
   const titleNorm = _normalizeForCompare(title);
   const chunks = [];
   $(`.${CONTENT_CONTAINER_CLASS}`).each((_i, container) => {
@@ -566,11 +654,14 @@ function extractContentMarkdown($, title) {
   let result = chunks.join("\n\n").trim();
   result = stripLeadingDuplicateTitle(result, title);
   result = stripLeadingIntro(result);
-  result = stripCtaBlockParagraphs(result);
-  return stripSignature(result);
+  if (displayName === CHANNEL_DISPLAY_NAME) {
+    result = stripCtaBlockParagraphs(result);
+    result = stripSignature(result);
+  }
+  return result;
 }
 
-function parseArticle(html, url) {
+function parseArticle(html, url, displayName = CHANNEL_DISPLAY_NAME) {
   const $ = cheerio.load(html);
   const ogUrl = extractOgUrl($, url);
   const title = extractTitle($);
@@ -581,7 +672,7 @@ function parseArticle(html, url) {
     title,
     date: dateStr,
     slug,
-    content_md: extractContentMarkdown($, title),
+    content_md: extractContentMarkdown($, title, displayName),
     image_url: extractImageUrl($),
     og_description: extractOgDescription($),
   };
@@ -711,7 +802,8 @@ async function clickNextPage(page, baseUrl) {
   return false;
 }
 
-async function processBlogListingPage(page, context, outputDir, processedUrls, skipState) {
+async function processBlogListingPage(page, context, source, processedUrls, skipState) {
+  const { outputDir } = source;
   const articleUrls = await visibleArticleUrls(page, page.url());
   if (articleUrls.length === 0) return 0;
 
@@ -725,7 +817,7 @@ async function processBlogListingPage(page, context, outputDir, processedUrls, s
     try {
       await articlePage.goto(articleUrl, { waitUntil: "networkidle", timeout: REQUEST_TIMEOUT * 1000 });
       const articleHtml = await articlePage.content();
-      const article = parseArticle(articleHtml, articleUrl);
+      const article = parseArticle(articleHtml, articleUrl, source.name);
       const [mdPath, jpgPath] = articlePaths(outputDir, article);
 
       if (fs.existsSync(mdPath) && fs.existsSync(jpgPath)) {
@@ -764,7 +856,9 @@ async function processBlogListingPage(page, context, outputDir, processedUrls, s
   return processedThisPage;
 }
 
-async function scrapeBlog(browser, baseUrl, outputDir) {
+async function scrapeBlog(browser, source) {
+  const baseUrl = source.url;
+  const outputDir = source.outputDir;
   await fs.promises.mkdir(outputDir, { recursive: true });
   const processedUrls = new Set();
   const skipState = { count: 0, stop: false, saved: 0 };
@@ -773,14 +867,14 @@ async function scrapeBlog(browser, baseUrl, outputDir) {
   try {
     const page = await context.newPage();
 
-    logger.info(`[Start] Oeffne Blog: ${baseUrl}`);
+    logger.info(`[Start] Öffne Blog "${source.name}": ${baseUrl}`);
     await page.goto(baseUrl, { waitUntil: "networkidle", timeout: REQUEST_TIMEOUT * 1000 });
     await page.waitForTimeout(PAGE_WAIT_MS);
 
     let pageNumber = 1;
     for (;;) {
       logger.info(`[Seite ${pageNumber}] Sammle sichtbare Artikel`);
-      const count = await processBlogListingPage(page, context, outputDir, processedUrls, skipState);
+      const count = await processBlogListingPage(page, context, source, processedUrls, skipState);
       if (count === 0) logger.info(`[Seite ${pageNumber}] Keine neuen Artikel gefunden.`);
 
       logger.info(`[Seite ${pageNumber}] ${count} Artikel verarbeitet oder uebersprungen.`);
@@ -799,7 +893,7 @@ async function scrapeBlog(browser, baseUrl, outputDir) {
     await context.close();
   }
 
-  logger.info(`Blog: ${skipState.saved} gespeichert, ${skipState.count} bereits vorhanden.`);
+  logger.info(`Blog "${source.name}": ${skipState.saved} gespeichert, ${skipState.count} bereits vorhanden.`);
   return [skipState.saved, skipState.count];
 }
 
@@ -814,8 +908,11 @@ async function extractTelegramDate(post) {
   return dt.slice(0, 10);
 }
 
-async function scrapeTelegram(browser, channel, outputDir) {
-  const channelUrl = `https://t.me/s/${channel}`;
+async function scrapeTelegram(browser, source) {
+  const channelUrl = source.url;
+  const outputDir = source.outputDir;
+  const displayName = postAuthorName("telegram", source.name);
+  const applyJoeFilters = displayName === CHANNEL_DISPLAY_NAME;
   await fs.promises.mkdir(outputDir, { recursive: true });
 
   const context = await browser.newContext({ userAgent: USER_AGENT });
@@ -824,7 +921,7 @@ async function scrapeTelegram(browser, channel, outputDir) {
   try {
     const page = await context.newPage();
 
-    logger.info(`Öffne ${channelUrl}`);
+    logger.info(`Öffne Telegram "${source.name}": ${channelUrl}`);
     await page.goto(channelUrl, { waitUntil: "networkidle" });
 
     const processedIds = new Set();
@@ -859,7 +956,7 @@ async function scrapeTelegram(browser, channel, outputDir) {
         text = stripTrailingGreeting(text);
         if (!text) continue;
 
-        if (EXCLUDE_RE.test(text)) {
+        if (applyJoeFilters && EXCLUDE_RE.test(text)) {
           logger.info(`[SKIP] Post ${postId} enthält 'Kuschel Workshop'`);
           continue;
         }
@@ -884,7 +981,7 @@ async function scrapeTelegram(browser, channel, outputDir) {
 
         const yearDir = path.join(outputDir, dateStr.slice(0, 4));
         await fs.promises.mkdir(yearDir, { recursive: true });
-        const outPath = path.join(yearDir, buildFilename(dateStr, slug));
+        const outPath = resolvePostOutputPath(yearDir, dateStr, slug, displayName);
         if (fs.existsSync(outPath)) {
           logger.info(`[SKIP] ${path.basename(outPath)} existiert bereits`);
           skipped += 1;
@@ -1203,7 +1300,10 @@ async function fbExtractImageUrl(article) {
   return null;
 }
 
-async function scrapeFacebook(browser, url, cookiesFile, outputDir) {
+async function scrapeFacebook(browser, source, cookiesFile) {
+  const { url, outputDir } = source;
+  const displayName = postAuthorName("facebook", source.name);
+  const applyJoeFilters = displayName === CHANNEL_DISPLAY_NAME;
   await fs.promises.mkdir(outputDir, { recursive: true });
   const cookies = loadNetscapeCookies(cookiesFile);
 
@@ -1238,7 +1338,7 @@ async function scrapeFacebook(browser, url, cookiesFile, outputDir) {
       }
     });
 
-    logger.info(`Öffne ${url}`);
+    logger.info(`Öffne Facebook "${source.name}": ${url}`);
     await page.goto(url, { waitUntil: "domcontentloaded" });
 
     // Consent-/Cookie-Banner best effort wegklicken
@@ -1299,14 +1399,10 @@ async function scrapeFacebook(browser, url, cookiesFile, outputDir) {
         await fbExpandMore(post, page);
         const rawText = await fbExtractText(post);
 
-        let text = stripFbUiText(rawText); // "… Weniger anzeigen" entfernen
-        text = stripLeadingIntro(text);
-        text = stripTrailingGreeting(text);
-        text = stripCtaBlockLines(text); // Werbe-/Erstgespräch-Aufrufe
-        text = stripSignature(text); // Abspann (joeturan.com etc.)
+        const text = cleanFacebookText(rawText, displayName);
         if (!text) continue;
 
-        if (EXCLUDE_RE.test(text)) {
+        if (applyJoeFilters && EXCLUDE_RE.test(text)) {
           logger.info("[SKIP] Beitrag enthält 'Kuschel Workshop'");
           continue;
         }
@@ -1343,7 +1439,7 @@ async function scrapeFacebook(browser, url, cookiesFile, outputDir) {
 
         const yearDir = path.join(outputDir, dateStr.slice(0, 4));
         await fs.promises.mkdir(yearDir, { recursive: true });
-        const outPath = path.join(yearDir, buildFilename(dateStr, slug));
+        const outPath = resolvePostOutputPath(yearDir, dateStr, slug, displayName);
         if (fs.existsSync(outPath)) {
           logger.info(`[SKIP] ${path.basename(outPath)} existiert bereits`);
           skipped += 1;
@@ -1405,23 +1501,13 @@ async function scrapeFacebook(browser, url, cookiesFile, outputDir) {
     await context.close();
   }
 
-  logger.info(`Facebook: ${saved} gespeichert, ${skipped} bereits vorhanden.`);
+  logger.info(`Facebook "${source.name}": ${saved} gespeichert, ${skipped} bereits vorhanden.`);
   return [saved, skipped];
 }
 
 // ===========================================================================
 // Orchestrator
 // ===========================================================================
-/** Liefert die Facebook-URL: explizites Argument oder Abonenten-URL.txt. */
-function resolveFacebookUrl(urlFile, explicit) {
-  if (explicit) return explicit;
-  if (fs.existsSync(urlFile)) {
-    const url = fs.readFileSync(urlFile, "utf-8").trim();
-    if (url) return url;
-  }
-  throw new Error(`Keine Facebook-URL übergeben und ${path.basename(urlFile)} nicht lesbar.`);
-}
-
 async function runAll(phases, opts) {
   const results = {};
   const failures = [];
@@ -1432,20 +1518,35 @@ async function runAll(phases, opts) {
       logger.info("=".repeat(70));
       logger.info(`### Phase: ${phase.toUpperCase()}`);
       logger.info("=".repeat(70));
-      try {
-        if (phase === "blog") {
-          results[phase] = await scrapeBlog(browser, opts.baseUrl, opts.blogOutput);
-        } else if (phase === "facebook") {
-          const fbUrl = resolveFacebookUrl(opts.urlFile, opts.facebookUrl);
-          results[phase] = await scrapeFacebook(browser, fbUrl, opts.cookies, opts.facebookOutput);
-        } else if (phase === "telegram") {
-          results[phase] = await scrapeTelegram(browser, opts.channel, opts.telegramOutput);
-        }
-      } catch (exc) {
-        logger.error(`[FEHLER] Phase '${phase}' abgebrochen: ${exc}`);
-        logger.error(exc && exc.stack ? exc.stack : String(exc));
-        failures.push(phase);
+      const sources = opts.config[phase];
+      let saved = 0;
+      let skipped = 0;
+      let failed = 0;
+
+      if (!sources.length) {
+        logger.info(`Keine Quellen unter "${CONFIG_SECTIONS[phase]}" konfiguriert.`);
       }
+
+      for (const source of sources) {
+        try {
+          let sourceResult;
+          if (phase === "blog") {
+            sourceResult = await scrapeBlog(browser, source);
+          } else if (phase === "facebook") {
+            sourceResult = await scrapeFacebook(browser, source, opts.cookies);
+          } else if (phase === "telegram") {
+            sourceResult = await scrapeTelegram(browser, source);
+          }
+          saved += sourceResult[0];
+          skipped += sourceResult[1];
+        } catch (exc) {
+          logger.error(`[FEHLER] ${phase} "${source.name}" abgebrochen: ${exc}`);
+          logger.error(exc && exc.stack ? exc.stack : String(exc));
+          failures.push(`${phase}:${source.name}`);
+          failed += 1;
+        }
+      }
+      results[phase] = { saved, skipped, failed };
     }
   } finally {
     await browser.close();
@@ -1455,8 +1556,10 @@ async function runAll(phases, opts) {
   logger.info("Zusammenfassung:");
   for (const phase of phases) {
     if (phase in results) {
-      const [saved, skipped] = results[phase];
-      logger.info(`  ${phase.padEnd(9)}  gespeichert=${saved}  bereits vorhanden=${skipped}`);
+      const { saved, skipped, failed } = results[phase];
+      logger.info(
+        `  ${phase.padEnd(9)}  gespeichert=${saved}  bereits vorhanden=${skipped}  fehlgeschlagen=${failed}`
+      );
     } else {
       logger.info(`  ${phase.padEnd(9)}  FEHLGESCHLAGEN`);
     }
@@ -1478,14 +1581,8 @@ function parseArgs(argv) {
     .option("--facebook", "Facebook-Quelle einschließen")
     .option("--telegram", "Telegram-Quelle einschließen")
     .option("--visible", "Browser sichtbar starten")
-    .option("--base-url <url>", "Blog-Startseite", DEFAULT_BASE_URL)
-    .option("--facebook-url <url>", "Facebook-URL (sonst Abonenten-URL.txt)")
-    .option("--channel <name>", "Telegram-Channel-Name", DEFAULT_CHANNEL)
+    .option("--config <path>", "Pfad zu scraper-config.json")
     .option("--cookies <path>", "Pfad zu cookies.txt")
-    .option("--url-file <path>", "Pfad zu Abonenten-URL.txt")
-    .option("--blog-output <path>", "Zielordner Blog")
-    .option("--facebook-output <path>", "Zielordner Facebook")
-    .option("--telegram-output <path>", "Zielordner Telegram")
     .allowExcessArguments(false);
   program.parse(argv, { from: "user" });
   return program.opts();
@@ -1497,21 +1594,20 @@ async function main(argv) {
   const selected = CANONICAL_ORDER.filter((p) => args[p]);
   const phases = selected.length ? selected : [...CANONICAL_ORDER];
 
-  const resolvePath = (p, fallback) => (p ? path.resolve(p) : fallback);
-
+  const configPath = args.config ? path.resolve(args.config) : CONFIG_FILE;
   const opts = {
     headless: !args.visible,
-    baseUrl: args.baseUrl,
-    facebookUrl: args.facebookUrl || null,
-    channel: args.channel,
-    cookies: resolvePath(args.cookies, COOKIES_FILE),
-    urlFile: resolvePath(args.urlFile, URL_FILE),
-    blogOutput: resolvePath(args.blogOutput, BLOG_OUTPUT_DIR),
-    facebookOutput: resolvePath(args.facebookOutput, FB_OUTPUT_DIR),
-    telegramOutput: resolvePath(args.telegramOutput, TELEGRAM_OUTPUT_DIR),
+    config: loadScraperConfig(configPath),
+    cookies: args.cookies ? path.resolve(args.cookies) : COOKIES_FILE,
   };
 
   logger.info(`Ablaufplan: ${phases.join(" -> ")}`);
+  logger.info(`Config: ${configPath}`);
+  for (const phase of phases) {
+    logger.info(
+      `  ${CONFIG_SECTIONS[phase]}: ${opts.config[phase].map((source) => source.name).join(", ") || "(keine)"}`
+    );
+  }
   return runAll(phases, opts);
 }
 
@@ -1520,6 +1616,9 @@ export {
   slugify,
   firstSentence,
   buildFilename,
+  cleanFacebookText,
+  loadScraperConfig,
+  postAuthorName,
   splitlines,
   stripLeadingDuplicateTitle,
   stripLeadingIntro,

@@ -5,14 +5,46 @@ von `BlogDownloader/node/scrape_all.js`; **einziger Unterschied**: die Ausgabe
 geht ins `www/` des WebArchiv-Projekt-Roots (eine Ebene höher), das der Server
 rendert.
 
-| Quelle | Zielordner (im Projekt-Root) |
-|---|---|
-| Blog (`joeturan.com/blog`) | `../www/Joe Turan/<Jahr>/` |
-| Telegram (`t.me/s/<channel>`) | `../www/Telegram/<Jahr>/` |
-| Facebook (login-pflichtig) | `../www/Facebook/<Jahr>/` |
+Alle Quellen werden in `scraper-config.json` konfiguriert. `OutputPath` ist
+relativ zu `scraper/scrape_all.js` und muss innerhalb von `../www/` liegen:
+
+```json
+{
+  "Blog": [
+    {
+      "Name": "Joe Turan",
+      "URL": "https://www.joeturan.com/blog",
+      "OutputPath": "../www/Joe Turan"
+    }
+  ],
+  "Facebook": [
+    {
+      "Name": "Facebook",
+      "URL": "https://www.facebook.com/61551902387350/supporters/",
+      "OutputPath": "../www/Facebook"
+    },
+    {
+      "Name": "Nawal Boussi",
+      "URL": "https://facebook.com/nawal.boussi",
+      "OutputPath": "../www/Nawal Boussi"
+    }
+  ],
+  "Telegram": [
+    {
+      "Name": "Telegram",
+      "URL": "https://t.me/s/joeturan",
+      "OutputPath": "../www/Telegram"
+    }
+  ]
+}
+```
+
+Weitere Autoren oder Kanäle werden als zusätzliche
+Objekte mit `Name`, `URL` und `OutputPath` im passenden Array ergänzt. Leere
+Platzhalter gehören nicht in die aktive Config, da jeder Eintrag aufgerufen wird.
 
 Pro Beitrag entsteht eine Markdown-Datei (Blog/Facebook zusätzlich das Bild mit
-gleichem Dateinamen-Stamm). Jede Quelle bricht nach **5** bereits vorhandenen
+gleichem Dateinamen-Stamm). Jede Quelle bricht nach **3** bereits vorhandenen
 Artikeln ab (`SKIP_LIMIT`). Der Scraper ist self-contained (eigene
 `node_modules`), damit die WebArchiv-App-Abhängigkeiten schlank bleiben.
 
@@ -41,6 +73,9 @@ node scrape_all.js --visible
 
 # Hilfe / alle Optionen
 node scrape_all.js --help
+
+# Alternative Config-Datei
+node scrape_all.js --config ./meine-scraper-config.json
 ```
 
 Bequem aus dem Projekt-Root: `npm run scrape` (falls in der Wurzel-`package.json`
@@ -48,20 +83,24 @@ eingetragen).
 
 ### Facebook-Eingaben
 
-Für die Facebook-Quelle in `scraper/` ablegen (oder per CLI überschreiben):
+Für die Facebook-Quellen in `scraper/` ablegen:
 
 - `cookies.txt` — Login-Cookies im **Netscape-Format**
-- `Abonenten-URL.txt` — die zu scrapende Facebook-URL
+
+Die URLs kommen ausschließlich aus `scraper-config.json`. Alle konfigurierten
+Facebook-Quellen verwenden dieselbe Cookie-Datei.
 
 ## Nach dem Lauf: Reindex
 
 Der WebArchiv-Server baut seinen Index beim Start und über `POST /api/reindex`
 (Admin). Damit neu gescrapte Artikel erscheinen, nach dem Lauf **reindexen**
-(Admin-UI „Reindex" oder Serverneustart). Ein neuer FB-Lauf legt den Autor
-`Facebook` an — ggf. ACL (`users.json` / `public-directories.txt`) anpassen.
+(Admin-UI „Reindex" oder Serverneustart). Neue Namen aus der Config werden
+automatisch als Autorenverzeichnisse angelegt (z. B. `Nawal Boussi`). Ggf. ACL
+(`users.json` / `public-directories.txt`) anpassen.
 
 ## Sync-Hinweis
 
-Diese Datei ist eine Kopie von `BlogDownloader/node/scrape_all.js` und
-unterscheidet sich nur in den drei Zielpfaden. Bei Änderungen an der
-Scraping-Logik beide Kopien synchron halten.
+Diese Datei ist eine Kopie von `BlogDownloader/node/scrape_all.js`. Der
+WebArchiv-Scraper erlaubt als Ausgabe-Stamm `../www/`, der eigenständige
+Node-Port sein lokales `www/`. Bei Änderungen an der Scraping-Logik beide
+Kopien synchron halten.

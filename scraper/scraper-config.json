@@ -1,0 +1,28 @@
+{
+  "Blog": [
+    {
+      "Name": "Joe Turan",
+      "URL": "https://www.joeturan.com/blog",
+      "OutputPath": "../www/Joe Turan"
+    }
+  ],
+  "Facebook": [
+    {
+      "Name": "Facebook",
+      "URL": "https://www.facebook.com/61551902387350/supporters/",
+      "OutputPath": "../www/Facebook"
+    },
+    {
+      "Name": "Nawal Boussi",
+      "URL": "https://facebook.com/nawal.boussi",
+      "OutputPath": "../www/Nawal Boussi"
+    }
+  ],
+  "Telegram": [
+    {
+      "Name": "Telegram",
+      "URL": "https://t.me/s/joeturan",
+      "OutputPath": "../www/Telegram"
+    }
+  ]
+}
