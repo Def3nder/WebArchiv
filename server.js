@@ -272,11 +272,39 @@ function parseArticle(content, filePath) {
 
 // ─── File scanner ──────────────────────────────────────────────────────────
 
-function findSibling(dir, basename, exts) {
+function indexFilesByLowerName(entries) {
+  const files = new Map();
+  for (const entry of entries) {
+    if (entry.isFile()) files.set(entry.name.toLowerCase(), entry.name);
+  }
+  return files;
+}
+
+function findSibling(dir, basename, exts, filesByLowerName = null) {
+  // Schneller Normalfall: exakt gleichnamige Datei mit erwarteter Endung.
   for (const ext of exts) {
     const p = path.join(dir, basename + ext);
     if (fs.existsSync(p)) return p;
   }
+
+  // Auf dem Debian-Zielsystem ist das Dateisystem case-sensitive. Medien sollen
+  // trotzdem autorenunabhängig erkannt werden, wenn nur Groß-/Kleinschreibung
+  // von Basisname oder Endung abweicht (z. B. Artikel.md + artikel.MP3).
+  if (!filesByLowerName) {
+    try {
+      filesByLowerName = indexFilesByLowerName(
+        fs.readdirSync(dir, { withFileTypes: true })
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  for (const ext of exts) {
+    const actualName = filesByLowerName.get((basename + ext).toLowerCase());
+    if (actualName) return path.join(dir, actualName);
+  }
+
   return null;
 }
 
@@ -295,6 +323,7 @@ async function scanDir(dirPath, author, year, collector) {
   } catch {
     return;
   }
+  const filesByLowerName = indexFilesByLowerName(entries);
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
@@ -313,11 +342,11 @@ async function scanDir(dirPath, author, year, collector) {
       const content = await fs.promises.readFile(fullPath, 'utf8');
       const parsed = parseArticle(content, fullPath);
 
-      const imgPath = findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'])
+      const imgPath = findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'], filesByLowerName)
         || findSibling(path.join(WWW_DIR, author), 'standard', ['.jpg', '.jpeg', '.png']);
-      const audioPath = findSibling(dirPath, basename, ['.mp3']);
-      const videoPath = findSibling(dirPath, basename, ['.mp4']);
-      const pdfPath   = findSibling(dirPath, basename, ['.pdf']);
+      const audioPath = findSibling(dirPath, basename, ['.mp3'], filesByLowerName);
+      const videoPath = findSibling(dirPath, basename, ['.mp4'], filesByLowerName);
+      const pdfPath   = findSibling(dirPath, basename, ['.pdf'], filesByLowerName);
 
       const relImg   = imgPath   ? path.relative(WWW_DIR, imgPath).replace(/\\/g, '/')   : null;
       const relAudio = audioPath ? path.relative(WWW_DIR, audioPath).replace(/\\/g, '/') : null;

@@ -773,7 +773,7 @@ function renderAudioPlayer(article) {
         <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
       </button>
       <div class="audio-controls">
-        <span class="audio-label">Audioquickie</span>
+        <span class="audio-label">Audio</span>
         <div class="audio-progress-wrap">
           <div class="audio-progress" id="audio-progress" role="slider" aria-label="Fortschritt">
             <div class="audio-progress-fill" id="audio-progress-fill"></div>
