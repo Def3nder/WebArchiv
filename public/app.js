@@ -4,6 +4,7 @@
 const state = {
   q: '',
   author: '',
+  externalAudio: false,
   year: '',
   category: '',
   telegram: false,
@@ -252,6 +253,7 @@ async function fetchArticles(params = {}) {
   const qs = new URLSearchParams();
   if (params.q)        qs.set('q', params.q);
   if (params.author)   qs.set('author', params.author);
+  if (params.externalAudio) qs.set('externalAudio', '1');
   if (params.year)     qs.set('year', params.year);
   if (params.category) qs.set('category', params.category);
   if (params.telegram) qs.set('telegram', '1');
@@ -377,6 +379,7 @@ async function loadArticles() {
     const data = await fetchArticles({
       q:        state.q,
       author:   state.author,
+      externalAudio: state.externalAudio,
       year:     state.year,
       category: state.category,
       telegram: state.telegram,
@@ -862,6 +865,11 @@ async function loadMeta() {
   // = alphabetische Serverliste) -> jeder Autor gut sichtbar und unterscheidbar.
   authorHueMap = {};
   const hueStep = 360 / (authors.length || 1);
+  const audioOpt = document.createElement('option');
+  audioOpt.value = '__external_audio__';
+  audioOpt.textContent = 'mit Audio';
+  $filterAuthor.appendChild(audioOpt);
+
   authors.forEach((a, i) => {
     authorHueMap[a] = Math.round(i * hueStep);
     const opt = document.createElement('option');
@@ -907,7 +915,8 @@ $searchClear.addEventListener('click', () => {
 });
 
 $filterAuthor.addEventListener('change', () => {
-  state.author = $filterAuthor.value;
+  state.externalAudio = $filterAuthor.value === '__external_audio__';
+  state.author = state.externalAudio ? '' : $filterAuthor.value;
   if (state.author === 'Telegram') setTelegram(true);
   state.page = 1;
   loadArticles();
@@ -972,7 +981,7 @@ $resetFilters.addEventListener('click', () => {
   document.body.classList.add('layout-tall');
   $filterLimit.value = '24';
   setTelegram(false);
-  Object.assign(state, { q:'', author:'', year:'', category:'', telegram:false, page:1, limit:24 });
+  Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false, page:1, limit:24 });
   loadArticles();
 });
 

@@ -392,6 +392,7 @@ async function scanDir(dirPath, author, year, collector) {
         audioUrl: relAudio
           ? (localAudioPath ? fileUrl(relAudio, audioPath) : audioFileUrl(relAudio, audioPath))
           : null,
+        hasExternalAudio: !!externalAudioPath,
         videoUrl: relVideo ? fileUrl(relVideo, videoPath) : null,
         pdfUrl:   relPdf   ? fileUrl(relPdf, pdfPath)     : null,
         episodeNum: parsed.episodeNum,
@@ -430,6 +431,7 @@ function inheritAudioForInfographics(articleList) {
     if (!baseArticle || !baseArticle.audioUrl) continue;
 
     article.audioUrl = baseArticle.audioUrl;
+    article.hasExternalAudio = !!baseArticle.hasExternalAudio;
     article.episodeNum = article.episodeNum || baseArticle.episodeNum;
     article.inheritedAudioAuthor = baseArticle.author;
     article.inheritedAudioArticleId = baseArticle.id;
@@ -439,7 +441,7 @@ function inheritAudioForInfographics(articleList) {
 function exposeArticleForUser(article, user) {
   const { filePath, inheritedAudioAuthor, inheritedAudioArticleId, ...rest } = article;
   if (inheritedAudioAuthor && !canAccessAuthor(user, inheritedAudioAuthor)) {
-    return { ...rest, audioUrl: null, episodeNum: null };
+    return { ...rest, audioUrl: null, hasExternalAudio: false, episodeNum: null };
   }
   return rest;
 }
@@ -1109,7 +1111,7 @@ app.get('/api/scrape/log', requireAdmin, (_req, res) => {
 });
 
 app.get('/api/articles', attachUser, (req, res) => {
-  const { q, author, year, category, page = '1', limit = '24', telegram } = req.query;
+  const { q, author, year, category, page = '1', limit = '24', telegram, externalAudio } = req.query;
   const user = req.user;
   let filtered = articles;
 
@@ -1132,6 +1134,12 @@ app.get('/api/articles', attachUser, (req, res) => {
   }
   if (year)     filtered = filtered.filter(a => a.year === year);
   if (category) filtered = filtered.filter(a => a.categories.includes(category));
+  if (externalAudio === '1') {
+    filtered = filtered.filter(a =>
+      a.hasExternalAudio &&
+      (!a.inheritedAudioAuthor || canAccessAuthor(user, a.inheritedAudioAuthor))
+    );
+  }
 
   if (q) {
     // Query in Tokens zerlegen: Datums-Tokens → Datumsfilter, Rest → Fuse-Text.
