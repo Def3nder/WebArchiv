@@ -8,7 +8,9 @@
 /www/Telegram/2*
 /www/Facebook/2*
 /www/Nawal Boussi/2*
+/audio/
 /download/
+migrate-audio.log
 
 # Node Modules #
 ###################

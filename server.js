@@ -14,6 +14,7 @@ const app = express();
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 const WWW_DIR = path.join(__dirname, 'www');
+const AUDIO_DIR = path.join(__dirname, 'audio');
 const INFOGRAPHICS_AUTHOR = 'Infografiken';
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 
@@ -316,6 +317,12 @@ function fileUrl(relPath, absPath) {
   return `/files/${relPath}${v}`;
 }
 
+function audioFileUrl(relPath, absPath) {
+  let v = '';
+  try { v = '?v=' + Math.floor(fs.statSync(absPath).mtimeMs); } catch { /* Datei weg */ }
+  return `/audio-files/${relPath}${v}`;
+}
+
 async function scanDir(dirPath, author, year, collector) {
   let entries;
   try {
@@ -344,12 +351,19 @@ async function scanDir(dirPath, author, year, collector) {
 
       const imgPath = findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'], filesByLowerName)
         || findSibling(path.join(WWW_DIR, author), 'standard', ['.jpg', '.jpeg', '.png']);
-      const audioPath = findSibling(dirPath, basename, ['.mp3'], filesByLowerName);
+      const localAudioPath = findSibling(dirPath, basename, ['.mp3'], filesByLowerName);
+      const externalAudioDir = path.join(AUDIO_DIR, author, relDir);
+      const externalAudioPath = localAudioPath
+        ? null
+        : findSibling(externalAudioDir, basename, ['.mp3']);
+      const audioPath = localAudioPath || externalAudioPath;
       const videoPath = findSibling(dirPath, basename, ['.mp4'], filesByLowerName);
       const pdfPath   = findSibling(dirPath, basename, ['.pdf'], filesByLowerName);
 
       const relImg   = imgPath   ? path.relative(WWW_DIR, imgPath).replace(/\\/g, '/')   : null;
-      const relAudio = audioPath ? path.relative(WWW_DIR, audioPath).replace(/\\/g, '/') : null;
+      const relAudio = audioPath
+        ? path.relative(localAudioPath ? WWW_DIR : AUDIO_DIR, audioPath).replace(/\\/g, '/')
+        : null;
       const relVideo = videoPath ? path.relative(WWW_DIR, videoPath).replace(/\\/g, '/') : null;
       const relPdf   = pdfPath   ? path.relative(WWW_DIR, pdfPath).replace(/\\/g, '/')   : null;
 
@@ -375,7 +389,9 @@ async function scanDir(dirPath, author, year, collector) {
         sourceUrl: parsed.sourceUrl || null,
         preview: bodyExcerpt(parsed.body).slice(0, 200),
         imageUrl: relImg   ? fileUrl(relImg, imgPath)     : null,
-        audioUrl: relAudio ? fileUrl(relAudio, audioPath) : null,
+        audioUrl: relAudio
+          ? (localAudioPath ? fileUrl(relAudio, audioPath) : audioFileUrl(relAudio, audioPath))
+          : null,
         videoUrl: relVideo ? fileUrl(relVideo, videoPath) : null,
         pdfUrl:   relPdf   ? fileUrl(relPdf, pdfPath)     : null,
         episodeNum: parsed.episodeNum,
@@ -720,6 +736,19 @@ app.get('/files/*', attachUser, (req, res) => {
   }
   const absPath = path.resolve(path.join(WWW_DIR, relPath));
   if (!absPath.startsWith(WWW_DIR + path.sep)) {
+    return res.status(403).end();
+  }
+  res.sendFile(absPath, err => { if (err && !res.headersSent) res.status(404).end(); });
+});
+
+app.get('/audio-files/*', attachUser, (req, res) => {
+  const relPath = req.params[0];
+  const author  = relPath.split('/')[0];
+  if (!canAccessAuthor(req.user, author)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const absPath = path.resolve(path.join(AUDIO_DIR, relPath));
+  if (!absPath.startsWith(AUDIO_DIR + path.sep)) {
     return res.status(403).end();
   }
   res.sendFile(absPath, err => { if (err && !res.headersSent) res.status(404).end(); });

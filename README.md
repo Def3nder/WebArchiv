@@ -163,6 +163,11 @@ Kategorien und baut den Fuse-Index. Läuft **beim Serverstart**, auf
 Neustart — offene Sessions bleiben erhalten). Da der Index im Speicher liegt,
 werden **neu hinzugefügte Dateien erst nach einem Reindex sichtbar**.
 
+Wichtig: `scraper/scrape_all.js` triggert selbst **keinen** Reindex. Es schreibt
+nur neue Dateien. Den Reindex stößt entweder `server.js` nach einem Web-UI-Scrape
+an, oder ein CLI/Cron-Aufruf muss danach den laufenden Server per `SIGHUP`
+signalisieren.
+
 ---
 
 ## Scraper-Integration (`scraper/`)
@@ -187,6 +192,13 @@ Details/CLI: siehe `scraper/README.md`. Zwei Auslöse-Wege:
    mit der Zusammenfassung `gespeichert=… bereits vorhanden=…`); danach wird
    automatisch `buildIndex()` (Reindex) angestoßen. *Scrape-Log anzeigen* öffnet
    dasselbe Modal mit den letzten 100 Log-Zeilen, bereits ans untere Ende gescrollt.
+
+Beim CLI-/Cron-Aufruf führt `scrape_all.js` dagegen nur den Scrape aus; der
+Reindex muss anschließend außerhalb des Scrapers ausgelöst werden. Dafür **kein
+`systemctl restart nodeapp` verwenden**, weil ein harter Neustart laufende
+Requests, Sessions und einen eventuell gerade laufenden Reindex unterbrechen
+kann. Stattdessen den vorhandenen `SIGHUP`-Handler nutzen (siehe Cron-Beispiel
+unten).
 
 Voraussetzungen für den Scrape: installierte Playwright-Browser + System-Libs und
 gesetztes `PLAYWRIGHT_BROWSERS_PATH` (siehe `LXC-container node.js Setup.txt`).
@@ -259,6 +271,12 @@ npx playwright install --with-deps chromium
 - `www/` liegt auf einer eingebundenen externen Disk.
 - Reverse Proxy (Caddy/Nginx) für HTTPS ist vorgesehen; der Server ist mit
   `trust proxy` darauf vorbereitet.
+- **Serverdienst steuern**:
+  ```bash
+  sudo systemctl restart nodeapp          # nach Codeänderungen neu starten
+  sudo systemctl status nodeapp           # Dienststatus prüfen
+  journalctl -u nodeapp -n 100 --no-pager # letzte Logzeilen anzeigen
+  ```
 - **Reindex ohne Neustart**: der Server hat einen `SIGHUP`-Handler, der
   `buildIndex()` auslöst, ohne den Prozess zu beenden — offene Sessions bleiben
   erhalten. Auslösen (als `ralf`, ohne sudo):
@@ -276,7 +294,9 @@ cd /opt/nodeapp/scraper
 /usr/bin/node scrape_all.js >> /opt/nodeapp/scraper/cron-scrape.log 2>&1
 echo "$(date '+%F %T') Scraper exit $?" >> /opt/nodeapp/scraper/cron-scrape.log
 
-# Reindex OHNE Neustart (Sessions bleiben erhalten): SIGHUP an den Node-Prozess
+# Reindex OHNE Neustart (Sessions bleiben erhalten): SIGHUP an den Node-Prozess.
+# Nicht "systemctl restart nodeapp" verwenden; der Restart kann laufende Requests
+# oder einen parallel gestarteten Reindex abbrechen.
 PID=$(systemctl show -p MainPID --value nodeapp)
 [ "${PID:-0}" -gt 0 ] && kill -HUP "$PID"
 ```
