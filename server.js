@@ -404,6 +404,46 @@ async function scanDir(dirPath, author, year, collector) {
   }
 }
 
+function infographicBaseStem(stem) {
+  return stem.replace(/_\d+$/, '');
+}
+
+function inheritAudioForInfographics(articleList) {
+  const baseArticlesByYearAndStem = new Map();
+
+  for (const article of articleList) {
+    if (article.author === INFOGRAPHICS_AUTHOR) continue;
+    const stem = path.basename(article.filePath, '.md');
+    const key = `${article.year || ''}/${stem}`;
+    baseArticlesByYearAndStem.set(
+      key,
+      baseArticlesByYearAndStem.has(key) ? null : article
+    );
+  }
+
+  for (const article of articleList) {
+    if (article.author !== INFOGRAPHICS_AUTHOR || article.audioUrl) continue;
+
+    const stem = path.basename(article.filePath, '.md');
+    const baseStem = infographicBaseStem(stem);
+    const baseArticle = baseArticlesByYearAndStem.get(`${article.year || ''}/${baseStem}`);
+    if (!baseArticle || !baseArticle.audioUrl) continue;
+
+    article.audioUrl = baseArticle.audioUrl;
+    article.episodeNum = article.episodeNum || baseArticle.episodeNum;
+    article.inheritedAudioAuthor = baseArticle.author;
+    article.inheritedAudioArticleId = baseArticle.id;
+  }
+}
+
+function exposeArticleForUser(article, user) {
+  const { filePath, inheritedAudioAuthor, inheritedAudioArticleId, ...rest } = article;
+  if (inheritedAudioAuthor && !canAccessAuthor(user, inheritedAudioAuthor)) {
+    return { ...rest, audioUrl: null, episodeNum: null };
+  }
+  return rest;
+}
+
 async function buildIndex() {
   console.log('Building article index…');
   const t0 = Date.now();
@@ -430,6 +470,8 @@ async function buildIndex() {
     seen.add(a.id);
     return true;
   });
+
+  inheritAudioForInfographics(articles);
 
   const isInfografik = a => (a.author === 'Infografiken' ? 1 : 0);
   articles.sort((a, b) =>
@@ -1120,7 +1162,7 @@ app.get('/api/articles', attachUser, (req, res) => {
   const total = filtered.length;
   const p = Math.max(1, parseInt(page));
   const lim = Math.min(100, Math.max(1, parseInt(limit)));
-  const items = filtered.slice((p - 1) * lim, p * lim).map(({ filePath, ...rest }) => rest);
+  const items = filtered.slice((p - 1) * lim, p * lim).map(article => exposeArticleForUser(article, user));
 
   res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
 });
@@ -1138,7 +1180,7 @@ app.get('/api/articles/*', attachUser, (req, res) => {
     const content = fs.readFileSync(article.filePath, 'utf8');
     const parsed = parseArticle(content, article.filePath);
     const bodyHtml = marked.parse(parsed.body);
-    const { filePath, ...rest } = article;
+    const rest = exposeArticleForUser(article, req.user);
     res.json({ ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article) });
   } catch (err) {
     res.status(500).json({ error: err.message });
