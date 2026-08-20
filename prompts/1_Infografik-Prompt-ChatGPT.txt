@@ -69,6 +69,8 @@ WICHTIG:
 - keine überladene Business-Optik
 - keine Comic-Optik
 - keine flachen Standard-Infografiken
+- bitte verwende farbliche Abstufungen, wenn immer es sinnvoll ist
+- assoziiere dunkele/kühle Farbtöne in Richtung 'negativ' und helle/warme Farbtöne in Richtung 'positiv'
 
 QUALITÄT:
 ultra polished, premium infographic aesthetic, emotionally intelligent visual design, cinematic composition, luxury coaching brand style, highly detailed but clean
