@@ -406,16 +406,22 @@ async function scanDir(dirPath, author, year, collector) {
 }
 
 function infographicBaseStem(stem) {
-  return stem.replace(/_\d+$/, '');
+  return stem.replace(/_(?:[2-9]|\d{2,})$/, '');
 }
 
 function inheritAudioForInfographics(articleList) {
   const baseArticlesByYearAndStem = new Map();
+  const baseInfographicsByYearAndStem = new Map();
 
   for (const article of articleList) {
-    if (article.author === INFOGRAPHICS_AUTHOR) continue;
     const stem = path.basename(article.filePath, '.md');
     const key = `${article.year || ''}/${stem}`;
+    if (article.author === INFOGRAPHICS_AUTHOR) {
+      if (article.audioUrl && infographicBaseStem(stem) === stem) {
+        baseInfographicsByYearAndStem.set(key, article);
+      }
+      continue;
+    }
     baseArticlesByYearAndStem.set(
       key,
       baseArticlesByYearAndStem.has(key) ? null : article
@@ -427,7 +433,8 @@ function inheritAudioForInfographics(articleList) {
 
     const stem = path.basename(article.filePath, '.md');
     const baseStem = infographicBaseStem(stem);
-    const baseArticle = baseArticlesByYearAndStem.get(`${article.year || ''}/${baseStem}`);
+    const key = `${article.year || ''}/${baseStem}`;
+    const baseArticle = baseInfographicsByYearAndStem.get(key) || baseArticlesByYearAndStem.get(key);
     if (!baseArticle || !baseArticle.audioUrl) continue;
 
     article.audioUrl = baseArticle.audioUrl;

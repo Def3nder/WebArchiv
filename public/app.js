@@ -809,6 +809,7 @@ function renderPdfEmbed(pdfUrl) {
 
 function wireAudioPlayer(audioUrl) {
   audioEl = new Audio(audioUrl);
+  audioEl.preload = 'metadata';
   const btn  = document.getElementById('audio-play-btn');
   const bar  = document.getElementById('audio-progress');
   const fill = document.getElementById('audio-progress-fill');
@@ -822,11 +823,16 @@ function wireAudioPlayer(audioUrl) {
     return `${m}:${sec}`;
   }
 
-  audioEl.addEventListener('timeupdate', () => {
+  function updateAudioTime() {
     const pct = audioEl.duration ? (audioEl.currentTime / audioEl.duration * 100) : 0;
     fill.style.width = `${pct}%`;
     time.textContent = `${fmt(audioEl.currentTime)} / ${fmt(audioEl.duration)}`;
-  });
+  }
+
+  audioEl.addEventListener('loadedmetadata', updateAudioTime);
+  audioEl.addEventListener('durationchange', updateAudioTime);
+  audioEl.addEventListener('timeupdate', updateAudioTime);
+  audioEl.load();
 
   audioEl.addEventListener('ended', () => {
     btn.classList.remove('playing');
