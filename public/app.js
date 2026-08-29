@@ -1250,7 +1250,13 @@ const $imgFullscreenImg = document.getElementById('img-fullscreen-img');
 $imgFullscreen.addEventListener('click', e => {
   if (e.target === $imgFullscreen) closeImageFullscreen();
 });
-$imgFullscreenImg.addEventListener('click', e => e.stopPropagation());
+$imgFullscreenImg.addEventListener('click', e => {
+  if (isDesktopPointer()) {
+    e.stopPropagation();
+    return;
+  }
+  closeImageFullscreen();
+});
 $imgFullscreenImg.addEventListener('wheel', e => {
   if (!isDesktopPointer()) return;
   e.preventDefault();
