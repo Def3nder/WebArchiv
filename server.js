@@ -410,6 +410,7 @@ function infographicBaseStem(stem) {
 }
 
 function inheritAudioForInfographics(articleList) {
+  const baseArticleCandidatesByYearAndStem = new Map();
   const baseArticlesByYearAndStem = new Map();
   const baseInfographicsByYearAndStem = new Map();
 
@@ -422,10 +423,20 @@ function inheritAudioForInfographics(articleList) {
       }
       continue;
     }
-    baseArticlesByYearAndStem.set(
-      key,
-      baseArticlesByYearAndStem.has(key) ? null : article
-    );
+    const candidates = baseArticleCandidatesByYearAndStem.get(key) || [];
+    candidates.push(article);
+    baseArticleCandidatesByYearAndStem.set(key, candidates);
+  }
+
+  for (const [key, candidates] of baseArticleCandidatesByYearAndStem) {
+    const audioCandidates = candidates.filter(article => article.audioUrl);
+    if (audioCandidates.length === 1) {
+      baseArticlesByYearAndStem.set(key, audioCandidates[0]);
+    } else if (candidates.length === 1) {
+      baseArticlesByYearAndStem.set(key, candidates[0]);
+    } else {
+      baseArticlesByYearAndStem.set(key, null);
+    }
   }
 
   for (const article of articleList) {
