@@ -63,12 +63,95 @@ const $loginBtnText   = document.getElementById('login-btn-text');
 const $loginSpinner   = document.getElementById('login-spinner');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+const imageZoom = {
+  scale: 1,
+  x: 0,
+  y: 0,
+  dragging: false,
+  dragStartX: 0,
+  dragStartY: 0,
+  startX: 0,
+  startY: 0
+};
+
+const IMAGE_ZOOM_MIN = 1;
+const IMAGE_ZOOM_MAX = 5;
+const IMAGE_ZOOM_STEP = 1.16;
+const IMAGE_DBLCLICK_ZOOM = 2;
+
+function isDesktopPointer() {
+  return matchMedia('(hover: hover) and (pointer: fine)').matches;
+}
+
+function resetImageZoom() {
+  imageZoom.scale = 1;
+  imageZoom.x = 0;
+  imageZoom.y = 0;
+  imageZoom.dragging = false;
+  applyImageZoom();
+}
+
+function applyImageZoom() {
+  const img = document.getElementById('img-fullscreen-img');
+  img.style.transform = `translate(${imageZoom.x}px, ${imageZoom.y}px) scale(${imageZoom.scale})`;
+  img.classList.toggle('is-zoomed', imageZoom.scale > 1);
+}
+
+function clampImagePan() {
+  const img = document.getElementById('img-fullscreen-img');
+  const prevTransform = img.style.transform;
+  img.style.transform = '';
+  const baseRect = img.getBoundingClientRect();
+  img.style.transform = prevTransform;
+
+  const scaledWidth = baseRect.width * imageZoom.scale;
+  const scaledHeight = baseRect.height * imageZoom.scale;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const maxX = Math.max(0, (scaledWidth - viewportWidth) / 2);
+  const maxY = Math.max(0, (scaledHeight - viewportHeight) / 2);
+
+  if (scaledWidth <= viewportWidth) {
+    imageZoom.x = 0;
+  } else {
+    imageZoom.x = Math.min(maxX, Math.max(-maxX, imageZoom.x));
+  }
+
+  if (scaledHeight <= viewportHeight) {
+    imageZoom.y = 0;
+  } else {
+    imageZoom.y = Math.min(maxY, Math.max(-maxY, imageZoom.y));
+  }
+}
+
+function zoomImageCentered(nextScale) {
+  if (!isDesktopPointer()) return;
+
+  const currentScale = imageZoom.scale;
+  const clampedScale = Math.min(IMAGE_ZOOM_MAX, Math.max(IMAGE_ZOOM_MIN, nextScale));
+  const scaleRatio = clampedScale / currentScale;
+
+  imageZoom.scale = clampedScale;
+  imageZoom.x *= scaleRatio;
+  imageZoom.y *= scaleRatio;
+
+  if (imageZoom.scale <= IMAGE_ZOOM_MIN) {
+    resetImageZoom();
+    return;
+  }
+
+  clampImagePan();
+  applyImageZoom();
+}
+
 function openImageFullscreen(src) {
   document.getElementById('img-fullscreen-img').src = src;
+  resetImageZoom();
   document.getElementById('img-fullscreen').hidden = false;
 }
 function closeImageFullscreen() {
   document.getElementById('img-fullscreen').hidden = true;
+  resetImageZoom();
 }
 
 function updateNavButtons() {
@@ -1162,8 +1245,56 @@ $overlayClose.addEventListener('click', closeOverlay);
 $overlayBdrop.addEventListener('click', closeOverlay);
 document.getElementById('overlay-prev').addEventListener('click', () => navigateArticle(-1));
 document.getElementById('overlay-next').addEventListener('click', () => navigateArticle(+1));
-document.getElementById('img-fullscreen-close').addEventListener('click', closeImageFullscreen);
-document.getElementById('img-fullscreen').addEventListener('click', closeImageFullscreen);
+const $imgFullscreen = document.getElementById('img-fullscreen');
+const $imgFullscreenImg = document.getElementById('img-fullscreen-img');
+$imgFullscreen.addEventListener('click', e => {
+  if (e.target === $imgFullscreen) closeImageFullscreen();
+});
+$imgFullscreenImg.addEventListener('click', e => e.stopPropagation());
+$imgFullscreenImg.addEventListener('wheel', e => {
+  if (!isDesktopPointer()) return;
+  e.preventDefault();
+  const direction = e.deltaY < 0 ? 1 : -1;
+  const factor = direction > 0 ? IMAGE_ZOOM_STEP : 1 / IMAGE_ZOOM_STEP;
+  zoomImageCentered(imageZoom.scale * factor);
+}, { passive: false });
+$imgFullscreenImg.addEventListener('dblclick', e => {
+  if (!isDesktopPointer()) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (imageZoom.scale > 1) {
+    resetImageZoom();
+  } else {
+    zoomImageCentered(IMAGE_DBLCLICK_ZOOM);
+  }
+});
+$imgFullscreenImg.addEventListener('mousedown', e => {
+  if (!isDesktopPointer() || imageZoom.scale <= 1 || e.button !== 0) return;
+  e.preventDefault();
+  imageZoom.dragging = true;
+  imageZoom.dragStartX = e.clientX;
+  imageZoom.dragStartY = e.clientY;
+  imageZoom.startX = imageZoom.x;
+  imageZoom.startY = imageZoom.y;
+  $imgFullscreenImg.classList.add('is-dragging');
+});
+window.addEventListener('mousemove', e => {
+  if (!imageZoom.dragging) return;
+  imageZoom.x = imageZoom.startX + e.clientX - imageZoom.dragStartX;
+  imageZoom.y = imageZoom.startY + e.clientY - imageZoom.dragStartY;
+  clampImagePan();
+  applyImageZoom();
+});
+window.addEventListener('mouseup', () => {
+  if (!imageZoom.dragging) return;
+  imageZoom.dragging = false;
+  $imgFullscreenImg.classList.remove('is-dragging');
+});
+window.addEventListener('resize', () => {
+  if ($imgFullscreen.hidden || imageZoom.scale <= 1) return;
+  clampImagePan();
+  applyImageZoom();
+});
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
