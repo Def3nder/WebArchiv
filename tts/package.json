@@ -1,0 +1,9 @@
+{
+  "name": "webarchiv-markdown-tts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test", "start": "node markdown_tts.js" },
+  "dependencies": { "markdown-it": "14.1.0", "markdown-it-footnote": "4.0.0" }
+}

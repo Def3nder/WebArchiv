@@ -17,6 +17,12 @@ migrate-audio.log
 ###################
 /node_modules/
 /scraper/node_modules/
+/tts/node_modules/
+/tts/.cache/
+/tts/.test-*/
+/.npm-cache/
+*.tts-lock
+.markdown-tts-*/
 
 # private Data #
 ###################

@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=17" />
 </head>
 <body>
 
@@ -50,6 +50,8 @@
           <button type="button" role="menuitem" class="header-menu-item" data-action="reindex">Archiv neu einlesen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="scrape">Neue Beiträge scrapen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="log">Scrape-Log anzeigen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="tts" id="tts-start-menu" disabled>Audio erzeugen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job">Audio-Auftrag anzeigen</button>
         </div>
       </div>
       <button id="login-btn" class="logout-btn" title="Anmelden" hidden>
@@ -200,6 +202,26 @@
     </div>
   </div>
 
-  <script src="app.js?v=20"></script>
+  <!-- Audio-Auftrag: Schließen beendet nur die Anzeige. -->
+  <div id="tts-overlay" class="scrape-overlay" hidden>
+    <div id="tts-backdrop" class="scrape-backdrop"></div>
+    <div class="scrape-panel" role="dialog" aria-modal="true" aria-labelledby="tts-title">
+      <button type="button" id="tts-close" class="login-close" aria-label="Schließen">✕</button>
+      <h2 id="tts-title" class="login-title">Audio erzeugen</h2>
+      <p id="tts-article"></p>
+      <p id="tts-status" class="scrape-status" role="status" aria-live="polite"></p>
+      <span id="tts-activity" class="login-btn-spinner" hidden aria-label="Auftrag läuft"></span>
+      <pre id="tts-output" class="scrape-output" tabindex="0"></pre>
+      <p class="scrape-status">Schließen lässt den Auftrag weiterlaufen. Bereits angefallene API-Kosten bleiben auch bei Abbruch oder Fehler bestehen.</p>
+      <div class="tts-buttons">
+        <button type="button" id="tts-cancel" class="detail-cat-pill" disabled>Auftrag abbrechen</button>
+        <button type="button" id="tts-refresh" class="detail-cat-pill">Status aktualisieren</button>
+        <button type="button" id="tts-reindex" class="detail-cat-pill" hidden>Archiv neu einlesen</button>
+        <a id="tts-audio" class="detail-cat-pill" target="_blank" rel="noopener" hidden>MP3 anhören / herunterladen</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=21"></script>
 </body>
 </html>

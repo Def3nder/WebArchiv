@@ -1189,6 +1189,21 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
 }
 
 /* Scrape-Ergebnis Modal */
+.tts-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+#tts-overlay .scrape-panel { max-height: 94vh; overflow: auto; }
+#tts-output { max-height: 40vh; }
+#tts-article { overflow-wrap: anywhere; margin-bottom: 12px; }
+.detail-tts-menu { position: relative; display: inline-flex; flex: 0 0 auto; }
+.detail-tts-menu summary { cursor: pointer; }
+.detail-tts-menu .copy-prompt-menu {
+  left: 0;
+  right: auto;
+  min-width: 220px;
+  max-width: min(260px, calc(100vw - 24px));
+  box-sizing: border-box;
+}
+.header-menu-item:disabled, .detail-cat-pill:disabled { opacity: .5; cursor: not-allowed; }
+
 .scrape-overlay {
   position: fixed;
   inset: 0;

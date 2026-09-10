@@ -1,0 +1,73 @@
+{
+  "parser": {
+    "front_matter_delimiter": "---",
+    "url_pattern": "\\s*\\b(?:https?://|www\\.)[^\\s<>()]+(?<![.,;:!?])",
+    "source_prefixes": [
+      "Quelle:"
+    ],
+    "date_line_pattern": "^Datum:\\s*(?:\\d{4}-\\d{2}-\\d{2}|\\d{2}\\.\\d{2}\\.\\d{4})\\s*$",
+    "url_flags": "giu"
+  },
+  "renderer": {
+    "heading_suffix": ".",
+    "block_separator": "\n\n",
+    "list_item_separator": "\n",
+    "ordered_list_markers": [
+      "Erstens",
+      "Zweitens",
+      "Drittens",
+      "Viertens",
+      "Fünftens",
+      "Sechstens",
+      "Siebtens",
+      "Achtens",
+      "Neuntens",
+      "Zehntens"
+    ],
+    "ordered_list_fallback": "Punkt {number}",
+    "list_marker_suffix": ", "
+  },
+  "chunking": {
+    "max_characters": 3800,
+    "preferred_minimum_characters": 800,
+    "minimum_split_ratio": 0.5,
+    "boundary_groups": [
+      "\n",
+      ".!?…",
+      ";:—–",
+      ","
+    ]
+  },
+  "tts": {
+    "model": "gpt-4o-mini-tts-2025-12-15",
+    "api_key_environment_variable": "OPENAI_API_KEY",
+    "timeout_seconds": 120.0,
+    "max_retries": 2,
+    "voice": "cedar",
+    "speed": 1.0,
+    "instructions": "Sprich mit einer klaren, vorwärtsgerichteten und positiven Energie. Das Sprechtempo ist leicht angezogen, aber absolut präzise und glasklar in der Artikulation. Betone Verben und kraftvolle Schlüsselwörter mit spürbarem Nachdruck. Klinge ermutigend, selbstbewusst und unterstützend. Lass deine Stimme am Ende von Sätzen nicht absinken, sondern halte die Spannung hoch."
+  },
+  "prefill": {
+    "text": "Dies ist ein kurzer technischer Vorspann.",
+    "separator": "\n\n",
+    "analysis_window_milliseconds": 20.0,
+    "minimum_quiet_milliseconds": 80.0,
+    "quiet_threshold_dbfs": -38.0,
+    "search_before_seconds": 0.8,
+    "search_after_seconds": 1.2,
+    "cut_safety_seconds": 0.15,
+    "minimum_remaining_seconds": 0.2
+  },
+  "audio": {
+    "ffmpeg": "ffmpeg",
+    "ffprobe": "ffprobe",
+    "bitrate": "128k",
+    "timeout_seconds": 300.0,
+    "duration_tolerance_seconds": 0.2
+  },
+  "runtime": {
+    "cache_directory": ".cache",
+    "job_timeout_seconds": 1800,
+    "keep_failed_work": true
+  }
+}

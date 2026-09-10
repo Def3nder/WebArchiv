@@ -245,6 +245,7 @@ function hideLogin() {
 }
 
 function applyUserUI(user) {
+  if (user?.role !== 'admin') clearTtsUI();
   const isGuest = !user || user.role === 'guest';
   $reindexBtn.hidden = !(user && user.role === 'admin');
   $logoutBtn.hidden  = isGuest;
@@ -505,6 +506,8 @@ async function loadArticles() {
 
 // ── Article detail overlay ─────────────────────────────────────────────────
 async function openArticle(id) {
+  selectedTtsArticle = null;
+  updateTtsActions();
   $overlay.hidden = false;
   document.body.style.overflow = 'hidden';
   // Beim Artikel-Wechsel laufende Medien stoppen
@@ -546,6 +549,8 @@ async function openArticle(id) {
 }
 
 function closeOverlay() {
+  selectedTtsArticle = null;
+  updateTtsActions();
   $overlay.hidden = true;
   document.body.style.overflow = '';
   stopAudio();
@@ -570,6 +575,8 @@ function stopAudio() {
 }
 
 function renderDetail(article) {
+  selectedTtsArticle = article;
+  updateTtsActions();
   const hue = authorHue(article.author);
 
   const heroHtml = article.imageUrl
@@ -620,6 +627,7 @@ function renderDetail(article) {
   const dateHtml = `<div class="detail-date-row">
         <span class="detail-date-block">${article.date ? esc(formatDate(article.date)) : ''}</span>
         <div class="detail-action-row">
+          ${currentUser?.role === 'admin' ? `<details class="detail-tts-menu"><summary class="detail-cat-pill">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-tts-action="start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</button><button type="button" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></details>` : ''}
           ${infographicBtnHtml}
           ${copyBtnHtml}
           ${shareBtnHtml}
@@ -668,6 +676,26 @@ function renderDetail(article) {
       state.category = cat;
       state.page = 1;
       loadArticles();
+    });
+  });
+
+  // Das TTS-Dropdown bleibt auch bei schmalen Viewports vollständig sichtbar.
+  $detail.querySelectorAll('.detail-tts-menu').forEach(details => {
+    details.addEventListener('toggle', () => {
+      if (!details.open) return;
+      const menu = details.querySelector('.copy-prompt-menu');
+      if (!menu) return;
+      requestAnimationFrame(() => {
+        const box = menu.getBoundingClientRect();
+        const margin = 8;
+        let left = 0;
+        if (box.left < margin) left += margin - box.left;
+        if (box.right > window.innerWidth - margin) left -= box.right - (window.innerWidth - margin);
+        if (left) {
+          menu.style.left = `${left}px`;
+          menu.style.right = 'auto';
+        }
+      });
     });
   });
 
@@ -1074,6 +1102,230 @@ $resetFilters.addEventListener('click', () => {
   loadArticles();
 });
 
+// ── Audio erzeugen: bestätigter Start und wiederaufnehmbares Status-Polling ──
+let selectedTtsArticle = null;
+let ttsStarting = false;
+let ttsActive = false;
+let ttsJobId = null;
+let ttsPollGeneration = 0;
+let ttsReturnFocus = null;
+const $ttsOverlay = document.getElementById('tts-overlay');
+const $ttsStatus = document.getElementById('tts-status');
+const $ttsOutput = document.getElementById('tts-output');
+const $ttsCancel = document.getElementById('tts-cancel');
+const $ttsAudio = document.getElementById('tts-audio');
+const $ttsActivity = document.getElementById('tts-activity');
+const $ttsReindex = document.getElementById('tts-reindex');
+
+function updateTtsActions() {
+  const disabled = !selectedTtsArticle || $overlay.hidden || ttsStarting || ttsActive;
+  document.getElementById('tts-start-menu').disabled = disabled;
+  document.querySelectorAll('[data-tts-action="start"]').forEach(button => { button.disabled = disabled; });
+}
+function rememberTtsJob(id) {
+  ttsJobId = id;
+  try {
+    if (id) sessionStorage.setItem('wa-tts-job', id);
+    else sessionStorage.removeItem('wa-tts-job');
+  } catch { /* Status bleibt über den Server wiederauffindbar. */ }
+}
+function clearTtsUI() {
+  ++ttsPollGeneration;
+  rememberTtsJob(null);
+  ttsActive = false;
+  $ttsOverlay.hidden = true;
+  $ttsOutput.textContent = '';
+  $ttsStatus.textContent = '';
+  $ttsAudio.hidden = true;
+}
+function openTtsModal() {
+  ++ttsPollGeneration;
+  if ($ttsOverlay.hidden) ttsReturnFocus = document.activeElement;
+  $ttsOverlay.hidden = false;
+  document.body.style.overflow = 'hidden';
+  $ttsOutput.textContent = '';
+  $ttsStatus.textContent = 'Auftrag wird geladen …';
+  $ttsAudio.hidden = true;
+  $ttsReindex.hidden = true;
+  $ttsCancel.disabled = true;
+  $ttsActivity.hidden = false;
+  document.getElementById('tts-article').textContent = '';
+  document.getElementById('tts-close').focus();
+}
+function closeTtsModal() {
+  ++ttsPollGeneration;
+  $ttsOverlay.hidden = true;
+  document.body.style.overflow = $overlay.hidden ? '' : 'hidden';
+  if (ttsReturnFocus?.isConnected) ttsReturnFocus.focus();
+  else if (!$overlay.hidden) $overlayClose.focus();
+  else $reindexBtn.focus();
+}
+async function runTts() {
+  const article = selectedTtsArticle;
+  if (!article || $overlay.hidden || currentUser?.role !== 'admin' || ttsStarting || ttsActive) return;
+  // Derselbe native Bestätigungsdialog wie bei „Archiv neu einlesen“.
+  if (!confirm(`Audio für „${article.title}“ erzeugen?\n\nDie Sprachgenerierung ist kostenpflichtig. Dabei wird der Markdown-Text an OpenAI übertragen.`)) return;
+  ttsStarting = true;
+  updateTtsActions();
+  openTtsModal();
+  document.getElementById('tts-article').textContent = article.title;
+  $ttsStatus.textContent = 'Audio-Auftrag wird gestartet …';
+  try {
+    const response = await apiFetch('/api/tts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ articleId: article.id }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Audio-Auftrag konnte nicht gestartet werden.');
+    if (currentUser?.role !== 'admin') return;
+    rememberTtsJob(data.jobId);
+    ttsActive = true;
+    if (!$ttsOverlay.hidden) watchTts(data.jobId);
+  } catch (error) {
+    $ttsActivity.hidden = true;
+    $ttsStatus.textContent = `${error.message} Bei unklarer Verbindung „Status aktualisieren“ verwenden; der Auftrag könnte bereits laufen.`;
+  } finally {
+    ttsStarting = false;
+    updateTtsActions();
+  }
+}
+async function showTtsJob() {
+  if (currentUser?.role !== 'admin') return;
+  openTtsModal();
+  const generation = ttsPollGeneration;
+  try {
+    // Funktioniert auch nach Reload oder in einem zweiten Browserfenster.
+    const response = await apiFetch('/api/tts/latest');
+    const data = await response.json();
+    if (generation !== ttsPollGeneration) return;
+    if (!response.ok) throw new Error(data.error || 'Auftrag nicht verfügbar.');
+    rememberTtsJob(data.jobId);
+    if (data.jobId) watchTts(data.jobId);
+    else {
+      ttsActive = false;
+      updateTtsActions();
+      $ttsActivity.hidden = true;
+      $ttsStatus.textContent = 'Kein gespeicherter Audio-Auftrag vorhanden.';
+    }
+  } catch (error) {
+    if (generation !== ttsPollGeneration) return;
+    $ttsActivity.hidden = true;
+    $ttsStatus.textContent = error.message;
+  }
+}
+async function refreshTtsArticle(articleId) {
+  await loadMeta();
+  await loadArticles();
+  if (!$overlay.hidden && selectedTtsArticle?.id === articleId) {
+    const article = await fetchArticle(articleId);
+    if (!$overlay.hidden && selectedTtsArticle?.id === articleId) {
+      stopAudio();
+      stopVideo();
+      renderDetail(article);
+    }
+  }
+}
+async function watchTts(jobId) {
+  const generation = ++ttsPollGeneration;
+  let failures = 0;
+  while (generation === ttsPollGeneration && !$ttsOverlay.hidden) {
+    try {
+      const response = await apiFetch(`/api/tts/${encodeURIComponent(jobId)}/status`);
+      if (generation !== ttsPollGeneration) return;
+      if ([401, 403, 404].includes(response.status)) {
+        rememberTtsJob(null);
+        ttsActive = false;
+        updateTtsActions();
+        $ttsOutput.textContent = '';
+        $ttsCancel.disabled = true;
+        $ttsActivity.hidden = true;
+        $ttsStatus.textContent = 'Auftrag nicht verfügbar oder keine Berechtigung.';
+        return;
+      }
+      if (!response.ok) throw new Error(`Status HTTP ${response.status}`);
+      const s = await response.json();
+      if (generation !== ttsPollGeneration) return;
+      failures = 0;
+      ttsActive = !s.done;
+      updateTtsActions();
+      document.getElementById('tts-article').textContent = s.title;
+      const atBottom = $ttsOutput.scrollTop + $ttsOutput.clientHeight >= $ttsOutput.scrollHeight - 24;
+      $ttsOutput.textContent = s.output || '';
+      if (atBottom) $ttsOutput.scrollTop = $ttsOutput.scrollHeight;
+      const labels = { starting: 'Start wird vorbereitet …', running: 'Sprachgenerierung läuft …',
+        cancelling: 'Abbruch angefordert …', indexing: 'MP3 fertig – Artikelindex wird aktualisiert …',
+        succeeded: 'Fertig. Die MP3 wurde erzeugt.', failed: 'Sprachgenerierung fehlgeschlagen.', cancelled: 'Audio-Auftrag abgebrochen.' };
+      $ttsStatus.textContent = s.indexError || s.error || ((labels[s.status] || s.status)
+        + (!s.done && s.total ? ` · Chunk ${s.current || 0} von ${s.total}` : ''));
+      $ttsCancel.disabled = s.done || ['cancelling', 'indexing'].includes(s.status);
+      $ttsActivity.hidden = s.done;
+      $ttsReindex.hidden = !s.indexError;
+      if (s.done) {
+        if (s.status === 'succeeded' && s.audioUrl?.startsWith('/files/')) {
+          $ttsAudio.href = s.audioUrl;
+          $ttsAudio.hidden = false;
+          try { await refreshTtsArticle(s.articleId); }
+          catch {
+            if (generation === ttsPollGeneration) $ttsStatus.textContent += ' Die Artikelansicht konnte nicht aktualisiert werden. Bitte neu laden; die MP3 ist fertig.';
+          }
+        }
+        return;
+      }
+    } catch {
+      if (generation !== ttsPollGeneration) return;
+      $ttsStatus.textContent = 'Verbindung unterbrochen; der Auftrag kann weiterlaufen. Status aktualisieren oder später wieder öffnen.';
+      if (++failures >= 3) { $ttsActivity.hidden = true; return; }
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
+document.getElementById('tts-close').addEventListener('click', closeTtsModal);
+document.getElementById('tts-backdrop').addEventListener('click', closeTtsModal);
+document.getElementById('tts-refresh').addEventListener('click', showTtsJob);
+$ttsReindex.addEventListener('click', async () => {
+  await runReindex();
+  if (ttsJobId && !$ttsOverlay.hidden) watchTts(ttsJobId);
+});
+$ttsCancel.addEventListener('click', async () => {
+  if (!ttsJobId || $ttsCancel.disabled) return;
+  $ttsCancel.disabled = true;
+  const generation = ttsPollGeneration;
+  try {
+    const response = await apiFetch(`/api/tts/${encodeURIComponent(ttsJobId)}/cancel`, { method: 'POST' });
+    if (!response.ok) throw new Error((await response.json()).error || 'Abbruch konnte nicht angefordert werden.');
+    if (generation === ttsPollGeneration) watchTts(ttsJobId);
+  } catch (error) {
+    if (generation !== ttsPollGeneration) return;
+    $ttsStatus.textContent = error.message;
+    $ttsCancel.disabled = false;
+  }
+});
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-tts-action]');
+  if (!button || button.disabled) return;
+  if (button.dataset.ttsAction === 'start') runTts();
+  else showTtsJob();
+});
+// Geöffnete Artikel-Aktionsmenüs schließen bei einem Klick außerhalb.
+document.addEventListener('click', event => {
+  document.querySelectorAll('.detail-tts-menu[open]').forEach(menu => {
+    if (!menu.contains(event.target)) menu.removeAttribute('open');
+  });
+});
+document.addEventListener('keydown', event => {
+  if ($ttsOverlay.hidden) return;
+  // Keine Navigation oder Schließen des darunterliegenden Artikels.
+  event.stopImmediatePropagation();
+  if (event.key === 'Escape') { event.preventDefault(); closeTtsModal(); }
+  if (event.key === 'Tab') {
+    const controls = [...$ttsOverlay.querySelectorAll('button, a[href], [tabindex="0"]')]
+      .filter(element => !element.disabled && !element.hidden);
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+}, true);
+
 async function runReindex() {
   if (!confirm('Archiv neu indizieren?')) return;
   $reindexBtn.disabled = true;
@@ -1082,7 +1334,7 @@ async function runReindex() {
     const r = await apiFetch('/api/reindex', { method: 'POST' });
     const data = await r.json();
     if (!data.started) {
-      alert('Re-Index läuft bereits.');
+      alert(data.error || 'Re-Index läuft bereits.');
       return;
     }
     await new Promise(resolve => {
@@ -1133,9 +1385,9 @@ async function runScrape() {
     const r = await apiFetch('/api/scrape', { method: 'POST' });
     const data = await r.json();
     if (!data.started) {
-      $scrapeStatus.textContent = data.reason === 'reindex running'
+      $scrapeStatus.textContent = data.error || (data.reason === 'reindex running'
         ? 'Re-Index läuft gerade – bitte kurz warten.'
-        : 'Ein Scrape-Lauf läuft bereits.';
+        : 'Ein Scrape-Lauf läuft bereits.');
       return;
     }
     // 1) Scrape-Lauf: Ausgabe live anzeigen, bis fertig.
@@ -1226,6 +1478,7 @@ function onAdminEsc(ev) {
 $reindexBtn.addEventListener('click', e => {
   e.stopPropagation();
   if (!$adminMenu.hidden) { closeAdminMenu(); return; }
+  updateTtsActions();
   $adminMenu.hidden = false;
   $reindexBtn.setAttribute('aria-expanded', 'true');
   document.addEventListener('click', onAdminOutside, true);
@@ -1239,6 +1492,8 @@ $adminMenu.addEventListener('click', ev => {
   if (action === 'reindex') runReindex();
   else if (action === 'scrape') runScrape();
   else if (action === 'log') showScrapeLog();
+  else if (action === 'tts') runTts();
+  else if (action === 'tts-job') showTtsJob();
 });
 
 $overlayClose.addEventListener('click', closeOverlay);
