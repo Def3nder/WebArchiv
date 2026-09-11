@@ -1119,7 +1119,8 @@ const $ttsReindex = document.getElementById('tts-reindex');
 
 function updateTtsActions() {
   const disabled = !selectedTtsArticle || $overlay.hidden || ttsStarting || ttsActive;
-  document.getElementById('tts-start-menu').disabled = disabled;
+  const startMenu = document.getElementById('tts-start-menu');
+  if (startMenu) startMenu.disabled = disabled;
   document.querySelectorAll('[data-tts-action="start"]').forEach(button => { button.disabled = disabled; });
 }
 function rememberTtsJob(id) {
