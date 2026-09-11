@@ -1,5 +1,5 @@
 # Media files #
-###################
+###############
 /www/Infografiken/2*
 /www/Joe Turan/2*
 /www/PDF/2*
@@ -14,7 +14,7 @@
 migrate-audio.log
 
 # Node Modules #
-###################
+################
 /node_modules/
 /scraper/node_modules/
 /tts/node_modules/
@@ -25,10 +25,14 @@ migrate-audio.log
 .markdown-tts-*/
 
 # private Data #
-###################
+################
 users.json
 /scraper/cookies.txt
 /scraper/Abonenten-URL.txt
+
+# other repositories #
+######################
+/public/pdfjs/
 
 # Compiled source #
 ###################
