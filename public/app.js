@@ -1255,7 +1255,7 @@ async function watchTts(jobId) {
       $ttsActivity.hidden = s.done;
       $ttsReindex.hidden = !s.indexError;
       if (s.done) {
-        if (s.status === 'succeeded' && s.audioUrl?.startsWith('/files/')) {
+        if (s.status === 'succeeded' && (s.audioUrl?.startsWith('/files/') || s.audioUrl?.startsWith('/audio-files/'))) {
           $ttsAudio.href = s.audioUrl;
           $ttsAudio.hidden = false;
           try { await refreshTtsArticle(s.articleId); }

@@ -57,11 +57,12 @@ const markdownEditor = createMarkdownEditor({
 });
 const ttsJobs = createTtsJobs({
   root: WWW_DIR,
+  audioRoot: AUDIO_DIR,
   getArticle: id => articles.find(a => a.id === id),
   canAccessAuthor,
   busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || markdownEditor.running,
   reindex: buildIndex,
-  mediaUrl: filename => fileUrl(path.relative(WWW_DIR, filename).split(path.sep).map(encodeURIComponent).join('/'), filename),
+  mediaUrl: filename => audioFileUrl(path.relative(AUDIO_DIR, filename).split(path.sep).map(encodeURIComponent).join('/'), filename),
 });
 
 // ─── Parsers ───────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { startTts } = require('./spawn_tts.cjs');
 
-function createTtsJobs({ root, getArticle, canAccessAuthor, busy, reindex, mediaUrl, start = startTts }) {
+function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, reindex, mediaUrl, start = startTts }) {
   const jobs = new Map();
   let active = null;
   let stopping = false;
@@ -56,9 +56,31 @@ function createTtsJobs({ root, getArticle, canAccessAuthor, busy, reindex, media
       if (!inside(parent) || (!parent.startsWith(authorRoot + path.sep) && parent !== authorRoot)) {
         throw fail('Ungültiges Ausgabeverzeichnis.', 403);
       }
-      const output = path.join(parent, path.basename(source, path.extname(source)) + '.mp3');
+      const basename = path.basename(source, path.extname(source)) + '.mp3';
       const names = await fs.readdir(parent);
-      if (names.some(name => name.toLowerCase() === path.basename(output).toLowerCase())) {
+      if (names.some(name => name.toLowerCase() === basename.toLowerCase())) {
+        throw fail('Eine MP3 für diesen Artikel existiert bereits. Sie wird nicht überschrieben.');
+      }
+      const relative = path.relative(path.resolve(root), source);
+      if (relative.startsWith('..' + path.sep) || path.isAbsolute(relative) || relative === '..') {
+        throw fail('Ungültiger Artikelpfad.', 403);
+      }
+      // Spiegelstruktur unter audio/. Jeden vorhandenen Elternpfad vor dem
+      // Anlegen weiterer Ordner prüfen, damit Symlinks kein fremdes Ziel öffnen.
+      await fs.mkdir(audioRoot, { recursive: true });
+      let targetDir = await fs.realpath(audioRoot);
+      for (const part of path.dirname(relative).split(path.sep)) {
+        const next = path.join(targetDir, part);
+        try { await fs.mkdir(next); }
+        catch (error) { if (error.code !== 'EEXIST') throw error; }
+        const stat = await fs.lstat(next);
+        if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(next) !== next) {
+          throw fail('Ungültiges Audio-Ausgabeverzeichnis.', 403);
+        }
+        targetDir = next;
+      }
+      const output = path.join(targetDir, basename);
+      if ((await fs.readdir(targetDir)).some(name => name.toLowerCase() === basename.toLowerCase())) {
         throw fail('Eine MP3 für diesen Artikel existiert bereits. Sie wird nicht überschrieben.');
       }
       if (stopping) throw fail('Server wird beendet.');
@@ -71,7 +93,7 @@ function createTtsJobs({ root, getArticle, canAccessAuthor, busy, reindex, media
         if (path.resolve(result.outputPath) !== output || !stat.isFile() || stat.size === 0) {
           throw fail('Der Worker hat keine gültige MP3-Datei erzeugt.', 500);
         }
-        state.audioUrl = mediaUrl(source.slice(0, -path.extname(source).length) + '.mp3');
+        state.audioUrl = mediaUrl(path.join(audioRoot, path.dirname(relative), basename));
         state.status = 'indexing';
         try {
           await reindex();
