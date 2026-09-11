@@ -8,6 +8,7 @@ const bcrypt  = require('bcryptjs');
 const sharp   = require('sharp');
 const { spawn } = require('child_process');
 const { createTtsJobs, installTtsRoutes } = require('./tts/jobs.cjs');
+const { createMarkdownEditor, installMarkdownRoutes } = require('./article-editor.cjs');
 
 const app = express();
 // Hinter dem Reverse-Proxy (Caddy/HTTPS) X-Forwarded-Proto/Host respektieren,
@@ -47,11 +48,18 @@ let fuseIndex = null;
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
 let scrapeState = { running: false, sources: null, exitCode: null, startedAt: null, done: true, error: null };
 let infographicWrites = 0;
+const markdownEditor = createMarkdownEditor({
+  root: WWW_DIR,
+  getArticle: id => articles.find(a => a.id === id),
+  canAccessAuthor,
+  busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || ttsJobs.running,
+  reindex: buildIndex,
+});
 const ttsJobs = createTtsJobs({
   root: WWW_DIR,
   getArticle: id => articles.find(a => a.id === id),
   canAccessAuthor,
-  busy: () => reindexState.running || scrapeState.running || infographicWrites > 0,
+  busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || markdownEditor.running,
   reindex: buildIndex,
   mediaUrl: filename => fileUrl(path.relative(WWW_DIR, filename).split(path.sep).map(encodeURIComponent).join('/'), filename),
 });
@@ -777,6 +785,7 @@ function attachUser(req, res, next) {
 
 // ─── API ───────────────────────────────────────────────────────────────────
 
+app.use('/api/article-markdown', express.json({ limit: '2mb' }));
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'webarchiv-dev-secret-change-in-prod',
@@ -997,7 +1006,7 @@ app.get('/api/prompts/:file', attachUser, (req, res) => {
 });
 
 app.post('/api/reindex', requireAdmin, (req, res) => {
-  if (ttsJobs.running || scrapeState.running || infographicWrites) return res.status(409).json({ started: false, error: 'Es läuft bereits ein Audio-, Scrape- oder Speicherauftrag.' });
+  if (ttsJobs.running || scrapeState.running || infographicWrites || markdownEditor.running) return res.status(409).json({ started: false, error: 'Es läuft bereits ein Audio-, Scrape- oder Speicherauftrag.' });
   if (reindexState.running) return res.json({ started: false, reason: 'already running' });
   buildIndex().catch(console.error);
   res.json({ started: true });
@@ -1008,7 +1017,7 @@ app.post(
   requireAdmin,
   express.raw({ type: ['image/png', 'image/jpeg'], limit: INFOGRAPHIC_MAX_BYTES }),
   async (req, res) => {
-    if (ttsJobs.running) return res.status(409).json({ error: 'Es läuft bereits ein Audio-Auftrag.' });
+    if (ttsJobs.running || markdownEditor.running) return res.status(409).json({ error: 'Es läuft bereits ein Audio- oder Speicherauftrag.' });
     const id = req.params[0];
     const article = articles.find(a => a.id === id);
     if (!article) return res.status(404).json({ error: 'Artikel nicht gefunden.' });
@@ -1083,7 +1092,7 @@ app.post(
 app.get('/api/scrape/status', requireAuth, (_req, res) => res.json(scrapeState));
 
 app.post('/api/scrape', requireAdmin, (req, res) => {
-  if (ttsJobs.running || infographicWrites) return res.status(409).json({ started: false, error: 'Es läuft bereits ein Audio- oder Speicherauftrag.' });
+  if (ttsJobs.running || infographicWrites || markdownEditor.running) return res.status(409).json({ started: false, error: 'Es läuft bereits ein Audio- oder Speicherauftrag.' });
   if (scrapeState.running) return res.json({ started: false, reason: 'already running' });
   if (reindexState.running) return res.json({ started: false, reason: 'reindex running' });
 
@@ -1240,8 +1249,13 @@ app.get('/api/articles/*', attachUser, (req, res) => {
 // ─── Start ─────────────────────────────────────────────────────────────────
 
 installTtsRoutes(app, requireAdmin, ttsJobs);
+installMarkdownRoutes(app, requireAdmin, markdownEditor);
 
 app.use((err, _req, res, next) => {
+  if (_req.path.startsWith('/api/article-markdown/')) {
+    if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Die Anfrage ist zu groß. Artikel dürfen höchstens 1 MB enthalten.' });
+    if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Ungültige Speicheranfrage.' });
+  }
   if (err?.type === 'entity.too.large') {
     return res.status(413).json({ error: 'Die Bilddatei ist größer als 10 MB.' });
   }
@@ -1254,7 +1268,7 @@ app.use((err, _req, res, next) => {
 //   kill -HUP "$(systemctl show -p MainPID --value nodeapp)"
 process.on('SIGHUP', () => {
   console.log('SIGHUP empfangen → Reindex');
-  if (!reindexState.running && !scrapeState.running && !ttsJobs.running) buildIndex().catch(console.error);
+  if (!reindexState.running && !scrapeState.running && !ttsJobs.running && !infographicWrites && !markdownEditor.running) buildIndex().catch(console.error);
 });
 
 buildIndex().catch(console.error);

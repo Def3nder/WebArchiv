@@ -506,6 +506,7 @@ async function loadArticles() {
 
 // ── Article detail overlay ─────────────────────────────────────────────────
 async function openArticle(id) {
+  if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) return;
   selectedTtsArticle = null;
   updateTtsActions();
   $overlay.hidden = false;
@@ -549,6 +550,7 @@ async function openArticle(id) {
 }
 
 function closeOverlay() {
+  if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) return;
   selectedTtsArticle = null;
   updateTtsActions();
   $overlay.hidden = true;
@@ -627,7 +629,7 @@ function renderDetail(article) {
   const dateHtml = `<div class="detail-date-row">
         <span class="detail-date-block">${article.date ? esc(formatDate(article.date)) : ''}</span>
         <div class="detail-action-row">
-          ${currentUser?.role === 'admin' ? `<details class="detail-tts-menu"><summary class="detail-cat-pill">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-tts-action="start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</button><button type="button" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></details>` : ''}
+          ${currentUser?.role === 'admin' ? `<details class="detail-tts-menu"><summary class="detail-cat-pill">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Artikel editieren</button><button type="button" class="header-menu-item" data-tts-action="start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</button><button type="button" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></details>` : ''}
           ${infographicBtnHtml}
           ${copyBtnHtml}
           ${shareBtnHtml}
@@ -1646,6 +1648,10 @@ $imgFs.addEventListener('touchend', e => {
 
 // Handle back button
 window.addEventListener('popstate', () => {
+  if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) {
+    history.pushState(null, '', articleEditorState.url);
+    return;
+  }
   const hash = location.hash;
   if (!hash || hash === '#/' || hash === '#') {
     if (!$overlay.hidden) {
