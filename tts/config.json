@@ -61,7 +61,7 @@
   "audio": {
     "ffmpeg": "ffmpeg",
     "ffprobe": "ffprobe",
-    "bitrate": "128k",
+    "bitrate": "64k",
     "timeout_seconds": 300.0,
     "duration_tolerance_seconds": 0.2
   },
