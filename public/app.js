@@ -607,13 +607,11 @@ function renderDetail(article) {
   const hasBody = !!(article.bodyHtml && article.bodyHtml.trim());
   const copyBtnHtml = hasBody
     ? `<div class="detail-copy-wrap">
-        <button class="detail-cat-pill detail-copy-btn" id="detail-copy-btn" aria-label="Titel und Text kopieren">
-          <span class="detail-copy-icon" data-copy-zone="prompt" title="Prompt auswählen" aria-haspopup="menu" aria-expanded="false">
+        <button type="button" class="detail-cat-pill detail-copy-btn" id="detail-copy-btn" aria-label="Kopieroptionen" title="Kopieroptionen" aria-haspopup="menu" aria-controls="copy-prompt-menu" aria-expanded="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="9" y="9" width="11" height="11" rx="2"/>
               <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
             </svg>
-          </span><span class="detail-copy-text" data-copy-zone="plain" title="Titel + Text kopieren">copy</span>
         </button>
         <div class="copy-prompt-menu" id="copy-prompt-menu" role="menu" hidden></div>
       </div>`
@@ -629,7 +627,7 @@ function renderDetail(article) {
   const dateHtml = `<div class="detail-date-row">
         <span class="detail-date-block">${article.date ? esc(formatDate(article.date)) : ''}</span>
         <div class="detail-action-row">
-          ${currentUser?.role === 'admin' ? `<details class="detail-tts-menu"><summary class="detail-cat-pill">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Artikel editieren</button><button type="button" class="header-menu-item" data-tts-action="start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</button><button type="button" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></details>` : ''}
+          ${currentUser?.role === 'admin' ? `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Artikel bearbeiten und Audio erzeugen">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Artikel editieren</button><button type="button" class="header-menu-item" data-tts-action="start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</button><button type="button" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></details>` : ''}
           ${infographicBtnHtml}
           ${copyBtnHtml}
           ${shareBtnHtml}
@@ -760,7 +758,6 @@ function renderDetail(article) {
 
   const $copyBtn  = document.getElementById('detail-copy-btn');
   const $copyMenu = document.getElementById('copy-prompt-menu');
-  const $copyIcon = $copyBtn?.querySelector('.detail-copy-icon');
 
   if ($copyBtn) {
     // Kopiert Artikel, optional mit vorangestelltem Prompt-Text
@@ -817,12 +814,12 @@ function renderDetail(article) {
     let promptsLoaded = false;
     const closeMenu = () => {
       $copyMenu.hidden = true;
-      $copyIcon?.setAttribute('aria-expanded', 'false');
+      $copyBtn.setAttribute('aria-expanded', 'false');
       document.removeEventListener('click', onOutside, true);
       document.removeEventListener('keydown', onEsc, true);
     };
-    const onOutside = ev => { if (!$copyMenu.contains(ev.target) && ev.target !== $copyIcon && !$copyIcon.contains(ev.target)) closeMenu(); };
-    const onEsc = ev => { if (ev.key === 'Escape') { ev.stopPropagation(); closeMenu(); } };
+    const onOutside = ev => { if (!$copyMenu.contains(ev.target) && !$copyBtn.contains(ev.target)) closeMenu(); };
+    const onEsc = ev => { if (ev.key === 'Escape') { ev.stopPropagation(); closeMenu(); $copyBtn.focus(); } };
 
     const buildMenu = async () => {
       if (promptsLoaded) return;
@@ -855,19 +852,13 @@ function renderDetail(article) {
 
     $copyBtn.addEventListener('click', async e => {
       e.stopPropagation();
-      const zone = e.target.closest('[data-copy-zone]');
-      const wantsMenu = zone?.dataset.copyZone === 'prompt'
-                     || (!zone && !!e.target.closest('svg'));
-      if (wantsMenu) {
-        if (!$copyMenu.hidden) { closeMenu(); return; }
-        await buildMenu();
-        $copyMenu.hidden = false;
-        $copyIcon?.setAttribute('aria-expanded', 'true');
-        document.addEventListener('click', onOutside, true);
-        document.addEventListener('keydown', onEsc, true);
-      } else {
-        copyArticle('');
-      }
+      if (!$copyMenu.hidden) { closeMenu(); return; }
+      $copyMenu.hidden = false;
+      $copyBtn.setAttribute('aria-expanded', 'true');
+      document.addEventListener('click', onOutside, true);
+      document.addEventListener('keydown', onEsc, true);
+      await buildMenu();
+      if (e.detail === 0 && !$copyMenu.hidden) $copyMenu.querySelector('button')?.focus();
     });
   }
 
