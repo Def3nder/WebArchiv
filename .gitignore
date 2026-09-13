@@ -32,7 +32,11 @@ users.json
 
 # other repositories #
 ######################
-/public/pdfjs/
+#/public/vendor/pdfjs/
+
+# Tests für Graft #
+###################
+/.test/
 
 # Compiled source #
 ###################
