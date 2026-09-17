@@ -3,12 +3,12 @@ const { spawn } = require('node:child_process');
 const { createInterface } = require('node:readline');
 const path = require('node:path');
 
-function startTts({ inputPath, outputPath, configPath, onEvent = () => {}, scriptPath = path.join(__dirname, 'markdown_tts.js') }) {
+function startTts({ inputPath, outputPath, configPath, expectedProvider, onEvent = () => {}, scriptPath = path.join(__dirname, 'markdown_tts.js') }) {
   const args = [scriptPath, path.resolve(inputPath), '--output', path.resolve(outputPath), '--json-progress'];
   if (configPath) args.push('--config', path.resolve(configPath));
   const child = spawn(process.execPath, args, {
     cwd: path.dirname(scriptPath), shell: false, windowsHide: true,
-    env: process.env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    env: { ...process.env, WEBARCHIV_TTS_EXPECTED_PROVIDER: expectedProvider || '' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
   let result, lastError, startError, timer, settled = false;
   const notify = event => { try { onEvent(event); } catch { /* UI/log callbacks must not orphan a paid worker. */ } };

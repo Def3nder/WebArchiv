@@ -39,6 +39,7 @@
     ]
   },
   "tts": {
+    "provider": "qwen",
     "model": "gpt-4o-mini-tts-2025-12-15",
     "api_key_environment_variable": "OPENAI_API_KEY",
     "timeout_seconds": 120.0,
@@ -46,6 +47,10 @@
     "voice": "cedar",
     "speed": 1.0,
     "instructions": "Sprich mit einer klaren, vorwärtsgerichteten und positiven Energie. Das Sprechtempo ist leicht angezogen, aber absolut präzise und glasklar in der Artikulation. Betone Verben und kraftvolle Schlüsselwörter mit spürbarem Nachdruck. Klinge ermutigend, selbstbewusst und unterstützend. Lass deine Stimme am Ende von Sätzen nicht absinken, sondern halte die Spannung hoch."
+  },
+  "qwen": {
+    "base_url_environment_variable": "QWEN_TTS_BASE_URL",
+    "token_environment_variable": "QWEN_TTS_TOKEN"
   },
   "prefill": {
     "text": "Dies ist ein kurzer technischer Vorspann.",

@@ -1154,30 +1154,85 @@ function closeTtsModal() {
   else if (!$overlay.hidden) $overlayClose.focus();
   else $reindexBtn.focus();
 }
+function chooseTtsProvider(article, providers) {
+  const dialog = document.getElementById('tts-provider-dialog');
+  const options = document.getElementById('tts-provider-options');
+  const start = document.getElementById('tts-provider-start');
+  const description = document.getElementById('tts-provider-description');
+  const status = document.getElementById('tts-provider-status');
+  document.getElementById('tts-provider-article').textContent = article.title;
+  options.replaceChildren();
+  const radios = [];
+  for (const provider of providers) {
+    const label = document.createElement('label');
+    const radio = document.createElement('input');
+    radio.type = 'radio'; radio.name = 'tts-provider';
+    radio.value = provider.provider;
+    radio.disabled = !provider.available;
+    const text = document.createElement('span');
+    text.textContent = provider.label + (provider.available ? '' : ' – nicht verfügbar');
+    label.append(radio); label.append(text);
+    options.append(label);
+    radios.push(radio);
+  }
+  const selectedProvider = () => providers.find(p => p.available
+    && radios.some(radio => radio.checked && radio.value === p.provider));
+  status.textContent = providers.map(p => `${p.label}: ${p.status}`).join('\n');
+  const update = () => {
+    const selected = selectedProvider();
+    start.disabled = !selected;
+    description.textContent = selected?.confirmation || (providers.some(p => p.available)
+      ? 'Wählen Sie einen Anbieter. Erst der Startbutton bestätigt die Generierung.'
+      : 'Kein Anbieter verfügbar. Bitte Server oder API-Schlüssel prüfen.');
+  };
+  for (const radio of radios) radio.onchange = update;
+  update();
+  dialog.returnValue = '';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => {
+      const selected = selectedProvider();
+      resolve(dialog.returnValue === 'start' ? selected || null : null);
+    }, { once: true });
+    dialog.showModal();
+    (radios.find(radio => !radio.disabled) || dialog.querySelector('button')).focus();
+  });
+}
+
 async function runTts() {
   const article = selectedTtsArticle;
   if (!article || $overlay.hidden || currentUser?.role !== 'admin' || ttsStarting || ttsActive) return;
-  // Derselbe native Bestätigungsdialog wie bei „Archiv neu einlesen“.
-  if (!confirm(`Audio für „${article.title}“ erzeugen?\n\nDie Sprachgenerierung ist kostenpflichtig. Dabei wird der Markdown-Text an OpenAI übertragen.`)) return;
   ttsStarting = true;
+  let startUncertain = false;
   updateTtsActions();
-  openTtsModal();
-  document.getElementById('tts-article').textContent = article.title;
-  $ttsStatus.textContent = 'Audio-Auftrag wird gestartet …';
   try {
+    const providerResponse = await apiFetch('/api/tts/provider');
+    const info = await providerResponse.json();
+    if (!providerResponse.ok) throw new Error(info.error || 'TTS-Provider nicht verfügbar.');
+    if (currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
+    const provider = await chooseTtsProvider(article, info.providers);
+    if (!provider || currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
+    openTtsModal();
+    document.getElementById('tts-article').textContent = article.title;
+    $ttsStatus.textContent = 'Audio-Auftrag wird gestartet …';
+    startUncertain = true;
     const response = await apiFetch('/api/tts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ articleId: article.id }),
+      body: JSON.stringify({ articleId: article.id, provider: provider.provider }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Audio-Auftrag konnte nicht gestartet werden.');
+    if (!response.ok) {
+      startUncertain = false;
+      throw new Error(data.error || 'Audio-Auftrag konnte nicht gestartet werden.');
+    }
     if (currentUser?.role !== 'admin') return;
     rememberTtsJob(data.jobId);
     ttsActive = true;
     if (!$ttsOverlay.hidden) watchTts(data.jobId);
   } catch (error) {
+    openTtsModal();
     $ttsActivity.hidden = true;
-    $ttsStatus.textContent = `${error.message} Bei unklarer Verbindung „Status aktualisieren“ verwenden; der Auftrag könnte bereits laufen.`;
+    $ttsStatus.textContent = error.message + (startUncertain
+      ? ' Bei unklarer Verbindung „Status aktualisieren“ verwenden; der Auftrag könnte bereits laufen.' : '');
   } finally {
     ttsStarting = false;
     updateTtsActions();
@@ -1243,9 +1298,13 @@ async function watchTts(jobId) {
       ttsActive = !s.done;
       updateTtsActions();
       document.getElementById('tts-article').textContent = s.title;
-      const atBottom = $ttsOutput.scrollTop + $ttsOutput.clientHeight >= $ttsOutput.scrollHeight - 24;
-      $ttsOutput.textContent = s.output || '';
-      if (atBottom) $ttsOutput.scrollTop = $ttsOutput.scrollHeight;
+      const nextOutput = s.output || '';
+      if ($ttsOutput.textContent !== nextOutput) {
+        const scrollTop = $ttsOutput.scrollTop;
+        const atBottom = scrollTop + $ttsOutput.clientHeight >= $ttsOutput.scrollHeight - 24;
+        $ttsOutput.textContent = nextOutput;
+        $ttsOutput.scrollTop = atBottom ? $ttsOutput.scrollHeight : scrollTop;
+      }
       const labels = { starting: 'Start wird vorbereitet …', running: 'Sprachgenerierung läuft …',
         cancelling: 'Abbruch angefordert …', indexing: 'MP3 fertig – Artikelindex wird aktualisiert …',
         succeeded: 'Fertig. Die MP3 wurde erzeugt.', failed: 'Sprachgenerierung fehlgeschlagen.', cancelled: 'Audio-Auftrag abgebrochen.' };

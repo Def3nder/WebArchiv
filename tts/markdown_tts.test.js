@@ -10,6 +10,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const { startTts } = require('./spawn_tts.cjs');
 const cfg = await loadConfig();
+cfg.tts.provider = 'openai'; // Bestehende OpenAI-Pipeline ausschließlich mit Simulation testen.
 const emit = () => {};
 async function temporary(fn) {
   const dir = await fs.mkdtemp(path.join(ROOT, '.test-'));

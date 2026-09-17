@@ -8,6 +8,8 @@ import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import MarkdownIt from 'markdown-it';
 import footnote from 'markdown-it-footnote';
+import { synthesizeQwen } from './qwen-provider.js';
+import providerConfig from './provider-config.cjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const length = text => Array.from(text).length;
@@ -17,7 +19,7 @@ const check = signal => signal?.throwIfAborted();
 const round = x => Math.abs(x % 1) === 0.5 ? 2 * Math.round(x / 2) : Math.round(x);
 const duration = wav => wav.data.length / (wav.channels * wav.width * wav.rate);
 
-export async function loadConfig(filename = path.join(ROOT, 'config.json')) {
+export async function loadConfig(filename = path.join(ROOT, 'config.json'), selectedProvider) {
   const configPath = path.resolve(filename);
   let c;
   try {
@@ -25,9 +27,15 @@ export async function loadConfig(filename = path.join(ROOT, 'config.json')) {
     for (const section of ['parser', 'renderer', 'chunking', 'tts', 'prefill', 'audio', 'runtime']) {
       if (!c[section] || typeof c[section] !== 'object') throw Error(`Abschnitt ${section} fehlt.`);
     }
+    // Der Webserver übergibt ausschließlich den zuvor bestätigten Provider.
+    // Im Worker erfolgt keine erneute Auswahl und kein Fallback.
+    if (selectedProvider) {
+      if (!['openai', 'qwen'].includes(selectedProvider)) throw Error('Unbekannter bestätigter TTS-Provider.');
+      c.tts.provider = selectedProvider;
+    }
     for (const [section, keys] of Object.entries({
       chunking: ['max_characters', 'preferred_minimum_characters', 'minimum_split_ratio'],
-      tts: ['speed', 'timeout_seconds'], audio: ['timeout_seconds', 'duration_tolerance_seconds'],
+      tts: c.tts.provider === 'qwen' ? [] : ['speed', 'timeout_seconds'], audio: ['timeout_seconds', 'duration_tolerance_seconds'],
       prefill: ['analysis_window_milliseconds', 'minimum_quiet_milliseconds', 'minimum_remaining_seconds'],
       runtime: ['job_timeout_seconds'],
     })) for (const key of keys) {
@@ -36,7 +44,7 @@ export async function loadConfig(filename = path.join(ROOT, 'config.json')) {
     for (const [section, keys] of Object.entries({
       parser: ['front_matter_delimiter', 'url_pattern', 'date_line_pattern'],
       renderer: ['block_separator', 'list_item_separator', 'ordered_list_fallback'],
-      tts: ['model', 'voice', 'instructions', 'api_key_environment_variable'],
+      tts: c.tts.provider === 'qwen' ? [] : ['model', 'voice', 'instructions', 'api_key_environment_variable'],
       prefill: ['text', 'separator'], audio: ['ffmpeg', 'ffprobe', 'bitrate'], runtime: ['cache_directory'],
     })) for (const key of keys) {
       if (typeof c[section][key] !== 'string' || !c[section][key]) throw Error(`${section}.${key} fehlt.`);
@@ -50,7 +58,7 @@ export async function loadConfig(filename = path.join(ROOT, 'config.json')) {
     if (!Number.isInteger(c.chunking.max_characters) || c.chunking.minimum_split_ratio > 1
         || c.chunking.preferred_minimum_characters > c.chunking.max_characters
         || length(c.prefill.text + c.prefill.separator) >= c.chunking.max_characters) throw Error('Chunk-Limit ist ungültig.');
-    if (!Number.isInteger(c.tts.max_retries) || c.tts.max_retries < 0 || c.tts.max_retries > 5) throw Error('max_retries muss zwischen 0 und 5 liegen.');
+    if (c.tts.provider !== 'qwen' && (!Number.isInteger(c.tts.max_retries) || c.tts.max_retries < 0 || c.tts.max_retries > 5)) throw Error('max_retries muss zwischen 0 und 5 liegen.');
     for (const key of ['search_before_seconds', 'search_after_seconds', 'cut_safety_seconds']) {
       if (!Number.isFinite(c.prefill[key]) || c.prefill[key] < 0) throw Error(`prefill.${key} ist ungültig.`);
     }
@@ -59,6 +67,7 @@ export async function loadConfig(filename = path.join(ROOT, 'config.json')) {
     new RegExp(c.parser.url_pattern, c.parser.url_flags);
     new RegExp(c.parser.date_line_pattern, 'u');
     c.runtime.cache_directory = path.resolve(path.dirname(configPath), c.runtime.cache_directory);
+    if (!['openai', 'qwen'].includes(c.tts.provider || 'openai')) throw Error('Unbekannter TTS-Provider.');
     return c;
   } catch (error) { throw fail(`Konfiguration: ${error.message}`, 'CONFIG_ERROR'); }
 }
@@ -332,19 +341,26 @@ async function calibration(c, work, signal, emit, synth) {
   return wav;
 }
 
-export async function convert(input, output, c, { signal, emit = () => {}, synth = synthesize } = {}) {
+export async function convert(input, output, c, { signal, emit = () => {}, synth } = {}) {
+  const qwen = c.tts.provider === 'qwen';
+  if (!['openai', 'qwen'].includes(c.tts.provider || 'openai')) throw fail('Unbekannter TTS-Provider.', 'CONFIG_ERROR');
+  if (!synth) {
+    if (qwen) providerConfig.providerSettings(c);
+    synth = qwen ? synthesizeQwen : synthesize;
+  }
   const source = path.resolve(input), target = path.resolve(output);
   if (path.extname(target).toLowerCase() !== '.mp3' || source === target) throw fail('Ausgabe muss eine andere Datei mit Endung .mp3 sein.', 'ARGUMENT_ERROR');
   check(signal);
   try { await fs.lstat(target); throw fail('Ausgabedatei existiert bereits.', 'OUTPUT_EXISTS'); }
   catch (e) { if (e.code !== 'ENOENT') throw e; }
-  const markdown = new TextDecoder('utf-8', { fatal: true }).decode(await fs.readFile(source));
-  const blocks = speechBlocks(markdown, c), text = blocks.map(b => b[1]).join(c.renderer.block_separator);
+  const markdown = new TextDecoder('utf-8', { fatal: true, ignoreBOM: qwen }).decode(await fs.readFile(source));
+  const blocks = qwen ? [] : speechBlocks(markdown, c), text = qwen ? markdown : blocks.map(b => b[1]).join(c.renderer.block_separator);
   if (!text.trim()) throw fail('Das Dokument enthält keinen sprechbaren Text.', 'TEXT_ERROR');
-  const long = length(text) > c.chunking.max_characters, chunks = long ? chunkText(blocks, c) : [text];
+  const long = !qwen && length(text) > c.chunking.max_characters, chunks = long ? chunkText(blocks, c) : [text];
+  if (qwen && Buffer.byteLength(markdown, 'utf8') > 1_000_000) throw fail('Markdown ist größer als 1 MB.', 'TEXT_ERROR');
   if (synth === synthesize && !process.env[c.tts.api_key_environment_variable]?.trim()) throw fail(`API-Key fehlt: ${c.tts.api_key_environment_variable}`, 'CONFIG_ERROR');
   // Preflight tools and target lock before any paid request.
-  if (long) for (const tool of ['ffmpeg', 'ffprobe']) await runTool(c.audio[tool], ['-version'], signal, 10);
+  if (long || qwen) for (const tool of ['ffmpeg', 'ffprobe']) await runTool(c.audio[tool], ['-version'], signal, 10);
   await fs.mkdir(path.dirname(target), { recursive: true });
   const lockPath = target + '.tts-lock';
   let lock;
@@ -357,8 +373,19 @@ export async function convert(input, output, c, { signal, emit = () => {}, synth
     await lock.writeFile(JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
     work = await fs.mkdtemp(path.join(path.dirname(target), '.markdown-tts-'));
     const staged = path.join(work, 'output.mp3');
-    emit('start', `${length(text)} Zeichen; ${chunks.length} Chunk(s), ${long ? 'mit' : 'ohne'} Pre-Fill.`, { total: chunks.length, characters: length(text) });
-    if (!long) {
+    emit('start', qwen ? `${length(text)} Zeichen Markdown; vollständige Verarbeitung durch das Qwen-Originalscript.`
+      : `${length(text)} Zeichen; ${chunks.length} Chunk(s), ${long ? 'mit' : 'ohne'} Pre-Fill.`,
+      { total: qwen ? null : chunks.length, characters: length(text) });
+    if (qwen) {
+      emit('synthesis', 'Original-Markdown wird an Qwen übergeben; erwartet wird die fertige MP3.');
+      await synth(markdown, staged, c, signal, emit);
+      const verified = JSON.parse(await runTool(c.audio.ffprobe, ['-v', 'error', '-show_entries', 'stream=codec_name:format=duration', '-of', 'json', staged], signal, c.audio.timeout_seconds));
+      const seconds = Number(verified.format?.duration);
+      if (!verified.streams?.some(s => s.codec_name === 'mp3') || !Number.isFinite(seconds)
+          || seconds <= 0) throw fail('Qwen-Ausgabe ist keine gültige MP3.');
+      emit('encoding', 'Fertige Qwen-MP3 wird geprüft und unverändert übernommen.');
+      await runTool(c.audio.ffmpeg, ['-nostdin', '-v', 'error', '-xerror', '-i', staged, '-map', '0:a:0', '-f', 'null', '-'], signal, c.audio.timeout_seconds);
+    } else if (!long) {
       emit('synthesis', 'Direkte MP3-Synthese ohne Pre-Fill.', { current: 1, total: 1 });
       await synth(text, staged, c, signal, emit);
     } else {
@@ -429,7 +456,7 @@ export async function main(argv) {
   try {
     const args = parseArgs(argv); json = args.jsonProgress;
     if (args.help) { process.stdout.write('node markdown_tts.js input.md --output output.mp3 [--config config.json] [--json-progress]\n'); return 0; }
-    const c = await loadConfig(args.config);
+    const c = await loadConfig(args.config, process.env.WEBARCHIV_TTS_EXPECTED_PROVIDER);
     timer = setTimeout(() => controller.abort(fail('Gesamtzeitlimit überschritten.', 'TIMEOUT')), c.runtime.job_timeout_seconds * 1000);
     const result = await convert(args.input, args.output, c, { signal: controller.signal, emit });
     emit('complete', 'MP3-Datei erfolgreich erzeugt.');

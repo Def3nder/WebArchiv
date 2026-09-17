@@ -30,7 +30,7 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
     if (Number.isInteger(event.current)) state.current = event.current;
     if (Number.isInteger(event.total)) state.total = event.total;
   }
-  async function launch(articleId, user) {
+  async function launch(articleId, user, expectedProvider) {
     if (typeof articleId !== 'string' || !articleId) throw fail('Artikel-ID fehlt.', 400);
     const article = getArticle(articleId);
     if (!article) throw fail('Artikel nicht gefunden.', 404);
@@ -86,7 +86,7 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
       if (stopping) throw fail('Server wird beendet.');
       jobs.set(state.id, job);
       state.status = 'running';
-      job.worker = start({ inputPath: input, outputPath: output, onEvent: event => capture(state, event) });
+      job.worker = start({ inputPath: input, outputPath: output, expectedProvider, onEvent: event => capture(state, event) });
       job.completion = job.worker.completion.then(async result => {
         state.exitCode = 0;
         const stat = await fs.lstat(output);
@@ -147,16 +147,20 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
   };
 }
 
-function installTtsRoutes(app, requireAdmin, jobs) {
+function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./provider-config.cjs').providerInfo) {
   const route = handler => async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try { await handler(req, res); }
     catch (error) { res.status(error.status || 500).json({ error: error.message }); }
   };
   app.post('/api/tts', requireAdmin, route(async (req, res) => {
-    const jobId = await jobs.launch(req.body?.articleId, req.session.user);
+    const info = await providerInfo();
+    const selected = info.providers.find(p => p.provider === req.body?.provider && p.available);
+    if (!selected) return res.status(409).json({ error: 'Der gewählte TTS-Anbieter ist nicht verfügbar. Bitte „Audio erzeugen“ erneut aufrufen und einen verfügbaren Anbieter auswählen. Es wurde kein Auftrag gestartet.' });
+    const jobId = await jobs.launch(req.body?.articleId, req.session.user, selected.provider);
     res.status(202).json({ jobId });
   }));
+  app.get('/api/tts/provider', requireAdmin, route(async (_req, res) => res.json(await providerInfo())));
   app.get('/api/tts/latest', requireAdmin, route((req, res) => res.json({ jobId: jobs.latest(req.session.user) })));
   app.get('/api/tts/:jobId/status', requireAdmin, route((req, res) => res.json(jobs.status(req.params.jobId, req.session.user))));
   app.post('/api/tts/:jobId/cancel', requireAdmin, route((req, res) => {

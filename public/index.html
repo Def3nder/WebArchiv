@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20" />
+  <link rel="stylesheet" href="styles.css?v=22" />
 </head>
 <body>
 
@@ -221,6 +221,23 @@
     </div>
   </div>
 
+  <dialog id="tts-provider-dialog" aria-labelledby="tts-provider-title">
+    <form method="dialog">
+      <h2 id="tts-provider-title" class="login-title">Audio erzeugen</h2>
+      <p id="tts-provider-article"></p>
+      <p id="tts-provider-status"></p>
+      <fieldset class="tts-provider-choices" aria-describedby="tts-provider-description">
+        <legend>Anbieter auswählen</legend>
+        <div id="tts-provider-options"></div>
+      </fieldset>
+      <p id="tts-provider-description" aria-live="polite"></p>
+      <div class="tts-buttons">
+        <button type="submit" value="cancel" class="detail-cat-pill">Abbrechen</button>
+        <button type="submit" id="tts-provider-start" value="start" class="detail-cat-pill" disabled>Audio-Generierung starten</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="article-editor" aria-labelledby="article-editor-title">
     <div class="article-editor-heading">
       <div><p class="article-editor-eyebrow">MARKDOWN-DATEI</p><h2 id="article-editor-title">Artikel editieren</h2></div>
@@ -237,7 +254,7 @@
       <button type="button" id="article-editor-save" class="detail-cat-pill" disabled>Speichern</button>
     </div>
   </dialog>
-  <script src="app.js?v=26"></script>
+  <script src="app.js?v=31"></script>
   <script src="article-editor.js?v=1"></script>
 </body>
 </html>
