@@ -264,6 +264,14 @@ function parseArticle(content, filePath) {
       if (rest) summaryLines.push(rest);
       continue;
     }
+
+    // Ohne expliziten Trenner beginnt der Artikel mit der ersten normalen
+    // Textzeile nach Datum und optionalen Metadaten. Spätere Zeilen wie
+    // "Quelle:" gehören dann zum Inhalt und dürfen den Body nicht abschneiden.
+    if (datumIdx >= 0 && raw.trim()) {
+      bodyStartIdx = i;
+      break;
+    }
   }
 
   const summary = summaryLines.join('\n').trim() || null;
@@ -1263,25 +1271,29 @@ app.use((err, _req, res, next) => {
   next(err);
 });
 
-// Reindex ohne Neustart: SIGHUP löst einen Index-Neuaufbau aus – der Prozess
-// läuft weiter, bestehende Sessions bleiben erhalten. Aus Cron als derselbe
-// User (ralf) ohne sudo aufrufbar:
-//   kill -HUP "$(systemctl show -p MainPID --value nodeapp)"
-process.on('SIGHUP', () => {
-  console.log('SIGHUP empfangen → Reindex');
-  if (!reindexState.running && !scrapeState.running && !ttsJobs.running && !infographicWrites && !markdownEditor.running) buildIndex().catch(console.error);
-});
+if (require.main === module) {
+  // Reindex ohne Neustart: SIGHUP löst einen Index-Neuaufbau aus – der Prozess
+  // läuft weiter, bestehende Sessions bleiben erhalten. Aus Cron als derselbe
+  // User (ralf) ohne sudo aufrufbar:
+  //   kill -HUP "$(systemctl show -p MainPID --value nodeapp)"
+  process.on('SIGHUP', () => {
+    console.log('SIGHUP empfangen → Reindex');
+    if (!reindexState.running && !scrapeState.running && !ttsJobs.running && !infographicWrites && !markdownEditor.running) buildIndex().catch(console.error);
+  });
 
-buildIndex().catch(console.error);
-const server = app.listen(PORT, () => {
-  console.log(`WebArchiv → http://localhost:${PORT}`);
-});
+  buildIndex().catch(console.error);
+  const server = app.listen(PORT, () => {
+    console.log(`WebArchiv → http://localhost:${PORT}`);
+  });
 
-let shuttingDown = false;
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  server.close();
-  await ttsJobs.shutdown();
-  process.exit(0);
-});
+  let shuttingDown = false;
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    server.close();
+    await ttsJobs.shutdown();
+    process.exit(0);
+  });
+}
+
+module.exports = { parseArticle };
