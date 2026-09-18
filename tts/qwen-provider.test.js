@@ -165,15 +165,19 @@ test('Anbieterdialog: explizite Auswahl, Kostenhinweis, gesperrte Anbieter und A
       const result = vm.runInContext(source.slice(start, end) + '\nchooseTtsProvider({ title: "Artikel" }, providers)', context);
       const options = element('tts-provider-options'), button = element('tts-provider-start');
       const radios = options.children.map(label => label.children[0]);
-      assert.equal(button.disabled, true);
+      const defaultProvider = providers.find(p => p.provider === 'qwen' && p.available);
+      assert.equal(button.disabled, !defaultProvider);
       assert.equal(radios.length, 2);
       providers.forEach((p, i) => {
         assert.equal(radios[i].type, 'radio');
         assert.equal(radios[i].name, 'tts-provider');
         assert.equal(radios[i].disabled, !p.available);
+        assert.equal(radios[i].checked, p === defaultProvider);
       });
+      if (defaultProvider) assert.equal(element('tts-provider-description').textContent, defaultProvider.confirmation);
       const chosen = providers.findLast(p => p.available);
       const radio = radios.find(r => r.value === (chosen?.provider || 'openai'));
+      radios.forEach(item => { item.checked = false; });
       radio.checked = true; radio.onchange();
       assert.equal(button.disabled, !chosen);
       if (chosen) assert.equal(element('tts-provider-description').textContent, chosen.confirmation);

@@ -1169,6 +1169,7 @@ function chooseTtsProvider(article, providers) {
     radio.type = 'radio'; radio.name = 'tts-provider';
     radio.value = provider.provider;
     radio.disabled = !provider.available;
+    radio.checked = provider.provider === 'qwen' && provider.available;
     const text = document.createElement('span');
     text.textContent = provider.label + (provider.available ? '' : ' – nicht verfügbar');
     label.append(radio); label.append(text);
@@ -1194,7 +1195,8 @@ function chooseTtsProvider(article, providers) {
       resolve(dialog.returnValue === 'start' ? selected || null : null);
     }, { once: true });
     dialog.showModal();
-    (radios.find(radio => !radio.disabled) || dialog.querySelector('button')).focus();
+    (radios.find(radio => radio.checked) || radios.find(radio => !radio.disabled)
+      || dialog.querySelector('button')).focus();
   });
 }
 
