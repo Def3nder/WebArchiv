@@ -1074,9 +1074,11 @@ $filterCategory.addEventListener('change', () => {
   loadArticles();
 });
 
-// Ansicht quadratisch/länglich als Piktogramm-Umschalter (Radio-Gruppe).
+// Ansicht quadratisch/länglich/Liste als Piktogramm-Umschalter (Radio-Gruppe).
+const LAYOUTS = ['square', 'tall', 'list'];
 function setLayout(layout) {
   document.body.classList.toggle('layout-tall', layout === 'tall');
+  document.body.classList.toggle('layout-list', layout === 'list');
   $filterLayout.querySelectorAll('[data-layout]').forEach(button => {
     const active = button.dataset.layout === layout;
     button.setAttribute('aria-checked', String(active));
@@ -1084,6 +1086,7 @@ function setLayout(layout) {
   });
 }
 function currentLayout() {
+  if (document.body.classList.contains('layout-list')) return 'list';
   return document.body.classList.contains('layout-tall') ? 'tall' : 'square';
 }
 $filterLayout.addEventListener('click', event => {
@@ -1094,7 +1097,8 @@ $filterLayout.addEventListener('keydown', event => {
   if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
   event.preventDefault();
   event.stopPropagation();
-  const next = currentLayout() === 'tall' ? 'square' : 'tall';
+  const step = ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1;
+  const next = LAYOUTS[(LAYOUTS.indexOf(currentLayout()) + step + LAYOUTS.length) % LAYOUTS.length];
   setLayout(next);
   $filterLayout.querySelector(`[data-layout="${next}"]`).focus();
 });

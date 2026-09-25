@@ -98,15 +98,19 @@ function extractDate(lines, filename) {
   return fm ? fm[1] : '';
 }
 
-function bodyExcerpt(text) {
-  return text
+function bodyExcerpt(text, maxLength = 320) {
+  const clean = text
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/\*\*/g, '')
     .replace(/_/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/\n{3,}/g, '\n\n')
-    .trim()
-    .slice(0, 320);
+    .trim();
+  if (clean.length <= maxLength) return clean;
+  // An der letzten Wortgrenze kürzen, damit kein Wort mitten abbricht.
+  const cut = clean.slice(0, maxLength);
+  const space = cut.search(/\s\S*$/);
+  return (space > maxLength * 0.8 ? cut.slice(0, space) : cut).trimEnd() + ' …';
 }
 
 // ─── Auto-categorizer ──────────────────────────────────────────────────────
@@ -403,7 +407,8 @@ async function scanDir(dirPath, author, year, collector) {
         excerpt,
         summary: parsed.summary || null,
         sourceUrl: parsed.sourceUrl || null,
-        preview: bodyExcerpt(parsed.body).slice(0, 200),
+        // Lang genug, um in der Listenansicht auch auf breiten Bildschirmen drei volle Zeilen zu füllen.
+        preview: bodyExcerpt(parsed.body, 1000),
         imageUrl: relImg   ? fileUrl(relImg, imgPath)     : null,
         audioUrl: relAudio
           ? (localAudioPath ? fileUrl(relAudio, audioPath) : audioFileUrl(relAudio, audioPath))

@@ -592,6 +592,80 @@ body.layout-tall .card-image   { flex: unset; aspect-ratio: 1 / 1; }
 body.layout-tall .card-title   { -webkit-line-clamp: 3; }
 body.layout-tall .card-preview { -webkit-line-clamp: 3; }
 
+/* ── Listen-Modus: eine Zeile pro Artikel ──────────────────────────────────
+   Desktop: quadratisches Bild; daneben Autor + Kategorien, Titel, Anfang des
+   Inhalts; Medien-Kennzeichen rechts oben. Handy: kleines Bild, Autor mit
+   Medien-Kennzeichen rechts, Titel. */
+body.layout-list .article-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+body.layout-list .card {
+  aspect-ratio: unset;
+  flex-direction: row;
+  align-items: center;
+  border-radius: var(--radius);
+  position: relative;
+}
+body.layout-list .card:hover { transform: none; }
+/* Desktop: quadratisches Bild; die Zeile ist so hoch wie das Bild. Das Bild wird
+   am Kartenrand statt am Bildcontainer ausgerichtet, damit die Medien-Kennzeichen
+   (ebenfalls an der Karte ausgerichtet) rechts oben neben dem Autor stehen können. */
+body.layout-list .card-image { flex: 0 0 120px; height: 120px; position: static; }
+body.layout-list .card-image img,
+body.layout-list .card-image-placeholder { position: absolute; top: 0; bottom: 0; left: 0; width: 120px; }
+body.layout-list .card-image-placeholder svg { width: 22px; height: 22px; }
+body.layout-list .card-badges { top: 8px; right: 12px; bottom: auto; flex-direction: row; gap: 4px; color: var(--accent); }
+/* Neben dem Text statt auf dem Bild: helle Kennzeichen passend zum Kartenhintergrund. */
+body.layout-list .card-audio-badge,
+body.layout-list .card-video-badge,
+body.layout-list .card-pdf-badge {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-hi);
+  backdrop-filter: none;
+}
+/* Platz für die Kennzeichen freihalten, damit Kategorien nicht darunter laufen. */
+body.layout-list .card:has(.card-badges) .card-body { padding-right: 100px; }
+body.layout-list .card:has(.card-badges > :nth-child(2)) .card-body { padding-right: 170px; }
+body.layout-list .card-date,
+body.layout-list .episode-num { display: none; }
+body.layout-list .card-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "meta cats" "title title" "preview preview";
+  /* Oben ausrichten, damit Autor und Medien-Kennzeichen immer auf einer Höhe stehen. */
+  align-self: stretch;
+  align-content: start;
+  gap: 3px 10px;
+  padding: 8px 16px 6px;
+  min-width: 0;
+}
+body.layout-list .card-meta { grid-area: meta; flex-wrap: nowrap; }
+body.layout-list .author-badge { white-space: nowrap; }
+body.layout-list .card-categories { grid-area: cats; flex-wrap: nowrap; overflow: hidden; margin: 0; align-items: center; }
+body.layout-list .card-title { grid-area: title; font-size: 0.95rem; -webkit-line-clamp: 1; }
+body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex: none; }
+@media (max-width: 600px) {
+  body.layout-list .article-grid { gap: 6px; }
+  /* Bild füllt die Zeilenhöhe; es wird am Kartenrand statt am Bildcontainer
+     ausgerichtet, damit die Medien-Kennzeichen rechts neben dem Autor stehen können. */
+  body.layout-list .card-image { flex-basis: 64px; height: auto; min-height: 48px; align-self: stretch; }
+  body.layout-list .card-image img,
+  body.layout-list .card-image-placeholder { width: 64px; }
+  body.layout-list .card-badges { top: 5px; right: 8px; }
+  body.layout-list .card-audio-badge,
+  body.layout-list .card-video-badge,
+  body.layout-list .card-pdf-badge { font-size: 0.62rem; padding: 2px 7px; }
+  /* Auf dem Handy nur die Autorenzeile freihalten; der Titel darf die volle Breite nutzen. */
+  body.layout-list .card:has(.card-badges) .card-body,
+  body.layout-list .card:has(.card-badges > :nth-child(2)) .card-body { padding-right: 10px; }
+  body.layout-list .card:has(.card-badges) .card-meta { padding-right: 80px; }
+  body.layout-list .card:has(.card-badges > :nth-child(2)) .card-meta { padding-right: 150px; }
+  body.layout-list .card-categories,
+  body.layout-list .card-preview { display: none; }
+  body.layout-list .card-body { grid-template-areas: "meta meta" "title title"; gap: 3px; padding: 5px 10px; }
+  body.layout-list .card-title { font-size: 0.85rem; -webkit-line-clamp: 2; }
+}
+
 /* ── Pagination ──────────────────────────────────────────────────────────── */
 .pagination {
   display: flex;
