@@ -245,9 +245,13 @@ public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
 ├── user-admin.js             Kennwort ändern, Benutzerverwaltung, Öffentlicher Zugang
+├── favicon.svg               Favicon (Bücherregal, Gold auf Dunkel) – Vorlage für die beiden folgenden
+├── favicon.ico               16/32/48 px (PNG-Einträge), aus favicon.svg erzeugt
+├── apple-touch-icon.png      180 px ohne Eckenradius für den iOS-Homescreen
 ├── styles.css                Styles (Light/Dark, Layouts)
 └── pdfjs/                    PDF-Anzeige
 scripts/hash-passwords.js     bcrypt-Hashes für users.json erzeugen
+scripts/make-favicons.js      favicon.ico + apple-touch-icon.png aus public/favicon.svg erzeugen
 prompts/*.txt                 Prompt-Bausteine fürs Copy-Menü (Zahl-Präfix = Reihenfolge)
 scraper/                      Eigenständiger Scraper (schreibt nach ../www)
 www/<Autor>/<Jahr>/           Inhalte (per .gitignore ausgenommen)

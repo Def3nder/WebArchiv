@@ -928,7 +928,10 @@ app.get('/a/*', (req, res) => {
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="refresh" content="0; url=${escapeHtml(target)}" />${tags}
+    <meta http-equiv="refresh" content="0; url=${escapeHtml(target)}" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />${tags}
 </head>
 <body>
     <p>Weiterleitung … <a href="${escapeHtml(target)}">Zum Artikel</a></p>

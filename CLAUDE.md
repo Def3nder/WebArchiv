@@ -16,6 +16,7 @@ code comments, and content are German.
 npm install            # install deps (express, marked, fuse.js, express-session, bcryptjs, sharp)
 npm start              # run server.js → http://localhost:3000 (PORT env overrides)
 node scripts/hash-passwords.js   # hash plaintext passwords in users.json (see Auth below)
+node scripts/make-favicons.js    # regenerate public/favicon.ico + apple-touch-icon.png from favicon.svg
 ```
 
 There is no `npm test` script, linter, or build; run tests with
