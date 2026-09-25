@@ -218,7 +218,7 @@ function uaRenderList() {
         <button type="button" class="detail-cat-pill" data-ua="password" data-email="${esc(user.email)}">Kennwort neu vergeben</button>
         <button type="button" class="detail-cat-pill ua-danger ua-icon-btn" data-ua="delete" data-email="${esc(user.email)}"
           ${isSelf ? 'disabled title="Der eigene Zugang kann nicht gelöscht werden." aria-label="Löschen nicht möglich"'
-            : `title="Nutzer löschen" aria-label="${esc(user.email)} löschen"`}>${SVG_TRASH}</button>
+            : 'title="Benutzer löschen" aria-label="Benutzer löschen"'}>${SVG_TRASH}</button>
       </div>
     </li>`;
   }).join('');

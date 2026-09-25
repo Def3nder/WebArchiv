@@ -1576,7 +1576,8 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
 .ua-user-name strong { font-weight: 600; overflow-wrap: anywhere; }
 .ua-user-authors { margin: 4px 0 0; font-size: .8rem; color: var(--text-muted); overflow-wrap: anywhere; }
 .ua-user-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; flex-shrink: 0; }
-.ua-danger:hover { color: var(--red); border-color: var(--red); }
+.ua-danger:not(:disabled):hover,
+.ua-danger:not(:disabled):focus-visible { background: var(--red); border-color: var(--red); color: #fff; }
 .ua-icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; }
 .ua-icon-btn svg { display: block; }
 .ua-badge, .ua-tag {
