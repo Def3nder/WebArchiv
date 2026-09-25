@@ -4,11 +4,11 @@ const path = require('path');
 const { marked } = require('marked');
 const Fuse = require('fuse.js');
 const session = require('express-session');
-const bcrypt  = require('bcryptjs');
 const sharp   = require('sharp');
 const { spawn } = require('child_process');
 const { createTtsJobs, installTtsRoutes } = require('./tts/jobs.cjs');
 const { createMarkdownEditor, installMarkdownRoutes } = require('./article-editor.cjs');
+const { createUserStore, installUserRoutes } = require('./user-store.cjs');
 
 const app = express();
 // Hinter dem Reverse-Proxy (Caddy/HTTPS) X-Forwarded-Proto/Host respektieren,
@@ -22,25 +22,14 @@ const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 
 // ─── Users ─────────────────────────────────────────────────────────────────
 
-const USERS_FILE = path.join(__dirname, 'users.json');
-let users = [];
-try {
-  const parsed = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-  users = Array.isArray(parsed) ? parsed : (parsed.users || []);
-} catch (err) {
-  console.error('WARNING: users.json nicht geladen —', err.message);
-}
-
-const PUBLIC_DIRS_FILE = path.join(__dirname, 'public-directories.txt');
-let publicAuthors = [];
-try {
-  const parsed = JSON.parse(fs.readFileSync(PUBLIC_DIRS_FILE, 'utf8'));
-  publicAuthors = Array.isArray(parsed['public-directories'])
-    ? parsed['public-directories'] : [];
-  console.log(`Public-Autoren: ${publicAuthors.length ? publicAuthors.join(', ') : '(keine)'}`);
-} catch (err) {
-  console.warn('public-directories.txt nicht geladen —', err.message);
-}
+// Nutzer (users.json) und öffentliche Autoren (public-directories.txt) werden
+// über die Benutzerverwaltung gepflegt und zur Laufzeit geschrieben.
+const userStore = createUserStore({
+  usersFile: process.env.USERS_FILE || path.join(__dirname, 'users.json'),
+  publicFile: process.env.PUBLIC_DIRS_FILE || path.join(__dirname, 'public-directories.txt'),
+});
+userStore.load();
+console.log(`Public-Autoren: ${userStore.publicAuthors.length ? userStore.publicAuthors.join(', ') : '(keine)'}`);
 
 let articles = [];
 let meta = { authors: [], years: [], categories: [] };
@@ -564,18 +553,10 @@ async function rebuildIndex() {
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
-function findUser(email) {
-  return users.find(u => u.email.toLowerCase() === (email || '').toLowerCase());
-}
-
 function canAccessAuthor(sessionUser, author) {
   if (!sessionUser) return false;
   if (sessionUser.allowedAuthors === null) return true;
   return sessionUser.allowedAuthors.includes(author);
-}
-
-function isPublicAuthor(author) {
-  return publicAuthors.includes(author);
 }
 
 function canUploadInfographic(sessionUser, article) {
@@ -583,8 +564,7 @@ function canUploadInfographic(sessionUser, article) {
     sessionUser?.role === 'admin' &&
     article &&
     canAccessAuthor(sessionUser, article.author) &&
-    article.author !== INFOGRAPHICS_AUTHOR &&
-    !isPublicAuthor(article.author)
+    article.author !== INFOGRAPHICS_AUTHOR
   );
 }
 
@@ -779,14 +759,14 @@ function requireAdmin(req, res, next) {
 
 function getEffectiveUser(req) {
   if (req.session?.user) return req.session.user;
-  return { email: null, role: 'guest', allowedAuthors: publicAuthors };
+  return { email: null, role: 'guest', allowedAuthors: userStore.publicAuthors };
 }
 
 // Soft auth: attaches req.user (session user or anonymous guest with public-author whitelist).
 // Returns 401 only when no session AND no public authors are configured.
 function attachUser(req, res, next) {
   req.user = getEffectiveUser(req);
-  if (req.user.role === 'guest' && publicAuthors.length === 0) {
+  if (req.user.role === 'guest' && userStore.publicAuthors.length === 0) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
@@ -802,22 +782,52 @@ app.use(session({
   saveUninitialized: false,
   cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax' },
 }));
+// Session-Nutzer bei jeder Anfrage frisch aus dem Nutzerbestand auflösen: geänderte
+// Rechte wirken sofort; gelöschte Nutzer oder neu vergebene Kennwörter beenden Sitzungen.
+app.use((req, res, next) => {
+  if (req.session?.user) {
+    const fresh = userStore.sessionUser(req.session.user);
+    if (fresh) req.session.user = fresh;
+    else delete req.session.user;
+  }
+  next();
+});
+
+// Solange eine Kennwortänderung aussteht, sind nur Anmelde-/Kennwortrouten erlaubt.
+const PASSWORD_PENDING_ALLOWED = new Set(['/api/me', '/api/me/password', '/api/login', '/api/logout']);
+app.use((req, res, next) => {
+  if (!req.session?.user?.mustChangePassword || PASSWORD_PENDING_ALLOWED.has(req.path)) return next();
+  if (/^\/(api|files|audio-files)\//.test(req.path)) {
+    return res.status(403).json({ error: 'Bitte zuerst ein neues Kennwort festlegen.', mustChangePassword: true });
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Auth routes (public) ──────────────────────────────────────────────────
 
+function meView(user) {
+  const { sessionVersion, ...view } = user;
+  return view;
+}
+
 app.get('/api/me', (req, res) => {
-  res.json(getEffectiveUser(req));
+  res.set('Cache-Control', 'no-store');
+  res.json(meView(getEffectiveUser(req)));
 });
 
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body || {};
-  const user = findUser(email);
-  if (!user || !(await bcrypt.compare(password || '', user.passwordHash || ''))) {
+  const auth = await userStore.authenticate(email, password);
+  if (!auth) {
     return res.status(401).json({ error: 'Ungültige E-Mail oder Passwort' });
   }
-  req.session.user = { email: user.email, role: user.role, allowedAuthors: user.allowedAuthors };
-  res.json(req.session.user);
+  // Neue Session-ID nach der Anmeldung (Schutz vor Session-Fixation).
+  req.session.regenerate(err => {
+    if (err) return res.status(500).json({ error: 'Anmeldung fehlgeschlagen.' });
+    req.session.user = userStore.sessionUser(auth);
+    res.json(meView(req.session.user));
+  });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -1259,6 +1269,7 @@ app.get('/api/articles/*', attachUser, (req, res) => {
 
 installTtsRoutes(app, requireAdmin, ttsJobs);
 installMarkdownRoutes(app, requireAdmin, markdownEditor);
+installUserRoutes(app, { store: userStore, requireAuth, requireAdmin, getAuthors: () => meta.authors });
 
 app.use((err, _req, res, next) => {
   if (_req.path.startsWith('/api/article-markdown/')) {

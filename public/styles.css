@@ -1485,3 +1485,195 @@ body.layout-tall .card-preview { -webkit-line-clamp: 3; }
   #article-editor { padding: 18px; width: calc(100vw - 16px); height: calc(100dvh - 16px); }
   #article-editor-text { padding: 12px; font-size: 16px; }
 }
+
+/* ── Konto: Aktionen-Button für Nutzer, Kennwort-Dialog, Benutzerverwaltung ── */
+.reindex-btn.is-account { display: inline-flex; align-items: center; padding: 5px 7px; }
+.reindex-btn[hidden] { display: none; }
+.header-menu-dropdown [hidden] { display: none; }
+.header-menu-account {
+  margin: 0;
+  padding: 8px 12px 6px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.header-menu-account:empty { display: none; }
+.header-menu-sep { border: 0; border-top: 1px solid var(--border); margin: 4px 6px; }
+
+.account-dialog {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 28px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 90px #0006;
+}
+.account-dialog::backdrop { background: #0009; backdrop-filter: blur(4px); }
+.account-dialog form { display: flex; flex-direction: column; gap: 14px; }
+.account-dialog .login-title { margin: 0; }
+.account-hint { margin: 0; font-size: .8rem; color: var(--text-muted); line-height: 1.5; }
+.account-buttons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 4px; }
+.account-buttons .detail-cat-pill { font-size: .8rem; padding: 6px 14px; }
+.account-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.account-primary:hover { color: var(--bg); filter: brightness(1.08); }
+.account-dialog button:disabled { opacity: .5; cursor: default; }
+.account-notice {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 400;
+  padding: 10px 18px;
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: .85rem;
+  box-shadow: var(--shadow);
+}
+
+.account-dialog-wide { width: min(820px, calc(100vw - 32px)); height: min(960px, calc(100dvh - 32px)); }
+.account-dialog-wide[open] { display: flex; flex-direction: column; gap: 12px; }
+#user-admin-title { margin: 0; font-family: var(--font-head); font-size: 1.6rem; }
+.user-admin-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+.user-admin-tabs button {
+  padding: 8px 14px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: .85rem;
+  cursor: pointer;
+}
+.user-admin-tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.user-admin-status { margin: 0; min-height: 1.2em; font-size: .85rem; color: var(--accent); }
+.user-admin-status.is-error { color: var(--red); }
+.user-admin-panel { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.user-admin-panel[hidden] { display: none; }
+
+.ua-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.ua-toolbar .detail-cat-pill { font-size: .8rem; padding: 6px 14px; }
+.ua-count { margin: 0; font-size: .8rem; color: var(--text-muted); }
+.ua-user-list, .ua-author-list { list-style: none; margin: 0; padding: 0; }
+.ua-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.ua-user-main { min-width: 0; }
+.ua-user-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ua-user-name strong { font-weight: 600; overflow-wrap: anywhere; }
+.ua-user-authors { margin: 4px 0 0; font-size: .8rem; color: var(--text-muted); overflow-wrap: anywhere; }
+.ua-user-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; flex-shrink: 0; }
+.ua-danger:hover { color: var(--red); border-color: var(--red); }
+.ua-icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; }
+.ua-icon-btn svg { display: block; }
+.ua-badge, .ua-tag {
+  font-size: .68rem;
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid var(--border-hi);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ua-badge.is-admin { color: var(--accent); border-color: var(--accent-dim); }
+.ua-badge.is-warn, .ua-tag.is-warn { color: var(--red); border-color: var(--red); }
+.ua-empty { padding: 12px 0; color: var(--text-muted); font-size: .85rem; }
+
+.ua-form { display: flex; flex-direction: column; gap: 14px; }
+.ua-form-title { margin: 0; font-size: 1.05rem; }
+/* Speichern/Abbrechen bleiben beim Scrollen unten im Dialog sichtbar. */
+.ua-form-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 2px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.ua-form-footer .account-buttons { margin-top: 0; }
+.ua-form input[readonly] { opacity: .7; }
+.ua-fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px 12px; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ua-fieldset legend { padding: 0 6px; font-size: .8rem; color: var(--text-muted); }
+.ua-legend { margin: 0 0 2px; font-size: .8rem; color: var(--text-muted); }
+.user-admin-status:empty { display: none; }
+.ua-radio-row { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 8px; }
+.ua-radio { display: flex; align-items: center; gap: 8px; font-size: .88rem; cursor: pointer; }
+.ua-radio input, .ua-author input { accent-color: var(--accent); flex-shrink: 0; }
+.ua-password-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ua-password-row .login-input { flex: 1 1 200px; font-family: ui-monospace, Consolas, monospace; }
+
+.ua-picker-body[hidden] { display: none; }
+.ua-picker-tools { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ua-picker-search { flex: 1; min-width: 0; }
+.ua-author-list { overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+/* Formulare mit Autorenliste füllen den Dialog; nur die Liste scrollt. Reicht die
+   Höhe nicht für die Mindesthöhe der Liste, scrollt ersatzweise der Bereich. */
+.ua-form:has(.ua-picker) { height: 100%; }
+/* Keine min-height: 0 an den Hüllen: so bleibt der Rahmen mindestens so hoch
+   wie Liste (Mindesthöhe) plus Werkzeuge, statt dass die Liste herausragt. */
+.ua-fieldset-authors:has(.ua-picker-body:not([hidden])),
+.ua-form > .ua-picker { flex: 1 1 0; }
+.ua-fieldset-authors .ua-picker, .ua-form > .ua-picker { display: flex; flex-direction: column; flex: 1 1 0; }
+.ua-picker-body:not([hidden]) { display: flex; flex-direction: column; flex: 1 1 0; }
+.ua-picker-body .ua-author-list { flex: 1 1 0; min-height: 140px; }
+.ua-author-list li[hidden] { display: none; }
+.ua-author {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: .88rem;
+  cursor: pointer;
+}
+.ua-author-list li:last-child .ua-author { border-bottom: 0; }
+.ua-author:hover { background: var(--surface-2); }
+.ua-author.is-locked { cursor: default; color: var(--text-muted); }
+.ua-author-name { margin-right: auto; }
+.ua-picker-count { margin: 6px 0 0; font-size: .78rem; color: var(--text-muted); }
+.ua-warning { margin: 0; padding: 8px 12px; border: 1px solid var(--red); border-radius: var(--radius); color: var(--red); font-size: .85rem; }
+.ua-warning[hidden] { display: none; }
+
+@media (max-width: 600px) {
+  .account-dialog { padding: 18px; width: calc(100vw - 16px); }
+  /* Kompakte Benutzerverwaltung auf dem Handy: möglichst viel Platz für die Autorenliste. */
+  .account-dialog-wide { height: calc(100dvh - 16px); padding: 12px 14px 10px; gap: 8px; }
+  #user-admin .article-editor-eyebrow { display: none; }
+  #user-admin-title { font-size: 1.2rem; }
+  #user-admin-close { padding: 2px 9px; }
+  .user-admin-tabs button { padding: 6px 10px; }
+  .ua-form { gap: 8px; }
+  .ua-form-title { font-size: .95rem; }
+  .ua-form .login-field { gap: 3px; }
+  .ua-form .login-input { padding: 7px 10px; font-size: 16px; }
+  .ua-fieldset { padding: 6px 10px 8px; gap: 4px; }
+  .ua-radio { font-size: .85rem; }
+  .ua-radio-hint { display: none; }
+  .ua-mobile-hidden { display: none; }
+  .ua-fieldset-inline { flex-direction: row; flex-wrap: wrap; column-gap: 18px; }
+  .ua-fieldset-inline .account-hint { flex-basis: 100%; }
+  .ua-radio-row { gap: 4px 14px; margin-bottom: 6px; }
+  .ua-author { padding: 5px 10px; font-size: .85rem; }
+  .ua-picker-body .ua-author-list { min-height: 160px; }
+  .ua-picker-count { margin-top: 4px; font-size: .75rem; }
+  .ua-form-footer { padding-top: 8px; gap: 6px; }
+  .account-hint { font-size: .75rem; }
+  .ua-user { flex-direction: column; align-items: stretch; }
+  .ua-user-actions { justify-content: flex-start; }
+}

@@ -27,6 +27,9 @@ Diese Datei ist eine thematische Zusammenfassung, kein wortgetreues Transkript. 
 | Providerwechsel | Kein automatischer Wechsel eines laufenden Auftrags zu OpenAI und keine erneute Synthese wegen eines Reindex-Fehlers. |
 | PDF.js | Lokal unter `public/vendor/pdfjs`; der zuvor erwogene CDN-Umbau wurde nicht umgesetzt. |
 | Inhaltsaktualisierung | Reindex statt Dienstneustart. Beim Cron-Wrapper besteht noch eine Abweichung vom dokumentierten Soll, siehe Abschnitt 10. |
+| Benutzerverwaltung (25.09.) | Admin pflegt Nutzer, Rechte, Kennwörter und öffentliche Autoren über Aktionen → *Benutzerverwaltung*; jeder Nutzer kann sein Kennwort ändern. Siehe Abschnitt 4a. |
+| Öffentliche Autoren (25.09.) | Angemeldete Nutzer mit Autorenliste sehen öffentliche Autoren immer zusätzlich. |
+| „Neue Grafik“ (25.09.) | Für alle Autoren außer `Infografiken` selbst, auch für öffentliche Autoren. |
 
 ## 2. Projekt, Architektur und Datenmodell
 
@@ -122,7 +125,7 @@ Aktuell abgeglichen: `server.js:166–299` (`parseArticle`) und `scraper/scrape_
 - Autorenrechte werden in Listen, Metadaten, Detailabruf und Datei-Auslieferung berücksichtigt. Neue Funktionen dürfen nicht ausschließlich durch ausgeblendete UI-Elemente geschützt werden.
 - Dateipfade werden serverseitig bestimmt und gegen die jeweilige Wurzel geprüft. Editor und TTS prüfen zusätzlich auf unzulässige Symlink-/Junction-Pfade.
 - `express-session` verwendet derzeit den Arbeitsspeicher. Ein Dienstneustart verliert die Sessions; ein Reindex nicht. `SESSION_SECRET` muss im produktiven Dienst gesetzt sein.
-- Passwörter werden mit `node scripts/hash-passwords.js` von `password` nach `passwordHash` überführt. Für einen Wechsel den alten Hash entfernen, ein neues Klartextfeld setzen und das Skript ausführen; der Klartext wird dabei entfernt.
+- Passwörter werden mit `node scripts/hash-passwords.js` von `password` nach `passwordHash` überführt (Liste oder Objekt mit `users`). Im laufenden Betrieb erfolgt die Pflege über die Benutzerverwaltung, siehe Abschnitt 4a.
 
 ### Gewollte Ausnahme: Link-Vorschau
 
@@ -138,11 +141,33 @@ Eine öffentliche Infografik darf intern auf Audio eines geschützten Autors ver
 
 Aktuell abgeglichen: `server.js:486–492` (`exposeArticleForUser`) und `/audio-files/*` ab `server.js:842`. Quellen: [G4], [D1], [D2], Projektregeln.
 
+## 4a. Benutzerverwaltung und eigene Kennwortänderung (25.09.2026)
+
+Entscheidungen des Benutzers in dieser Sitzung:
+
+- Aufruf über den Aktionen-Button im Header. Admin behält das ↺-Icon und erhält die Einträge *Benutzerverwaltung* und *Kennwort ändern*. Rolle `user` sieht den Button ebenfalls, aber mit **Personen-Icon** und nur „Angemeldet als …“ plus *Kennwort ändern*. Gäste sehen ihn nicht.
+- Benutzerverwaltung: Nutzer anzeigen (Rolle, Autoren-Kurzfassung, „Kennwortänderung ausstehend“), anlegen, bearbeiten (Rolle, Autoren), **Kennwort neu vergeben**, **löschen** (mit Bestätigung).
+- Beim Anlegen und Neuvergeben wählt der Admin per Radio-Buttons: *Nutzer muss das Kennwort ändern* (**vorausgewählt**) oder *Nutzer behält dieses Kennwort*. Kennwort eintippen oder erzeugen lassen (Anzeigen/Kopieren).
+- Mindestlänge **8 Zeichen** (bcrypt: höchstens 72 Byte).
+- Autorenauswahl: Schalter *Alle Autoren, auch künftige* (`null`) oder *Nur ausgewählte*; dann durchsuchbare Checkliste mit *Alle*/*Keine* und Zähler. Öffentliche Autoren erscheinen angehakt und gesperrt („durch öffentlichen Zugang“) und werden beim Speichern **nicht** in die Nutzerliste geschrieben; bereits vorhandene Alteinträge entfallen beim nächsten Speichern des Nutzers (Entscheidung b vom 25.09.). Telegram erscheint mit Hinweis „standardmäßig ausgeblendet“, verwaiste Einträge als „nicht mehr vorhanden“. Die Kurzfassung in der Nutzerliste zählt öffentliche Autoren nie als eigene.
+- Reiter **Öffentlicher Zugang** pflegt `public-directories.txt` mit derselben Checkliste; leere Auswahl zeigt die Warnung, dass das Archiv dann nur mit Anmeldung nutzbar ist. Wirkt sofort ohne Neustart.
+- **Angemeldete Nutzer mit Autorenliste sehen die öffentlichen Autoren automatisch zusätzlich.**
+
+Technik:
+
+- `user-store.cjs` liest/schreibt `users.json` und `public-directories.txt`: temporäre Datei im selben Ordner, atomares Ersetzen, Rechte/Eigentümer erhalten, Schreibvorgänge nacheinander, vor jeder Änderung frisch einlesen (Handänderungen gehen nicht verloren). Format (Liste bzw. Objekt mit `_comment`) und unbekannte Felder bleiben erhalten.
+- Session speichert nur E-Mail und `sessionVersion`; eine Middleware in `server.js` löst Rolle/Rechte bei jeder Anfrage neu auf. Rechteänderungen wirken sofort; gelöschte Nutzer verlieren die Sitzung; neues Kennwort erhöht `sessionVersion` und beendet die übrigen Sitzungen (die eigene bleibt). Alte Sitzungen ohne `sessionVersion` bleiben gültig.
+- `mustChangePassword` wird **serverseitig** durchgesetzt: bis zur Änderung antworten `/api/*`, `/files/*`, `/audio-files/*` mit 403 (`mustChangePassword: true`); erlaubt bleiben `/api/me`, `/api/me/password`, `/api/login`, `/api/logout`. Die Oberfläche zeigt einen nicht schließbaren Dialog mit „Abmelden“ als einziger Alternative.
+- Schutzregeln: eigene Rolle nicht änderbar, eigener Zugang nicht löschbar, letzter Admin nicht herabstufbar/löschbar, E-Mail eindeutig (ohne Groß-/Kleinschreibung) und nachträglich nicht änderbar, Cross-Site-Schreibanfragen abgewiesen, Session-ID wird nach dem Login neu vergeben, unbekannte E-Mails werden gegen einen Dummy-Hash geprüft.
+- Deployment: Der Dienstbenutzer `ralf` braucht Schreibrecht auf `users.json`, `public-directories.txt` und `/opt/nodeapp` (für die temporäre Datei); `users.json` sinnvollerweise `600`. Nach dem Einspielen Dienst neu starten. Hinweis: `public-directories.txt` ist im Git eingecheckt; beim Code-Deployment die produktive Fassung nicht versehentlich überschreiben.
+- Für Tests lassen sich die Dateipfade über `USERS_FILE` und `PUBLIC_DIRS_FILE` umlenken.
+- Geprüft am 25.09.2026: 10 neue Tests in `user-store.test.cjs` (zusammen mit Parser- und Editortests 21/21 bestanden) sowie Browserprüfung mit Testdateien: Menü je Rolle, Nutzer bearbeiten/anlegen/löschen, Kennwort neu vergeben, Pflichtdialog (Escape gesperrt, Fehlermeldungen, Serversperre 403, Freigabe nach Änderung), Öffentlicher Zugang inklusive sofortiger Wirkung für Gäste. Die echte `users.json` wurde dabei nicht verwendet.
+
 ## 5. Infografiken erstellen und verknüpfen
 
 ### Upload
 
-Der Upload wurde für Administratoren in der Artikel-Detailansicht eingeführt, bei Autoren außerhalb der Public-Liste. Der Server entscheidet, ob die Aktion zulässig ist. Öffentliche Autoren einschließlich `Infografiken` sind nicht einfach deshalb Upload-Quellen, weil ein Admin angemeldet ist.
+Der Upload wurde für Administratoren in der Artikel-Detailansicht eingeführt. Der Server entscheidet, ob die Aktion zulässig ist. **Seit 25.09.2026 gilt:** Der Button steht bei allen Autoren zur Verfügung, auch bei öffentlichen; ausgenommen bleibt nur der Autor `Infografiken` selbst (ausdrücklich bestätigt). Die frühere Einschränkung auf Autoren außerhalb der Public-Liste ist historisch.
 
 Vorgaben aus der Umsetzung und den anschließenden Korrekturen:
 
@@ -603,7 +628,7 @@ Vom Projektroot, mit installierten jeweiligen Abhängigkeiten:
 node --check server.js
 node --check public/app.js
 node --check public/article-editor.js
-node --test server.test.cjs article-editor.test.cjs
+node --test server.test.cjs article-editor.test.cjs user-store.test.cjs
 npm test --prefix scraper
 npm test --prefix tts
 python -B -m unittest discover -s tts -p test_qwen_http_service.py -v
@@ -628,7 +653,7 @@ Für eine echte Abnahme gezielt Rechte, vorhandene MP3, parallele Starts, Abbruc
 
 ### Frühere Ideen, keine zugesagten nächsten Implementierungen
 
-Die frühen Notizen nannten Benutzerverwaltung in der UI, persistente Sessions, Datumsbereich-Picker, Lesezeichen, Bildergalerie, Zusammenfassung als Kachelvorschau, PDF.js-Setuphilfe, Video-Poster, PDF-/EPUB-/CSV-Export und Offline-Modus. Diese Punkte sind ein historischer Ideenspeicher; ihr vollständiger aktueller Umsetzungsstand wurde nicht geprüft.
+Die frühen Notizen nannten Benutzerverwaltung in der UI (seit 25.09.2026 umgesetzt, Abschnitt 4a), persistente Sessions, Datumsbereich-Picker, Lesezeichen, Bildergalerie, Zusammenfassung als Kachelvorschau, PDF.js-Setuphilfe, Video-Poster, PDF-/EPUB-/CSV-Export und Offline-Modus. Diese Punkte sind ein historischer Ideenspeicher; ihr vollständiger aktueller Umsetzungsstand wurde nicht geprüft.
 
 Die ebenfalls dort als offen bezeichnete kombinierte Text-/Datumssuche ist bereits umgesetzt. Teilen/Link-Vorschau und die überarbeitete Bildvollansicht wurden ebenfalls später bearbeitet. Alte Aufgabenlisten nicht ungeprüft als aktuellen Backlog übernehmen.
 

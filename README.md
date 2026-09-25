@@ -104,13 +104,27 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
 
 - **`users.json`** (nicht eingecheckt): Liste von Nutzern
   ```json
-  [{ "email": "a@b.de", "passwordHash": "<bcrypt>", "role": "admin", "allowedAuthors": null }]
+  [{ "email": "a@b.de", "passwordHash": "<bcrypt>", "role": "admin", "allowedAuthors": null, "mustChangePassword": false }]
   ```
-  - `passwordHash`: bcrypt (siehe `scripts/hash-passwords.js`).
+  - `passwordHash`: bcrypt. Erstanlage per `scripts/hash-passwords.js`, danach
+    über die **Benutzerverwaltung** in der Oberfläche.
   - `role`: `admin` sieht das Aktions-Menü hinter dem **↺-Button** (Archiv neu
-    einlesen, Neue Beiträge scrapen, Scrape-Log anzeigen) und darf `/api/reindex`,
-    `/api/scrape` + `/api/scrape/log` nutzen.
+    einlesen, Neue Beiträge scrapen, Scrape-Log, Benutzerverwaltung, Kennwort
+    ändern). `user` sieht denselben Button mit **Personen-Icon** und nur
+    „Kennwort ändern“.
   - `allowedAuthors`: `null` = alle Autoren; sonst Whitelist von Autor-Ordnern (ACL).
+    Öffentliche Autoren kommen für angemeldete Nutzer immer hinzu.
+  - `mustChangePassword`: `true` = nach der nächsten Anmeldung muss ein eigenes
+    Kennwort gesetzt werden; bis dahin sperrt der Server alle Daten-/Datei-Routen.
+  - `sessionVersion` (automatisch): wird bei neuem Kennwort erhöht und beendet
+    damit die übrigen Sitzungen des Nutzers.
+- **Benutzerverwaltung** (Admin, Aktionen → *Benutzerverwaltung*): Nutzer anzeigen,
+  anlegen, Rolle/Autoren ändern, Kennwort neu vergeben (wahlweise mit Pflicht zur
+  Änderung), löschen; Reiter *Öffentlicher Zugang* pflegt `public-directories.txt`.
+  Rechteänderungen wirken sofort, weil die Session nur E-Mail und `sessionVersion`
+  trägt und Rolle/Autoren bei jeder Anfrage frisch aufgelöst werden. Schutzregeln:
+  eigene Rolle nicht änderbar, eigener Zugang nicht löschbar, letzter Admin bleibt.
+  Kennwörter mindestens 8 Zeichen.
 - **Gäste** (ohne Login) bekommen die Rolle `guest` mit den in
   **`public-directories.txt`** gelisteten öffentlichen Autoren:
   ```json
@@ -118,8 +132,16 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
   ```
   Sind keine öffentlichen Autoren konfiguriert, ist die App vollständig
   login-pflichtig (401).
+- **Schreiben der Dateien** (`user-store.cjs`): temporäre Datei im selben Ordner,
+  dann atomar ersetzen; Rechte/Eigentümer bleiben erhalten. Jede Änderung liest die
+  Datei vorher frisch ein, Handänderungen gehen also nicht verloren. Wird
+  `users.json` bei laufendem Server von Hand bearbeitet (z. B. `hash-passwords.js`),
+  gilt der neue Stand für Anmeldungen erst nach der nächsten Änderung über die
+  Oberfläche oder einem Neustart. Der Dienstbenutzer braucht Schreibrecht auf
+  `users.json`, `public-directories.txt` **und** das App-Verzeichnis.
 - **Sessions** via `express-session` (Cookie 7 Tage, `httpOnly`, `sameSite=lax`);
-  Secret über `SESSION_SECRET` (Env) setzen.
+  Secret über `SESSION_SECRET` (Env) setzen. Nach dem Login wird die Session-ID
+  neu vergeben.
 - Datei-Auslieferung `/files/*` prüft die Autor-ACL (kein Zugriff auf fremde Autoren,
   Path-Traversal-Schutz).
 
@@ -132,6 +154,13 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
 | `GET /api/me` | – | Aktueller (oder Gast-)Nutzer |
 | `POST /api/login` | – | Anmeldung `{email,password}` |
 | `POST /api/logout` | – | Abmeldung |
+| `POST /api/me/password` | Auth | Eigenes Kennwort ändern `{currentPassword,newPassword}` |
+| `GET /api/users` | Admin | Nutzer (ohne Hashes), alle Autoren, öffentliche Autoren |
+| `POST /api/users` | Admin | Nutzer anlegen `{email,role,allowedAuthors,password,mustChangePassword}` |
+| `PATCH /api/users/:email` | Admin | Rolle/Autoren/Änderungspflicht ändern |
+| `POST /api/users/:email/password` | Admin | Kennwort neu vergeben `{password,mustChangePassword}` |
+| `DELETE /api/users/:email` | Admin | Nutzer löschen |
+| `PUT /api/public-authors` | Admin | Öffentliche Autoren setzen `{authors:[…]}` |
 | `GET /api/meta` | Soft | Autoren/Jahre/Kategorien (ACL-gefiltert) |
 | `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram` |
 | `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml` |
@@ -209,11 +238,13 @@ Facebook benötigt `scraper/cookies.txt` (Netscape-Format) und `scraper/Abonente
 ## Projektstruktur
 
 ```
-server.js                     Express-App (gesamter Backend-Code)
+server.js                     Express-App (Routen, Index, Auth-Anbindung)
+user-store.cjs                Nutzer & öffentliche Autoren: Lesen/Schreiben, Regeln, Routen
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp
 public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
-├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Admin-Menü: Reindex/Scrape/Log)
+├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
+├── user-admin.js             Kennwort ändern, Benutzerverwaltung, Öffentlicher Zugang
 ├── styles.css                Styles (Light/Dark, Layouts)
 └── pdfjs/                    PDF-Anzeige
 scripts/hash-passwords.js     bcrypt-Hashes für users.json erzeugen
@@ -251,6 +282,8 @@ node server.js            # bzw. npm start  →  http://localhost:3000
 |---|---|---|
 | `PORT` | `3000` | HTTP-Port |
 | `SESSION_SECRET` | Dev-Fallback | Signatur der Session-Cookies (in Prod setzen!) |
+| `USERS_FILE` | `./users.json` | Abweichender Pfad der Nutzerdatei (z. B. für Tests) |
+| `PUBLIC_DIRS_FILE` | `./public-directories.txt` | Abweichender Pfad der Liste öffentlicher Autoren |
 | `PLAYWRIGHT_BROWSERS_PATH` | – | Chromium-Ablage für den Scraper (siehe Setup-Doku) |
 
 Scraper zusätzlich einrichten:

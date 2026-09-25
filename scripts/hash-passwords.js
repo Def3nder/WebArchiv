@@ -8,7 +8,8 @@
  *
  * Passwort ändern:
  *   "passwordHash"-Zeile löschen, "password": "NeuesPasswort" eintragen,
- *   Skript erneut ausführen.
+ *   Skript erneut ausführen. Im laufenden Betrieb geht das einfacher über
+ *   Aktionen → Benutzerverwaltung (Admin) bzw. Aktionen → Kennwort ändern.
  */
 
 const bcrypt = require('bcryptjs');
@@ -18,11 +19,18 @@ const path = require('path');
 const USERS_FILE = path.join(__dirname, '..', 'users.json');
 
 async function main() {
-  let users;
+  let data;
   try {
-    users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+    data = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
   } catch (err) {
     console.error('Fehler beim Lesen von users.json:', err.message);
+    process.exit(1);
+  }
+
+  // Reine Liste oder Objekt mit "users" (wie example-users.json).
+  const users = Array.isArray(data) ? data : data?.users;
+  if (!Array.isArray(users)) {
+    console.error('users.json enthält weder eine Liste noch ein Feld "users".');
     process.exit(1);
   }
 
@@ -42,7 +50,7 @@ async function main() {
   }
 
   if (changed > 0) {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+    fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2) + '\n', 'utf8');
     console.log(`\n${changed} Passwort(e) gehashed — users.json aktualisiert.`);
   } else {
     console.log('\nKeine Änderungen notwendig.');

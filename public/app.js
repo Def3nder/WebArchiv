@@ -244,12 +244,33 @@ function hideLogin() {
   $loginError.hidden = true;
 }
 
+const SVG_ACCOUNT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
+
 function applyUserUI(user) {
   if (user?.role !== 'admin') clearTtsUI();
   const isGuest = !user || user.role === 'guest';
-  $reindexBtn.hidden = !(user && user.role === 'admin');
+  const isAdmin = user?.role === 'admin';
+  // Aktionen-Button: Admin mit ↺, normaler Nutzer mit Personen-Icon (nur Konto-Einträge).
+  $reindexBtn.hidden = isGuest;
+  if (isGuest) closeAdminMenu();
+  if (isAdmin) {
+    if (!$reindexBtn.disabled) $reindexBtn.textContent = '↺';
+  } else {
+    $reindexBtn.innerHTML = SVG_ACCOUNT;
+  }
+  $reindexBtn.classList.toggle('is-account', !isGuest && !isAdmin);
+  $adminMenu.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !isAdmin; });
+  document.getElementById('header-menu-account').textContent = isGuest ? '' : `Angemeldet als ${user.email}`;
   $logoutBtn.hidden  = isGuest;
   $loginBtn.hidden   = !isGuest;
+}
+
+// Vom Admin verlangte Kennwortänderung: ohne neues Kennwort bleibt nur Abmelden.
+async function ensurePasswordChanged() {
+  if (!currentUser?.mustChangePassword) return true;
+  if (await openPasswordDialog({ forced: true })) return true;
+  await logout();
+  return false;
 }
 
 async function login(email, password) {
@@ -273,6 +294,7 @@ async function login(email, password) {
     currentUser = data;
     hideLogin();
     applyUserUI(currentUser);
+    if (!(await ensurePasswordChanged())) return;
     await loadMeta();
     await loadArticles();
     const deepId = location.hash.startsWith('#/article/')
@@ -324,6 +346,14 @@ async function apiFetch(url, options) {
     applyUserUI(null);
     showLogin('Ihre Sitzung ist abgelaufen. Bitte erneut anmelden.');
     throw new Error('Session expired');
+  }
+  if (r.status === 403 && currentUser && currentUser.role !== 'guest') {
+    const data = await r.clone().json().catch(() => null);
+    if (data?.mustChangePassword) {
+      currentUser = { ...currentUser, mustChangePassword: true };
+      ensurePasswordChanged().then(ok => { if (ok) { loadMeta(); loadArticles(); } });
+      throw new Error('Password change required');
+    }
   }
   return r;
 }
@@ -1549,6 +1579,8 @@ $adminMenu.addEventListener('click', ev => {
   else if (action === 'log') showScrapeLog();
   else if (action === 'tts') runTts();
   else if (action === 'tts-job') showTtsJob();
+  else if (action === 'users') openUserAdmin();
+  else if (action === 'password') openPasswordDialog({ forced: false });
 });
 
 $overlayClose.addEventListener('click', closeOverlay);
@@ -1769,6 +1801,7 @@ async function init() {
     showLogin();
     return;
   }
+  if (!(await ensurePasswordChanged())) return;
 
   // Check for article deep-link in hash
   const deepId = location.hash.startsWith('#/article/')

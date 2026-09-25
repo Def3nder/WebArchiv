@@ -1,23 +1,26 @@
 {
-  "_comment": "Kopiere diese Datei als 'users.json', trage die gewuenschten Kennwoerter im Feld 'password' ein und fuehre dann 'node scripts/hash-passwords.js' aus. Die Datei 'users.json' ist in .gitignore eingetragen und landet nicht im Repository. allowedAuthors 'null' bedeutet keine Einschränkungen.",
+  "_comment": "Kopiere diese Datei als 'users.json', trage die gewuenschten Kennwoerter im Feld 'password' ein und fuehre dann 'node scripts/hash-passwords.js' aus. Die Datei 'users.json' ist in .gitignore eingetragen und landet nicht im Repository. allowedAuthors 'null' bedeutet keine Einschränkungen. mustChangePassword 'true' verlangt ein neues Kennwort bei der naechsten Anmeldung. Danach laesst sich alles ueber Aktionen -> Benutzerverwaltung pflegen.",
   "users": [
     {
       "email": "Max.Mustermann@domain.com",
       "password": "BITTE_ERSETZEN",
       "role": "admin",
-      "allowedAuthors": null
+      "allowedAuthors": null,
+      "mustChangePassword": false
     },
     {
       "email": "Klara.Korn@domain.com",
       "password": "BITTE_ERSETZEN",
       "role": "user",
-      "allowedAuthors": null
+      "allowedAuthors": null,
+      "mustChangePassword": true
     },
     {
       "email": "test@test.com",
       "password": "BITTE_ERSETZEN",
       "role": "user",
-      "allowedAuthors": ["Infografiken"]
+      "allowedAuthors": ["Infografiken"],
+      "mustChangePassword": true
     }
   ]
 }

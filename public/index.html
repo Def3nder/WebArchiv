@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=22" />
+  <link rel="stylesheet" href="styles.css?v=31" />
 </head>
 <body>
 
@@ -47,10 +47,14 @@
         <button id="reindex-btn" class="reindex-btn" title="Aktionen"
                 aria-haspopup="true" aria-expanded="false" hidden>↺</button>
         <div id="admin-menu" class="header-menu-dropdown" role="menu" hidden>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="reindex">Archiv neu einlesen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="scrape">Neue Beiträge scrapen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="log">Scrape-Log anzeigen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job">Audio-Auftrag anzeigen</button>
+          <p id="header-menu-account" class="header-menu-account"></p>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="reindex" data-admin-only>Archiv neu einlesen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="scrape" data-admin-only>Neue Beiträge scrapen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="log" data-admin-only>Scrape-Log anzeigen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job" data-admin-only>Audio-Auftrag anzeigen</button>
+          <hr class="header-menu-sep" data-admin-only>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="users" data-admin-only>Benutzerverwaltung</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="password">Kennwort ändern</button>
         </div>
       </div>
       <button id="login-btn" class="logout-btn" title="Anmelden" hidden>
@@ -254,7 +258,50 @@
       <button type="button" id="article-editor-save" class="detail-cat-pill" disabled>Speichern</button>
     </div>
   </dialog>
-  <script src="app.js?v=32"></script>
+  <!-- Eigenes Kennwort ändern (auch als Pflichtdialog nach der Anmeldung) -->
+  <dialog id="password-dialog" class="account-dialog" aria-labelledby="password-title">
+    <form id="password-form" novalidate>
+      <h2 id="password-title" class="login-title">Kennwort ändern</h2>
+      <p id="password-intro" class="account-hint"></p>
+      <input type="text" id="password-username" autocomplete="username" hidden />
+      <div class="login-field">
+        <label for="password-current" class="login-label">Aktuelles Kennwort</label>
+        <input id="password-current" type="password" class="login-input" autocomplete="current-password" required />
+      </div>
+      <div class="login-field">
+        <label for="password-new" class="login-label">Neues Kennwort</label>
+        <input id="password-new" type="password" class="login-input" autocomplete="new-password" minlength="8" required />
+      </div>
+      <div class="login-field">
+        <label for="password-repeat" class="login-label">Neues Kennwort wiederholen</label>
+        <input id="password-repeat" type="password" class="login-input" autocomplete="new-password" minlength="8" required />
+      </div>
+      <p class="account-hint">Mindestens 8 Zeichen.</p>
+      <p id="password-error" class="login-error" role="alert" hidden></p>
+      <div class="account-buttons">
+        <button type="button" id="password-cancel" class="detail-cat-pill">Abbrechen</button>
+        <button type="button" id="password-logout" class="detail-cat-pill" hidden>Abmelden</button>
+        <button type="submit" id="password-submit" class="detail-cat-pill account-primary">Kennwort speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Benutzerverwaltung (Admin) -->
+  <dialog id="user-admin" class="account-dialog account-dialog-wide" aria-labelledby="user-admin-title">
+    <div class="article-editor-heading">
+      <div><p class="article-editor-eyebrow">VERWALTUNG</p><h2 id="user-admin-title">Benutzerverwaltung</h2></div>
+      <button type="button" id="user-admin-close" class="detail-cat-pill" aria-label="Benutzerverwaltung schließen">✕</button>
+    </div>
+    <div class="user-admin-tabs" role="tablist">
+      <button type="button" role="tab" id="user-admin-tab-users" aria-controls="user-admin-panel-users" aria-selected="true">Nutzer</button>
+      <button type="button" role="tab" id="user-admin-tab-public" aria-controls="user-admin-panel-public" aria-selected="false">Öffentlicher Zugang</button>
+    </div>
+    <p id="user-admin-status" class="user-admin-status" role="status" aria-live="polite"></p>
+    <section id="user-admin-panel-users" role="tabpanel" aria-labelledby="user-admin-tab-users" class="user-admin-panel"></section>
+    <section id="user-admin-panel-public" role="tabpanel" aria-labelledby="user-admin-tab-public" class="user-admin-panel" hidden></section>
+  </dialog>
+  <script src="user-admin.js?v=8"></script>
+  <script src="app.js?v=34"></script>
   <script src="article-editor.js?v=1"></script>
 </body>
 </html>

@@ -18,7 +18,8 @@ npm start              # run server.js → http://localhost:3000 (PORT env overr
 node scripts/hash-passwords.js   # hash plaintext passwords in users.json (see Auth below)
 ```
 
-There is no test suite, linter, or build. `node server.js` is the only runtime; restart it to
+There is no `npm test` script, linter, or build; run tests with
+`node --test server.test.cjs article-editor.test.cjs user-store.test.cjs`. `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button
 → `POST /api/reindex`, or restart). Frontend changes (`public/`) only need a browser reload;
 bump the `?v=` query on the `<script>`/`<link>` tags in `public/index.html` to bust caches.
@@ -59,10 +60,18 @@ object in `app.js`.
 
 - **Users** live in `users.json` (gitignored). Copy `example-users.json` → `users.json`, set
   plaintext `password` fields, run `node scripts/hash-passwords.js` to replace them with bcrypt
-  `passwordHash`. Each user has `role` (`admin`/`user`) and `allowedAuthors`: `null` = all authors,
-  or an array of author names = whitelist.
+  `passwordHash`. Each user has `role` (`admin`/`user`), `allowedAuthors` (`null` = all authors,
+  or an array = whitelist), optional `mustChangePassword` and `sessionVersion`.
+- **User management** (`user-store.cjs` + `public/user-admin.js`): admins manage users and the
+  public-author list in the UI (header "Aktionen" menu); every user can change their own password.
+  `users.json` and `public-directories.txt` are written at runtime (atomic temp+rename, re-read
+  before each change). The session stores only `{email, sessionVersion}`; a middleware in
+  `server.js` re-resolves role/rights from the store on every request, so changes apply at once and
+  a bumped `sessionVersion` (new password) ends other sessions. While `mustChangePassword` is set,
+  only `/api/me`, `/api/me/password`, `/api/login`, `/api/logout` are allowed.
 - **Guests (no session)** get the authors listed in `public-directories.txt` (JSON, key
-  `public-directories`). If that list is empty, unauthenticated requests get 401.
+  `public-directories`). If that list is empty, unauthenticated requests get 401. Logged-in users
+  with a whitelist always get the public authors in addition.
 - **Enforcement is per-author** via `canAccessAuthor`. It gates three layers that must stay
   consistent: the `/files/*` media handler, the `/api/articles` list (ACL pre-filter), and the
   single-article route. `/files/*` also has path-traversal protection (resolved path must stay
