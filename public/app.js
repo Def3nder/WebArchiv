@@ -1074,8 +1074,29 @@ $filterCategory.addEventListener('change', () => {
   loadArticles();
 });
 
-$filterLayout.addEventListener('change', () => {
-  document.body.classList.toggle('layout-tall', $filterLayout.value === 'tall');
+// Ansicht quadratisch/länglich als Piktogramm-Umschalter (Radio-Gruppe).
+function setLayout(layout) {
+  document.body.classList.toggle('layout-tall', layout === 'tall');
+  $filterLayout.querySelectorAll('[data-layout]').forEach(button => {
+    const active = button.dataset.layout === layout;
+    button.setAttribute('aria-checked', String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
+}
+function currentLayout() {
+  return document.body.classList.contains('layout-tall') ? 'tall' : 'square';
+}
+$filterLayout.addEventListener('click', event => {
+  const button = event.target.closest('[data-layout]');
+  if (button) setLayout(button.dataset.layout);
+});
+$filterLayout.addEventListener('keydown', event => {
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const next = currentLayout() === 'tall' ? 'square' : 'tall';
+  setLayout(next);
+  $filterLayout.querySelector(`[data-layout="${next}"]`).focus();
 });
 
 $filterLimit.addEventListener('change', () => {
@@ -1117,8 +1138,7 @@ $resetFilters.addEventListener('click', () => {
   $filterAuthor.value = '';
   $filterYear.value = '';
   $filterCategory.value = '';
-  $filterLayout.value = 'tall';
-  document.body.classList.add('layout-tall');
+  setLayout('tall');
   $filterLimit.value = '24';
   setTelegram(false);
   Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false, page:1, limit:24 });
@@ -1777,7 +1797,7 @@ function svgShare() {
 // ── Boot ───────────────────────────────────────────────────────────────────
 async function init() {
   $loading.hidden = false;
-  document.body.classList.toggle('layout-tall', $filterLayout.value === 'tall');
+  setLayout('tall');
 
   const savedTheme = localStorage.getItem('wa-theme') || 'light';
   applyTheme(savedTheme);

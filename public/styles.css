@@ -61,7 +61,9 @@ body[data-theme="light"] {
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+/* iOS Safari vergrößert Text beim Drehen ins Querformat automatisch und setzt
+   ihn beim Zurückdrehen nicht zuverlässig zurück. Zoomen per Geste bleibt möglich. */
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -218,6 +220,31 @@ select { font: inherit; color: inherit; }
   max-width: 200px;
 }
 .filter-select:focus { border-color: var(--accent-dim); outline: none; }
+.layout-toggle {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.layout-toggle button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+}
+.layout-toggle button:hover { color: var(--text); }
+.layout-toggle button[aria-checked="true"] { background: var(--accent); color: var(--bg); }
+.layout-toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .filter-select option { background: var(--surface-2); }
 
 .reset-btn {
