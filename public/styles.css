@@ -384,6 +384,11 @@ select { font: inherit; color: inherit; }
 @media (max-width: 1100px) { .article-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 720px)  { .article-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 440px)  { .article-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
+/* Handy: schmalere Ränder, damit die Kacheln mehr Inhalt zeigen. */
+@media (max-width: 600px) {
+  #app { padding: 16px 8px 60px; }
+  .article-grid { gap: 8px; }
+}
 
 /* ── Article card ────────────────────────────────────────────────────────── */
 .card {
@@ -538,6 +543,17 @@ body[data-theme="light"] .author-badge {
   color: var(--text-muted);
   font-family: var(--font-body);
 }
+.date-short { display: none; }
+@media (max-width: 600px) {
+  .date-long { display: none; }
+  .date-short { display: inline; white-space: nowrap; }
+  .card-body { padding: 8px 8px 10px; gap: 5px; }
+  /* „Quadratisch“ auf dem Handy leicht hochkant, damit der Titel meist ganz passt. */
+  body:not(.layout-tall):not(.layout-list) .card { aspect-ratio: 2 / 3; }
+  body:not(.layout-tall):not(.layout-list) .card-image { flex-basis: 40%; }
+  body:not(.layout-tall):not(.layout-list) .card-title { -webkit-line-clamp: 5; }
+  body:not(.layout-tall):not(.layout-list) .card-categories { flex-wrap: nowrap; overflow: hidden; }
+}
 .episode-num {
   font-size: 0.65rem;
   color: var(--text-dim);
@@ -663,7 +679,8 @@ body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex
   body.layout-list .card-categories,
   body.layout-list .card-preview { display: none; }
   body.layout-list .card-body { grid-template-areas: "meta meta" "title title"; gap: 3px; padding: 5px 10px; }
-  body.layout-list .card-title { font-size: 0.85rem; -webkit-line-clamp: 2; }
+  /* Immer Platz für zwei Titelzeilen: alle Zeilen gleich hoch. */
+  body.layout-list .card-title { font-size: 0.85rem; -webkit-line-clamp: 2; min-height: 2.6em; }
 }
 
 /* ── Pagination ──────────────────────────────────────────────────────────── */

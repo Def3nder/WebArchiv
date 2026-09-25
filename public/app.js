@@ -219,6 +219,13 @@ function formatDate(d) {
   return `${parseInt(day)}. ${months[parseInt(m) - 1]} ${y}`;
 }
 
+// Kurzform TT.MM.JJJJ für schmale Kacheln auf dem Handy.
+function formatDateShort(d) {
+  if (!d) return '';
+  const [y, m, day] = d.split('-');
+  return day && m ? `${day}.${m}.${y}` : d;
+}
+
 function sanitizeForId(id) {
   return encodeURIComponent(id);
 }
@@ -444,7 +451,7 @@ function renderCard(article, idx) {
       <div class="card-body">
         <div class="card-meta">
           <span class="author-badge" style="--author-hue:${hue}">${esc(article.author.replace(/_/g,' '))}</span>
-          <span class="card-date">${esc(formatDate(article.date))}</span>
+          <span class="card-date"><span class="date-long">${esc(formatDate(article.date))}</span><span class="date-short">${esc(formatDateShort(article.date))}</span></span>
           ${epNum}
         </div>
         <h2 class="card-title">${esc(article.title)}</h2>
@@ -485,6 +492,15 @@ function renderPagination(page, pages) {
 }
 
 // ── Load & display articles ────────────────────────────────────────────────
+// Zum Anfang der Ergebnisliste scrollen: erste Kachel direkt unter der
+// (klebenden) Filterleiste, unabhängig von deren Höhe auf Desktop oder Handy.
+function scrollToResults() {
+  const bar = document.querySelector('.filter-bar');
+  const covered = bar ? (parseFloat(getComputedStyle(bar).top) || 0) + bar.offsetHeight : 0;
+  const top = window.scrollY + $app.getBoundingClientRect().top - covered;
+  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+}
+
 async function loadArticles() {
   if (state.loading) return;
   state.loading = true;
@@ -521,8 +537,7 @@ async function loadArticles() {
         const p = parseInt(btn.dataset.page);
         if (p !== state.page) {
           state.page = p;
-          window.scrollTo({ top: 116, behavior: 'smooth' });
-          loadArticles();
+          loadArticles().then(scrollToResults);
         }
       });
     });
