@@ -30,7 +30,7 @@ Diese Datei ist eine thematische Zusammenfassung, kein wortgetreues Transkript. 
 | Benutzerverwaltung (25.09.) | Admin pflegt Nutzer, Rechte, Kennwörter und öffentliche Autoren über Aktionen → *Benutzerverwaltung*; jeder Nutzer kann sein Kennwort ändern. Siehe Abschnitt 4a. |
 | Öffentliche Autoren (25.09.) | Angemeldete Nutzer mit Autorenliste sehen öffentliche Autoren immer zusätzlich. |
 | „Neue Grafik“ (25.09.) | Für alle Autoren außer `Infografiken` selbst, auch für öffentliche Autoren. |
-| Hörbücher (27.09.) | Eigener Autor `Hörbücher` unter `audio/Hörbücher/<Buch>/`, nicht unter `www/`. Kein Artikel; erscheint nur bei Autorenfilter „Hörbücher“. Nie öffentlich. Siehe Abschnitt 6a. |
+| Hörbücher (27.09.) | Eigener Autor `Hörbücher`; Ablage `audio/Hoerbuecher/<Buch>/` (ohne Umlaute, lokal und auf dem Server), nicht unter `www/`. Kein Artikel; erscheint nur bei Autorenfilter „Hörbücher“. Nie öffentlich. Siehe Abschnitt 6a. |
 
 ## 2. Projekt, Architektur und Datenmodell
 
@@ -250,7 +250,7 @@ Quellen: [G2], [G3], [G4].
 
 Entscheidungen des Benutzers:
 
-- Ablage: `audio/Hörbücher/<Ordner je Buch>/` mit `cover.jpg`/`.png`, nummerierten Tracks (`.mp3`, `.m4b`, auch `.m4a`) direkt im Ordner (keine Unterordner) und optional `abstract.md`. Fehlt das Cover, gilt `audio/Hörbücher/standard.*`. Bewusst unter `audio/`, damit der Artikel-Scan von `www/` die `abstract.md` nicht als Artikel einliest.
+- Ablage: `audio/Hoerbuecher/<Ordner je Buch>/` mit `cover.jpg`/`.png`, nummerierten Tracks (`.mp3`, `.m4b`, auch `.m4a`) direkt im Ordner (keine Unterordner) und optional `abstract.md`. Fehlt das Cover, gilt `audio/Hoerbuecher/standard.*`. Ordnername und Anzeige sind getrennt (Entscheidung vom 27.09.): Angezeigt, in Rechten und Buch-IDs wird immer „Hörbücher“ verwendet; auf der Platte wird `Hoerbuecher` gesucht, ersatzweise `Hörbücher`, oder der Name aus `config.json` → `audiobooks.directory`. `/audio-files/Hoerbuecher/...` wird für die Rechteprüfung dem Autor „Hörbücher“ zugeordnet. Bewusst unter `audio/`, damit der Artikel-Scan von `www/` die `abstract.md` nicht als Artikel einliest.
 - `abstract.md` hat feste Felder `Titel:`, `Autor:`, `Datum:`, `Inhalt:`; alles ab `Inhalt:` ist Markdown und wird gerendert. Ohne Datei werden Autor und Titel aus dem Ordnernamen „Autor - Titel“ gelesen.
 - Hörbücher sind **keine Artikel**: nicht unter „Alle Autoren“, nicht in der globalen Suche, nicht im Filter „mit Audio“. Nur bei Autor = „Hörbücher“; dort Sortierung *Zuletzt gehört* (Standard, danach ungehörte nach Name), *Nach Name*, *Nach Datum*. Jahr/Kategorie sind in dieser Ansicht ausgeblendet; die Suche durchsucht Titel, Buchautor und Kurzbeschreibung.
 - Rechte: wie ein normaler Autor über `allowedAuthors` (Haken in der Benutzerverwaltung). **Gäste nie**, auch nicht per `public-directories.txt`; der Eintrag wird beim Laden ignoriert, beim Speichern abgewiesen und im Reiter „Öffentlicher Zugang“ nicht angeboten.
@@ -267,7 +267,7 @@ Technik:
 - Medien über `/audio-files/*` (ACL, Range-Requests); `.m4b`/`.m4a` werden als `audio/mp4` ausgeliefert. Media-Session-API für Sperrbildschirm/Kopfhörertasten.
 - Editor (`article-editor.cjs`) akzeptiert mehrere Wurzeln (`www/` und `audio/`).
 - Frontend: `public/audiobooks.js` (Liste, Detail, Player, Miniplayer).
-- Deployment: `audio/Hörbücher` auf dem Server anlegen (Leserecht für `ralf`), `config.json` mitkopieren; Schreibrecht im App-Verzeichnis für `audiobook-progress.json` besteht bereits (wie `users.json`). Danach Dienst neu starten.
+- Deployment: `audio/Hoerbuecher` auf dem Server anlegen (Leserecht für `ralf`), `config.json` mitkopieren; Schreibrecht im App-Verzeichnis für `audiobook-progress.json` besteht bereits (wie `users.json`). Danach Dienst neu starten.
 - Geprüft am 27.09.2026: 29/29 Tests (neu `audiobooks.test.cjs`, erweiterte Editor-/Nutzer-Tests) sowie Browserprüfung mit Testnutzern und Testdateien (Gastsperre, Rechte je Nutzer, Wiedergabe, ±10 Min über Dateigrenzen, Buchende, Tempo, Wiederaufnahme nach Reload, Miniplayer, Artikel-Audio-Wechsel, Abstract-Editor lesend, Handy-Layout). Echte `users.json` und echte `abstract.md` wurden nicht verändert; ein Hörtest auf iPhone/Sperrbildschirm steht aus.
 
 ### ToDo für später (Ideen, noch nicht beauftragt)

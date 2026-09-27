@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const {
-  AUDIOBOOK_AUTHOR, parseAbstract, trackTitles, createAudiobookLibrary, createProgressStore, loadAudiobookConfig,
+  AUDIOBOOK_AUTHOR, resolveAudiobookDirectory, parseAbstract, trackTitles, createAudiobookLibrary, createProgressStore, loadAudiobookConfig,
 } = require('./audiobooks.cjs');
 
 async function tempDir(t) {
@@ -15,7 +15,8 @@ async function tempDir(t) {
 
 async function fixture(t) {
   const dir = await tempDir(t);
-  const root = path.join(dir, AUDIOBOOK_AUTHOR);
+  // Server-Variante: Ordner ohne Umlaute, Anzeige bleibt „Hörbücher“.
+  const root = path.join(dir, 'audio', 'Hoerbuecher');
   const book = path.join(root, 'Karin Kuschik - 50 Fragen');
   await fs.mkdir(book, { recursive: true });
   for (const name of ['10 - Kapitel zehn.mp3', '2 - Kapitel zwei.mp3', '01 - Intro.mp3', 'cover.jpg', 'notiz.txt']) {
@@ -32,7 +33,7 @@ async function fixture(t) {
   const progress = createProgressStore({ file: path.join(dir, 'progress.json') });
   progress.load();
   const library = createAudiobookLibrary({
-    root, progress, excerpt: text => text.replace(/\*/g, '').slice(0, 320), renderMarkdown: text => `<p>${text}</p>`,
+    audioRoot: path.join(dir, 'audio'), progress, excerpt: text => text.replace(/\*/g, '').slice(0, 320), renderMarkdown: text => `<p>${text}</p>`,
   });
   await library.rebuild();
   return { dir, root, library, progress };
@@ -59,10 +60,14 @@ test('Bibliothek: natürliche Sortierung, Cover, Fallbacks, leere Ordner übersp
   assert.equal(kuschik.bookAuthor, 'Karin Kuschik');
   assert.equal(kuschik.date, '2025-09-25');
   assert.deepEqual(kuschik.tracks.map(tr => tr.file), ['01 - Intro.mp3', '2 - Kapitel zwei.mp3', '10 - Kapitel zehn.mp3']);
-  assert.match(kuschik.imageUrl, /^\/audio-files\/H%C3%B6rb%C3%BCcher\/Karin%20Kuschik%20-%2050%20Fragen\/cover\.jpg\?v=\d+$/);
+  assert.equal(library.directory, 'Hoerbuecher');
+  assert.equal(kuschik.id, `${AUDIOBOOK_AUTHOR}/Karin Kuschik - 50 Fragen`);
+  assert.equal(kuschik.author, AUDIOBOOK_AUTHOR);
+  assert.match(kuschik.imageUrl, /^\/audio-files\/Hoerbuecher\/Karin%20Kuschik%20-%2050%20Fragen\/cover\.jpg\?v=\d+$/);
+  assert.equal(kuschik.tracks[0].url, '/audio-files/Hoerbuecher/Karin%20Kuschik%20-%2050%20Fragen/01%20-%20Intro.mp3');
   assert.equal(nagoski.bookAuthor, 'Emily Nagoski');
   assert.equal(nagoski.filePath, null);
-  assert.match(nagoski.imageUrl, /\/audio-files\/H%C3%B6rb%C3%BCcher\/standard\.png/);
+  assert.match(nagoski.imageUrl, /\/audio-files\/Hoerbuecher\/standard\.png/);
   const detail = library.detail({ email: 'a@b.de' }, kuschik.id);
   assert.equal(detail.descriptionHtml, '<p>**Fett** und Text.</p>');
   assert.equal(detail.hasAbstract, true);
@@ -97,10 +102,24 @@ test('Hörfortschritt pro Nutzer: speichern, Sortierung „zuletzt gehört“, N
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, 'progress.json'), 'utf8')), {});
 });
 
-test('config.json: Sprungweiten mit Standardwerten', async t => {
+test('config.json: Sprungweiten mit Standardwerten, optionales Verzeichnis', async t => {
   const dir = await tempDir(t);
   const file = path.join(dir, 'config.json');
-  assert.deepEqual(loadAudiobookConfig(file), { skipLongSeconds: 600, skipShortSeconds: 30 });
-  await fs.writeFile(file, JSON.stringify({ audiobooks: { skipLongSeconds: 300, skipShortSeconds: -1 } }));
-  assert.deepEqual(loadAudiobookConfig(file), { skipLongSeconds: 300, skipShortSeconds: 30 });
+  assert.deepEqual(loadAudiobookConfig(file), { skipLongSeconds: 600, skipShortSeconds: 30, directory: null });
+  await fs.writeFile(file, JSON.stringify({ audiobooks: { skipLongSeconds: 300, skipShortSeconds: -1, directory: '../etc' } }));
+  assert.deepEqual(loadAudiobookConfig(file), { skipLongSeconds: 300, skipShortSeconds: 30, directory: null });
+  await fs.writeFile(file, JSON.stringify({ audiobooks: { directory: 'Meine Hoerbuecher' } }));
+  assert.equal(loadAudiobookConfig(file).directory, 'Meine Hoerbuecher');
+});
+
+test('Verzeichnis: Hoerbuecher vor Hörbücher, konfigurierter Name hat Vorrang', async t => {
+  const dir = await tempDir(t);
+  assert.equal(resolveAudiobookDirectory(dir, null), null);
+  await fs.mkdir(path.join(dir, AUDIOBOOK_AUTHOR));
+  assert.equal(resolveAudiobookDirectory(dir, null), AUDIOBOOK_AUTHOR);
+  await fs.mkdir(path.join(dir, 'Hoerbuecher'));
+  assert.equal(resolveAudiobookDirectory(dir, null), 'Hoerbuecher');
+  await fs.mkdir(path.join(dir, 'Andere'));
+  assert.equal(resolveAudiobookDirectory(dir, 'Andere'), 'Andere');
+  assert.equal(resolveAudiobookDirectory(dir, 'Fehlt'), null);
 });

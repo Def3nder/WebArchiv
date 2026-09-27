@@ -85,12 +85,14 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
   über eine feste Stichwort-Taxonomie bis zu 5 Kategorien zu (für Filter/Facetten).
   Das Feld `Kategorien:` bleibt davon getrennt als reine Anzeige-Tags.
 
-### Hörbücher (`audio/Hörbücher/`)
+### Hörbücher (`audio/Hoerbuecher/`)
 
-Je Buch ein Ordner unter `audio/Hörbücher/` mit `cover.jpg`/`.png`, nummerierten
+Je Buch ein Ordner unter `audio/Hoerbuecher/` mit `cover.jpg`/`.png`, nummerierten
 Tracks (`.mp3`/`.m4b`/`.m4a`) und optional `abstract.md`
 (`Titel:`, `Autor:`, `Datum:`, `Inhalt:` + Markdown). Fallback-Cover:
-`audio/Hörbücher/standard.png`. Hörbücher sind keine Artikel: Sie erscheinen nur
+`audio/Hoerbuecher/standard.png`. Der Ordner heißt bewusst ohne Umlaute, angezeigt
+wird „Hörbücher“ (Alternativen: Ordner `Hörbücher` oder `audiobooks.directory` in
+`config.json`). Hörbücher sind keine Artikel: Sie erscheinen nur
 beim Autorenfilter „Hörbücher“ (Sortierung zuletzt gehört / Name / Datum), sind nie
 für Gäste sichtbar und werden über `allowedAuthors` freigegeben. Der Player spielt
 das ganze Buch, springt über Dateigrenzen (Weiten in `config.json`) und merkt sich

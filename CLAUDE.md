@@ -79,7 +79,7 @@ object in `app.js`.
   under `www/`) — replicate that pattern for any new file-serving route. `prompts/*` uses the same
   `path.basename` + prefix-check guard.
 - **Audiobooks** (`audiobooks.cjs`, `public/audiobooks.js`): author `Hörbücher` lives under
-  `audio/Hörbücher/<book>/` (tracks + cover + optional `abstract.md`), has its own index and
+  `audio/Hoerbuecher/<book>/` (ASCII dir name, mapped to author `Hörbücher`; tracks + cover + optional `abstract.md`), has its own index and
   `/api/audiobooks*` routes, is never public (guests blocked in `canAccessAuthor`, filtered from
   `public-directories.txt`), and stores per-user playback position in `audiobook-progress.json`.
 - The `Telegram` author is special-cased: hidden from listings unless `?telegram=1` or explicitly

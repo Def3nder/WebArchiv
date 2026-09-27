@@ -4,9 +4,11 @@ const path = require('node:path');
 const Fuse = require('fuse.js');
 const { writeJsonAtomic } = require('./user-store.cjs');
 
-// Hörbücher liegen als je ein Ordner unter audio/<AUTHOR>/ (nicht unter www/),
-// damit der Artikel-Scan sie nicht als Artikel einliest.
+// Hörbücher liegen als je ein Ordner unter audio/<Verzeichnis>/ (nicht unter www/),
+// damit der Artikel-Scan sie nicht als Artikel einliest. Angezeigt wird immer
+// AUDIOBOOK_AUTHOR; das Verzeichnis darf ohne Umlaute heißen (Server: Hoerbuecher).
 const AUDIOBOOK_AUTHOR = 'Hörbücher';
+const DIRECTORY_CANDIDATES = ['Hoerbuecher', AUDIOBOOK_AUTHOR];
 const TRACK_EXTS = new Set(['.mp3', '.m4b', '.m4a']);
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png'];
 const SORTS = ['recent', 'title', 'date'];
@@ -85,12 +87,23 @@ function findByName(filesByLower, names) {
 
 // ─── Bibliothek (In-Memory-Index, wird beim Reindex neu aufgebaut) ─────────
 
-function createAudiobookLibrary({ root, excerpt, renderMarkdown, progress }) {
+// Konfiguriertes Verzeichnis oder das erste vorhandene aus DIRECTORY_CANDIDATES.
+function resolveAudiobookDirectory(audioRoot, configured) {
+  const candidates = configured ? [configured] : DIRECTORY_CANDIDATES;
+  return candidates.find(name => {
+    try { return fsSync.statSync(path.join(audioRoot, name)).isDirectory(); }
+    catch { return false; }
+  }) || null;
+}
+
+function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMarkdown, progress }) {
   let books = [];
   let fuse = null;
+  let dirName = null;   // tatsächlicher Ordnername unter audioRoot (für URLs und Rechteprüfung)
+  let root = null;
 
-  async function scanBook(dirName) {
-    const dirPath = path.join(root, dirName);
+  async function scanBook(bookDir) {
+    const dirPath = path.join(root, bookDir);
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const filesByLower = new Map(entries.filter(e => e.isFile()).map(e => [e.name.toLowerCase(), e.name]));
     const trackFiles = [...filesByLower.values()]
@@ -102,22 +115,23 @@ function createAudiobookLibrary({ root, excerpt, renderMarkdown, progress }) {
     const abstractPath = abstractName ? path.join(dirPath, abstractName) : null;
     const abstract = abstractPath ? parseAbstract(await fs.readFile(abstractPath, 'utf8')) : parseAbstract('');
     // Ohne Angaben: Ordnername „Autor - Titel“ auswerten.
-    const sep = dirName.indexOf(' - ');
-    const title = abstract.title || (sep > 0 ? dirName.slice(sep + 3) : dirName);
-    const bookAuthor = abstract.author || (sep > 0 ? dirName.slice(0, sep) : '');
+    const sep = bookDir.indexOf(' - ');
+    const title = abstract.title || (sep > 0 ? bookDir.slice(sep + 3) : bookDir);
+    const bookAuthor = abstract.author || (sep > 0 ? bookDir.slice(0, sep) : '');
 
     const coverName = findByName(filesByLower, IMAGE_EXTS.map(ext => 'cover' + ext));
     let imageUrl = null;
     if (coverName) {
-      imageUrl = withVersion(mediaUrl(AUDIOBOOK_AUTHOR, dirName, coverName), path.join(dirPath, coverName));
+      imageUrl = withVersion(mediaUrl(dirName, bookDir, coverName), path.join(dirPath, coverName));
     } else {
       const standard = IMAGE_EXTS.map(ext => 'standard' + ext).find(name => fsSync.existsSync(path.join(root, name)));
-      if (standard) imageUrl = withVersion(mediaUrl(AUDIOBOOK_AUTHOR, standard), path.join(root, standard));
+      if (standard) imageUrl = withVersion(mediaUrl(dirName, standard), path.join(root, standard));
     }
 
     const titles = trackTitles(trackFiles);
     return {
-      id: `${AUDIOBOOK_AUTHOR}/${dirName}`,
+      // ID unabhängig vom Ordnernamen auf der Platte → Hörfortschritt bleibt gültig.
+      id: `${AUDIOBOOK_AUTHOR}/${bookDir}`,
       kind: 'audiobook',
       author: AUDIOBOOK_AUTHOR,
       bookAuthor,
@@ -127,13 +141,16 @@ function createAudiobookLibrary({ root, excerpt, renderMarkdown, progress }) {
       excerpt: excerpt(abstract.description),
       imageUrl,
       trackCount: trackFiles.length,
-      tracks: trackFiles.map((file, i) => ({ title: titles[i], file, url: mediaUrl(AUDIOBOOK_AUTHOR, dirName, file) })),
+      tracks: trackFiles.map((file, i) => ({ title: titles[i], file, url: mediaUrl(dirName, bookDir, file) })),
       description: abstract.description,
       filePath: abstractPath,
     };
   }
 
   async function rebuild() {
+    dirName = resolveAudiobookDirectory(audioRoot, directory);
+    if (!dirName) { books = []; fuse = null; return books; }
+    root = path.join(audioRoot, dirName);
     let entries;
     try {
       entries = await fs.readdir(root, { withFileTypes: true });
@@ -220,6 +237,7 @@ function createAudiobookLibrary({ root, excerpt, renderMarkdown, progress }) {
     detail,
     get: id => books.find(b => b.id === id),
     get books() { return books; },
+    get directory() { return dirName; },
   };
 }
 
@@ -293,9 +311,12 @@ function loadAudiobookConfig(file) {
   try { raw = JSON.parse(fsSync.readFileSync(file, 'utf8').replace(/^﻿/, ''))?.audiobooks || {}; }
   catch (err) { if (err.code !== 'ENOENT') console.warn('config.json nicht geladen —', err.message); }
   const pick = (value, fallback) => (Number.isFinite(value) && value > 0 ? value : fallback);
+  const dir = typeof raw.directory === 'string' ? raw.directory.trim() : '';
   return {
     skipLongSeconds: pick(raw.skipLongSeconds, DEFAULT_CONFIG.skipLongSeconds),
     skipShortSeconds: pick(raw.skipShortSeconds, DEFAULT_CONFIG.skipShortSeconds),
+    // Optional; ohne Angabe wird Hoerbuecher bzw. Hörbücher gesucht.
+    directory: dir && !/[\\/\0]/.test(dir) && dir !== '.' && dir !== '..' ? dir : null,
   };
 }
 
@@ -318,7 +339,7 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
   app.get('/api/audiobooks/*', requireAuth, route((req, user) => {
     const book = library.detail(user, req.params[0]);
     if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
-    return { ...book, config };
+    return { ...book, config: { skipLongSeconds: config.skipLongSeconds, skipShortSeconds: config.skipShortSeconds } };
   }));
   app.put('/api/audiobook-progress/*', requireAuth, route(async (req, user) => {
     const book = library.get(req.params[0]);
@@ -329,6 +350,7 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
 
 module.exports = {
   AUDIOBOOK_AUTHOR,
+  resolveAudiobookDirectory,
   parseAbstract,
   trackTitles,
   createAudiobookLibrary,

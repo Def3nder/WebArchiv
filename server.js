@@ -43,14 +43,15 @@ let reindexState = { running: false, processed: 0, articles: 0, done: true };
 let scrapeState = { running: false, sources: null, exitCode: null, startedAt: null, done: true, error: null };
 let infographicWrites = 0;
 
-// Hörbücher: je ein Ordner unter audio/Hörbücher/, eigener Index neben den Artikeln.
+// Hörbücher: je ein Ordner unter audio/Hoerbuecher/ (oder audio/Hörbücher/), eigener Index neben den Artikeln.
 const audiobookConfig = loadAudiobookConfig(path.join(__dirname, 'config.json'));
 const audiobookProgress = createProgressStore({
   file: process.env.AUDIOBOOK_PROGRESS_FILE || path.join(__dirname, 'audiobook-progress.json'),
 });
 audiobookProgress.load();
 const audiobooks = createAudiobookLibrary({
-  root: path.join(AUDIO_DIR, AUDIOBOOK_AUTHOR),
+  audioRoot: AUDIO_DIR,
+  directory: audiobookConfig.directory,
   excerpt: text => bodyExcerpt(text || ''),
   renderMarkdown: text => marked.parse(text),
   progress: audiobookProgress,
@@ -879,7 +880,9 @@ app.get('/files/*', attachUser, (req, res) => {
 
 app.get('/audio-files/*', attachUser, (req, res) => {
   const relPath = req.params[0];
-  const author  = relPath.split('/')[0];
+  // Das Hörbuch-Verzeichnis (z. B. „Hoerbuecher“) gehört zum Autor „Hörbücher“.
+  const topDir  = relPath.split('/')[0];
+  const author  = topDir === audiobooks.directory ? AUDIOBOOK_AUTHOR : topDir;
   if (!canAccessAuthor(req.user, author)) {
     return res.status(403).json({ error: 'Access denied' });
   }
