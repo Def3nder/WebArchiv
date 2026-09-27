@@ -84,6 +84,8 @@ function installMarkdownRoutes(app, requireAdmin, editor) {
     try { res.json(await handler(req)); }
     catch (error) {
       const status = error.status || (error.code === 'ENOENT' ? 404 : 500);
+      // Unerwartete Fehler im Dienst-Log festhalten (journalctl), die Oberfläche zeigt nur eine allgemeine Meldung.
+      if (status === 500) console.error(`Artikel-Editor ${req.method} ${req.params[0]}:`, error);
       res.status(status).json({ error: error.status ? error.message : status === 404
         ? 'Artikeldatei nicht gefunden.' : 'Artikeldatei konnte nicht gelesen oder gespeichert werden.' });
     }
