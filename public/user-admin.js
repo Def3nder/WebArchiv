@@ -124,7 +124,7 @@ const $ua = document.getElementById('user-admin');
 const $uaUsers = document.getElementById('user-admin-panel-users');
 const $uaPublic = document.getElementById('user-admin-panel-public');
 const $uaStatus = document.getElementById('user-admin-status');
-const ua = { users: [], authors: [], publicAuthors: [], self: '', tab: 'users', view: 'list', target: null, dirty: false, busy: false };
+const ua = { users: [], authors: [], publicAuthors: [], privateAuthors: [], self: '', tab: 'users', view: 'list', target: null, dirty: false, busy: false };
 
 function uaSetStatus(message, isError = false) {
   $uaStatus.textContent = message || '';
@@ -140,6 +140,7 @@ async function uaLoad() {
   ua.users = data.users;
   ua.authors = data.authors;
   ua.publicAuthors = data.publicAuthors;
+  ua.privateAuthors = data.privateAuthors || [];
   ua.self = data.self;
 }
 
@@ -231,10 +232,12 @@ function uaRenderList() {
 }
 
 // Autorenauswahl: Schalter „alle/ausgewählte“ plus durchsuchbare Checkliste.
-function uaAuthorPickerHtml({ id, selected, lockPublic, allowAll }) {
+function uaAuthorPickerHtml({ id, selected, lockPublic, allowAll, exclude = [] }) {
   const all = allowAll && selected === null;
   const chosen = new Set(selected || []);
-  const names = [...new Set([...ua.authors, ...chosen])].sort((a, b) => a.localeCompare(b, 'de'));
+  const names = [...new Set([...ua.authors, ...chosen])]
+    .filter(name => !exclude.includes(name))
+    .sort((a, b) => a.localeCompare(b, 'de'));
   const rows = names.map(name => {
     const locked = lockPublic && ua.publicAuthors.includes(name);
     const tags = [];
@@ -359,7 +362,8 @@ function uaRenderPublic() {
   $uaPublic.innerHTML = `
     <form class="ua-form" id="ua-public-form" novalidate>
       <p class="account-hint">Diese Autoren sieht jeder <strong>ohne Anmeldung</strong>. Angemeldete Nutzer sehen sie zusätzlich zu ihren eigenen Autoren.</p>
-      ${uaAuthorPickerHtml({ id: 'ua-public-picker', selected: ua.publicAuthors, lockPublic: false, allowAll: false })}
+      ${uaAuthorPickerHtml({ id: 'ua-public-picker', selected: ua.publicAuthors, lockPublic: false, allowAll: false, exclude: ua.privateAuthors })}
+      ${ua.privateAuthors.length ? `<p class="account-hint">Nie öffentlich: ${esc(ua.privateAuthors.join(', '))}.</p>` : ''}
       <p id="ua-public-warning" class="ua-warning" hidden>Kein öffentlicher Zugang: Das Archiv ist dann nur mit Anmeldung nutzbar.</p>
       <div class="ua-form-footer">
         <p id="ua-form-error" class="login-error" role="alert" hidden></p>

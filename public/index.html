@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=47" />
+  <link rel="stylesheet" href="styles.css?v=48" />
 </head>
 <body>
 
@@ -86,16 +86,24 @@
           <option value="">Alle Autoren</option>
         </select>
       </div>
-      <div class="filter-group">
+      <div class="filter-group filter-group-articles">
         <label class="filter-label">Jahr</label>
         <select id="filter-year" class="filter-select">
           <option value="">Alle Jahre</option>
         </select>
       </div>
-      <div class="filter-group">
+      <div class="filter-group filter-group-articles">
         <label class="filter-label">Kategorie</label>
         <select id="filter-category" class="filter-select">
           <option value="">Alle Kategorien</option>
+        </select>
+      </div>
+      <div class="filter-group filter-group-books">
+        <label class="filter-label" for="filter-book-sort">Sortierung</label>
+        <select id="filter-book-sort" class="filter-select">
+          <option value="recent">Zuletzt gehört</option>
+          <option value="title">Nach Name</option>
+          <option value="date">Nach Datum</option>
         </select>
       </div>
       <div class="filter-group">
@@ -151,6 +159,26 @@
         </svg>
       </button>
       <div id="article-detail"></div>
+    </div>
+  </div>
+
+  <!-- Hörbuch-Miniplayer: läuft weiter, wenn die Detailansicht geschlossen ist -->
+  <div id="mini-player" class="mini-player" role="region" aria-label="Hörbuch-Wiedergabe" hidden>
+    <button type="button" class="mini-player-open" id="mini-player-open" title="Hörbuch öffnen">
+      <img id="mini-player-cover" src="" alt="" />
+      <span class="mini-player-text">
+        <span class="mini-player-title" id="mini-player-title"></span>
+        <span class="mini-player-track" id="mini-player-track"></span>
+      </span>
+    </button>
+    <div class="mini-player-progress" aria-hidden="true"><div class="mini-player-fill" id="mini-player-fill"></div></div>
+    <div class="mini-player-buttons">
+      <button type="button" class="book-btn" data-book="back-short"></button>
+      <button type="button" class="book-btn book-btn-play" data-book="toggle" aria-label="Abspielen"></button>
+      <button type="button" class="book-btn" data-book="forward-short"></button>
+      <button type="button" class="book-btn mini-player-close" data-book="close" aria-label="Wiedergabe beenden" title="Wiedergabe beenden">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
     </div>
   </div>
 
@@ -310,8 +338,9 @@
     <section id="user-admin-panel-users" role="tabpanel" aria-labelledby="user-admin-tab-users" class="user-admin-panel"></section>
     <section id="user-admin-panel-public" role="tabpanel" aria-labelledby="user-admin-tab-public" class="user-admin-panel" hidden></section>
   </dialog>
-  <script src="user-admin.js?v=9"></script>
-  <script src="app.js?v=38"></script>
-  <script src="article-editor.js?v=1"></script>
+  <script src="user-admin.js?v=10"></script>
+  <script src="app.js?v=39"></script>
+  <script src="audiobooks.js?v=1"></script>
+  <script src="article-editor.js?v=2"></script>
 </body>
 </html>

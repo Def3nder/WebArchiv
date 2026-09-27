@@ -80,7 +80,7 @@ async function saveEditorFile() {
       const notice = document.createElement('p');
       notice.className = 'detail-infographic-status';
       notice.setAttribute('role', 'status');
-      notice.textContent = 'Artikel gespeichert.';
+      notice.textContent = article.kind === 'audiobook' ? 'Abstract gespeichert.' : 'Artikel gespeichert.';
       $detail.querySelector('.detail-date-row').after(notice);
       state.currentArticleIdx = state.currentItems.findIndex(item => item.id === article.id);
       updateNavButtons();
@@ -102,15 +102,17 @@ async function saveEditorFile() {
 }
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-article-edit]');
-  if (!button || !selectedTtsArticle || currentUser?.role !== 'admin') return;
+  // Artikel oder angezeigtes Hörbuch (dessen abstract.md).
+  const entry = selectedTtsArticle || (typeof currentBookDetail !== 'undefined' ? currentBookDetail : null);
+  if (!button || !entry || currentUser?.role !== 'admin') return;
   button.closest('details')?.removeAttribute('open');
-  articleEditorState.id = selectedTtsArticle.id;
+  articleEditorState.id = entry.id;
   articleEditorState.url = location.href;
   articleEditorState.focus = button.closest('details')?.querySelector('summary');
   articleEditorState.version = null;
   articleEditorState.original = '';
   $editorText.value = '';
-  document.getElementById('article-editor-name').textContent = selectedTtsArticle.title;
+  document.getElementById('article-editor-name').textContent = entry.title;
   $articleEditor.showModal();
   loadEditorFile();
 });

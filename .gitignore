@@ -10,6 +10,8 @@
 /www/Facebook/2*
 /www/Coaching/2*
 /www/Ralf/*
+/www/Hörbücher/
+!/www/Hörbücher/standard.png
 /audio/
 /download/
 migrate-audio.log
@@ -28,6 +30,7 @@ migrate-audio.log
 # private Data #
 ################
 users.json
+audiobook-progress.json
 /scraper/cookies.txt
 /scraper/Abonenten-URL.txt
 

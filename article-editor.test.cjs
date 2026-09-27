@@ -122,3 +122,27 @@ test('HTTP-Endpunkte prüfen Session, Autor und Cross-Site-Schreiben', async t =
   assert.equal((await fetch(url, options)).status, 200);
   assert.equal((await fetch(url, options)).status, 409);
 });
+test('Mehrere Wurzeln: abstract.md eines Hörbuchs unter audio/ ist editierbar, fremde Pfade nicht', async t => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'webarchiv-editor-'));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const www = path.join(base, 'www');
+  const audio = path.join(base, 'audio', 'Hörbücher', 'Buch');
+  await fs.mkdir(www, { recursive: true });
+  await fs.mkdir(audio, { recursive: true });
+  const abstract = path.join(audio, 'abstract.md');
+  const outside = path.join(base, 'fremd.md');
+  await fs.writeFile(abstract, 'Titel: Buch\nInhalt:\nText\n');
+  await fs.writeFile(outside, 'x');
+  const entries = {
+    'Hörbücher/Buch': { id: 'Hörbücher/Buch', author: 'Hörbücher', filePath: abstract },
+    'Hörbücher/Ohne': { id: 'Hörbücher/Ohne', author: 'Hörbücher', filePath: null },
+    'X/fremd': { id: 'X/fremd', author: 'X', filePath: outside },
+  };
+  const editor = createMarkdownEditor({ root: [www, path.join(base, 'audio')], getArticle: id => entries[id],
+    canAccessAuthor: () => true, busy: () => false, reindex: async () => {} });
+  const loaded = await editor.read('Hörbücher/Buch', admin);
+  await editor.save('Hörbücher/Buch', admin, { ...loaded, markdown: 'Titel: Neu\nInhalt:\nText\n' });
+  assert.equal(await fs.readFile(abstract, 'utf8'), 'Titel: Neu\nInhalt:\nText\n');
+  await assert.rejects(editor.read('Hörbücher/Ohne', admin), { status: 404 });
+  await assert.rejects(editor.read('X/fremd', admin), { status: 403 });
+});

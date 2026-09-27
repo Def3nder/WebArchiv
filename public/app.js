@@ -15,7 +15,13 @@ const state = {
   loading: false,
   currentItems: [],
   currentArticleIdx: -1,
+  bookSort: 'recent',
 };
+
+// Hörbücher sind kein Artikel-Autor: eigene Liste, eigene Detailansicht (audiobooks.js).
+const AUDIOBOOK_AUTHOR = 'Hörbücher';
+const isAudiobookId = id => String(id || '').startsWith(AUDIOBOOK_AUTHOR + '/');
+const isBookMode = () => state.author === AUDIOBOOK_AUTHOR;
 
 let authorHueMap = {};  // author name → hue (0..359), gesetzt in loadMeta()
 let audioEl = null;     // shared audio element
@@ -319,6 +325,8 @@ async function login(email, password) {
 }
 
 async function logout() {
+  // Hörposition vor dem Abmelden sichern und Wiedergabe beenden.
+  if (typeof bookPlayerClose === 'function') await bookPlayerClose();
   try { await fetch('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
   // Auf Guest-User umstellen (oder null, falls keine Public-Autoren konfiguriert)
   try {
@@ -334,6 +342,7 @@ async function logout() {
   state.author = '';
   state.year = '';
   state.category = '';
+  applyBookMode();
   $filterAuthor.value = '';
   $filterYear.value = '';
   $filterCategory.value = '';
@@ -385,7 +394,8 @@ async function fetchArticles(params = {}) {
 }
 
 async function fetchArticle(id) {
-  const r = await apiFetch(`/api/articles/${id}`);
+  const base = isAudiobookId(id) ? '/api/audiobooks/' : '/api/articles/';
+  const r = await apiFetch(base + String(id).split('/').map(encodeURIComponent).join('/'));
   if (!r.ok) {
     const err = new Error('Not found');
     err.status = r.status;
@@ -506,7 +516,8 @@ async function loadArticles() {
   state.loading = true;
 
   try {
-    const data = await fetchArticles({
+    const bookMode = isBookMode();
+    const data = bookMode ? await fetchAudiobooks() : await fetchArticles({
       q:        state.q,
       author:   state.author,
       externalAudio: state.externalAudio,
@@ -521,8 +532,8 @@ async function loadArticles() {
     state.pages = data.pages;
     state.currentItems = data.items;
 
-    $count.textContent = `${data.total.toLocaleString('de-DE')} Artikel`;
-    $app.innerHTML = renderGrid(data.items) + renderPagination(state.page, state.pages);
+    $count.textContent = `${data.total.toLocaleString('de-DE')} ${bookMode ? (data.total === 1 ? 'Hörbuch' : 'Hörbücher') : 'Artikel'}`;
+    $app.innerHTML = (bookMode ? renderBookGrid(data.items) : renderGrid(data.items)) + renderPagination(state.page, state.pages);
 
     // Attach card click handlers
     $app.querySelectorAll('.card').forEach(card => {
@@ -603,6 +614,8 @@ function closeOverlay() {
   stopAudio();
   stopVideo();
   history.pushState(null, '', '#/');
+  // Hörfortschritt und „zuletzt gehört“ in der Liste auffrischen.
+  if (isBookMode()) loadArticles();
 }
 
 function stopVideo() {
@@ -622,6 +635,7 @@ function stopAudio() {
 }
 
 function renderDetail(article) {
+  if (article.kind === 'audiobook') return renderBookDetail(article);
   selectedTtsArticle = article;
   updateTtsActions();
   const hue = authorHue(article.author);
@@ -990,6 +1004,7 @@ function wireAudioPlayer(audioUrl) {
 
   btn.addEventListener('click', () => {
     if (audioEl.paused) {
+      if (typeof bookPlayerPause === 'function') bookPlayerPause();
       audioEl.play();
       btn.classList.add('playing');
     } else {
@@ -1069,10 +1084,16 @@ $searchClear.addEventListener('click', () => {
   loadArticles();
 });
 
+// Hörbuch-Ansicht: Jahr/Kategorie ausblenden, Sortierung einblenden.
+function applyBookMode() {
+  document.body.classList.toggle('mode-audiobooks', isBookMode());
+}
+
 $filterAuthor.addEventListener('change', () => {
   state.externalAudio = $filterAuthor.value === '__external_audio__';
   state.author = state.externalAudio ? '' : $filterAuthor.value;
   if (state.author === 'Telegram') setTelegram(true);
+  applyBookMode();
   state.page = 1;
   loadArticles();
 });
@@ -1161,6 +1182,7 @@ $resetFilters.addEventListener('click', () => {
   $filterLimit.value = '24';
   setTelegram(false);
   Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false, page:1, limit:24 });
+  applyBookMode();
   loadArticles();
 });
 

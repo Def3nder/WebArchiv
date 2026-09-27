@@ -14,9 +14,10 @@ function createMarkdownEditor({ root, getArticle, canAccessAuthor, busy, reindex
     const article = getArticle(id);
     if (!article) throw fail(404, 'Artikel nicht gefunden.');
     if (!canAccessAuthor(user, article.author)) throw fail(403, 'Kein Zugriff auf diesen Artikel.');
-    const base = await io.realpath(root);
+    if (!article.filePath) throw fail(404, 'Zu diesem Eintrag gibt es keine Markdown-Datei.');
+    const bases = await Promise.all([].concat(root).map(dir => io.realpath(dir).catch(() => null)));
     const filename = await io.realpath(article.filePath);
-    if (!filename.startsWith(base + path.sep) || path.extname(filename) !== '.md') {
+    if (!bases.some(base => base && filename.startsWith(base + path.sep)) || path.extname(filename) !== '.md') {
       throw fail(403, 'Ungültiger Artikelpfad.');
     }
     // Ein Austausch würde sonst den Link statt der Originaldatei ersetzen.

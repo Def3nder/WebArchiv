@@ -85,6 +85,17 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
   über eine feste Stichwort-Taxonomie bis zu 5 Kategorien zu (für Filter/Facetten).
   Das Feld `Kategorien:` bleibt davon getrennt als reine Anzeige-Tags.
 
+### Hörbücher (`audio/Hörbücher/`)
+
+Je Buch ein Ordner unter `audio/Hörbücher/` mit `cover.jpg`/`.png`, nummerierten
+Tracks (`.mp3`/`.m4b`/`.m4a`) und optional `abstract.md`
+(`Titel:`, `Autor:`, `Datum:`, `Inhalt:` + Markdown). Fallback-Cover:
+`audio/Hörbücher/standard.png`. Hörbücher sind keine Artikel: Sie erscheinen nur
+beim Autorenfilter „Hörbücher“ (Sortierung zuletzt gehört / Name / Datum), sind nie
+für Gäste sichtbar und werden über `allowedAuthors` freigegeben. Der Player spielt
+das ganze Buch, springt über Dateigrenzen (Weiten in `config.json`) und merkt sich
+Position und Tempo pro Nutzer und Buch in `audiobook-progress.json`.
+
 ---
 
 ## Suche, Filter, Facetten
@@ -168,6 +179,9 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht) |
 | `GET /api/prompts` · `GET /api/prompts/:file` | Soft | Prompt-Textbausteine aus `prompts/` (Copy-Menü) |
+| `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/title/date),page,limit` |
+| `GET /api/audiobooks/*` | Auth + Autor | Hörbuch mit Tracks, Beschreibung, eigenem Fortschritt |
+| `PUT /api/audiobook-progress/*` | Auth + Autor | Hörposition speichern `{trackIndex,position,speed}` |
 | `GET /api/reindex/status` | Auth | Status des Index-Neuaufbaus |
 | `POST /api/reindex` | Admin | Index neu aufbauen (`buildIndex()`) |
 | `GET /api/scrape/status` | Auth | Status + Live-Ausgabe des Scrape-Laufs |
@@ -240,11 +254,14 @@ Facebook benötigt `scraper/cookies.txt` (Netscape-Format) und `scraper/Abonente
 ```
 server.js                     Express-App (Routen, Index, Auth-Anbindung)
 user-store.cjs                Nutzer & öffentliche Autoren: Lesen/Schreiben, Regeln, Routen
+audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
+config.json                   Einstellungen (Hörbuch-Sprungweiten)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp
 public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
 ├── user-admin.js             Kennwort ändern, Benutzerverwaltung, Öffentlicher Zugang
+├── audiobooks.js             Hörbuch-Liste, -Detail, Player und Miniplayer
 ├── favicon.svg               Favicon (Bücherregal, Gold auf Dunkel) – Vorlage für die beiden folgenden
 ├── favicon.ico               16/32/48 px (PNG-Einträge), aus favicon.svg erzeugt
 ├── apple-touch-icon.png      180 px ohne Eckenradius für den iOS-Homescreen
@@ -288,6 +305,7 @@ node server.js            # bzw. npm start  →  http://localhost:3000
 | `SESSION_SECRET` | Dev-Fallback | Signatur der Session-Cookies (in Prod setzen!) |
 | `USERS_FILE` | `./users.json` | Abweichender Pfad der Nutzerdatei (z. B. für Tests) |
 | `PUBLIC_DIRS_FILE` | `./public-directories.txt` | Abweichender Pfad der Liste öffentlicher Autoren |
+| `AUDIOBOOK_PROGRESS_FILE` | `./audiobook-progress.json` | Abweichender Pfad des Hörfortschritts |
 | `PLAYWRIGHT_BROWSERS_PATH` | – | Chromium-Ablage für den Scraper (siehe Setup-Doku) |
 
 Scraper zusätzlich einrichten:

@@ -80,7 +80,8 @@ function checkMustChange(value) {
   return value;
 }
 
-function createUserStore({ usersFile, publicFile, io = fs }) {
+// privateAuthors: Autoren, die nie öffentlich sein dürfen (z. B. Hörbücher).
+function createUserStore({ usersFile, publicFile, privateAuthors = [], io = fs }) {
   let users = [];
   let usersShape = null;   // null = reine Liste, sonst Objekt mit weiteren Schlüsseln (z. B. _comment)
   let publicDoc = {};
@@ -100,7 +101,7 @@ function createUserStore({ usersFile, publicFile, io = fs }) {
   function loadPublic() {
     publicDoc = readJson(publicFile, {}) || {};
     const list = publicDoc['public-directories'];
-    publicAuthors = Array.isArray(list) ? list.filter(a => typeof a === 'string') : [];
+    publicAuthors = Array.isArray(list) ? list.filter(a => typeof a === 'string' && !privateAuthors.includes(a)) : [];
   }
   // Schreibvorgänge nacheinander; jede Änderung liest die Datei frisch ein,
   // damit Handänderungen (z. B. per hash-passwords.js) nicht überschrieben werden.
@@ -143,6 +144,7 @@ function createUserStore({ usersFile, publicFile, io = fs }) {
       try { loadPublic(); } catch (err) { console.warn('public-directories.txt nicht geladen —', err.message); }
     },
     get publicAuthors() { return publicAuthors; },
+    get privateAuthors() { return privateAuthors; },
     list: () => users.map(publicView),
 
     // Rechte werden bei jeder Anfrage frisch aufgelöst; öffentliche Autoren kommen immer hinzu.
@@ -242,6 +244,8 @@ function createUserStore({ usersFile, publicFile, io = fs }) {
     async setPublicAuthors(value) {
       const authors = normalizeAuthors(value, 'Liste der öffentlichen Autoren');
       if (authors === null) throw fail(400, 'Liste der öffentlichen Autoren ist ungültig.');
+      const blocked = authors.filter(a => privateAuthors.includes(a));
+      if (blocked.length) throw fail(400, `${blocked.join(', ')} kann nicht öffentlich freigegeben werden.`);
       return exclusive(async () => {
         loadPublic();
         const doc = { ...publicDoc, 'public-directories': authors };
@@ -254,7 +258,7 @@ function createUserStore({ usersFile, publicFile, io = fs }) {
   };
 }
 
-function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors }) {
+function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors, onUserDeleted }) {
   const route = handler => async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
@@ -272,6 +276,7 @@ function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors }
     users: store.list(),
     authors: getAuthors(),
     publicAuthors: store.publicAuthors,
+    privateAuthors: store.privateAuthors,
     self: actor(req),
   });
 
@@ -285,7 +290,12 @@ function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors }
     delete result.sessionVersion;
     return result;
   }));
-  app.delete('/api/users/:email', requireAdmin, route(req => store.remove(req.params.email, actor(req))));
+  app.delete('/api/users/:email', requireAdmin, route(async req => {
+    const result = await store.remove(req.params.email, actor(req));
+    // Zugehörige Daten (z. B. Hörfortschritt) mit entfernen; ein Fehler dabei macht das Löschen nicht rückgängig.
+    if (onUserDeleted) await Promise.resolve(onUserDeleted(req.params.email)).catch(err => console.error('Nutzerdaten nicht entfernt:', err.message));
+    return result;
+  }));
   app.put('/api/public-authors', requireAdmin, route(req => store.setPublicAuthors(req.body?.authors)));
   app.post('/api/me/password', requireAuth, route(async req => {
     const { sessionVersion } = await store.changeOwnPassword(actor(req), req.body);
@@ -294,4 +304,4 @@ function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors }
   }));
 }
 
-module.exports = { createUserStore, installUserRoutes, MIN_PASSWORD };
+module.exports = { createUserStore, installUserRoutes, writeJsonAtomic, MIN_PASSWORD };

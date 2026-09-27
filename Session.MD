@@ -1,6 +1,6 @@
 # WebArchiv – gesammeltes Projektwissen und Sitzungsprotokoll
 
-Stand: **25.09.2026**. Zusammengeführt aus den zugänglichen Projektgesprächen und den vorhandenen Projektdokumenten; wichtige spätere Entscheidungen mit dem lokalen Code abgeglichen.
+Stand: **27.09.2026**. Zusammengeführt aus den zugänglichen Projektgesprächen und den vorhandenen Projektdokumenten; wichtige spätere Entscheidungen mit dem lokalen Code abgeglichen.
 
 ## Umfang und Leseregel
 
@@ -30,6 +30,7 @@ Diese Datei ist eine thematische Zusammenfassung, kein wortgetreues Transkript. 
 | Benutzerverwaltung (25.09.) | Admin pflegt Nutzer, Rechte, Kennwörter und öffentliche Autoren über Aktionen → *Benutzerverwaltung*; jeder Nutzer kann sein Kennwort ändern. Siehe Abschnitt 4a. |
 | Öffentliche Autoren (25.09.) | Angemeldete Nutzer mit Autorenliste sehen öffentliche Autoren immer zusätzlich. |
 | „Neue Grafik“ (25.09.) | Für alle Autoren außer `Infografiken` selbst, auch für öffentliche Autoren. |
+| Hörbücher (27.09.) | Eigener Autor `Hörbücher` unter `audio/Hörbücher/<Buch>/`, nicht unter `www/`. Kein Artikel; erscheint nur bei Autorenfilter „Hörbücher“. Nie öffentlich. Siehe Abschnitt 6a. |
 
 ## 2. Projekt, Architektur und Datenmodell
 
@@ -63,6 +64,8 @@ WebArchiv ist ein selbst gehostetes Archiv für überwiegend deutschsprachige Ar
 | `scripts/hash-passwords.js` | Passwortpflege über bcrypt |
 | `migrate-audio.js` | Bewusste Migration der MP3s eines ausgewählten Autors |
 | `graft/` | Kontextgraph für Entwicklung; keine Laufzeitvoraussetzung |
+| `audiobooks.cjs`, `public/audiobooks.js` | Hörbücher: Index, Fortschritt, Player (Abschnitt 6a) |
+| `config.json` | Einstellungen (derzeit Hörbuch-Sprungweiten) |
 
 Artikel und Medien werden getrennt vom Code synchronisiert. `users.json`, Audioablage, Cookies, Logs und Abhängigkeiten sollen nicht versehentlich veröffentlicht werden. Die tatsächlichen Ignore-Muster prüfen: Ein neuer Autorenordner oder eine neue Dateistruktur ist nicht allein deshalb sicher ignoriert, weil andere Archivdateien ignoriert werden.
 
@@ -242,6 +245,39 @@ Ein tatsächlicher Debian-Fehler war `EXDEV: cross-device link not permitted`: `
 Vorgehen: Dry-Run prüfen, Migration gezielt ausführen, Log auf Konflikte/Fehler kontrollieren, anschließend reindexieren. Das Skript wurde erstellt und der Dry-Run damals mit zwei Joe-Turan-MP3s geprüft; daraus folgt keine heute bestätigte vollständige Produktionsmigration.
 
 Quellen: [G2], [G3], [G4].
+
+## 6a. Hörbücher (27.09.2026)
+
+Entscheidungen des Benutzers:
+
+- Ablage: `audio/Hörbücher/<Ordner je Buch>/` mit `cover.jpg`/`.png`, nummerierten Tracks (`.mp3`, `.m4b`, auch `.m4a`) direkt im Ordner (keine Unterordner) und optional `abstract.md`. Fehlt das Cover, gilt `audio/Hörbücher/standard.*`. Bewusst unter `audio/`, damit der Artikel-Scan von `www/` die `abstract.md` nicht als Artikel einliest.
+- `abstract.md` hat feste Felder `Titel:`, `Autor:`, `Datum:`, `Inhalt:`; alles ab `Inhalt:` ist Markdown und wird gerendert. Ohne Datei werden Autor und Titel aus dem Ordnernamen „Autor - Titel“ gelesen.
+- Hörbücher sind **keine Artikel**: nicht unter „Alle Autoren“, nicht in der globalen Suche, nicht im Filter „mit Audio“. Nur bei Autor = „Hörbücher“; dort Sortierung *Zuletzt gehört* (Standard, danach ungehörte nach Name), *Nach Name*, *Nach Datum*. Jahr/Kategorie sind in dieser Ansicht ausgeblendet; die Suche durchsucht Titel, Buchautor und Kurzbeschreibung.
+- Rechte: wie ein normaler Autor über `allowedAuthors` (Haken in der Benutzerverwaltung). **Gäste nie**, auch nicht per `public-directories.txt`; der Eintrag wird beim Laden ignoriert, beim Speichern abgewiesen und im Reiter „Öffentlicher Zugang“ nicht angeboten.
+- Player: ein Play-Button für das ganze Buch; Teil zurück/vor, große und kleine Sprünge **über Dateigrenzen hinweg**, Tempo 0,75×–2×, Trackliste, automatischer Übergang zum nächsten Teil. Sprungweiten in `config.json` (`audiobooks.skipLongSeconds` = 600, `skipShortSeconds` = 30), Neustart nötig.
+- Anzeige einfach: „Teil x von y · Titel“ und Zeit im aktuellen Teil; keine Gesamtdauer des Buches.
+- Hörposition **pro Nutzer und Buch**, einschließlich Tempo (pro Buch). Gespeichert alle 15 s beim Hören, bei Pause, Teilwechsel, Sprung, Schließen der Seite und Abmelden.
+- Miniplayer: Wiedergabe läuft beim Schließen des Details weiter (Leiste unten). Startet ein Artikel-Audio, pausiert das Hörbuch, und umgekehrt.
+- Aktionen-Menü (Admin): nur „Abstract editieren“ (vorhandener Editor mit Versionsschutz), sofern `abstract.md` existiert.
+
+Technik:
+
+- `audiobooks.cjs`: Scan/Index (beim Reindex mit aufgebaut), `abstract.md`-Parser, natürliche Tracksortierung (`2` vor `10`), Tracktitel ohne Nummer und ohne gemeinsamen Anhang wie „ - Buchtitel - Autor“, Fortschrittsspeicher und Routen `GET /api/audiobooks`, `GET /api/audiobooks/*`, `PUT /api/audiobook-progress/*` (angemeldet, Autorenrecht, Cross-Site-Schutz).
+- Fortschritt in `audiobook-progress.json` (gitignored, atomar geschrieben, Modus 600), Schlüssel E-Mail (klein) → Buch-ID → `{file, trackIndex, position, speed, updatedAt}`. Der Track wird bevorzugt über den Dateinamen wiedergefunden. Beim Löschen eines Nutzers werden seine Einträge entfernt. Pfad per `AUDIOBOOK_PROGRESS_FILE` umlenkbar.
+- Medien über `/audio-files/*` (ACL, Range-Requests); `.m4b`/`.m4a` werden als `audio/mp4` ausgeliefert. Media-Session-API für Sperrbildschirm/Kopfhörertasten.
+- Editor (`article-editor.cjs`) akzeptiert mehrere Wurzeln (`www/` und `audio/`).
+- Frontend: `public/audiobooks.js` (Liste, Detail, Player, Miniplayer).
+- Deployment: `audio/Hörbücher` auf dem Server anlegen (Leserecht für `ralf`), `config.json` mitkopieren; Schreibrecht im App-Verzeichnis für `audiobook-progress.json` besteht bereits (wie `users.json`). Danach Dienst neu starten.
+- Geprüft am 27.09.2026: 29/29 Tests (neu `audiobooks.test.cjs`, erweiterte Editor-/Nutzer-Tests) sowie Browserprüfung mit Testnutzern und Testdateien (Gastsperre, Rechte je Nutzer, Wiedergabe, ±10 Min über Dateigrenzen, Buchende, Tempo, Wiederaufnahme nach Reload, Miniplayer, Artikel-Audio-Wechsel, Abstract-Editor lesend, Handy-Layout). Echte `users.json` und echte `abstract.md` wurden nicht verändert; ein Hörtest auf iPhone/Sperrbildschirm steht aus.
+
+### ToDo für später (Ideen, noch nicht beauftragt)
+
+1. „Weiterhören“-Leiste auf der Startseite mit angefangenen Büchern.
+2. Einschlaf-Timer (15/30/60 Min, „Ende des Teils“) mit sanftem Ausblenden.
+3. Lesezeichen/Notizen an einer Stelle im Buch.
+4. „Als gehört markieren“ und „Von vorn beginnen“.
+5. Gesamtdauer und Restzeit des Buches (Dauer aller Tracks per ffprobe beim Reindex, gecacht).
+6. Nächsten Teil vorladen für lückenlose Übergänge.
 
 ## 7. Scraper, Bereinigung und verwandtes Projekt
 
@@ -628,7 +664,7 @@ Vom Projektroot, mit installierten jeweiligen Abhängigkeiten:
 node --check server.js
 node --check public/app.js
 node --check public/article-editor.js
-node --test server.test.cjs article-editor.test.cjs user-store.test.cjs
+node --test server.test.cjs article-editor.test.cjs user-store.test.cjs audiobooks.test.cjs
 npm test --prefix scraper
 npm test --prefix tts
 python -B -m unittest discover -s tts -p test_qwen_http_service.py -v

@@ -1,0 +1,6 @@
+{
+  "audiobooks": {
+    "skipLongSeconds": 600,
+    "skipShortSeconds": 30
+  }
+}

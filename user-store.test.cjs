@@ -144,3 +144,17 @@ test('Öffentliche Autoren werden gespeichert und wirken sofort', async t => {
   assert.deepEqual(f.store.sessionUser({ email: 'leser@example.org' }).allowedAuthors, ['Joe Turan', 'PDF', 'Infografiken']);
   await assert.rejects(f.store.setPublicAuthors(null), { status: 400 });
 });
+
+test('Private Autoren (Hörbücher) sind nie öffentlich', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'webarchiv-users-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const usersFile = path.join(dir, 'users.json');
+  const publicFile = path.join(dir, 'public-directories.txt');
+  await fs.writeFile(usersFile, '[]');
+  await fs.writeFile(publicFile, JSON.stringify({ 'public-directories': ['Videos', 'Hörbücher'] }));
+  const store = createUserStore({ usersFile, publicFile, privateAuthors: ['Hörbücher'] });
+  store.load();
+  assert.deepEqual(store.publicAuthors, ['Videos']);
+  await assert.rejects(store.setPublicAuthors(['PDF', 'Hörbücher']), { status: 400 });
+  assert.deepEqual(store.publicAuthors, ['Videos']);
+});

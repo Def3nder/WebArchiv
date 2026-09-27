@@ -20,7 +20,7 @@ node scripts/make-favicons.js    # regenerate public/favicon.ico + apple-touch-i
 ```
 
 There is no `npm test` script, linter, or build; run tests with
-`node --test server.test.cjs article-editor.test.cjs user-store.test.cjs`. `node server.js` is the only runtime; restart it to
+`node --test server.test.cjs article-editor.test.cjs user-store.test.cjs audiobooks.test.cjs`. `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button
 → `POST /api/reindex`, or restart). Frontend changes (`public/`) only need a browser reload;
 bump the `?v=` query on the `<script>`/`<link>` tags in `public/index.html` to bust caches.
@@ -78,6 +78,10 @@ object in `app.js`.
   single-article route. `/files/*` also has path-traversal protection (resolved path must stay
   under `www/`) — replicate that pattern for any new file-serving route. `prompts/*` uses the same
   `path.basename` + prefix-check guard.
+- **Audiobooks** (`audiobooks.cjs`, `public/audiobooks.js`): author `Hörbücher` lives under
+  `audio/Hörbücher/<book>/` (tracks + cover + optional `abstract.md`), has its own index and
+  `/api/audiobooks*` routes, is never public (guests blocked in `canAccessAuthor`, filtered from
+  `public-directories.txt`), and stores per-user playback position in `audiobook-progress.json`.
 - The `Telegram` author is special-cased: hidden from listings unless `?telegram=1` or explicitly
   filtered by `author=Telegram`.
 - **Link-preview exception:** `GET /a/<id>` (Open-Graph HTML for social crawlers, redirects humans

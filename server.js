@@ -9,6 +9,9 @@ const { spawn } = require('child_process');
 const { createTtsJobs, installTtsRoutes } = require('./tts/jobs.cjs');
 const { createMarkdownEditor, installMarkdownRoutes } = require('./article-editor.cjs');
 const { createUserStore, installUserRoutes } = require('./user-store.cjs');
+const {
+  AUDIOBOOK_AUTHOR, createAudiobookLibrary, createProgressStore, loadAudiobookConfig, installAudiobookRoutes,
+} = require('./audiobooks.cjs');
 
 const app = express();
 // Hinter dem Reverse-Proxy (Caddy/HTTPS) X-Forwarded-Proto/Host respektieren,
@@ -27,6 +30,8 @@ const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const userStore = createUserStore({
   usersFile: process.env.USERS_FILE || path.join(__dirname, 'users.json'),
   publicFile: process.env.PUBLIC_DIRS_FILE || path.join(__dirname, 'public-directories.txt'),
+  // Hörbücher sind nie öffentlich, auch nicht per public-directories.txt.
+  privateAuthors: [AUDIOBOOK_AUTHOR],
 });
 userStore.load();
 console.log(`Public-Autoren: ${userStore.publicAuthors.length ? userStore.publicAuthors.join(', ') : '(keine)'}`);
@@ -37,9 +42,24 @@ let fuseIndex = null;
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
 let scrapeState = { running: false, sources: null, exitCode: null, startedAt: null, done: true, error: null };
 let infographicWrites = 0;
+
+// Hörbücher: je ein Ordner unter audio/Hörbücher/, eigener Index neben den Artikeln.
+const audiobookConfig = loadAudiobookConfig(path.join(__dirname, 'config.json'));
+const audiobookProgress = createProgressStore({
+  file: process.env.AUDIOBOOK_PROGRESS_FILE || path.join(__dirname, 'audiobook-progress.json'),
+});
+audiobookProgress.load();
+const audiobooks = createAudiobookLibrary({
+  root: path.join(AUDIO_DIR, AUDIOBOOK_AUTHOR),
+  excerpt: text => bodyExcerpt(text || ''),
+  renderMarkdown: text => marked.parse(text),
+  progress: audiobookProgress,
+});
+
 const markdownEditor = createMarkdownEditor({
-  root: WWW_DIR,
-  getArticle: id => articles.find(a => a.id === id),
+  // Artikel liegen unter www/, die abstract.md der Hörbücher unter audio/.
+  root: [WWW_DIR, AUDIO_DIR],
+  getArticle: id => articles.find(a => a.id === id) || audiobooks.get(id),
   canAccessAuthor,
   busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || ttsJobs.running,
   reindex: buildIndex,
@@ -521,6 +541,7 @@ async function rebuildIndex() {
   });
 
   inheritAudioForInfographics(articles);
+  await audiobooks.rebuild();
 
   const isInfografik = a => (a.author === 'Infografiken' ? 1 : 0);
   articles.sort((a, b) =>
@@ -530,6 +551,7 @@ async function rebuildIndex() {
   );
 
   const authorsSet = new Set(articles.map(a => a.author));
+  if (audiobooks.books.length) authorsSet.add(AUDIOBOOK_AUTHOR);
   const yearsSet = new Set(articles.map(a => a.year).filter(Boolean));
   const catsSet = new Set(articles.flatMap(a => a.categories));
 
@@ -553,13 +575,14 @@ async function rebuildIndex() {
   });
 
   reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-  console.log(`✓ ${articles.length} articles indexed in ${Date.now() - t0}ms`);
+  console.log(`✓ ${articles.length} articles, ${audiobooks.books.length} Hörbücher indexed in ${Date.now() - t0}ms`);
 }
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
 function canAccessAuthor(sessionUser, author) {
   if (!sessionUser) return false;
+  if (author === AUDIOBOOK_AUTHOR && sessionUser.role === 'guest') return false;
   if (sessionUser.allowedAuthors === null) return true;
   return sessionUser.allowedAuthors.includes(author);
 }
@@ -864,6 +887,8 @@ app.get('/audio-files/*', attachUser, (req, res) => {
   if (!absPath.startsWith(AUDIO_DIR + path.sep)) {
     return res.status(403).end();
   }
+  // Hörbuch-Tracks (.m4b/.m4a) kennt die MIME-Tabelle nicht; Browser brauchen audio/mp4.
+  if (/\.m4[ab]$/i.test(absPath)) res.type('audio/mp4');
   res.sendFile(absPath, err => { if (err && !res.headersSent) res.status(404).end(); });
 });
 
@@ -1277,7 +1302,13 @@ app.get('/api/articles/*', attachUser, (req, res) => {
 
 installTtsRoutes(app, requireAdmin, ttsJobs);
 installMarkdownRoutes(app, requireAdmin, markdownEditor);
-installUserRoutes(app, { store: userStore, requireAuth, requireAdmin, getAuthors: () => meta.authors });
+installUserRoutes(app, {
+  store: userStore, requireAuth, requireAdmin, getAuthors: () => meta.authors,
+  onUserDeleted: email => audiobookProgress.removeUser(email),
+});
+installAudiobookRoutes(app, {
+  library: audiobooks, progress: audiobookProgress, config: audiobookConfig, requireAuth, canAccessAuthor,
+});
 
 app.use((err, _req, res, next) => {
   if (_req.path.startsWith('/api/article-markdown/')) {
