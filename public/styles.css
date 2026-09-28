@@ -249,6 +249,8 @@ select { font: inherit; color: inherit; }
 
 .reset-btn {
   margin-left: auto;
+  /* Gleiche Höhe wie die Dropdowns derselben Zeile. */
+  align-self: stretch;
   font-size: 0.78rem;
   color: var(--text-muted);
   padding: 4px 10px;
@@ -345,12 +347,13 @@ select { font: inherit; color: inherit; }
     grid-template-rows: auto auto;
     height: auto;
     min-height: 56px;
-    padding: 8px 16px;
-    gap: 8px 10px;
+    padding: 8px 6px;  /* links/rechts bündig mit der Filterleiste */
+    /* Icons dicht nebeneinander; die Artikelzahl behält per margin ihren alten Abstand. */
+    gap: 8px 5px;
     align-items: center;
   }
   .site-logo    { grid-column: 1; grid-row: 1; }
-  .header-count { grid-column: 2; grid-row: 1; font-size: 0.7rem; }
+  .header-count { grid-column: 2; grid-row: 1; font-size: 0.7rem; margin-right: 5px; }
   .theme-btn    { grid-column: 3; grid-row: 1; }
   .telegram-btn { grid-column: 4; grid-row: 1; }
   .header-menu  { grid-column: 5; grid-row: 1; }
@@ -364,7 +367,7 @@ select { font: inherit; color: inherit; }
   }
 
   .filter-bar { top: 100px; }
-  .filter-bar-inner { padding: 8px 12px; gap: 8px 10px; }
+  .filter-bar-inner { padding: 4px 6px; gap: 4px 5px; }
   .filter-label { display: none; }
   .filter-select { max-width: 120px; font-size: 0.78rem; }
 }
@@ -2012,5 +2015,4 @@ body.has-mini-player #app { padding-bottom: 84px; }
   .book-btn { min-width: 40px; padding: 0 8px; font-size: 0.74rem; }
   .book-btn-play { width: 48px; height: 48px; }
   .mini-player { gap: 8px; padding: 6px 8px; bottom: 8px; }
-  .mini-player-buttons [data-book="back-short"] { display: none; }
 }
