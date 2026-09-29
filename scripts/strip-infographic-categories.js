@@ -1,6 +1,6 @@
 /**
  * Entfernt die „Kategorien:“-Zeile aus dem Kopf der Infografik-Markdown-Dateien
- * (www/Infografiken/**.md). Infografiken erben die Kategorien ihres Artikels;
+ * (www/Infografiken/**.md) ohne eigenen Text. Solche Infografiken erben die Kategorien ihres Artikels;
  * eine eigene Zeile ist überflüssig und würde veraltete Kategorien anzeigen.
  *
  * Nutzung:
@@ -45,6 +45,8 @@ function stripCategories(content) {
     if (c && !/^(audioquickie|kategorien|quelle):/i.test(c)) break;
     end++;
   }
+  // Infografiken mit eigenem Text sind Originale; ihre Kategorien bleiben.
+  if (lines.slice(end).some(line => line.trim() && !/^(\*{4,}|-{3,})$/.test(line.trim()))) return null;
   const head = [];
   let changed = false;
   for (let i = 0; i < end; i++) {

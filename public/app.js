@@ -1780,6 +1780,7 @@ $adminMenu.addEventListener('click', ev => {
   else if (action === 'log') showScrapeLog();
   else if (action === 'tts') runTts();
   else if (action === 'tts-job') showTtsJob();
+  else if (action === 'new-infographic') openNewInfographic();
   else if (action === 'users') openUserAdmin();
   else if (action === 'password') openPasswordDialog({ forced: false });
 });

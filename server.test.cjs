@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseArticle, linkInfographics, buildInfographicMarkdown } = require('./server.js');
+const { parseArticle, linkInfographics, buildInfographicMarkdown, slugify, normalizeNewInfographicMarkdown, mergeCategories } = require('./server.js');
 
 test('beginnt einen Blogartikel mit dem ersten Inhalt nach dem Datum', () => {
   const markdown = [
@@ -127,4 +127,39 @@ test('Neue Grafik übernimmt keine Kategorien-Zeile', () => {
   ].join('\n');
   assert.equal(buildInfographicMarkdown(source, 2),
     ['# Titel (2)', '', '**Datum:** 2026-01-02', '', '**Audioquickie:** 2961', ''].join('\n'));
+});
+
+// ── Neue eigenständige Infografik ──────────────────────────────────────────
+test('Dateiname aus dem Titel: Umlaute, Sonderzeichen, Länge', () => {
+  assert.equal(slugify('Wie läuft’s? Größe & Übung – 100 %!'), 'wie-laeuft-s-groesse-uebung-100');
+  assert.equal(slugify('Élan vital'), 'elan-vital');
+  assert.equal(slugify('„«»“'), '');
+  const long = slugify('Wort '.repeat(40));
+  assert.ok(long.length <= 80 && !long.endsWith('-'));
+});
+
+test('Vorlage: leere Kategorien und Platzhalter [Inhalt] werden entfernt', () => {
+  const template = '# Mein Titel\n\nDatum: 2026-09-29\nKategorien: []\n\n----\n\n[Inhalt]\n';
+  assert.equal(normalizeNewInfographicMarkdown(template), '# Mein Titel\n\nDatum: 2026-09-29\n\n----\n');
+  const filled = '# Mein Titel\r\n\r\nDatum: 2026-09-29\r\nKategorien: [Angst, Mut]\r\n\r\n----\r\n\r\nEigener Text.';
+  const result = normalizeNewInfographicMarkdown(filled);
+  assert.equal(result, '# Mein Titel\n\nDatum: 2026-09-29\nKategorien: Angst, Mut\n\n----\n\nEigener Text.\n');
+  const parsed = parseArticle(result, '2026-09-29_mein-titel.md');
+  assert.deepEqual(parsed.tags, ['Angst', 'Mut']);
+  assert.equal(parsed.body, 'Eigener Text.');
+  assert.equal(parseArticle(normalizeNewInfographicMarkdown(template), 'x.md').body, '');
+});
+
+test('Angehakte Kategorien werden beim Speichern eingefügt bzw. ergänzt', () => {
+  const template = '# Titel\n\nDatum: 2026-09-29\n\n----\n\n[Inhalt]\n';
+  assert.equal(normalizeNewInfographicMarkdown(template, ['Psychologie', 'Achtsamkeit', 'Unbekannt']),
+    '# Titel\n\nDatum: 2026-09-29\nKategorien: Psychologie, Achtsamkeit\n\n----\n');
+  const typed = '# Titel\n\nDatum: 2026-09-29\nKategorien: [Mut, Psychologie]\n\n----\n\nText.';
+  assert.equal(normalizeNewInfographicMarkdown(typed, ['Psychologie', 'Gesundheit']),
+    '# Titel\n\nDatum: 2026-09-29\nKategorien: Mut, Psychologie, Gesundheit\n\n----\n\nText.\n');
+});
+
+test('Filter-Kategorien aus der Kategorien-Zeile zählen zuerst', () => {
+  assert.deepEqual(mergeCategories(['Mut', 'Achtsamkeit'], ['Psychologie', 'Achtsamkeit']), ['Achtsamkeit', 'Psychologie']);
+  assert.deepEqual(mergeCategories(['Gesundheit'], ['A', 'B', 'C', 'D', 'E']), ['Gesundheit', 'A', 'B', 'C', 'D']);
 });

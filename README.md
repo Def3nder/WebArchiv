@@ -101,6 +101,18 @@ Im Artikel zeigt eine Bildleiste alle Bilder (drei 9:16 nebeneinander, ab vier
 wischbar); die Vollansicht blättert durch die Bilder und danach zum Nachbarartikel.
 Link auf ein Bild: `#/article/<Artikel-ID>?bild=3`.
 
+**Neue eigenständige Infografik** (Admin, Aktionen → *Neue Infografik*): Dialog mit
+Markdown-Vorlage (`# [Titel]`, `Datum: <heute>`, `----`, `[Inhalt]`), Häkchen für die
+Filter-Kategorien und Grafikauswahl (PNG/JPG, max. 10 MB); alles wird in einem Schritt
+gespeichert als `www/Infografiken/<Jahr>/<Datum>_<titel-slug>.md` + Bild
+(Namenskonflikt → `-2`, `-3` …). Angehakte Kategorien fügt der Server beim Speichern
+als `Kategorien:`-Zeile nach dem Datum ein; ein unverändertes `[Inhalt]` wird entfernt.
+Danach Reindex, die neue Infografik öffnet sich.
+
+**Kategorien-Zeile und Filter:** Steht in `Kategorien:` ein Name der festen
+Filter-Kategorien (z. B. „Achtsamkeit“), zählt er für Filter und Suche immer – vor den
+automatisch erkannten, höchstens fünf. Andere Einträge bleiben reine Anzeige-Tags.
+
 ### Hörbücher (`audio/Hoerbuecher/`)
 
 Je Buch ein Ordner unter `audio/Hoerbuecher/` mit `cover.jpg`/`.png`, nummerierten
@@ -196,6 +208,7 @@ Position und Tempo pro Nutzer und Buch in `audiobook-progress.json`.
 | `GET /files/*` | Soft | Geschützte Datei (Bild/Audio/…), ACL pro Autor |
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht) |
+| `POST /api/new-infographic` | Admin | Neue Infografik `{markdown, image(base64)}` → `{id}` |
 | `GET /api/prompts` · `GET /api/prompts/:file` | Soft | Prompt-Textbausteine aus `prompts/` (Copy-Menü) |
 | `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/title/date),page,limit` |
 | `GET /api/audiobooks/*` | Auth + Autor | Hörbuch mit Tracks, Beschreibung, eigenem Fortschritt |

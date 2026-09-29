@@ -155,6 +155,15 @@ const TAXONOMY = [
   { label: 'Selbsterkenntnis', keys: ['selbsterkenntnis', 'beobachtung', 'wahrnehmung', 'reflexion', 'innenschau', 'selbstreflexion', 'erkennen', 'introspektion', 'bewusst werden', 'selbstbeobachtung'] },
 ];
 
+const TAXONOMY_LABELS = new Set(TAXONOMY.map(bucket => bucket.label));
+
+// Filter-Kategorien: ausdrücklich in „Kategorien:“ genannte Taxonomie-Labels
+// zählen immer (zuerst), danach die automatisch erkannten; höchstens fünf.
+function mergeCategories(tags, autoCategories) {
+  const explicit = (tags || []).filter(tag => TAXONOMY_LABELS.has(tag));
+  return [...new Set([...explicit, ...autoCategories])].slice(0, 5);
+}
+
 function autoCategorize(text) {
   const lower = text.toLowerCase();
   const scores = TAXONOMY.map(bucket => {
@@ -415,8 +424,8 @@ async function scanDir(dirPath, author, year, collector) {
 
       // categories = unified taxonomy labels (for filtering); tags = raw Kategorien field (display only)
       const searchText = parsed.title + ' ' + (parsed.summary || '') + ' ' + parsed.body;
-      const categories = autoCategorize(searchText);
       const tags = (parsed.tags || []).slice(0, 10);
+      const categories = mergeCategories(tags, autoCategorize(searchText));
 
       const excerpt = parsed.summary
         ? parsed.summary.slice(0, 320)
@@ -899,6 +908,8 @@ function attachUser(req, res, next) {
 // ─── API ───────────────────────────────────────────────────────────────────
 
 app.use('/api/article-markdown', express.json({ limit: '2mb' }));
+// Neue Infografik: Bild base64 in JSON (bis 10 MB Bild → ~14 MB JSON).
+app.use('/api/new-infographic', express.json({ limit: Math.ceil(INFOGRAPHIC_MAX_BYTES * 1.4) + 2 * 1024 * 1024 }));
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'webarchiv-dev-secret-change-in-prod',
@@ -1233,6 +1244,107 @@ app.post(
   }
 );
 
+// ─── Neue eigenständige Infografik (Admin, Aktionen-Menü) ───────────────────
+//
+// Markdown + Bild in einer Anfrage (Bild base64 in JSON, keine Zusatz-Abhängigkeit).
+// Dateiname: <Datum>_<Slug aus dem Titel>; Konflikt → -2, -3 … (nicht _2, das
+// bedeutet „Variante“). Unveränderte Platzhalter der Vorlage werden entfernt.
+
+function slugify(title) {
+  return String(title || '').toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    .slice(0, 80).replace(/-+$/, '');
+}
+
+// „Kategorien: [a, b]“ → „Kategorien: a, b“, leere Liste entfernen; ein
+// stehengebliebenes „[Inhalt]“ unter der Trennlinie entfernen. Im Dialog
+// angehakte Kategorien (nur Taxonomie-Labels) kommen erst hier in die Datei:
+// in eine vorhandene Kategorien-Zeile, sonst als neue Zeile nach „Datum:“.
+function normalizeNewInfographicMarkdown(markdown, categories = []) {
+  const checked = [...new Set((categories || []).filter(label => TAXONOMY_LABELS.has(label)))];
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const result = [];
+  const separatorIdx = lines.findIndex(line => /^(\*{4,}|-{4,})\s*$/.test(line.trim()));
+  const hasCategoryLine = lines.slice(0, separatorIdx < 0 ? lines.length : separatorIdx)
+    .some(line => /^\s*\**_?kategorien:/i.test(line));
+  let afterSeparator = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^(\*{4,}|-{4,})\s*$/.test(line.trim())) afterSeparator = true;
+    const m = !afterSeparator && line.match(/^(\s*\**_?kategorien:\**_?\s*)(.*)$/i);
+    if (m) {
+      const values = [...new Set([...m[2].replace(/^\[|\]$/g, '').split(',').map(v => v.trim()).filter(Boolean), ...checked])];
+      checked.length = 0;
+      if (values.length) result.push(m[1] + values.join(', '));
+      else if (result.length && result[result.length - 1].trim() === '' && (lines[i + 1] ?? '').trim() === '') i++;
+      continue;
+    }
+    result.push(line);
+    if (checked.length && !hasCategoryLine && !afterSeparator && /^[\s*_]*datum:/i.test(line)) {
+      result.push(`Kategorien: ${checked.join(', ')}`);
+      checked.length = 0;
+    }
+  }
+  let text = result.join('\n');
+  text = text.replace(/(\n(?:\*{4,}|-{4,})[ \t]*\n)\s*\[Inhalt\]\s*$/i, '$1');
+  return text.replace(/\s+$/, '') + '\n';
+}
+
+function detectImageType(buffer) {
+  if (buffer.length > 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return '.png';
+  if (buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return '.jpg';
+  return null;
+}
+
+app.post('/api/new-infographic', requireAdmin, async (req, res) => {
+  if (req.get('sec-fetch-site') === 'cross-site') return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
+  if (reindexState.running || scrapeState.running || ttsJobs.running || markdownEditor.running || infographicWrites) {
+    return res.status(409).json({ error: 'Es läuft bereits ein Reindex-, Scrape-, Audio- oder Speicherauftrag. Bitte gleich erneut speichern.' });
+  }
+  const categories = Array.isArray(req.body?.categories) ? req.body.categories.map(String) : [];
+  const markdown = normalizeNewInfographicMarkdown(req.body?.markdown, categories);
+  const header = validateInfographicHeader(markdown);
+  const title = parseArticle(markdown, 'neu.md').title;
+  if (!header.hasTitle || /\[titel\]/i.test(title)) return res.status(400).json({ error: 'Bitte in der ersten Zeile einen Titel eintragen.' });
+  if (!header.date) return res.status(400).json({ error: 'Die Datum-Zeile fehlt oder ist ungültig (JJJJ-MM-TT).' });
+  const slug = slugify(title);
+  if (!slug) return res.status(400).json({ error: 'Aus dem Titel lässt sich kein Dateiname ableiten.' });
+
+  const image = Buffer.from(String(req.body?.image || ''), 'base64');
+  if (!image.length) return res.status(400).json({ error: 'Bitte eine Grafik auswählen.' });
+  if (image.length > INFOGRAPHIC_MAX_BYTES) return res.status(413).json({ error: 'Die Bilddatei ist größer als 10 MB.' });
+  const imageExt = detectImageType(image);
+  if (!imageExt) return res.status(415).json({ error: 'Nur PNG- und JPG-Bilder sind erlaubt.' });
+
+  const year = header.date.slice(0, 4);
+  const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
+  if (!dir) return res.status(400).json({ error: 'Kein gültiger Zielordner.' });
+  const baseStem = `${header.date}_${slug}`;
+  let stem = baseStem;
+  for (let n = 2; infographicStemExists(dir, stem); n++) stem = `${baseStem}-${n}`;
+  const mdPath = path.join(dir, stem + '.md');
+  const imagePath = path.join(dir, stem + imageExt);
+
+  infographicWrites++;
+  try {
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(mdPath, markdown, { flag: 'wx' });
+    try {
+      await fs.promises.writeFile(imagePath, image, { flag: 'wx' });
+    } catch (err) {
+      await fs.promises.unlink(mdPath).catch(() => {});
+      throw err;
+    }
+    await buildIndex();
+    res.json({ ok: true, id: [INFOGRAPHICS_AUTHOR, year, stem].join('/') });
+  } catch (err) {
+    if (err.code === 'EEXIST') return res.status(409).json({ error: 'Eine Datei mit diesem Namen existiert bereits. Bitte erneut speichern.' });
+    res.status(500).json({ error: err.message || 'Infografik konnte nicht gespeichert werden.' });
+  } finally { infographicWrites--; }
+});
+
 // ─── Scrape (Admin): externen Scraper starten, danach automatisch reindexen ──
 //
 // Startet scraper/scrape_all.js als eigenen Node-Prozess (self-contained mit
@@ -1471,4 +1583,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseArticle, linkInfographics, buildInfographicMarkdown, removeCategoryLines };
+module.exports = { parseArticle, linkInfographics, buildInfographicMarkdown, removeCategoryLines, slugify, normalizeNewInfographicMarkdown, mergeCategories };

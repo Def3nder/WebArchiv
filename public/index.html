@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=55" />
+  <link rel="stylesheet" href="styles.css?v=57" />
 </head>
 <body>
 
@@ -55,6 +55,7 @@
           <button type="button" role="menuitem" class="header-menu-item" data-action="scrape" data-admin-only>Neue Beiträge scrapen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="log" data-admin-only>Scrape-Log anzeigen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job" data-admin-only>Audio-Auftrag anzeigen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="new-infographic" data-admin-only>Neue Infografik</button>
           <hr class="header-menu-sep" data-admin-only>
           <button type="button" role="menuitem" class="header-menu-item" data-action="users" data-admin-only>Benutzerverwaltung</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="password">Kennwort ändern</button>
@@ -299,6 +300,31 @@
       <button type="button" id="article-editor-save" class="detail-cat-pill" disabled>Speichern</button>
     </div>
   </dialog>
+  <!-- Neue eigenständige Infografik: Markdown-Vorlage + Grafik in einem Schritt -->
+  <dialog id="infographic-new" aria-labelledby="infographic-new-title">
+    <div class="article-editor-heading">
+      <div><p class="article-editor-eyebrow">INFOGRAFIKEN</p><h2 id="infographic-new-title">Neue Infografik</h2></div>
+      <button type="button" id="infographic-new-close" class="detail-cat-pill" aria-label="Dialog schließen">✕</button>
+    </div>
+    <label for="infographic-new-text">Markdown: Titel, Datum und optional eigener Text</label>
+    <textarea id="infographic-new-text" spellcheck="false" aria-describedby="infographic-new-filename"></textarea>
+    <p id="infographic-new-filename"></p>
+    <fieldset class="infographic-new-categories">
+      <legend>Kategorien (werden beim Speichern eingefügt)</legend>
+      <div id="infographic-new-categories"></div>
+    </fieldset>
+    <div class="infographic-new-image">
+      <button type="button" id="infographic-new-pick" class="detail-cat-pill">Grafik auswählen</button>
+      <input type="file" id="infographic-new-file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden />
+      <img id="infographic-new-preview" alt="Vorschau der Grafik" hidden />
+      <span id="infographic-new-image-name">PNG oder JPG, höchstens 10 MB</span>
+    </div>
+    <p id="infographic-new-status" role="status" aria-live="polite"></p>
+    <div class="article-editor-buttons">
+      <button type="button" id="infographic-new-cancel" class="detail-cat-pill">Abbrechen</button>
+      <button type="button" id="infographic-new-save" class="detail-cat-pill" disabled>Speichern</button>
+    </div>
+  </dialog>
   <!-- Eigenes Kennwort ändern (auch als Pflichtdialog nach der Anmeldung) -->
   <dialog id="password-dialog" class="account-dialog" aria-labelledby="password-title">
     <form id="password-form" novalidate>
@@ -342,8 +368,9 @@
     <section id="user-admin-panel-public" role="tabpanel" aria-labelledby="user-admin-tab-public" class="user-admin-panel" hidden></section>
   </dialog>
   <script src="user-admin.js?v=10"></script>
-  <script src="app.js?v=40"></script>
+  <script src="app.js?v=41"></script>
   <script src="audiobooks.js?v=1"></script>
   <script src="article-editor.js?v=2"></script>
+  <script src="infographic-new.js?v=2"></script>
 </body>
 </html>

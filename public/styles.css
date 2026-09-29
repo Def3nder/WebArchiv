@@ -1710,6 +1710,53 @@ body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex
   #article-editor-text { padding: 12px; font-size: 16px; }
 }
 
+/* Neue Infografik: gleicher Aufbau wie der Editor, dazu Grafikauswahl mit Vorschau. */
+#infographic-new {
+  width: min(760px, calc(100vw - 32px));
+  height: min(760px, calc(100dvh - 32px));
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 28px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 90px #0006;
+}
+#infographic-new[open] { display: flex; flex-direction: column; gap: 12px; }
+#infographic-new::backdrop { background: #0009; backdrop-filter: blur(4px); }
+#infographic-new-title { margin: 0; font-family: var(--font-heading, Georgia, serif); font-size: 1.7rem; }
+#infographic-new label, #infographic-new-filename { font-size: .8rem; color: var(--text-muted); }
+#infographic-new-filename { margin: 0; overflow-wrap: anywhere; }
+#infographic-new-text {
+  flex: 1; min-height: 140px; width: 100%; resize: none;
+  padding: 18px; border: 1px solid var(--border-hi); border-radius: 4px;
+  background: var(--bg); color: var(--text);
+  font: 15px/1.65 Consolas, 'Courier New', monospace; tab-size: 2;
+}
+#infographic-new-text:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.infographic-new-categories { margin: 0; padding: 8px 12px 10px; border: 1px solid var(--border); border-radius: 4px; }
+.infographic-new-categories legend { padding: 0 4px; font-size: .8rem; color: var(--text-muted); }
+#infographic-new-categories { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.infographic-new-category { display: inline-flex; align-items: center; gap: 5px; font-size: .85rem; color: var(--text); cursor: pointer; }
+.infographic-new-category input { accent-color: var(--accent); margin: 0; }
+.infographic-new-image { display: flex; align-items: center; gap: 12px; min-height: 56px; }
+#infographic-new-preview {
+  width: 42px; height: 56px; object-fit: cover; object-position: top;
+  border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2);
+}
+#infographic-new-preview[hidden] { display: none; }
+#infographic-new-image-name { font-size: .8rem; color: var(--text-muted); overflow-wrap: anywhere; }
+#infographic-new-status { margin: 0; font-size: .85rem; overflow-wrap: anywhere; }
+#infographic-new-cancel { margin-left: auto; }
+#infographic-new-save { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+#infographic-new button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 600px) {
+  #infographic-new { padding: 18px; width: calc(100vw - 16px); height: calc(100dvh - 16px); }
+  #infographic-new-text { padding: 12px; font-size: 16px; }
+}
+
 /* ── Konto: Aktionen-Button für Nutzer, Kennwort-Dialog, Benutzerverwaltung ── */
 .reindex-btn.is-account { display: inline-flex; align-items: center; padding: 5px 7px; }
 .reindex-btn[hidden] { display: none; }
