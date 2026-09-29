@@ -959,8 +959,7 @@ body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex
   box-shadow: 0 2px 8px rgba(0,0,0,.4);
 }
 .img-fullscreen-counter {
-  left: 50%;
-  transform: translateX(-50%);
+  right: 14px;
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 0.8rem;
