@@ -30,6 +30,7 @@ Diese Datei ist eine thematische Zusammenfassung, kein wortgetreues Transkript. 
 | Benutzerverwaltung (25.09.) | Admin pflegt Nutzer, Rechte, Kennwörter und öffentliche Autoren über Aktionen → *Benutzerverwaltung*; jeder Nutzer kann sein Kennwort ändern. Siehe Abschnitt 4a. |
 | Öffentliche Autoren (25.09.) | Angemeldete Nutzer mit Autorenliste sehen öffentliche Autoren immer zusätzlich. |
 | „Neue Grafik“ (25.09.) | Für alle Autoren außer `Infografiken` selbst, auch für öffentliche Autoren. |
+| Infografik-Gruppen (29.09.) | Artikel + Platzhalter-Infografiken = eine Kachel (quadratisch/länglich); Liste und Autor „Infografiken“ einzeln. Siehe Abschnitt 5a. |
 | Hörbücher (27.09.) | Eigener Autor `Hörbücher`; Ablage `audio/Hoerbuecher/<Buch>/` (ohne Umlaute, lokal und auf dem Server), nicht unter `www/`. Kein Artikel; erscheint nur bei Autorenfilter „Hörbücher“. Nie öffentlich. Siehe Abschnitt 6a. |
 
 ## 2. Projekt, Architektur und Datenmodell
@@ -201,6 +202,25 @@ Reihenfolge und Grenzen:
 7. Vor der Ausgabe greifen die Rechte am Audio-Ursprungsautor, siehe Abschnitt 4.
 
 Aktuell abgeglichen: `server.js:439–484` (`inheritAudioForInfographics`). Quelle: [G4].
+
+## 5a. Infografik-Gruppen (29.09.2026)
+
+Entscheidungen des Benutzers:
+
+- **Zuordnung** über Jahr + Dateistamm. `_N` ist nur dann eine Variante, wenn es den verkürzten Stamm gibt. Vorher schnitt `infographicBaseStem` jede Zahlenendung ab, dadurch fanden die Stefan-Hiene-Infografiken (`…_Audioquickie_2961`) ihren Artikel nicht und erbten kein Audio (behoben; 290 statt 270 Zuordnungen).
+- **Platzhalter** = Infografik-`.md` ohne Text unter Datum/Metadaten. Platzhalter und Artikel bilden eine Gruppe (Anker = Artikel; ohne Artikel die Basis-Infografik). Eine Infografik **mit eigenem Text** ist ein Original (eigene Kachel, „Artikel editieren“ bearbeitet sie); ihre Varianten `_2`, `_3` gehören als Bilder zu ihr, deren doppelter Text wird nicht gezeigt.
+- **Bilder der Gruppe:** eigenes Artikelfoto (nicht `standard.jpg`), dann Basis-Grafik, `_2`, `_3` …
+- Mitglieder **erben Kategorien/Tags** des Ankers (Suche, Filter) und wie bisher Audio (Zugriff bleibt beim Audio-Ursprung).
+- **Wo gruppiert:** nur Kachelansichten quadratisch/länglich (`/api/articles?group=1`). Liste und Autorenfilter „Infografiken“ einzeln. Gruppierung pro Anfrage nach dem Rechtefilter: Wer den Artikel nicht sehen darf (Gast), bekommt die Grafik einzeln ohne Text und Audio.
+- **Trefferzahl** = Artikel + Grafiken (wie vorher); Seiten zählen Kacheln.
+- **Kachel:** keine Animation. Desktop: Mausposition (Breite ÷ Anzahl) wählt das Bild, beim Verlassen zurück zu Bild 1. Touch: waagerecht wischen. Striche ●○○ oben auf dunklem Grund. Weitere Bilder erst bei Hover/Berührung geladen.
+- **Artikelansicht:** Bildleiste mit Höhe für drei 9:16-Bilder nebeneinander (27:16); bei zwei Bildern je halbe Breite, unten beschnitten; Artikelfoto mittig beschnitten; ab vier Bildern waagerecht scrollbar (Wischen dort wechselt nicht den Artikel). Klick öffnet die Vollansicht.
+- **Wischen/Pfeiltasten** wechseln in der Artikelansicht die Artikel; nur in der **Vollansicht** die Bilder, nach dem letzten Bild weiter zum nächsten Artikel (Bild 1), vor dem ersten zum vorigen (letztes Bild). Vollansicht zeigt „2 / 4“ und einen Download-Knopf.
+- **Deep-Link:** `#/article/<Anker-ID>?bild=N`. Alte Links auf eine gruppierte Infografik öffnen die Gruppe mit diesem Bild. `/a/<id>` unverändert.
+- „Neue Grafik“ übernimmt keine `Kategorien:`-Zeile mehr. Bestehende Zeilen entfernt `scripts/strip-infographic-categories.js` (erst `--dry-run`; Sicherung nach `download/backup-<Datum>/`; danach Reindex). Lokal am 29.09. nur als Probelauf ausgeführt (23 Dateien).
+- Grafik löschen/ersetzen: bewusst nicht umgesetzt.
+
+Technik: `linkInfographics` (Index), `visibleGroupAnchor`/`groupImagesFor` (API) in `server.js`; Frontend `renderCardGallery`/`wireCardGallery`, Bildleiste in `renderDetail`, `fsGallery`/`stepFullscreen`, `parseArticleHash` in `public/app.js`. Geprüft am 29.09.: 36/36 Tests (6 neue Gruppentests), API gegen den echten Bestand (5.614 Einträge → 5.327 Kacheln, 184 Gruppen; Gast: 22 reine Infografik-Gruppen), Browserprüfung Desktop und Handy-Ansicht (Hover, Wischen, Leiste mit 2 und 5 Bildern, Vollansicht über Bild- und Artikelgrenzen, Deep-Link, Liste einzeln). Nicht auf einem echten iPhone geprüft.
 
 ## 6. Audioablage, Player und Migration
 

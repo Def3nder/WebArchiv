@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=53" />
+  <link rel="stylesheet" href="styles.css?v=54" />
 </head>
 <body>
 
@@ -184,6 +184,10 @@
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen" class="img-fullscreen" hidden>
     <img id="img-fullscreen-img" src="" alt="" />
+    <a id="img-fullscreen-download" class="img-fullscreen-download" href="" download aria-label="Bild herunterladen" title="Bild herunterladen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0l-4-4m4 4l4-4"/><rect x="4" y="18" width="16" height="2" rx="1"/></svg>
+    </a>
+    <div id="img-fullscreen-counter" class="img-fullscreen-counter" aria-live="polite" hidden></div>
   </div>
 
   <!-- Loading spinner -->
@@ -338,7 +342,7 @@
     <section id="user-admin-panel-public" role="tabpanel" aria-labelledby="user-admin-tab-public" class="user-admin-panel" hidden></section>
   </dialog>
   <script src="user-admin.js?v=10"></script>
-  <script src="app.js?v=39"></script>
+  <script src="app.js?v=40"></script>
   <script src="audiobooks.js?v=1"></script>
   <script src="article-editor.js?v=2"></script>
 </body>

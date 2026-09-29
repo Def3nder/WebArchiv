@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseArticle } = require('./server.js');
+const { parseArticle, linkInfographics, buildInfographicMarkdown } = require('./server.js');
 
 test('beginnt einen Blogartikel mit dem ersten Inhalt nach dem Datum', () => {
   const markdown = [
@@ -44,4 +44,87 @@ test('liest bekannte Metadaten direkt nach dem Datum weiterhin', () => {
   assert.equal(article.episodeNum, 42);
   assert.deepEqual(article.tags, ['Körper', 'Gesundheit']);
   assert.equal(article.body, 'Artikelinhalt.');
+});
+
+// ── Infografik-Gruppen ─────────────────────────────────────────────────────
+function entry(author, stem, extra = {}) {
+  return {
+    id: `${author}/2026/${stem}`, author, year: '2026', filePath: `/www/${author}/2026/${stem}.md`,
+    categories: [], tags: [], audioUrl: null, ownImage: true, hasBody: author !== 'Infografiken', ...extra,
+  };
+}
+const memberIds = (groups, anchorId) => (groups.get(anchorId) || []).map(member => member.id);
+
+test('Infografiken mit Episodennummer im Namen finden ihren Artikel', () => {
+  const list = [
+    entry('Stefan Hiene', '2026-01-02_Audioquickie_2961', { audioUrl: '/files/a.mp3', categories: ['Verstand'], tags: ['Sucht'] }),
+    entry('Infografiken', '2026-01-02_Audioquickie_2961'),
+    entry('Infografiken', '2026-01-02_Audioquickie_2961_2'),
+    entry('Infografiken', '2026-01-03_Audioquickie_2962'),
+  ];
+  const { groups, anchorOf } = linkInfographics(list);
+
+  assert.deepEqual(memberIds(groups, 'Stefan Hiene/2026/2026-01-02_Audioquickie_2961'),
+    ['Infografiken/2026/2026-01-02_Audioquickie_2961', 'Infografiken/2026/2026-01-02_Audioquickie_2961_2']);
+  assert.equal(list[2].audioUrl, '/files/a.mp3');
+  assert.equal(list[2].inheritedAudioAuthor, 'Stefan Hiene');
+  assert.deepEqual(list[2].categories, ['Verstand']);
+  assert.deepEqual(list[2].tags, ['Sucht']);
+  // Ohne Artikel und ohne Varianten bleibt die Grafik einzeln.
+  assert.equal(anchorOf.has('Infografiken/2026/2026-01-03_Audioquickie_2962'), false);
+});
+
+test('Varianten ohne Artikel werden unter der Basis-Infografik gruppiert', () => {
+  const list = [
+    entry('Infografiken', '2026-02-01_thema'),
+    entry('Infografiken', '2026-02-01_thema_3'),
+    entry('Infografiken', '2026-02-01_thema_2'),
+  ];
+  const { groups } = linkInfographics(list);
+  assert.deepEqual(memberIds(groups, 'Infografiken/2026/2026-02-01_thema'),
+    ['Infografiken/2026/2026-02-01_thema_2', 'Infografiken/2026/2026-02-01_thema_3']);
+});
+
+test('Infografik mit eigenem Text ist ein Original; ihre Varianten gehören zu ihr', () => {
+  const list = [
+    entry('Facebook', '2026-06-15_angst'),
+    entry('Infografiken', '2026-06-15_angst', { hasBody: true, categories: ['Angst'] }),
+    entry('Infografiken', '2026-06-15_angst_2', { hasBody: true }),
+  ];
+  const { groups, anchorOf } = linkInfographics(list);
+  assert.equal(anchorOf.has('Infografiken/2026/2026-06-15_angst'), false);
+  assert.deepEqual(memberIds(groups, 'Infografiken/2026/2026-06-15_angst'), ['Infografiken/2026/2026-06-15_angst_2']);
+  assert.deepEqual(list[2].categories, ['Angst']);
+  assert.equal(groups.has('Facebook/2026/2026-06-15_angst'), false);
+});
+
+test('Mehrdeutiger Basisartikel: eindeutiger Kandidat mit Audio, sonst keine Gruppe', () => {
+  const withAudio = [
+    entry('Coaching', '2026-03-01_x', { audioUrl: '/files/x.mp3' }),
+    entry('Telegram', '2026-03-01_x'),
+    entry('Infografiken', '2026-03-01_x'),
+  ];
+  assert.deepEqual(memberIds(linkInfographics(withAudio).groups, 'Coaching/2026/2026-03-01_x'), ['Infografiken/2026/2026-03-01_x']);
+
+  const ambiguous = [entry('Coaching', '2026-03-01_y'), entry('Telegram', '2026-03-01_y'), entry('Infografiken', '2026-03-01_y')];
+  assert.equal(linkInfographics(ambiguous).anchorOf.size, 0);
+});
+
+test('Varianten _2 eines normalen Artikels und gleiches Jahr als Bedingung', () => {
+  const list = [
+    entry('Joe Turan', '2026-04-01_blog'),
+    entry('Infografiken', '2026-04-01_blog_2'),
+    { ...entry('Infografiken', '2026-04-01_blog'), id: 'Infografiken/2025/2026-04-01_blog', year: '2025' },
+  ];
+  const { groups, anchorOf } = linkInfographics(list);
+  assert.deepEqual(memberIds(groups, 'Joe Turan/2026/2026-04-01_blog'), ['Infografiken/2026/2026-04-01_blog_2']);
+  assert.equal(anchorOf.has('Infografiken/2025/2026-04-01_blog'), false);
+});
+
+test('Neue Grafik übernimmt keine Kategorien-Zeile', () => {
+  const source = [
+    '# Titel', '', '**Datum:** 2026-01-02', '', '**Audioquickie:** 2961', '', '**Kategorien:** Verstand, Sucht', '', '****', '', 'Body',
+  ].join('\n');
+  assert.equal(buildInfographicMarkdown(source, 2),
+    ['# Titel (2)', '', '**Datum:** 2026-01-02', '', '**Audioquickie:** 2961', ''].join('\n'));
 });

@@ -37,6 +37,10 @@ userStore.load();
 console.log(`Public-Autoren: ${userStore.publicAuthors.length ? userStore.publicAuthors.join(', ') : '(keine)'}`);
 
 let articles = [];
+let articleById = new Map();
+// Infografik-Gruppen (siehe linkInfographics): Anker-ID → Mitglieder, Mitglied → Anker-ID.
+let infographicGroups = new Map();
+let groupAnchorOf = new Map();
 let meta = { authors: [], years: [], categories: [] };
 let fuseIndex = null;
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
@@ -390,7 +394,8 @@ async function scanDir(dirPath, author, year, collector) {
       const content = await fs.promises.readFile(fullPath, 'utf8');
       const parsed = parseArticle(content, fullPath);
 
-      const imgPath = findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'], filesByLowerName)
+      const ownImgPath = findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'], filesByLowerName);
+      const imgPath = ownImgPath
         || findSibling(path.join(WWW_DIR, author), 'standard', ['.jpg', '.jpeg', '.png']);
       const localAudioPath = findSibling(dirPath, basename, ['.mp3'], filesByLowerName);
       const externalAudioDir = path.join(AUDIO_DIR, author, relDir);
@@ -439,6 +444,9 @@ async function scanDir(dirPath, author, year, collector) {
         pdfUrl:   relPdf   ? fileUrl(relPdf, pdfPath)     : null,
         episodeNum: parsed.episodeNum,
         filePath: fullPath,
+        // Intern (nicht in der API): eigenes Bild statt standard.jpg, eigener Text.
+        ownImage: !!ownImgPath,
+        hasBody: !!parsed.body.trim(),
       });
       reindexState.processed++;
     } catch (err) {
@@ -447,63 +455,137 @@ async function scanDir(dirPath, author, year, collector) {
   }
 }
 
-function infographicBaseStem(stem) {
-  return stem.replace(/_(?:[2-9]|\d{2,})$/, '');
+// Zuordnung Infografik → Artikel über Jahr + Dateistamm. Varianten heißen
+// „<Stamm>_2“, „<Stamm>_3“ … Die Endung _N wird aber nur abgeschnitten, wenn es
+// den verkürzten Stamm tatsächlich gibt – sonst gehört die Zahl zum Namen
+// (Stefan Hiene: „…_Audioquickie_2961“).
+function resolveInfographicStem(stem, hasArticle, hasInfographic) {
+  if (hasArticle(stem)) return { baseStem: stem, ordinal: 1 };
+  const m = stem.match(/^(.+)_(\d+)$/);
+  if (m && (hasArticle(m[1]) || hasInfographic(m[1]))) return { baseStem: m[1], ordinal: parseInt(m[2], 10) };
+  return { baseStem: stem, ordinal: 1 };
 }
 
-function inheritAudioForInfographics(articleList) {
-  const baseArticleCandidatesByYearAndStem = new Map();
-  const baseArticlesByYearAndStem = new Map();
-  const baseInfographicsByYearAndStem = new Map();
-
+// Verknüpft Infografiken mit ihrem Originalartikel:
+//  - Platzhalter-Infografiken (ohne eigenen Text) werden Mitglieder einer Gruppe,
+//    deren Anker der Originalartikel ist – oder, ohne Artikel, die Basis-Infografik.
+//  - Eine Basis-Infografik mit eigenem Text ist selbst ein Original; ihre Varianten
+//    gehören zu ihr (deren doppelter Text wird nicht angezeigt).
+//  - Mitglieder erben Kategorien/Tags des Ankers, Infografiken ohne eigenes Audio
+//    das Audio der Basis-Infografik bzw. des Artikels (Zugriff bleibt beim Ursprung).
+// Mehrdeutige Basis (gleicher Stamm bei mehreren Autoren): eindeutiger Kandidat mit
+// Audio, sonst keine Zuordnung.
+function linkInfographics(articleList) {
+  const key = (year, stem) => `${year || ''}/${stem}`;
+  const stemOf = article => path.basename(article.filePath, '.md');
+  const candidatesByKey = new Map();
+  const infographicsByKey = new Map();
   for (const article of articleList) {
-    const stem = path.basename(article.filePath, '.md');
-    const key = `${article.year || ''}/${stem}`;
-    if (article.author === INFOGRAPHICS_AUTHOR) {
-      if (article.audioUrl && infographicBaseStem(stem) === stem) {
-        baseInfographicsByYearAndStem.set(key, article);
-      }
-      continue;
+    const k = key(article.year, stemOf(article));
+    if (article.author === INFOGRAPHICS_AUTHOR) infographicsByKey.set(k, article);
+    else candidatesByKey.set(k, [...(candidatesByKey.get(k) || []), article]);
+  }
+  const baseArticleFor = k => {
+    const candidates = candidatesByKey.get(k) || [];
+    const withAudio = candidates.filter(article => article.audioUrl);
+    if (withAudio.length === 1) return withAudio[0];
+    return candidates.length === 1 ? candidates[0] : null;
+  };
+
+  const infographics = articleList.filter(article => article.author === INFOGRAPHICS_AUTHOR);
+  for (const info of infographics) {
+    const { baseStem, ordinal } = resolveInfographicStem(stemOf(info),
+      stem => candidatesByKey.has(key(info.year, stem)),
+      stem => infographicsByKey.has(key(info.year, stem)));
+    info.infographicBase = baseStem;
+    info.infographicOrdinal = ordinal;
+  }
+
+  const groups = new Map();   // Anker-ID → Mitglieder (sortiert)
+  const anchorOf = new Map(); // Mitglieds-ID → Anker-ID
+  for (const info of infographics) {
+    const k = key(info.year, info.infographicBase);
+    const baseArticle = baseArticleFor(k);
+    const baseInfo = infographicsByKey.get(k);
+    const isBase = baseInfo === info;
+    let anchor = null;
+    if (isBase) {
+      if (!info.hasBody && baseArticle) anchor = baseArticle;
+    } else if (baseInfo?.hasBody) {
+      anchor = baseInfo;
+    } else if (!info.hasBody) {
+      // Ohne Artikel ist die Basis-Infografik der Anker (und selbst das erste Bild).
+      anchor = baseArticle || (baseInfo && !baseInfo.hasBody ? baseInfo : null);
     }
-    const candidates = baseArticleCandidatesByYearAndStem.get(key) || [];
-    candidates.push(article);
-    baseArticleCandidatesByYearAndStem.set(key, candidates);
+    if (!anchor) continue;
+    anchorOf.set(info.id, anchor.id);
+    groups.set(anchor.id, [...(groups.get(anchor.id) || []), info]);
+  }
+  for (const members of groups.values()) members.sort((a, b) => a.infographicOrdinal - b.infographicOrdinal);
+
+  const byId = new Map(articleList.map(article => [article.id, article]));
+  for (const [memberId, anchorId] of anchorOf) {
+    const member = byId.get(memberId);
+    const anchor = byId.get(anchorId);
+    if (anchor.author === INFOGRAPHICS_AUTHOR && !anchor.hasBody) continue;
+    member.categories = [...anchor.categories];
+    member.tags = [...anchor.tags];
   }
 
-  for (const [key, candidates] of baseArticleCandidatesByYearAndStem) {
-    const audioCandidates = candidates.filter(article => article.audioUrl);
-    if (audioCandidates.length === 1) {
-      baseArticlesByYearAndStem.set(key, audioCandidates[0]);
-    } else if (candidates.length === 1) {
-      baseArticlesByYearAndStem.set(key, candidates[0]);
-    } else {
-      baseArticlesByYearAndStem.set(key, null);
-    }
+  // Audio-Vererbung (unabhängig davon, ob die Infografik gruppiert ist).
+  for (const info of infographics) {
+    if (info.audioUrl) continue;
+    const k = key(info.year, info.infographicBase);
+    const baseInfo = infographicsByKey.get(k);
+    const source = (baseInfo && baseInfo !== info && baseInfo.audioUrl ? baseInfo : null) || baseArticleFor(k);
+    if (!source || !source.audioUrl) continue;
+    info.audioUrl = source.audioUrl;
+    info.hasExternalAudio = !!source.hasExternalAudio;
+    info.episodeNum = info.episodeNum || source.episodeNum;
+    info.inheritedAudioAuthor = source.inheritedAudioAuthor || source.author;
+    info.inheritedAudioArticleId = source.inheritedAudioArticleId || source.id;
   }
-
-  for (const article of articleList) {
-    if (article.author !== INFOGRAPHICS_AUTHOR || article.audioUrl) continue;
-
-    const stem = path.basename(article.filePath, '.md');
-    const baseStem = infographicBaseStem(stem);
-    const key = `${article.year || ''}/${baseStem}`;
-    const baseArticle = baseInfographicsByYearAndStem.get(key) || baseArticlesByYearAndStem.get(key);
-    if (!baseArticle || !baseArticle.audioUrl) continue;
-
-    article.audioUrl = baseArticle.audioUrl;
-    article.hasExternalAudio = !!baseArticle.hasExternalAudio;
-    article.episodeNum = article.episodeNum || baseArticle.episodeNum;
-    article.inheritedAudioAuthor = baseArticle.author;
-    article.inheritedAudioArticleId = baseArticle.id;
-  }
+  return { groups, anchorOf };
 }
 
+// Nur interne Felder entfernen und geerbtes Audio ohne Recht am Ursprung verbergen.
 function exposeArticleForUser(article, user) {
-  const { filePath, inheritedAudioAuthor, inheritedAudioArticleId, ...rest } = article;
+  const {
+    filePath, inheritedAudioAuthor, inheritedAudioArticleId,
+    ownImage, hasBody, infographicBase, infographicOrdinal, ...rest
+  } = article;
   if (inheritedAudioAuthor && !canAccessAuthor(user, inheritedAudioAuthor)) {
     return { ...rest, audioUrl: null, hasExternalAudio: false, episodeNum: null };
   }
   return rest;
+}
+
+// Anker der Gruppe, zu der eine Infografik gehört – nur wenn der Nutzer ihn sehen
+// darf. Sonst (z. B. Gast ohne Recht am Artikel) bleibt die Infografik einzeln.
+function visibleGroupAnchor(article, user, { hideTelegram = false } = {}) {
+  const anchor = articleById.get(groupAnchorOf.get(article?.id));
+  if (!anchor || !canAccessAuthor(user, anchor.author)) return null;
+  if (hideTelegram && anchor.author === 'Telegram') return null;
+  return anchor;
+}
+
+// Bilder einer Gruppe: eigenes Artikelfoto (kein standard.jpg), dann die
+// Infografiken in Reihenfolge. null, wenn der Nutzer keine Grafik der Gruppe sieht.
+function groupImagesFor(anchor, user) {
+  const members = (infographicGroups.get(anchor.id) || [])
+    .filter(member => member.ownImage && canAccessAuthor(user, member.author));
+  if (!members.length) return null;
+  const images = anchor.ownImage
+    ? [{ id: anchor.id, url: anchor.imageUrl, kind: anchor.author === INFOGRAPHICS_AUTHOR ? 'infographic' : 'photo' }]
+    : [];
+  for (const member of members) images.push({ id: member.id, url: member.imageUrl, kind: 'infographic' });
+  return images;
+}
+
+function exposeGroupForUser(anchor, user) {
+  const exposed = exposeArticleForUser(anchor, user);
+  const images = groupImagesFor(anchor, user);
+  return images ? { ...exposed, imageUrl: images[0].url, images } : exposed;
 }
 
 async function buildIndex() {
@@ -541,7 +623,8 @@ async function rebuildIndex() {
     return true;
   });
 
-  inheritAudioForInfographics(articles);
+  ({ groups: infographicGroups, anchorOf: groupAnchorOf } = linkInfographics(articles));
+  articleById = new Map(articles.map(article => [article.id, article]));
   await audiobooks.rebuild();
 
   const isInfografik = a => (a.author === 'Infografiken' ? 1 : 0);
@@ -726,6 +809,18 @@ function validateInfographicHeader(content) {
   };
 }
 
+// Infografiken erben die Kategorien ihres Artikels; eine eigene „Kategorien:“-Zeile
+// im Kopf entfällt (samt einer dadurch doppelten Leerzeile).
+function removeCategoryLines(lines) {
+  const result = [];
+  for (let i = 0; i < lines.length; i++) {
+    const clean = lines[i].replace(/\*\*/g, '').replace(/^#+\s*/, '').trim().replace(/^_+|_+$/g, '').trim();
+    if (!/^kategorien:/i.test(clean)) { result.push(lines[i]); continue; }
+    if (result.length && result[result.length - 1].trim() === '' && (lines[i + 1] ?? '').trim() === '') i++;
+  }
+  return result;
+}
+
 function buildInfographicMarkdown(content, ordinal) {
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
   const lines = content.split(/\r?\n/);
@@ -771,7 +866,7 @@ function buildInfographicMarkdown(content, ordinal) {
   }
 
   const cutIdx = separatorIdx >= 0 ? separatorIdx : (lastMetaIdx >= 0 ? lastMetaIdx + 1 : lines.length);
-  const keptLines = appendOrdinalToMarkdownTitle(lines.slice(0, cutIdx), ordinal);
+  const keptLines = appendOrdinalToMarkdownTitle(removeCategoryLines(lines.slice(0, cutIdx)), ordinal);
   while (keptLines.length && keptLines[keptLines.length - 1].trim() === '') keptLines.pop();
   return keptLines.join(eol) + eol;
 }
@@ -1273,9 +1368,30 @@ app.get('/api/articles', attachUser, (req, res) => {
     }
   }
 
-  const total = filtered.length;
   const p = Math.max(1, parseInt(page));
   const lim = Math.min(100, Math.max(1, parseInt(limit)));
+
+  // Kachelansichten: Artikel und ihre Infografiken als eine Kachel. Eine Gruppe
+  // erscheint an der ersten Stelle, an der der Anker oder eine Grafik passt.
+  // Nicht für die Liste und nicht beim Autorenfilter „Infografiken“.
+  if (req.query.group === '1' && author !== INFOGRAPHICS_AUTHOR) {
+    const hideTelegram = telegram !== '1' && author !== 'Telegram';
+    const tiles = [];
+    const seen = new Set();
+    let total = 0;
+    for (const article of filtered) {
+      const tile = visibleGroupAnchor(article, user, { hideTelegram }) || article;
+      if (seen.has(tile.id)) continue;
+      seen.add(tile.id);
+      const images = groupImagesFor(tile, user);
+      total += 1 + (images ? images.length - (tile.ownImage ? 1 : 0) : 0);
+      tiles.push(tile);
+    }
+    const items = tiles.slice((p - 1) * lim, p * lim).map(tile => exposeGroupForUser(tile, user));
+    return res.json({ total, page: p, limit: lim, pages: Math.ceil(tiles.length / lim), items });
+  }
+
+  const total = filtered.length;
   const items = filtered.slice((p - 1) * lim, p * lim).map(article => exposeArticleForUser(article, user));
 
   res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
@@ -1283,19 +1399,25 @@ app.get('/api/articles', attachUser, (req, res) => {
 
 app.get('/api/articles/*', attachUser, (req, res) => {
   const id = req.params[0];
-  const article = articles.find(a => a.id === id);
-  if (!article) return res.status(404).json({ error: 'Not found' });
+  const requested = articleById.get(id);
+  if (!requested) return res.status(404).json({ error: 'Not found' });
 
-  if (!canAccessAuthor(req.user, article.author)) {
+  if (!canAccessAuthor(req.user, requested.author)) {
     return res.status(403).json({ error: 'Access denied' });
   }
+  // Eine gruppierte Infografik öffnet ihre Gruppe; requestedId sagt, welches Bild gemeint war.
+  const anchor = visibleGroupAnchor(requested, req.user);
+  const article = anchor || requested;
 
   try {
     const content = fs.readFileSync(article.filePath, 'utf8');
     const parsed = parseArticle(content, article.filePath);
     const bodyHtml = marked.parse(parsed.body);
-    const rest = exposeArticleForUser(article, req.user);
-    res.json({ ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article) });
+    const rest = exposeGroupForUser(article, req.user);
+    res.json({
+      ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article),
+      ...(anchor ? { requestedId: id } : {}),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1349,4 +1471,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseArticle };
+module.exports = { parseArticle, linkInfographics, buildInfographicMarkdown, removeCategoryLines };

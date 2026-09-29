@@ -150,14 +150,61 @@ function zoomImageCentered(nextScale) {
   applyImageZoom();
 }
 
-function openImageFullscreen(src) {
-  document.getElementById('img-fullscreen-img').src = src;
+// Vollansicht: bei einer Gruppe alle Bilder (Wischen/Pfeiltasten), sonst eines.
+// articleId gesetzt → Hash trägt „?bild=N“, damit der Link genau dieses Bild zeigt.
+const fsGallery = { urls: [], index: 0, articleId: null };
+
+function showFullscreenImage(index) {
+  const count = fsGallery.urls.length;
+  fsGallery.index = index;
+  const url = fsGallery.urls[index];
+  const $fs = document.getElementById('img-fullscreen');
+  document.getElementById('img-fullscreen-img').src = url;
   resetImageZoom();
+  $fs.scrollTop = 0;
+  const $counter = document.getElementById('img-fullscreen-counter');
+  $counter.hidden = count < 2;
+  $counter.textContent = `${index + 1} / ${count}`;
+  document.getElementById('img-fullscreen-download').href = url;
+  if (fsGallery.articleId && count > 1) {
+    history.replaceState(null, '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
+  }
+}
+function openGalleryFullscreen(urls, index = 0, articleId = null) {
+  if (!urls.length) return;
+  fsGallery.urls = urls;
+  fsGallery.articleId = articleId;
+  showFullscreenImage(Math.max(0, Math.min(urls.length - 1, index)));
   document.getElementById('img-fullscreen').hidden = false;
+}
+function openImageFullscreen(src) {
+  openGalleryFullscreen([src]);
 }
 function closeImageFullscreen() {
   document.getElementById('img-fullscreen').hidden = true;
   resetImageZoom();
+  if (fsGallery.articleId && location.hash.includes('?bild=')) {
+    history.replaceState(null, '', `#/article/${sanitizeForId(fsGallery.articleId)}`);
+  }
+  fsGallery.articleId = null;
+}
+// Nach dem letzten Bild weiter zum nächsten Artikel, vor dem ersten zum vorigen.
+function stepFullscreen(dir) {
+  const next = fsGallery.index + dir;
+  if (next >= 0 && next < fsGallery.urls.length) showFullscreenImage(next);
+  else navigateArticle(dir);
+}
+function detailImageUrls(article) {
+  if (article.images?.length) return article.images.map(image => image.url);
+  return article.imageUrl ? [article.imageUrl] : [];
+}
+
+// „#/article/<id>?bild=3“ → { id, image: 3 }
+function parseArticleHash(hash) {
+  if (!hash.startsWith('#/article/')) return null;
+  const [rawId, query = ''] = hash.slice('#/article/'.length).split('?');
+  const image = parseInt(new URLSearchParams(query).get('bild'), 10);
+  return { id: decodeURIComponent(rawId), image: image > 0 ? image : null };
 }
 
 function updateNavButtons() {
@@ -170,15 +217,15 @@ function updateNavButtons() {
 async function navigateArticle(dir) {
   const newIdx = state.currentArticleIdx + dir;
   if (newIdx >= 0 && newIdx < state.currentItems.length) {
-    openArticle(state.currentItems[newIdx].id);
+    openArticle(state.currentItems[newIdx].id, { dir });
   } else if (dir > 0 && state.page < state.pages) {
     state.page++;
     await loadArticles();
-    if (state.currentItems.length) openArticle(state.currentItems[0].id);
+    if (state.currentItems.length) openArticle(state.currentItems[0].id, { dir });
   } else if (dir < 0 && state.page > 1) {
     state.page--;
     await loadArticles();
-    if (state.currentItems.length) openArticle(state.currentItems[state.currentItems.length - 1].id);
+    if (state.currentItems.length) openArticle(state.currentItems[state.currentItems.length - 1].id, { dir });
   }
 }
 
@@ -310,10 +357,8 @@ async function login(email, password) {
     if (!(await ensurePasswordChanged())) return;
     await loadMeta();
     await loadArticles();
-    const deepId = location.hash.startsWith('#/article/')
-      ? decodeURIComponent(location.hash.slice('#/article/'.length))
-      : null;
-    if (deepId) openArticle(deepId);
+    const deepLink = parseArticleHash(location.hash);
+    if (deepLink) openArticle(deepLink.id, { image: deepLink.image, deepLink: true });
   } catch {
     $loginError.textContent = 'Netzwerkfehler. Bitte erneut versuchen.';
     $loginError.hidden = false;
@@ -387,6 +432,7 @@ async function fetchArticles(params = {}) {
   if (params.year)     qs.set('year', params.year);
   if (params.category) qs.set('category', params.category);
   if (params.telegram) qs.set('telegram', '1');
+  if (params.group)    qs.set('group', '1');
   qs.set('page',  params.page  || 1);
   qs.set('limit', params.limit || 24);
   const r = await apiFetch(`/api/articles?${qs}`);
@@ -430,7 +476,10 @@ function renderCard(article, idx) {
   const cats = (article.categories || []).slice(0, 5);
   const delay = Math.min(idx * 30, 300);
 
-  const imageHtml = article.imageUrl
+  const gallery = article.images?.length > 1;
+  const imageHtml = gallery
+    ? renderCardGallery(article.images)
+    : article.imageUrl
     ? `<img src="${esc(article.imageUrl)}" alt="" loading="lazy" onerror="handleImgError(this)" />`
     : `<div class="card-image-placeholder">${svgImage()}</div>`;
 
@@ -452,7 +501,7 @@ function renderCard(article, idx) {
 
   return `
     <article class="card" data-id="${esc(article.id)}" data-author="${esc(article.author)}" style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(article.title)}">
-      <div class="card-image">
+      <div class="card-image${gallery ? ' card-gallery' : ''}">
         ${imageHtml}
         ${audioBadge || videoBadge || pdfBadge
           ? `<div class="card-badges">${audioBadge}${videoBadge}${pdfBadge}</div>`
@@ -469,6 +518,57 @@ function renderCard(article, idx) {
         <p class="card-preview">${esc(article.preview || article.excerpt)}</p>
       </div>
     </article>`;
+}
+
+// Bildbereich einer Kachel mit mehreren Bildern (Artikel + Infografiken):
+// Desktop wählt das Bild über die Mausposition, Touch per Wischen; Striche zeigen
+// Anzahl und aktuelles Bild. Weitere Bilder werden erst bei Bedarf geladen.
+function renderCardGallery(images) {
+  const slides = images.map((image, i) => {
+    const src = i === 0 ? `src="${esc(image.url)}"` : `data-src="${esc(image.url)}"`;
+    return `<div class="card-gallery-slide${image.kind === 'infographic' ? ' is-infographic' : ''}"><img ${src} alt="" loading="lazy" onerror="handleImgError(this)" /></div>`;
+  }).join('');
+  const dots = images.map((_, i) => `<span${i === 0 ? ' class="active"' : ''}></span>`).join('');
+  return `<div class="card-gallery-track">${slides}</div><div class="card-gallery-dots" aria-hidden="true">${dots}</div>`;
+}
+
+function wireCardGallery(card) {
+  const gallery = card.querySelector('.card-gallery');
+  if (!gallery) return;
+  const track = gallery.querySelector('.card-gallery-track');
+  const dots = [...gallery.querySelectorAll('.card-gallery-dots span')];
+  let index = 0;
+  const loadAll = () => gallery.querySelectorAll('img[data-src]').forEach(img => {
+    img.src = img.dataset.src;
+    img.removeAttribute('data-src');
+  });
+  const show = next => {
+    index = Math.max(0, Math.min(dots.length - 1, next));
+    track.style.transform = `translateX(${-100 * index}%)`;
+    dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+  };
+  gallery.addEventListener('mousemove', e => {
+    if (!isDesktopPointer()) return;
+    loadAll();
+    const box = gallery.getBoundingClientRect();
+    show(Math.floor((e.clientX - box.left) / box.width * dots.length));
+  });
+  gallery.addEventListener('mouseleave', () => show(0));
+  let startX = 0, startY = 0, multi = false;
+  gallery.addEventListener('touchstart', e => {
+    loadAll();
+    multi = e.touches.length > 1;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+  gallery.addEventListener('touchend', e => {
+    if (multi) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (Math.abs(dx) < 30 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    show(index + (dx < 0 ? 1 : -1));
+    card.dataset.swipedAt = String(Date.now());
+  }, { passive: true });
 }
 
 function renderGrid(items) {
@@ -524,6 +624,7 @@ async function loadArticles() {
       year:     state.year,
       category: state.category,
       telegram: state.telegram,
+      group:    groupMode(),
       page:     state.page,
       limit:    state.limit,
     });
@@ -538,7 +639,12 @@ async function loadArticles() {
     // Attach card click handlers
     $app.querySelectorAll('.card').forEach(card => {
       const handler = () => openArticle(card.dataset.id);
-      card.addEventListener('click', handler);
+      wireCardGallery(card);
+      card.addEventListener('click', () => {
+        // Ein Wischen durch die Bilder der Kachel öffnet den Artikel nicht.
+        if (Date.now() - (Number(card.dataset.swipedAt) || 0) < 500) return;
+        handler();
+      });
       card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') handler(); });
     });
 
@@ -561,7 +667,9 @@ async function loadArticles() {
 }
 
 // ── Article detail overlay ─────────────────────────────────────────────────
-async function openArticle(id) {
+// dir: Richtung beim Blättern (für die Vollansicht: erstes/letztes Bild);
+// image/deepLink: Link auf ein Bild der Gruppe → direkt in der Vollansicht öffnen.
+async function openArticle(id, { dir = 0, image = null, deepLink = false } = {}) {
   if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) return;
   selectedTtsArticle = null;
   updateTtsActions();
@@ -577,18 +685,24 @@ async function openArticle(id) {
 
   try {
     const article = await fetchArticle(id);
+    // Eine gruppierte Infografik liefert ihre Gruppe (requestedId = angefragtes Bild).
     state.currentArticleIdx = state.currentItems.findIndex(a => a.id === id);
+    if (state.currentArticleIdx < 0) state.currentArticleIdx = state.currentItems.findIndex(a => a.id === article.id);
+    if (article.id !== id) history.replaceState(null, '', `#/article/${sanitizeForId(article.id)}`);
     updateNavButtons();
     renderDetail(article);
 
-    // If fullscreen image is open, update it to the new article's image
+    const urls = detailImageUrls(article);
     const $fs = document.getElementById('img-fullscreen');
-    if (!$fs.hidden) {
-      if (article.imageUrl) {
-        document.getElementById('img-fullscreen-img').src = article.imageUrl;
-      } else {
-        closeImageFullscreen();
-      }
+    const requestedIdx = (article.images || []).findIndex(img => img.id === article.requestedId);
+    if (image && urls.length > 1) {
+      openGalleryFullscreen(urls, image - 1, article.id);
+    } else if (deepLink && requestedIdx >= 0 && urls.length > 1) {
+      openGalleryFullscreen(urls, requestedIdx, article.id);
+    } else if (!$fs.hidden) {
+      // Blättern in der Vollansicht: beim nächsten Artikel mit Bild 1, rückwärts mit dem letzten.
+      if (urls.length) openGalleryFullscreen(urls, dir < 0 ? urls.length - 1 : 0, article.id);
+      else closeImageFullscreen();
     }
   } catch (err) {
     // Geschützter Artikel + Gast (403) → Anmeldung anbieten statt "nicht gefunden".
@@ -640,7 +754,14 @@ function renderDetail(article) {
   updateTtsActions();
   const hue = authorHue(article.author);
 
-  const heroHtml = article.imageUrl
+  // Gruppe: Bildleiste (drei 9:16-Bilder nebeneinander, bei zwei je halbe Breite,
+  // ab vier waagerecht wischbar). Klick öffnet das Bild in der Vollansicht.
+  const images = article.images?.length > 1 ? article.images : null;
+  const heroHtml = images
+    ? `<div class="detail-gallery${images.length > 3 ? ' is-scrollable' : ''}" style="--gallery-cols:${images.length === 2 ? 2 : 3}">
+        ${images.map((image, i) => `<button type="button" class="detail-gallery-item${image.kind === 'photo' ? ' is-photo' : ''}" data-index="${i}" aria-label="Bild ${i + 1} von ${images.length} vergrößern"><img src="${esc(image.url)}" alt="" loading="lazy" /></button>`).join('')}
+      </div>`
+    : article.imageUrl
     ? `<div class="detail-hero">
         <img src="${esc(article.imageUrl)}" alt="" id="detail-hero-img" />
         <button class="detail-hero-expand" id="detail-hero-expand" aria-label="Vollbild">${svgExpand()}</button>
@@ -719,7 +840,12 @@ function renderDetail(article) {
     </div>`;
 
   // Fullscreen image handler
-  if (article.imageUrl) {
+  if (images) {
+    const urls = images.map(image => image.url);
+    $detail.querySelectorAll('.detail-gallery-item').forEach(item => {
+      item.addEventListener('click', () => openGalleryFullscreen(urls, Number(item.dataset.index), article.id));
+    });
+  } else if (article.imageUrl) {
     const openFs = () => openImageFullscreen(article.imageUrl);
     document.getElementById('detail-hero-expand')?.addEventListener('click', e => { e.stopPropagation(); openFs(); });
     document.getElementById('detail-hero-img')?.addEventListener('click', openFs);
@@ -1125,9 +1251,23 @@ function currentLayout() {
   if (document.body.classList.contains('layout-list')) return 'list';
   return document.body.classList.contains('layout-tall') ? 'tall' : 'square';
 }
+// Kachelansichten fassen Artikel und ihre Infografiken zusammen; die Liste und
+// der Autorenfilter „Infografiken“ zeigen jede Grafik einzeln.
+function groupMode() {
+  return currentLayout() !== 'list' && state.author !== 'Infografiken';
+}
+// Wechsel zwischen Liste und Kacheln ändert die Einträge → neu laden.
+function changeLayout(layout) {
+  const wasGrouped = groupMode();
+  setLayout(layout);
+  if (groupMode() !== wasGrouped) {
+    state.page = 1;
+    loadArticles();
+  }
+}
 $filterLayout.addEventListener('click', event => {
   const button = event.target.closest('[data-layout]');
-  if (button) setLayout(button.dataset.layout);
+  if (button) changeLayout(button.dataset.layout);
 });
 $filterLayout.addEventListener('keydown', event => {
   if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
@@ -1135,7 +1275,7 @@ $filterLayout.addEventListener('keydown', event => {
   event.stopPropagation();
   const step = ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1;
   const next = LAYOUTS[(LAYOUTS.indexOf(currentLayout()) + step + LAYOUTS.length) % LAYOUTS.length];
-  setLayout(next);
+  changeLayout(next);
   $filterLayout.querySelector(`[data-layout="${next}"]`).focus();
 });
 
@@ -1715,8 +1855,11 @@ document.addEventListener('keydown', e => {
     return;
   }
   if ($overlay.hidden) return;
-  if (e.key === 'ArrowRight') navigateArticle(+1);
-  if (e.key === 'ArrowLeft')  navigateArticle(-1);
+  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+  const dir = e.key === 'ArrowRight' ? +1 : -1;
+  // In der Vollansicht erst durch die Bilder der Gruppe, danach zum Nachbarartikel.
+  if (!document.getElementById('img-fullscreen').hidden) stepFullscreen(dir);
+  else navigateArticle(dir);
 });
 
 // Returns false when the user is panning within a zoomed viewport and hasn't reached the edge yet.
@@ -1746,15 +1889,18 @@ let touchStartX = 0;
 let touchStartY = 0;
 let touchStartTime = 0;
 let touchStartMulti = false;
+let touchInGallery = false;
 const $overlayPanel = $overlay.querySelector('.overlay-panel');
 $overlayPanel.addEventListener('touchstart', e => {
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
   touchStartTime = Date.now();
   touchStartMulti = e.touches.length > 1;
+  // Wischen in einer scrollbaren Bildleiste blättert die Bilder, nicht den Artikel.
+  touchInGallery = !!e.target.closest?.('.detail-gallery.is-scrollable');
 }, { passive: true });
 $overlayPanel.addEventListener('touchend', e => {
-  if (touchStartMulti) return;
+  if (touchStartMulti || touchInGallery) return;
   if (hasActiveSelection()) return;
   if (Date.now() - touchStartTime > SWIPE_MAX_DURATION) return;
   const dx = e.changedTouches[0].clientX - touchStartX;
@@ -1787,7 +1933,7 @@ $imgFs.addEventListener('touchend', e => {
   if (Math.abs(dx) > SWIPE_MIN_X
       && Math.abs(dx) > Math.abs(dy) * SWIPE_X_DOMINANCE
       && swipeAllowed(dx)) {
-    navigateArticle(dx < 0 ? +1 : -1);
+    stepFullscreen(dx < 0 ? +1 : -1);
   }
 }, { passive: true });
 
@@ -1806,8 +1952,8 @@ window.addEventListener('popstate', () => {
       stopVideo();
     }
   } else if (hash.startsWith('#/article/')) {
-    const id = decodeURIComponent(hash.slice('#/article/'.length));
-    openArticle(id);
+    const link = parseArticleHash(hash);
+    openArticle(link.id, { image: link.image, deepLink: true });
   }
 });
 
@@ -1865,14 +2011,12 @@ async function init() {
   if (!(await ensurePasswordChanged())) return;
 
   // Check for article deep-link in hash
-  const deepId = location.hash.startsWith('#/article/')
-    ? decodeURIComponent(location.hash.slice('#/article/'.length))
-    : null;
+  const deepLink = parseArticleHash(location.hash);
 
   await loadMeta();
   await loadArticles();
 
-  if (deepId) openArticle(deepId);
+  if (deepLink) openArticle(deepLink.id, { image: deepLink.image, deepLink: true });
 }
 
 init();

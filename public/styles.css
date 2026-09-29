@@ -431,6 +431,43 @@ select { font: inherit; color: inherit; }
 }
 .card:hover .card-image img { transform: scale(1.04); }
 .card[data-author="Infografiken"] .card-image img { object-position: top; }
+
+/* Kachel mit mehreren Bildern (Artikel + Infografiken): Streifen, der per Maus-
+   position (Desktop) oder Wischen (Touch) verschoben wird; Striche oben. */
+.card-gallery { touch-action: pan-y; }
+.card-gallery-track {
+  display: flex;
+  height: 100%;
+  transition: transform .25s ease;
+}
+.card-gallery-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.card-gallery-slide.is-infographic img { object-position: top; }
+.card-gallery-slide:not(.is-infographic) img { object-position: center; }
+.card-gallery-dots {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  background: rgba(0,0,0,.45);
+  pointer-events: none;
+}
+.card-gallery-dots span {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,.4);
+  transition: background .2s ease;
+}
+.card-gallery-dots span.active { background: #fff; }
 .card-image-placeholder {
   width: 100%;
   height: 100%;
@@ -876,7 +913,74 @@ body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex
 .detail-hero-download:hover { opacity: 1; background: rgba(0,0,0,.85); }
 .detail-hero-download svg { width: 18px; height: 18px; stroke: #fff; }
 
+/* Bildleiste einer Gruppe: Höhe so, dass drei 9:16-Bilder nebeneinander ganz
+   sichtbar sind (27:16). Bei zwei Bildern je halbe Breite, unten beschnitten;
+   ab vier Bildern waagerecht scrollbar. */
+.detail-gallery {
+  --gallery-gap: 3px;
+  display: flex;
+  gap: var(--gallery-gap);
+  aspect-ratio: 27 / 16;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  background: var(--surface-2);
+}
+.detail-gallery-item {
+  flex: 0 0 calc((100% - (var(--gallery-cols) - 1) * var(--gallery-gap)) / var(--gallery-cols));
+  height: 100%;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  scroll-snap-align: start;
+  background: var(--surface-2);
+  cursor: zoom-in;
+}
+.detail-gallery-item img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.detail-gallery-item.is-photo img { object-position: center; }
+.detail-gallery-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 /* Image fullscreen overlay */
+.img-fullscreen-counter,
+.img-fullscreen-download {
+  position: fixed;
+  top: 14px;
+  z-index: 2;
+  background: rgba(0,0,0,.6);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+}
+.img-fullscreen-counter {
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.img-fullscreen-counter[hidden] { display: none; }
+.img-fullscreen-download {
+  left: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  cursor: pointer;
+}
+.img-fullscreen-download:hover { opacity: 1; }
+.img-fullscreen-download svg { width: 18px; height: 18px; }
 .img-fullscreen {
   position: fixed;
   inset: 0;

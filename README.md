@@ -85,6 +85,22 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
   über eine feste Stichwort-Taxonomie bis zu 5 Kategorien zu (für Filter/Facetten).
   Das Feld `Kategorien:` bleibt davon getrennt als reine Anzeige-Tags.
 
+### Infografiken und Gruppen
+
+Infografiken liegen unter `www/Infografiken/<Jahr>/` mit demselben Dateistamm wie
+ihr Artikel (`<Stamm>.png`, Varianten `<Stamm>_2`, `_3` …). Die Endung `_N` gilt nur
+als Variante, wenn es den verkürzten Stamm gibt (Stefan Hiene: `…_Audioquickie_2961`
+ist ein Name, `…_2961_2` die Variante). Eine Infografik-`.md` ohne Text unter den
+Metadaten ist ein **Platzhalter**: Sie wird in den Kachelansichten mit ihrem Artikel
+zu **einer Kachel** zusammengefasst (Bilder per Maus/Wischen, Striche ●○○), erbt
+dessen Kategorien und Audio. Ohne Artikel ist die Basis-Infografik der Anker; eine
+Infografik mit eigenem Text ist selbst ein Original und nimmt ihre Varianten auf.
+Die Liste und der Autorenfilter „Infografiken“ zeigen weiter jede Grafik einzeln;
+wer den Artikel nicht sehen darf (Gäste), bekommt die Grafik einzeln ohne Text/Audio.
+Im Artikel zeigt eine Bildleiste alle Bilder (drei 9:16 nebeneinander, ab vier
+wischbar); die Vollansicht blättert durch die Bilder und danach zum Nachbarartikel.
+Link auf ein Bild: `#/article/<Artikel-ID>?bild=3`.
+
 ### Hörbücher (`audio/Hoerbuecher/`)
 
 Je Buch ein Ordner unter `audio/Hoerbuecher/` mit `cover.jpg`/`.png`, nummerierten
@@ -175,8 +191,8 @@ Position und Tempo pro Nutzer und Buch in `audiobook-progress.json`.
 | `DELETE /api/users/:email` | Admin | Nutzer löschen |
 | `PUT /api/public-authors` | Admin | Öffentliche Autoren setzen `{authors:[…]}` |
 | `GET /api/meta` | Soft | Autoren/Jahre/Kategorien (ACL-gefiltert) |
-| `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram` |
-| `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml` |
+| `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen |
+| `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml` und `images`; eine gruppierte Infografik liefert ihre Gruppe (`requestedId`) |
 | `GET /files/*` | Soft | Geschützte Datei (Bild/Audio/…), ACL pro Autor |
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht) |
@@ -271,6 +287,7 @@ public/
 └── pdfjs/                    PDF-Anzeige
 scripts/hash-passwords.js     bcrypt-Hashes für users.json erzeugen
 scripts/make-favicons.js      favicon.ico + apple-touch-icon.png aus public/favicon.svg erzeugen
+scripts/strip-infographic-categories.js  „Kategorien:“ aus Infografik-.md entfernen (--dry-run, Sicherung)
 prompts/*.txt                 Prompt-Bausteine fürs Copy-Menü (Zahl-Präfix = Reihenfolge)
 scraper/                      Eigenständiger Scraper (schreibt nach ../www)
 www/<Autor>/<Jahr>/           Inhalte (per .gitignore ausgenommen)

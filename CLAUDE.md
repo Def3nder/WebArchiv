@@ -17,6 +17,7 @@ npm install            # install deps (express, marked, fuse.js, express-session
 npm start              # run server.js → http://localhost:3000 (PORT env overrides)
 node scripts/hash-passwords.js   # hash plaintext passwords in users.json (see Auth below)
 node scripts/make-favicons.js    # regenerate public/favicon.ico + apple-touch-icon.png from favicon.svg
+node scripts/strip-infographic-categories.js [--dry-run]  # drop Kategorien: lines from infographic .md (backup in download/)
 ```
 
 There is no `npm test` script, linter, or build; run tests with
@@ -50,6 +51,12 @@ bump the `?v=` query on the `<script>`/`<link>` tags in `public/index.html` to b
    `categories` by keyword-counting against the hardcoded German `TAXONOMY` list. These drive the
    category filter and search. Note the distinction: `categories` = unified taxonomy labels used
    for filtering; `tags` = the raw `Kategorien:` field, display-only.
+
+**Infographic groups (`linkInfographics`).** Infographics (`www/Infografiken/`) are linked to their article by year +
+file stem (`_N` suffix = variant only if the shortened stem exists). Placeholder infographics (no body) become
+members of a group anchored on the article (or the base infographic); they inherit categories/tags and audio.
+`/api/articles?group=1` (tile views) returns one tile per group with `images`; grouping happens per request after
+the ACL filter, so users who cannot see the article get the infographic as its own tile.
 
 **Frontend: `public/` (no framework).** `index.html` is the shell, `app.js` is a hash-routed SPA
 (`#/article/<id>` deep-links), `styles.css` the styling. It talks only to the `/api/*` JSON
