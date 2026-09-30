@@ -126,6 +126,14 @@ für Gäste sichtbar und werden über `allowedAuthors` freigegeben. Der Player s
 das ganze Buch, springt über Dateigrenzen (Weiten in `config.json`) und merkt sich
 Position und Tempo pro Nutzer und Buch in `audiobook-progress.json`.
 
+**eBook-Text zum Hörbuch:** Liegt im Buchordner eine Datei mit dem Namen des Ordners und der
+Endung `.md`, `.txt` oder `.pdf` (Vorrang in dieser Reihenfolge; z. B. `Autor - Titel/Autor - Titel.md`),
+zeigt das Detail den Button *Text lesen*. Er öffnet einen Vollbild-Reiter (Schriftgröße A−/A+ bei
+Markdown/Text, PDF im eingebauten Viewer); der Miniplayer bleibt unten sichtbar und führt zurück zum
+Detail. Die Leseposition (Scrollanteil bzw. PDF-Seite) wird pro Nutzer und Buch in
+`audiobook-progress.json` gemerkt, getrennt vom Hörstand. Text läuft nicht mit dem Audio mit. Interne Verweise (`[…](#kürzel)`) springen zur
+passenden Überschrift (Kürzel wie bei GitHub); „↩ Zurück“ kehrt zur Ausgangsstelle zurück.
+
 ---
 
 ## Suche, Filter, Facetten
@@ -213,6 +221,8 @@ Position und Tempo pro Nutzer und Buch in `audiobook-progress.json`.
 | `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/title/date),page,limit` |
 | `GET /api/audiobooks/*` | Auth + Autor | Hörbuch mit Tracks, Beschreibung, eigenem Fortschritt |
 | `PUT /api/audiobook-progress/*` | Auth + Autor | Hörposition speichern `{trackIndex,position,speed}` |
+| `GET /api/audiobook-text/*` | Auth + Autor | eBook-Text (`md`/`txt` als HTML, `pdf` als URL) mit Leseposition |
+| `PUT /api/audiobook-text-progress/*` | Auth + Autor | Leseposition speichern `{position}` (Anteil 0–1, bei PDF Seitenzahl) |
 | `GET /api/reindex/status` | Auth | Status des Index-Neuaufbaus |
 | `POST /api/reindex` | Admin | Index neu aufbauen (`buildIndex()`) |
 | `GET /api/scrape/status` | Auth | Status + Live-Ausgabe des Scrape-Laufs |
@@ -293,6 +303,7 @@ public/
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
 ├── user-admin.js             Kennwort ändern, Benutzerverwaltung, Öffentlicher Zugang
 ├── audiobooks.js             Hörbuch-Liste, -Detail, Player und Miniplayer
+├── book-reader.js            eBook-Text zum Hörbuch (Vollbild-Reiter, Leseposition)
 ├── favicon.svg               Favicon (Bücherregal, Gold auf Dunkel) – Vorlage für die beiden folgenden
 ├── favicon.ico               16/32/48 px (PNG-Einträge), aus favicon.svg erzeugt
 ├── apple-touch-icon.png      180 px ohne Eckenradius für den iOS-Homescreen

@@ -1434,6 +1434,11 @@ html.overlay-open body {
   max-width: min(260px, calc(100vw - 24px));
   box-sizing: border-box;
 }
+/* Hörbuch: Aktionen-Button sitzt rechts, das Menü öffnet bündig mit ihm nach links. */
+.detail-action-row-book .detail-tts-menu .copy-prompt-menu { left: auto; right: 0; }
+@media (max-width: 560px) {
+  .detail-action-row-book .detail-tts-menu .copy-prompt-menu { left: 0; right: auto; }
+}
 .header-menu-item:disabled, .detail-cat-pill:disabled { opacity: .5; cursor: not-allowed; }
 
 .scrape-overlay {
@@ -2176,3 +2181,66 @@ body.has-mini-player #app { padding-bottom: 84px; }
   .book-btn-play { width: 48px; height: 48px; }
   .mini-player { gap: 8px; padding: 6px 8px; bottom: 8px; }
 }
+
+/* ── eBook-Text zum Hörbuch (Vollbild-Reiter, Miniplayer bleibt darüber) ─── */
+.book-reader {
+  position: fixed;
+  inset: 0;
+  z-index: 205;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+body.book-reader-open .mini-player { z-index: 215; }
+.book-reader-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.book-reader-title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-head);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.book-reader-size { display: flex; gap: 6px; flex-shrink: 0; }
+.book-reader-size .book-btn:disabled { opacity: 0.35; cursor: default; }
+.book-reader-close { min-width: 36px; padding: 0; }
+.book-reader-body { flex: 1; min-height: 0; position: relative; }
+.book-reader-status { padding: 32px 20px; text-align: center; color: var(--text-muted); }
+.book-reader-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 20px 40px;
+  outline: none;
+}
+.book-reader-text { max-width: 42rem; margin: 0 auto; }
+.book-reader-back {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+}
+.book-reader-back[hidden] { display: none; }
+.book-reader-back:hover { background: var(--accent-glow); }
+.book-reader-pdf { width: 100%; height: 100%; border: 0; display: block; }
+/* Platz für den Miniplayer unten */
+body.has-mini-player .book-reader-body { padding-bottom: 76px; }
+body.has-mini-player .book-reader-back { bottom: 92px; }

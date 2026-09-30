@@ -65,7 +65,7 @@ WebArchiv ist ein selbst gehostetes Archiv für überwiegend deutschsprachige Ar
 | `scripts/hash-passwords.js` | Passwortpflege über bcrypt |
 | `migrate-audio.js` | Bewusste Migration der MP3s eines ausgewählten Autors |
 | `graft/` | Kontextgraph für Entwicklung; keine Laufzeitvoraussetzung |
-| `audiobooks.cjs`, `public/audiobooks.js` | Hörbücher: Index, Fortschritt, Player (Abschnitt 6a) |
+| `audiobooks.cjs`, `public/audiobooks.js`, `public/book-reader.js` | Hörbücher: Index, Fortschritt, Player, eBook-Text (Abschnitte 6a, 6b) |
 | `config.json` | Einstellungen (derzeit Hörbuch-Sprungweiten) |
 
 Artikel und Medien werden getrennt vom Code synchronisiert. `users.json`, Audioablage, Cookies, Logs und Abhängigkeiten sollen nicht versehentlich veröffentlicht werden. Die tatsächlichen Ignore-Muster prüfen: Ein neuer Autorenordner oder eine neue Dateistruktur ist nicht allein deshalb sicher ignoriert, weil andere Archivdateien ignoriert werden.
@@ -301,6 +301,24 @@ Technik:
 4. „Als gehört markieren“ und „Von vorn beginnen“.
 5. Gesamtdauer und Restzeit des Buches (Dauer aller Tracks per ffprobe beim Reindex, gecacht).
 6. Nächsten Teil vorladen für lückenlose Übergänge.
+
+## 6b. eBook-Text zum Hörbuch (30.09.2026)
+
+Entscheidungen des Benutzers:
+
+- **Ablage:** Die eBook-Datei liegt im Buchordner und heißt **wie der Ordner**; erlaubte Endungen `.pdf`, `.md`, `.txt` (Vorrang `.md`, `.txt`, `.pdf`; Groß-/Kleinschreibung egal). Eine Datei pro Buch. `abstract.md` und andere Dateien zählen nie als eBook.
+- **Umfang: nur Stufe 1.** Text auf Wunsch einblenden, **kein Mitlaufen** und keine Zuordnung Kapitel ↔ Teil. Kein EPUB, keine Suche im Text, keine Lesezeichen.
+- **Bedienung:** Button *Text lesen* im Hörbuch-Detail (nur wenn ein eBook vorhanden ist) öffnet einen **Vollbild-Reiter** über dem Artikel-Overlay. Der **Miniplayer bleibt sichtbar** (über dem Reiter); ein Tipp auf die Leiste schließt den Reiter und führt zum Detail. Escape schließt nur den Reiter; Pfeiltasten wechseln im Hintergrund keinen Artikel. Markdown/Text: Schriftgröße A−/A+ (sechs Stufen, pro Gerät in `localStorage`). PDF: eingebauter PDF.js-Viewer.
+- **Leseposition pro Nutzer und Buch**, serverseitig in `audiobook-progress.json` unter dem Schlüssel `__text` je Nutzer (`{ format, position, updatedAt }`), **getrennt vom Hörstand** (`progress.set` lässt sie stehen). Text: Scrollanteil 0–1, gespeichert 1,5 s nach dem Scrollen, beim Schließen und bei `pagehide`; PDF: Seitenzahl, alle 3 s geprüft. Wechselt das Format einer Datei, wird die alte Position ignoriert. Beim Löschen eines Nutzers entfällt sie mit.
+
+Technik:
+
+- `audiobooks.cjs`: `scanBook` sucht `<Ordnername>.{md,txt,pdf}`; `ebookText(book)` liefert `md` (über `marked`, wie Artikel ohne HTML-Bereinigung) bzw. `txt` (escaped, Absätze; fest umbrochene Zeilen werden zusammengezogen, ohne Leerzeilen gilt jede Zeile als Absatz) als HTML, Cache je Änderungszeit, Limit 5 MB; `pdf` als `/audio-files/…`-URL (ACL und Traversal-Schutz der bestehenden Route). Routen `GET /api/audiobook-text/*` und `PUT /api/audiobook-text-progress/*` (angemeldet, Autorenrecht `Hörbücher`, Cross-Site-Schutz, wie die übrigen Hörbuch-Routen). Das Detail enthält `ebook: { format, file }` und `ebookPosition`.
+- Frontend: `public/book-reader.js` (nach `audiobooks.js` geladen); `bookUpdateUi` zeigt den Miniplayer auch bei aktivem Detail, solange der Reiter offen ist. Öffnen lädt das Hörbuch in den Player (mit gespeichertem Hörstand), sofern nicht gerade ein anderes Buch läuft.
+- **Interne Verweise (30.09.):** Markdown-Links der Form `[Text](#kürzel)` springen im Text zur Überschrift. `book-reader.js` vergibt den Überschriften IDs im GitHub-Stil (klein, ohne Satzzeichen, Leerzeichen → `-`, Doppelte `-1`, `-2`) und fängt Klicks auf `#…`-Links ab (die Adresse der App bleibt unverändert). Externe Links öffnen in neuem Tab. Am Buch „50 Fragen“ geprüft: alle 101 Verweise (77 verschiedene) treffen eine Überschrift. **Zurück-Knopf (30.09.):** Nach einem internen Sprung erscheint unten rechts „↩ Zurück“ (über dem Miniplayer); er springt zur Stelle vor dem Sprung, bei mehreren Sprüngen schrittweise (Stapel, höchstens 20), und verschwindet, wenn keine Stelle mehr gemerkt ist. Eine Änderung der Schriftgröße leert den Stapel, weil die Positionen dann nicht mehr passen. Nicht umgesetzt: eigene Anker-IDs (`<a id>`), Bilder mit relativem Pfad (`../Images/…`, fehlen im Buchordner).
+- **Fallstricke (beim Test gefunden):** (1) pdf.js kodiert den `file`-Parameter selbst; der schon kodierte Medienpfad (`%20`) führte zu 404 → vor der Übergabe `decodeURI`. (2) Der Viewer meldet anfangs Seite 1; würde sofort gespeichert, überschriebe das die gespeicherte Seite → bei PDF wird erst gespeichert, nachdem der Viewer initialisiert und zur Seite gesprungen ist. (3) Ohne scrollbare Höhe (Layout nicht fertig) wird keine Position gespeichert.
+- Geprüft am 30.09.2026: 43/43 Tests (neu: eBook-Erkennung, Inhalt, Leseposition), Browserprüfung mit Testkopie und Testnutzer (Text öffnen, Scrollen/Speichern, Wiederherstellen, A+ behält die Stelle, Escape, Miniplayer-Tipp, PDF mit Seitensprung, Handy-Breite ohne seitliches Scrollen). **Nicht geprüft:** echtes iPhone/Safari, Hörtest mit echten Büchern, Serverrouten-Rechte (Gast/ohne Autorenrecht) nur über die gemeinsame `route()`-Hülle, kein eigener Test.
+- Deployment: Backend geändert → Dienst neu starten; `public/book-reader.js` neu, `audiobooks.js?v=2`, `styles.css?v=61`. eBook-Dateien in `audio/Hoerbuecher/<Buch>/` ablegen, danach Reindex. Leserecht für `ralf` genügt.
 
 ## 7. Scraper, Bereinigung und verwandtes Projekt
 
@@ -715,7 +733,7 @@ Für eine echte Abnahme gezielt Rechte, vorhandene MP3, parallele Starts, Abbruc
 ### Konkret offen bzw. heute als Abweichung festgestellt
 
 1. **Cron-Wrapper:** `scraper/run-scrape.sh` enthält noch den harten Neustart. Soll und tatsächlichen lokalen sowie produktiven Stand abgleichen und bei einem entsprechenden Änderungsauftrag auf Reindex umstellen.
-2. **Qwen-v4-Liveabnahme:** Der Benutzer bestätigte, dass eine frühere Fassung den Modellserver aufrief und nach der Transport-/Chunkänderung funktionierte. Ein vollständiger Hörtest der endgültigen v4-Verarbeitung mit der jüngsten Providerwahl ist in den ausgewerteten Gesprächen nicht abschließend bestätigt.
+2. ~~**Qwen-v4-Liveabnahme**~~ **Erledigt (30.09.2026, vom Benutzer bestätigt):** Der Benutzer bestätigte, dass eine frühere Fassung den Modellserver aufrief und nach der Transport-/Chunkänderung funktionierte; die Liveabnahme der endgültigen v4-Verarbeitung mit der jüngsten Providerwahl wurde am 30.09.2026 vom Benutzer als durchgeführt gemeldet. Einzelheiten des Hörtests sind nicht protokolliert.
 3. **Produktionsstand:** In dieser Sitzung kein SSH-Zugriff, keine Prüfung der installierten Dateiversionen, Mountrechte, Dienstvariablen oder tatsächlichen Cron-Konfiguration.
 4. **Dokumentationswidersprüche:** `tts/QWEN-ANBINDUNG.md`, `tts/UEBERGABE-TTS.md` und `tts/DEPLOYMENT-NODE-SERVER.md` enthalten noch „keine Vorauswahl“. Geltend ist Qwen-Vorauswahl bei Verfügbarkeit. Die Übergabedatei enthält zusätzlich ausdrücklich historische v2-/v3-Abschnitte.
 5. **Frühe Projektnotizen:** Aussagen über ausschließlich `server.js`, fehlende Tests, `public/pdfjs`, zweigeteiltes Copy und offene kombinierte Datums-/Textsuche sind teilweise überholt. README und Setup-Datei enthalten noch alte Facebook-URL-Eingaben und ältere Strukturangaben.

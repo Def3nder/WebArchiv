@@ -12,6 +12,10 @@ const DIRECTORY_CANDIDATES = ['Hoerbuecher', AUDIOBOOK_AUTHOR];
 const TRACK_EXTS = new Set(['.mp3', '.m4b', '.m4a']);
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png'];
 const SORTS = ['recent', 'title', 'date'];
+// eBook zum Hörbuch: Datei heißt wie der Ordner (Reihenfolge = Vorrang).
+const EBOOK_EXTS = ['.md', '.txt', '.pdf'];
+const EBOOK_MAX_BYTES = 5 * 1024 * 1024;
+const TEXT_PROGRESS_KEY = '__text';   // je Nutzer: { <Buch-ID>: { format, position, updatedAt } }
 const DEFAULT_CONFIG = { skipLongSeconds: 600, skipShortSeconds: 30 };
 const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -77,6 +81,22 @@ function withVersion(url, absPath) {
   catch { return url; }
 }
 
+function escapeHtml(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Reiner Text → Absätze. Ohne Leerzeilen gilt jede Zeile als Absatz, sonst werden
+// fest umbrochene Zeilen innerhalb eines Absatzes zusammengezogen.
+function renderPlainText(text) {
+  const clean = String(text).replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim();
+  const blocks = /\n[ \t]*\n/.test(clean) ? clean.split(/\n[ \t]*\n/) : clean.split('\n');
+  return blocks
+    .map(block => block.split('\n').map(line => line.trim()).filter(Boolean).join(' '))
+    .filter(Boolean)
+    .map(block => '<p>' + escapeHtml(block) + '</p>')
+    .join('\n');
+}
+
 function findByName(filesByLower, names) {
   for (const name of names) {
     const actual = filesByLower.get(name);
@@ -101,6 +121,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
   let fuse = null;
   let dirName = null;   // tatsächlicher Ordnername unter audioRoot (für URLs und Rechteprüfung)
   let root = null;
+  const textCache = new Map();   // Buch-ID → { mtimeMs, html }
 
   async function scanBook(bookDir) {
     const dirPath = path.join(root, bookDir);
@@ -128,6 +149,9 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       if (standard) imageUrl = withVersion(mediaUrl(dirName, standard), path.join(root, standard));
     }
 
+    const ebookFile = findByName(filesByLower, EBOOK_EXTS.map(ext => bookDir.toLowerCase() + ext));
+    const ebook = ebookFile ? { format: path.extname(ebookFile).slice(1).toLowerCase(), file: ebookFile } : null;
+
     const titles = trackTitles(trackFiles);
     return {
       // ID unabhängig vom Ordnernamen auf der Platte → Hörfortschritt bleibt gültig.
@@ -144,6 +168,8 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       tracks: trackFiles.map((file, i) => ({ title: titles[i], file, url: mediaUrl(dirName, bookDir, file) })),
       description: abstract.description,
       filePath: abstractPath,
+      ebook,
+      bookDir,
     };
   }
 
@@ -189,7 +215,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
   }
 
   function listView(book, user) {
-    const { tracks, description, filePath, ...rest } = book;
+    const { tracks, description, filePath, bookDir, ...rest } = book;
     return { ...rest, progress: progressSummary(user, book) };
   }
 
@@ -220,21 +246,39 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
   function detail(user, id) {
     const book = books.find(b => b.id === id);
     if (!book) return null;
-    const { description, filePath, ...rest } = book;
+    const { description, filePath, bookDir, ...rest } = book;
     const entry = progress.get(user?.email, book.id);
     return {
       ...rest,
       tracks: book.tracks.map(({ title, url }) => ({ title, url })),
       descriptionHtml: description ? renderMarkdown(description) : '',
       hasAbstract: !!filePath,
+      ebookPosition: book.ebook ? progress.getText(user?.email, book.id, book.ebook.format) : null,
       progress: entry ? { ...entry, trackIndex: resolveTrackIndex(book, entry) } : null,
     };
+  }
+
+  // eBook-Inhalt: md/txt als HTML (gecacht nach Änderungszeit), pdf als Medien-URL.
+  async function ebookText(book) {
+    if (!book?.ebook) throw fail(404, 'Zu diesem Hörbuch gibt es keinen Text.');
+    const abs = path.join(root, book.bookDir, book.ebook.file);
+    const stat = await fs.stat(abs);
+    const { format } = book.ebook;
+    if (format === 'pdf') return { format, url: withVersion(mediaUrl(dirName, book.bookDir, book.ebook.file), abs) };
+    if (stat.size > EBOOK_MAX_BYTES) throw fail(413, 'Der Text ist zu groß.');
+    const cached = textCache.get(book.id);
+    if (cached && cached.mtimeMs === stat.mtimeMs) return { format, html: cached.html };
+    const raw = await fs.readFile(abs, 'utf8');
+    const html = format === 'md' ? renderMarkdown(raw.replace(/^﻿/, '')) : renderPlainText(raw);
+    textCache.set(book.id, { mtimeMs: stat.mtimeMs, html });
+    return { format, html };
   }
 
   return {
     rebuild,
     list,
     detail,
+    ebookText,
     get: id => books.find(b => b.id === id),
     get books() { return books; },
     get directory() { return dirName; },
@@ -295,6 +339,27 @@ function createProgressStore({ file, io = fs }) {
       await persist();
       return entry;
     },
+    getText(email, bookId, format) {
+      const entry = email ? data[emailKey(email)]?.[TEXT_PROGRESS_KEY]?.[bookId] : null;
+      return entry && entry.format === format ? entry.position : null;
+    },
+    // Leseposition: Anteil 0–1 (md/txt) bzw. Seitenzahl (pdf); getrennt vom Hörstand.
+    async setText(email, book, input) {
+      if (!email) throw fail(401, 'Nicht angemeldet.');
+      if (!book.ebook) throw fail(404, 'Zu diesem Hörbuch gibt es keinen Text.');
+      const { format } = book.ebook;
+      const position = Number(input?.position);
+      const valid = format === 'pdf'
+        ? Number.isInteger(position) && position >= 1 && position <= 100000
+        : Number.isFinite(position) && position >= 0 && position <= 1;
+      if (!valid) throw fail(400, 'Ungültige Leseposition.');
+      const key = emailKey(email);
+      const user = data[key] || {};
+      const entry = { format, position: format === 'pdf' ? position : Math.round(position * 10000) / 10000, updatedAt: new Date().toISOString() };
+      data[key] = { ...user, [TEXT_PROGRESS_KEY]: { ...(user[TEXT_PROGRESS_KEY] || {}), [book.id]: entry } };
+      await persist();
+      return entry;
+    },
     async removeUser(email) {
       const key = emailKey(email);
       if (!data[key]) return;
@@ -340,6 +405,17 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
     const book = library.detail(user, req.params[0]);
     if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
     return { ...book, config: { skipLongSeconds: config.skipLongSeconds, skipShortSeconds: config.skipShortSeconds } };
+  }));
+  app.get('/api/audiobook-text/*', requireAuth, route(async (req, user) => {
+    const book = library.get(req.params[0]);
+    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    const text = await library.ebookText(book);
+    return { ...text, position: progress.getText(user.email, book.id, text.format) };
+  }));
+  app.put('/api/audiobook-text-progress/*', requireAuth, route(async (req, user) => {
+    const book = library.get(req.params[0]);
+    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    return progress.setText(user.email, book, req.body);
   }));
   app.put('/api/audiobook-progress/*', requireAuth, route(async (req, user) => {
     const book = library.get(req.params[0]);

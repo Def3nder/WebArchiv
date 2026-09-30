@@ -106,6 +106,9 @@ function renderBookDetail(book) {
         <button class="detail-hero-expand" id="detail-hero-expand" aria-label="Vollbild">${svgExpand()}</button>
       </div>`
     : `<div class="detail-hero"><div class="detail-hero-placeholder">${svgImage(true)}</div></div>`;
+  const readButton = book.ebook
+    ? `<button type="button" class="detail-cat-pill" data-book-text title="Text zum Hörbuch lesen">Text lesen</button>`
+    : '';
   const editMenu = currentUser?.role === 'admin' && book.hasAbstract
     ? `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Kurzbeschreibung bearbeiten">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Abstract editieren</button></div></details>`
     : '';
@@ -123,7 +126,7 @@ function renderBookDetail(book) {
       ${book.bookAuthor ? `<p class="detail-book-author">von ${esc(book.bookAuthor)}</p>` : ''}
       <div class="detail-date-row">
         <span class="detail-date-block">${book.date ? esc(formatDate(book.date)) : ''}</span>
-        <div class="detail-action-row">${editMenu}</div>
+        <div class="detail-action-row detail-action-row-book">${readButton}${editMenu}</div>
       </div>
       <div class="detail-divider"></div>
       <div class="book-player" id="book-player">
@@ -168,11 +171,21 @@ function renderBookDetail(book) {
       if (!details.open) return;
       const menu = details.querySelector('.copy-prompt-menu');
       requestAnimationFrame(() => {
+        // Beidseitig im Fenster halten (CSS richtet das Menü am Button aus).
         const box = menu.getBoundingClientRect();
-        if (box.right > window.innerWidth - 8) { menu.style.left = `${window.innerWidth - 8 - box.right}px`; menu.style.right = 'auto'; }
+        const margin = 8;
+        let shift = 0;
+        if (box.left < margin) shift = margin - box.left;
+        else if (box.right > window.innerWidth - margin) shift = window.innerWidth - margin - box.right;
+        if (shift) {
+          const left = menu.offsetLeft + shift;
+          menu.style.left = `${left}px`;
+          menu.style.right = 'auto';
+        }
       });
     });
   });
+  $detail.querySelector('[data-book-text]')?.addEventListener('click', () => openBookReader(book));
   $detail.querySelector('[data-book="speed"]').addEventListener('change', e => bookSetSpeed(Number(e.target.value)));
   $detail.querySelectorAll('.book-track').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -431,7 +444,11 @@ document.addEventListener('click', event => {
 });
 
 document.getElementById('mini-player-open').addEventListener('click', () => {
-  if (bookPlayer.book) openArticle(bookPlayer.book.id);
+  if (!bookPlayer.book) return;
+  // Im Text-Reiter führt die Leiste zurück zum Hörbuch-Detail.
+  const sameBook = bookReader.el && bookReader.book.id === bookPlayer.book.id;
+  closeBookReader();
+  if (!sameBook) openArticle(bookPlayer.book.id);
 });
 
 function bookFmt(s) {
@@ -476,7 +493,8 @@ function bookUpdateUi() {
   }
 
   // Miniplayer, sobald ein Buch geladen ist und nicht bereits im Detail sichtbar ist.
-  const showMini = !!book && !active;
+  const readerOpen = typeof bookReader !== 'undefined' && !!bookReader.el;   // book-reader.js lädt danach
+  const showMini = !!book && (!active || readerOpen);
   $miniPlayer.hidden = !showMini;
   document.body.classList.toggle('has-mini-player', showMini);
   if (!showMini) return;
