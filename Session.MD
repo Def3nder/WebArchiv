@@ -213,7 +213,7 @@ Entscheidungen des Benutzers:
 - Mitglieder **erben Kategorien/Tags** des Ankers (Suche, Filter) und wie bisher Audio (Zugriff bleibt beim Audio-Ursprung).
 - **Wo gruppiert:** nur Kachelansichten quadratisch/länglich (`/api/articles?group=1`). Liste und Autorenfilter „Infografiken“ einzeln. Gruppierung pro Anfrage nach dem Rechtefilter: Wer den Artikel nicht sehen darf (Gast), bekommt die Grafik einzeln ohne Text und Audio.
 - **Trefferzahl** = Artikel + Grafiken (wie vorher); Seiten zählen Kacheln.
-- **Kachel:** keine Animation. Desktop: Mausposition (Breite ÷ Anzahl) wählt das Bild, beim Verlassen zurück zu Bild 1. Touch: waagerecht wischen. Striche ●○○ oben auf dunklem Grund. Weitere Bilder erst bei Hover/Berührung geladen.
+- **Kachel:** keine Animation. Desktop: Mausposition (Breite ÷ Anzahl) wählt das Bild, beim Verlassen zurück zu Bild 1. Touch: waagerecht wischen, über das Ende hinaus wieder zum ersten Bild (und umgekehrt). Striche ●○○ unten links auf dunklem Grund (neben den Badges unten rechts). Weitere Bilder erst bei Hover/Berührung geladen.
 - **Artikelansicht:** Bildleiste mit Höhe für drei 9:16-Bilder nebeneinander (27:16); bei zwei Bildern je halbe Breite, unten beschnitten; Artikelfoto mittig beschnitten; ab vier Bildern waagerecht scrollbar (Wischen dort wechselt nicht den Artikel). Klick öffnet die Vollansicht.
 - **Wischen/Pfeiltasten** wechseln in der Artikelansicht die Artikel; nur in der **Vollansicht** die Bilder, nach dem letzten Bild weiter zum nächsten Artikel (Bild 1), vor dem ersten zum vorigen (letztes Bild). Vollansicht zeigt „2 / 4“ und einen Download-Knopf.
 - **Deep-Link:** `#/article/<Anker-ID>?bild=N`. Alte Links auf eine gruppierte Infografik öffnen die Gruppe mit diesem Bild. `/a/<id>` unverändert.
@@ -390,6 +390,18 @@ Aus der frühen Aufbauphase stammen Dark-/Light-Modus, persistierte Schriftwahl,
 - Das Aktionen-Dropdown beginnt unter dem Button. Nur bei Randüberschreitung wird es verschoben; 8 px Randabstand und begrenzte Breite halten es im Viewport.
 - Erneuter Buttonklick und Außenklick schließen das Menü.
 - „Audio erzeugen“ bleibt in der Artikel-Detailansicht. Die erste Entfernung traf versehentlich diese Stelle und wurde korrigiert; entfernt werden sollte der globale Menüeintrag der Übersicht. Die Anzeige bestehender Audio-Aufträge bleibt verfügbar.
+
+### Nach unten wegziehen (30.09.2026)
+
+Auf Touch-Geräten schließt Herunterziehen die Artikel- bzw. Hörbuch-Detailansicht, wenn sie beim Aufsetzen ganz oben steht, und ebenso die Bild-Vollansicht (zusätzlich zum Tippen; nicht bei Zoom). Die Ansicht folgt dem Finger, der Hintergrund hellt auf; ab 120 px schließt sie beim Loslassen, sonst federt sie zurück. Nur bei deutlich senkrechter Bewegung; waagerechtes Wischen wechselt weiter den Artikel. Nicht aus der wischbaren Bildleiste, bei markiertem Text, Pinch-Zoom oder offenen Dialogen. `overscroll-behavior-y: contain` verhindert „Pull to refresh“. Technik: `enablePullToClose` in `public/app.js`. Vom Benutzer am 30.09. in Safari und Chrome auf dem iPhone bestätigt.
+
+Safari-Erkenntnisse (Chrome auf dem iPhone verhielt sich jeweils anders, trotz gleicher Engine):
+- Die Richtung muss bei der **ersten** `touchmove` festgelegt und `preventDefault` sofort gerufen werden, sonst übernimmt iOS das Scrollen; `touchcancel` wie Loslassen behandeln.
+- Safari (Adressleiste unten) ließ die **Seite hinter dem Overlay** federn. Lösung: `html.overlay-open` (per MutationObserver auf `$overlay[hidden]`) mit `overflow: hidden; overscroll-behavior: none`, Panel `overscroll-behavior-y: none`.
+- Safari meldete `visualViewport.scale = 1.15` (Auto-Zoom nach Antippen von Suchfeld/Filtern < 16 px oder Seitenzoom „Aa“). Deshalb zählt als Zoom nur, was über der Grundvergrößerung beim Laden liegt (`pinchZoomed`), und bei Vergrößerung ist die Geste erlaubt, wenn der sichtbare Ausschnitt oben steht (`visualViewport.offsetTop`). Gilt auch für `swipeAllowed`.
+- `index.html` wird mit `Cache-Control: no-cache` ausgeliefert (server.js), damit Safari keine alte Seite mit alten `?v=`-Verweisen hält.
+- Diagnose-Hilfe (`?pulldebug`) wurde nach erfolgreichem Test wieder entfernt.
+- Offen/Vorschlag: Suchfeld und Filter-Auswahl auf dem Handy auf 16 px, damit Safari beim Antippen nicht mehr hineinzoomt (nicht beauftragt).
 
 ### Bildvollansicht
 

@@ -566,7 +566,8 @@ function wireCardGallery(card) {
     const dx = e.changedTouches[0].clientX - startX;
     const dy = e.changedTouches[0].clientY - startY;
     if (Math.abs(dx) < 30 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    show(index + (dx < 0 ? 1 : -1));
+    // Über das Ende hinaus geht es beim ersten Bild weiter (und umgekehrt).
+    show((index + (dx < 0 ? 1 : -1) + dots.length) % dots.length);
     card.dataset.swipedAt = String(Date.now());
   }, { passive: true });
 }
@@ -1863,10 +1864,19 @@ document.addEventListener('keydown', e => {
   else navigateArticle(dir);
 });
 
+// Grundvergrößerung der Seite: Safari meldet bei Seitenzoom (Aa, z. B. 115 %)
+// dauerhaft eine Skalierung über 1. Als Pinch-Zoom zählt nur, was darüber hinausgeht.
+let baseViewportScale = window.visualViewport?.scale ?? 1;
+window.visualViewport?.addEventListener('resize', () => {
+  baseViewportScale = Math.min(baseViewportScale, window.visualViewport.scale);
+});
+function pinchZoomed() {
+  return (window.visualViewport?.scale ?? 1) > baseViewportScale + 0.05;
+}
+
 // Returns false when the user is panning within a zoomed viewport and hasn't reached the edge yet.
 function swipeAllowed(delta) {
-  const scale = window.visualViewport?.scale ?? 1;
-  if (scale <= 1) return true;
+  if (!pinchZoomed()) return true;
   const vp = window.visualViewport;
   const atLeft  = vp.offsetLeft < 2;
   const atRight = (vp.offsetLeft + vp.width) >= (document.documentElement.clientWidth - 2);
@@ -1937,6 +1947,84 @@ $imgFs.addEventListener('touchend', e => {
     stepFullscreen(dx < 0 ? +1 : -1);
   }
 }, { passive: true });
+
+// Nach unten wegziehen (Touch): Steht die Ansicht ganz oben, folgt sie dem Finger
+// nach unten; ab PULL_CLOSE_DISTANCE schließt sie beim Loslassen, sonst federt sie
+// zurück. Für Artikel/Hörbuch (Overlay) und die Bild-Vollansicht.
+const PULL_CLOSE_DISTANCE = 120;
+function enablePullToClose({ scroller, moving, fading, canStart, onClose }) {
+  let startX = 0, startY = 0, dy = 0, state = 'idle'; // idle | pending | pulling
+  const reset = animate => {
+    moving.style.transition = animate ? 'transform .2s ease' : '';
+    moving.style.transform = '';
+    if (fading) { fading.style.transition = animate ? 'opacity .2s ease' : ''; fading.style.opacity = ''; }
+    state = 'idle';
+  };
+  scroller.addEventListener('touchstart', e => {
+    state = 'idle';
+    if (e.touches.length !== 1 || scroller.scrollTop > 1 || hasActiveSelection()) return;
+    // Vergrößert (Pinch oder Safaris Auto-Zoom nach einem Eingabefeld): nur, wenn der
+    // sichtbare Ausschnitt schon ganz oben steht – sonst verschiebt Safari ihn.
+    if ((pinchZoomed() && (window.visualViewport?.offsetTop ?? 0) > 1) || !canStart(e)) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    state = 'pending';
+  }, { passive: true });
+  scroller.addEventListener('touchmove', e => {
+    if (state === 'idle') return;
+    if (e.touches.length !== 1) { reset(true); return; }
+    const x = e.touches[0].clientX - startX;
+    dy = e.touches[0].clientY - startY;
+    if (state === 'pending') {
+      // Richtung gleich bei der ersten Bewegung festlegen: Sonst übernimmt iOS das
+      // Scrollen (Gummiband) und ignoriert preventDefault danach.
+      if (dy === 0 && x === 0) return;
+      if (dy <= 0 || Math.abs(x) >= dy || scroller.scrollTop > 1) { state = 'idle'; return; }
+      state = 'pulling';
+      moving.style.transition = 'none';
+      if (fading) fading.style.transition = 'none';
+    }
+    // Kein Scrollen/Neuladen der Seite, solange gezogen wird.
+    e.preventDefault();
+    const offset = Math.max(0, dy);
+    moving.style.transform = `translateY(${offset}px)`;
+    if (fading) fading.style.opacity = String(Math.max(0.25, 1 - offset / 400));
+  }, { passive: false });
+  const end = () => {
+    if (state !== 'pulling') { state = 'idle'; return; }
+    if (dy < PULL_CLOSE_DISTANCE) { reset(true); return; }
+    moving.style.transition = 'transform .2s ease';
+    moving.style.transform = `translateY(${window.innerHeight}px)`;
+    state = 'idle';
+    setTimeout(() => { reset(false); onClose(); }, 200);
+  };
+  scroller.addEventListener('touchend', end, { passive: true });
+  // iOS bricht eine Geste teils mit touchcancel ab – dann wie Loslassen behandeln.
+  scroller.addEventListener('touchcancel', end, { passive: true });
+}
+
+// Solange Artikel/Hörbuch offen sind, darf die Seite dahinter weder scrollen noch
+// federn – sonst übernimmt Safari (Adressleiste unten) das Herunterziehen selbst.
+new MutationObserver(() => {
+  document.documentElement.classList.toggle('overlay-open', !$overlay.hidden);
+}).observe($overlay, { attributes: true, attributeFilter: ['hidden'] });
+
+const dialogOpen = () => !!document.querySelector('dialog[open]') || !$ttsOverlay.hidden;
+enablePullToClose({
+  scroller: $overlayPanel,
+  moving: $overlayPanel,
+  fading: $overlayBdrop,
+  // Nicht aus der wischbaren Bildleiste, nicht bei offener Vollansicht oder Dialogen.
+  canStart: e => $imgFs.hidden && !dialogOpen() && !e.target.closest?.('.detail-gallery.is-scrollable, textarea, input'),
+  onClose: closeOverlay,
+});
+enablePullToClose({
+  scroller: $imgFs,
+  moving: $imgFullscreenImg,
+  fading: null,
+  canStart: () => imageZoom.scale <= 1,
+  onClose: closeImageFullscreen,
+});
 
 // Handle back button
 window.addEventListener('popstate', () => {

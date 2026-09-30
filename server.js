@@ -937,7 +937,13 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.static(path.join(__dirname, 'public')));
+// index.html immer beim Server nachfragen (sonst hält v. a. Safari eine alte Seite
+// mit alten ?v=-Verweisen); JS/CSS werden über ?v= in index.html aktualisiert.
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 
 // ─── Auth routes (public) ──────────────────────────────────────────────────
 

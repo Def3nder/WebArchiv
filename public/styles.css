@@ -433,7 +433,7 @@ select { font: inherit; color: inherit; }
 .card[data-author="Infografiken"] .card-image img { object-position: top; }
 
 /* Kachel mit mehreren Bildern (Artikel + Infografiken): Streifen, der per Maus-
-   position (Desktop) oder Wischen (Touch) verschoben wird; Striche oben. */
+   position (Desktop) oder Wischen (Touch) verschoben wird; Striche unten links. */
 .card-gallery { touch-action: pan-y; }
 .card-gallery-track {
   display: flex;
@@ -448,11 +448,11 @@ select { font: inherit; color: inherit; }
 }
 .card-gallery-slide.is-infographic img { object-position: top; }
 .card-gallery-slide:not(.is-infographic) img { object-position: center; }
+/* Unten links, damit sie die Medien-Badges (unten rechts) nicht überdecken. */
 .card-gallery-dots {
   position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 10px;
+  left: 10px;
   display: flex;
   gap: 4px;
   padding: 4px 6px;
@@ -780,6 +780,12 @@ body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex
   justify-content: center;
 }
 .overlay[hidden] { display: none; }
+/* Seite hinter dem offenen Artikel sperren (auch das Federn in Safari). */
+html.overlay-open,
+html.overlay-open body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 
 .overlay-backdrop {
   position: absolute;
@@ -803,6 +809,9 @@ body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex
   margin: 0 auto;
   animation: slideUp .25s cubic-bezier(.4,0,.2,1);
   scrollbar-width: thin;
+  /* Kein Federn/„Pull to refresh“ am oberen Rand – das Herunterziehen übernimmt
+     enablePullToClose (app.js). */
+  overscroll-behavior-y: none;
   scrollbar-color: var(--border-hi) transparent;
 }
 @media (min-width: 860px) {
@@ -988,6 +997,7 @@ body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex
   display: block;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   cursor: zoom-out;
   animation: fadeIn .2s ease;
 }
