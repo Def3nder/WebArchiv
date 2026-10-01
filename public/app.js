@@ -1126,37 +1126,8 @@ async function articleArtworkDataUrl(src) {
   return dataUrl;
 }
 
-// Diagnose: Seite mit ?mediadebug=1 öffnen, dann erscheint unter dem Player, was gemeldet wird.
-const MEDIA_DEBUG = /[?&]mediadebug\b/.test(location.search);
-function mediaDebug(line) {
-  if (!MEDIA_DEBUG) return;
-  let box = document.getElementById('media-debug');
-  if (!box) {
-    box = document.createElement('pre');
-    box.id = 'media-debug';
-    box.style.cssText = 'white-space:pre-wrap;word-break:break-all;font-size:.72rem;line-height:1.4;padding:10px;margin:12px 0;border:1px dashed var(--accent);border-radius:6px;color:var(--text-muted)';
-    const anchor = document.getElementById('audio-player');
-    if (anchor) anchor.after(box); else $detail.prepend(box);
-  }
-  box.textContent += line + '\n';
-}
-
-// Lädt das Bild testweise wie ein Bildelement und meldet das Ergebnis in die Diagnose.
-function mediaDebugProbe(src) {
-  const img = new Image();
-  img.onload = () => mediaDebug(`Bild lädt: ${img.naturalWidth}x${img.naturalHeight}`);
-  img.onerror = () => mediaDebug('Bild lädt NICHT (Bildelement)');
-  img.src = src;
-  fetch(src, { credentials: 'omit' })
-    .then(r => mediaDebug(`Abruf ohne Cookie: HTTP ${r.status}, ${r.headers.get('content-type')}`))
-    .catch(err => mediaDebug('Abruf ohne Cookie fehlgeschlagen: ' + err.message));
-}
-
 function setArticleMediaSession(article, audio) {
-  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') {
-    mediaDebug('Media Session wird von diesem Browser nicht unterstützt');
-    return;
-  }
+  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
   // Wird beim Klick und beim Play-Ereignis aufgerufen; ein Mal pro Artikel genügt.
   if (articleSessionActive && articleSessionId === article.id) return;
   articleSessionActive = true;
@@ -1178,19 +1149,11 @@ function setArticleMediaSession(article, audio) {
   const cached = hasImage ? articleArtworkCache.get(urlArtwork[1].src) : null;
   navigator.mediaSession.metadata = makeMetadata(cached ? [{ src: cached, sizes: '512x512', type: 'image/jpeg' }] : urlArtwork);
 
-  mediaDebug(`Seite: ${location.protocol}//${location.host} (sicherer Kontext: ${window.isSecureContext})`);
-  mediaDebug(`Titel: ${article.title}`);
-  mediaDebug(`Bilder im Artikel: ${article.images?.length || 0}; verwendet wird ID: ${artId}`);
-  urlArtwork.forEach(a => mediaDebug(`Bild-URL: ${a.src}`));
-  if (hasImage) mediaDebugProbe(urlArtwork[1].src);
-  if (cached) mediaDebug(`Data-URL aus dem Zwischenspeicher (${Math.round(cached.length / 1024)} KB) gemeldet`);
-
   if (hasImage && !cached) {
     articleArtworkDataUrl(urlArtwork[1].src).then(dataUrl => {
       if (token !== articleArtworkToken || !articleSessionActive) return;   // inzwischen anderer Artikel
       navigator.mediaSession.metadata = makeMetadata([{ src: dataUrl, sizes: '512x512', type: 'image/jpeg' }]);
-      mediaDebug(`Bild eingebettet als Data-URL (${Math.round(dataUrl.length / 1024)} KB) und neu gemeldet`);
-    }).catch(err => mediaDebug('Einbetten fehlgeschlagen, URL bleibt gemeldet: ' + err.message));
+    }).catch(() => { /* URL-Bild bleibt gemeldet */ });
   }
 
   const skip = 15;

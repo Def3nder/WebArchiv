@@ -21,6 +21,7 @@ migrate-audio.log
 /node_modules/
 /scraper/node_modules/
 /tts/node_modules/
+/epub-tool/node_modules/
 /tts/.cache/
 /tts/.test-*/
 /.npm-cache/

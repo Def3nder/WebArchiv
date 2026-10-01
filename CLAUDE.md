@@ -20,6 +20,12 @@ node scripts/make-favicons.js    # regenerate public/favicon.ico + apple-touch-i
 node scripts/strip-infographic-categories.js [--dry-run]  # drop Kategorien: lines from infographic .md (backup in download/)
 ```
 
+```bash
+# EPUB → Markdown für Hörbuch-eBooks (eigenes Paket epub-tool/, eigene node_modules; nicht Teil der App)
+node epub-tool/epub-to-md.js "Buch.epub" --out "audio/Hoerbuecher/<Buch>" [--dry-run] [--force]
+npm test --prefix epub-tool
+```
+
 There is no `npm test` script, linter, or build; run tests with
 `node --test server.test.cjs article-editor.test.cjs user-store.test.cjs audiobooks.test.cjs`. `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button

@@ -1,0 +1,17 @@
+{
+  "name": "webarchiv-epub-tool",
+  "version": "1.0.0",
+  "description": "EPUB → Markdown für Hörbuch-eBooks (eigenes Paket, unabhängig von der App)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.1",
+    "htmlparser2": "^9.1.0"
+  }
+}

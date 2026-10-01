@@ -117,7 +117,8 @@ automatisch erkannten, höchstens fünf. Andere Einträge bleiben reine Anzeige-
 
 Je Buch ein Ordner unter `audio/Hoerbuecher/` mit `cover.jpg`/`.png`, nummerierten
 Tracks (`.mp3`/`.m4b`/`.m4a`) und optional `abstract.md`
-(`Titel:`, `Autor:`, `Datum:`, `Inhalt:` + Markdown). Fallback-Cover:
+(`Titel:`, `Autor:`, `Datum:`, `Inhalt:` + Markdown). (EPUB-Bücher als eBook-Text: siehe `epub-tool/`
+unten.) Fallback-Cover:
 `audio/Hoerbuecher/standard.png`. Der Ordner heißt bewusst ohne Umlaute, angezeigt
 wird „Hörbücher“ (Alternativen: Ordner `Hörbücher` oder `audiobooks.directory` in
 `config.json`). Hörbücher sind keine Artikel: Sie erscheinen nur
@@ -134,6 +135,13 @@ Detail. Die Leseposition (Scrollanteil bzw. PDF-Seite) wird pro Nutzer und Buch 
 `audiobook-progress.json` gemerkt, getrennt vom Hörstand. Text läuft nicht mit dem Audio mit. Interne Verweise (`[…](#kürzel)`) springen zur
 passenden Überschrift (Kürzel wie bei GitHub); „↩ Zurück“ kehrt zur Ausgangsstelle zurück. Bilder im Markdown (`![](images/x.jpg)`)
 werden angezeigt, wenn sie im Buchordner (auch in Unterordnern) liegen.
+
+**EPUB als eBook-Text:** Der Reader liest kein EPUB direkt. Das Werkzeug `epub-tool/` (eigene
+Abhängigkeiten, nur lokal nötig) wandelt ein EPUB einmalig in diese `.md` um – Bilder nach `images/`, Verweise
+und Inhaltsverzeichnis als `#`-Sprunglinks, Fuß-/Endnoten als Sprungmarke im Text und „Anmerkungen“ mit
+Rücksprung:
+`node epub-tool/epub-to-md.js "Autor - Titel.epub" --out "audio/Hoerbuecher/Autor - Titel"`
+(Details: `epub-tool/README.md`; danach Reindex).
 
 ---
 
@@ -310,6 +318,7 @@ public/
 ├── apple-touch-icon.png      180 px ohne Eckenradius für den iOS-Homescreen
 ├── styles.css                Styles (Light/Dark, Layouts)
 └── pdfjs/                    PDF-Anzeige
+epub-tool/                    Eigenständiges Werkzeug: EPUB → Markdown für Hörbuch-eBooks (eigene package.json)
 scripts/hash-passwords.js     bcrypt-Hashes für users.json erzeugen
 scripts/make-favicons.js      favicon.ico + apple-touch-icon.png aus public/favicon.svg erzeugen
 scripts/strip-infographic-categories.js  „Kategorien:“ aus Infografik-.md entfernen (--dry-run, Sicherung)
