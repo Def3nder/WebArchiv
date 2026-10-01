@@ -101,6 +101,10 @@ function showBookText(body, html) {
   };
   restore();
   requestAnimationFrame(restore);
+  // Nachladende Bilder verschieben den Text; solange nicht gescrollt wurde, die Stelle nachführen.
+  let touched = false;
+  for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) scroller.addEventListener(type, () => { touched = true; }, { once: true, passive: true });
+  text.addEventListener('load', event => { if (!touched && event.target.tagName === 'IMG') restore(); }, true);
   scroller.focus({ preventScroll: true });
   scroller.addEventListener('scroll', () => {
     clearTimeout(bookReader.saveTimer);
@@ -108,9 +112,10 @@ function showBookText(body, html) {
   }, { passive: true });
 }
 
-// Überschriften-Kürzel wie bei GitHub: klein, ohne Satzzeichen, Leerzeichen → "-".
+// Überschriften-Kürzel exakt wie bei GitHub: klein, Satzzeichen entfallen, jedes Leerzeichen → "-"
+// (aus „A – B“ wird „a--b“, ein Leerzeichen am Ende bleibt als „-“ stehen).
 function bookHeadingSlug(text) {
-  return text.toLowerCase().replace(/[^\p{L}\p{N}\p{M}\s_-]/gu, '').trim().replace(/\s+/g, '-');
+  return text.toLowerCase().trim().replace(/[^\p{L}\p{N}\p{M}\s_-]/gu, '').replace(/\s/g, '-');
 }
 
 // Interne Verweise (#kürzel) springen im Text, statt die Adresse der App zu ändern;

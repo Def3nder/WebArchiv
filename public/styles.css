@@ -2223,6 +2223,7 @@ body.book-reader-open .mini-player { z-index: 215; }
   outline: none;
 }
 .book-reader-text { max-width: 42rem; margin: 0 auto; }
+.book-reader-text img { display: block; max-width: 100%; height: auto; margin: 1.2em auto; border-radius: 4px; }
 .book-reader-back {
   position: absolute;
   right: 16px;

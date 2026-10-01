@@ -174,6 +174,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
   }
 
   async function rebuild() {
+    textCache.clear();
     dirName = resolveAudiobookDirectory(audioRoot, directory);
     if (!dirName) { books = []; fuse = null; return books; }
     root = path.join(audioRoot, dirName);
@@ -258,6 +259,51 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     };
   }
 
+  // Bildpfad relativ zur eBook-Datei → Datei im Buchordner (Unterordner erlaubt, Groß-/Kleinschreibung
+  // egal: Linux unterscheidet sie, die Dateien entstehen aber oft unter Windows). Liefert { url } oder
+  // { reason }; Pfade aus dem Buchordner heraus werden abgewiesen. stat folgt Symlinks/Mounts.
+  async function resolveEbookImage(bookDir, src) {
+    let rel = src;
+    try { rel = decodeURIComponent(src); } catch { /* unverändert */ }
+    const parts = path.posix.normalize(rel.split('\\').join('/').split(/[?#]/)[0]).split('/').filter(part => part && part !== '.');
+    if (!parts.length || parts.includes('..')) return { reason: 'liegt außerhalb des Buchordners' };
+    let dir = path.join(root, bookDir);
+    const segments = [];
+    for (const [i, part] of parts.entries()) {
+      const isLast = i === parts.length - 1;
+      let name = part;
+      let stat = await fs.stat(path.join(dir, name)).catch(() => null);
+      if (!stat) {
+        let entries;
+        try { entries = await fs.readdir(dir); }
+        catch (err) { return { reason: 'Ordner nicht lesbar (' + err.code + '): ' + dir }; }
+        name = entries.find(entry => entry.toLowerCase() === part.toLowerCase());
+        stat = name && await fs.stat(path.join(dir, name)).catch(() => null);
+      }
+      if (!stat) return { reason: '„' + part + '“ nicht gefunden in ' + dir };
+      if (isLast ? !stat.isFile() : !stat.isDirectory()) return { reason: '„' + name + '“ hat den falschen Typ' };
+      segments.push(name);
+      dir = path.join(dir, name);
+    }
+    return { url: withVersion(mediaUrl(dirName, bookDir, ...segments), dir) };
+  }
+
+  // <img src="images/x.jpg"> → /audio-files/…; nicht auflösbare lokale Bilder entfallen (mit Hinweis
+  // im Log), externe (http, data:) bleiben unverändert.
+  async function rewriteEbookImages(html, book) {
+    const tags = [...new Set(html.match(/<img\b[^>]*>/gi) || [])];
+    const misses = [];
+    for (const tag of tags) {
+      const m = tag.match(/\bsrc="([^"]*)"/i);
+      if (!m || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(m[1])) continue;
+      const { url, reason } = await resolveEbookImage(book.bookDir, m[1]);
+      if (!url) misses.push(m[1] + ' – ' + reason);
+      html = html.split(tag).join(url ? tag.replace(m[0], 'src="' + url + '"') : '');
+    }
+    if (misses.length) console.warn('Hörbuch-Text „' + book.id + '“: ' + misses.length + ' Bild(er) nicht gefunden, z. B. ' + misses[0]);
+    return html;
+  }
+
   // eBook-Inhalt: md/txt als HTML (gecacht nach Änderungszeit), pdf als Medien-URL.
   async function ebookText(book) {
     if (!book?.ebook) throw fail(404, 'Zu diesem Hörbuch gibt es keinen Text.');
@@ -269,7 +315,9 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     const cached = textCache.get(book.id);
     if (cached && cached.mtimeMs === stat.mtimeMs) return { format, html: cached.html };
     const raw = await fs.readFile(abs, 'utf8');
-    const html = format === 'md' ? renderMarkdown(raw.replace(/^﻿/, '')) : renderPlainText(raw);
+    const html = format === 'md'
+      ? await rewriteEbookImages(renderMarkdown(raw.replace(/^﻿/, '')), book)
+      : renderPlainText(raw);
     textCache.set(book.id, { mtimeMs: stat.mtimeMs, html });
     return { format, html };
   }

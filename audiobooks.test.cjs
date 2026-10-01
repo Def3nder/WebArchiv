@@ -204,3 +204,30 @@ test('Leseposition: pro Nutzer und Buch, getrennt vom Hörstand, Format und Wert
   await progress.removeUser('a@b.de');
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, 'progress.json'), 'utf8')), {});
 });
+
+test('eBook-Bilder: Unterordner (Groß-/Kleinschreibung egal) wird zu /audio-files, Fremdes entfällt', async t => {
+  const dir = await tempDir(t);
+  const root = path.join(dir, 'audio', 'Hoerbuecher');
+  const book = path.join(root, 'Autor - Bilder');
+  await fs.mkdir(path.join(book, 'Images', 'sub'), { recursive: true });
+  await fs.writeFile(path.join(book, '01 - Teil.mp3'), 'x');
+  await fs.writeFile(path.join(book, 'Images', 'a b.jpg'), 'x');
+  await fs.writeFile(path.join(book, 'Images', 'sub', 'c.png'), 'x');
+  await fs.writeFile(path.join(root, 'geheim.jpg'), 'x');
+  await fs.writeFile(path.join(book, 'Autor - Bilder.md'), [
+    '<img src="images/a%20b.jpg" alt="">', '<img src="./images/sub/c.png">', '<img src="images/fehlt.jpg">',
+    '<img src="../geheim.jpg">', '<img src="images/../../geheim.jpg">', '<img src="https://example.org/x.jpg">',
+    '<img src="/files/x.jpg">', 'Text'].join('\n'));
+  const progress = createProgressStore({ file: path.join(dir, 'progress.json') });
+  const library = createAudiobookLibrary({ audioRoot: path.join(dir, 'audio'), progress, excerpt: x => x, renderMarkdown: x => x });
+  await library.rebuild();
+  const { html } = await library.ebookText(library.books[0]);
+  const srcs = [...html.matchAll(/src="([^"]*)"/g)].map(m => m[1].replace(/\?v=\d+$/, '').replace(/\/images\//i, '/Images/'));   // Windows behält die Schreibweise, Linux liefert die echte
+  assert.deepEqual(srcs, [
+    '/audio-files/Hoerbuecher/Autor%20-%20Bilder/Images/a%20b.jpg',
+    '/audio-files/Hoerbuecher/Autor%20-%20Bilder/Images/sub/c.png',
+    'https://example.org/x.jpg',
+    '/files/x.jpg',
+  ]);
+  assert.match(html, /Text$/);
+});
