@@ -322,12 +322,13 @@ Technik:
 
 ## 6c. Sperrbildschirm: Artikel-Audio mit Bild (01.10.2026)
 
-- Artikel-Audio setzte keine Media Session; iOS zeigte deshalb das Favicon. Jetzt (`setArticleMediaSession` in `public/app.js`, gesetzt beim Abspielen): Titel, Autor (ohne Unterstriche), Album „WebArchiv“ und als Bild der **obere Teil des Artikelbilds, quadratisch**. Ohne Artikelbild: `apple-touch-icon.png`.
+- Artikel-Audio setzte keine Media Session; iOS zeigte deshalb das Favicon. Jetzt (`setArticleMediaSession` in `public/app.js`, gesetzt beim Abspielen): Titel, Autor (ohne Unterstriche), Album „WebArchiv“ und als Bild der **obere Teil des Artikelbilds, quadratisch**; gibt es mehrere Bilder (Artikel + Infografiken, `article.images`), gilt **immer das zweite** (Entscheidung 01.10.). Die Anzeige wird schon beim Klick auf Abspielen gesetzt (vor `play()`), damit iOS das Bild sofort übernimmt. Ohne Artikelbild: `apple-touch-icon.png`.
 - Bild über die vorhandene Vorschau-Route: `GET /og-image/<id>?sq=256|512` (sharp `fit: cover, position: top`, JPEG q80, gecacht je mtime und Größe; andere Werte liefern das normale Vorschaubild). **Bewusst ohne Anmeldung**, weil iOS das Lock-Screen-Bild außerhalb der Seite lädt; es zeigt dasselbe Bild wie die schon öffentliche Link-Vorschau (Abschnitt 4), nur kleiner.
 - Steuerung vom Sperrbildschirm/Kopfhörer: Play, Pause, ±15 s, Position setzen; der Wiedergabeknopf in der Artikelansicht zieht bei Pause/Play von außen mit. Artikelwechsel oder Stopp gibt die Session frei bzw. überlässt sie dem geladenen Hörbuch; beim Abspielen holt sich das Hörbuch die Session zurück.
+- **Leeres Feld statt Favicon (01.10., iPhone):** Lädt iOS die Bild-URL nicht, bleibt das Bildfeld leer. Deshalb wird das Bild zusätzlich als **Data-URL eingebettet** (Abruf per `fetch`, danach Metadaten neu setzen; Zwischenspeicher je URL; Fallback bleibt die URL). **Diagnose:** Seite mit `?mediadebug=1` öffnen (z. B. `https://server/?mediadebug=1#/article/<ID>`), dann zeigt der Artikel unter dem Player Protokoll/Host, gewählte Bild-ID, Bild-URLs, ob das Bild lädt (mit/ohne Cookie) und ob das Einbetten klappte.
 - **Hörbücher unverändert:** ihr Sperrbildschirm-Bild bleibt das Cover aus `/audio-files/…`; ein quadratischer Ausschnitt ohne Anmeldung kam nicht in Frage, weil Hörbücher nie öffentlich sind.
 - Geprüft am 01.10.2026: Testserver, Route liefert 512×512 mit dem oberen Bildteil (Hochformat-Testbild), ungültige Größe liefert das normale Bild; Browser: Metadaten, Artwork-URLs, Knopfzustand, Freigabe. **Nicht geprüft:** echtes iPhone (Sperrbildschirm), ob iOS das Bild ohne Cookie lädt (dafür ist die Route offen).
-- Deployment: `server.js` geändert → Dienst neu starten; `app.js?v=48`, `audiobooks.js?v=4`.
+- Deployment: `server.js` geändert → Dienst neu starten; `app.js?v=50`, `audiobooks.js?v=4`. Das Artikel-Bild kommt nur mit dem neuen `server.js` (`?sq=`); ohne diesen Stand bleibt das Favicon, weil die Route das Bild dann nicht quadratisch liefert bzw. unbekannt ist.
 
 ## 7. Scraper, Bereinigung und verwandtes Projekt
 

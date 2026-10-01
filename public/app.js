@@ -1100,21 +1100,99 @@ function renderPdfEmbed(pdfUrl) {
 }
 
 // Sperrbildschirm und Kopfhörertasten: Titel, Autor und quadratischer Bildausschnitt (oberer
-// Teil des Artikelbilds) statt des Favicons. Die Vorschau-Route ist ohne Anmeldung erreichbar,
-// weil iOS das Bild außerhalb der Seite lädt.
-function setArticleMediaSession(article, audio, syncButton) {
-  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
+// Teil des Bildes) statt des Favicons. Gibt es mehrere Bilder (Artikel + Infografiken), gilt das
+// zweite. Die Vorschau-Route ist ohne Anmeldung erreichbar, weil iOS das Bild außerhalb der Seite
+// lädt. Zusätzlich wird das Bild als Data-URL eingebettet: Das System muss dann nichts nachladen
+// (kein Cookie, kein Mixed-Content, kein Netzwerkfehler) und zeigt nicht ein leeres Feld.
+const articleArtworkCache = new Map();   // Bild-URL → Data-URL
+let articleSessionId = null;
+let articleArtworkToken = 0;
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Lesefehler'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function articleArtworkDataUrl(src) {
+  if (articleArtworkCache.has(src)) return articleArtworkCache.get(src);
+  const response = await fetch(src, { credentials: 'same-origin' });
+  if (!response.ok) throw new Error('HTTP ' + response.status);
+  const dataUrl = await blobToDataUrl(await response.blob());
+  articleArtworkCache.set(src, dataUrl);
+  return dataUrl;
+}
+
+// Diagnose: Seite mit ?mediadebug=1 öffnen, dann erscheint unter dem Player, was gemeldet wird.
+const MEDIA_DEBUG = /[?&]mediadebug\b/.test(location.search);
+function mediaDebug(line) {
+  if (!MEDIA_DEBUG) return;
+  let box = document.getElementById('media-debug');
+  if (!box) {
+    box = document.createElement('pre');
+    box.id = 'media-debug';
+    box.style.cssText = 'white-space:pre-wrap;word-break:break-all;font-size:.72rem;line-height:1.4;padding:10px;margin:12px 0;border:1px dashed var(--accent);border-radius:6px;color:var(--text-muted)';
+    const anchor = document.getElementById('audio-player');
+    if (anchor) anchor.after(box); else $detail.prepend(box);
+  }
+  box.textContent += line + '\n';
+}
+
+// Lädt das Bild testweise wie ein Bildelement und meldet das Ergebnis in die Diagnose.
+function mediaDebugProbe(src) {
+  const img = new Image();
+  img.onload = () => mediaDebug(`Bild lädt: ${img.naturalWidth}x${img.naturalHeight}`);
+  img.onerror = () => mediaDebug('Bild lädt NICHT (Bildelement)');
+  img.src = src;
+  fetch(src, { credentials: 'omit' })
+    .then(r => mediaDebug(`Abruf ohne Cookie: HTTP ${r.status}, ${r.headers.get('content-type')}`))
+    .catch(err => mediaDebug('Abruf ohne Cookie fehlgeschlagen: ' + err.message));
+}
+
+function setArticleMediaSession(article, audio) {
+  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') {
+    mediaDebug('Media Session wird von diesem Browser nicht unterstützt');
+    return;
+  }
+  // Wird beim Klick und beim Play-Ereignis aufgerufen; ein Mal pro Artikel genügt.
+  if (articleSessionActive && articleSessionId === article.id) return;
   articleSessionActive = true;
+  articleSessionId = article.id;
+  const token = ++articleArtworkToken;
   const origin = location.origin;
-  const artwork = article.imageUrl
-    ? [256, 512].map(size => ({ src: `${origin}/og-image/${encodeURIComponent(article.id)}?sq=${size}`, sizes: `${size}x${size}`, type: 'image/jpeg' }))
+  const second = article.images?.length > 1 ? article.images[1] : null;
+  const artId = second?.id || article.id;
+  const hasImage = !!(second?.url || article.imageUrl);
+  const urlArtwork = hasImage
+    ? [256, 512].map(size => ({ src: `${origin}/og-image/${encodeURIComponent(artId)}?sq=${size}`, sizes: `${size}x${size}`, type: 'image/jpeg' }))
     : [{ src: origin + '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }];
-  navigator.mediaSession.metadata = new MediaMetadata({
+  const makeMetadata = artwork => new MediaMetadata({
     title: article.title || '',
     artist: (article.author || '').replace(/_/g, ' '),
     album: 'WebArchiv',
     artwork,
   });
+  const cached = hasImage ? articleArtworkCache.get(urlArtwork[1].src) : null;
+  navigator.mediaSession.metadata = makeMetadata(cached ? [{ src: cached, sizes: '512x512', type: 'image/jpeg' }] : urlArtwork);
+
+  mediaDebug(`Seite: ${location.protocol}//${location.host} (sicherer Kontext: ${window.isSecureContext})`);
+  mediaDebug(`Titel: ${article.title}`);
+  mediaDebug(`Bilder im Artikel: ${article.images?.length || 0}; verwendet wird ID: ${artId}`);
+  urlArtwork.forEach(a => mediaDebug(`Bild-URL: ${a.src}`));
+  if (hasImage) mediaDebugProbe(urlArtwork[1].src);
+  if (cached) mediaDebug(`Data-URL aus dem Zwischenspeicher (${Math.round(cached.length / 1024)} KB) gemeldet`);
+
+  if (hasImage && !cached) {
+    articleArtworkDataUrl(urlArtwork[1].src).then(dataUrl => {
+      if (token !== articleArtworkToken || !articleSessionActive) return;   // inzwischen anderer Artikel
+      navigator.mediaSession.metadata = makeMetadata([{ src: dataUrl, sizes: '512x512', type: 'image/jpeg' }]);
+      mediaDebug(`Bild eingebettet als Data-URL (${Math.round(dataUrl.length / 1024)} KB) und neu gemeldet`);
+    }).catch(err => mediaDebug('Einbetten fehlgeschlagen, URL bleibt gemeldet: ' + err.message));
+  }
+
   const skip = 15;
   const handlers = {
     play: () => { if (typeof bookPlayerPause === 'function') bookPlayerPause(); audio.play().catch(() => {}); },
@@ -1134,6 +1212,8 @@ function setArticleMediaSession(article, audio, syncButton) {
 function releaseArticleMediaSession() {
   if (!articleSessionActive) return;
   articleSessionActive = false;
+  articleSessionId = null;
+  articleArtworkToken++;
   if (!('mediaSession' in navigator)) return;
   if (typeof bookMediaSession === 'function' && typeof bookPlayer !== 'undefined' && bookPlayer.book) {
     bookMediaSession();
@@ -1187,6 +1267,7 @@ function wireAudioPlayer(audioUrl, article) {
   btn.addEventListener('click', () => {
     if (audioEl.paused) {
       if (typeof bookPlayerPause === 'function') bookPlayerPause();
+      if (article) setArticleMediaSession(article, audioEl);   // vor play(), damit iOS das Bild sofort übernimmt
       audioEl.play();
       btn.classList.add('playing');
     } else {
