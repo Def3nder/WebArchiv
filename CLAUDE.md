@@ -94,7 +94,7 @@ object in `app.js`.
 - **Link-preview exception:** `GET /a/<id>` (Open-Graph HTML for social crawlers, redirects humans
   to `#/article/<id>`) and `GET /og-image/<id>` (sharp-downscaled preview image) are **intentionally
   unauthenticated** — they expose title/description/image of *any* article to anyone with the link,
-  by design. `/og-image/*` still enforces the same path-traversal guard as `/files/*`. `sharp` output
+  by design. `/og-image/*` still enforces the same path-traversal guard as `/files/*`; `?sq=256|512` returns a square top crop of the same image, used as lock-screen artwork (Media Session) for article audio. `sharp` output
   is cached in-memory per file mtime.
 
 ## Content & data conventions

@@ -1089,7 +1089,9 @@ app.get('/a/*', (req, res) => {
 // Bewusst ohne canAccessAuthor: die Vorschau-Metadaten aller Artikel sind
 // öffentlich (Nutzer-Entscheidung). Bild wird auf max. 1200px/JPEG skaliert,
 // damit nie die Originalauflösung geteilt wird. Ergebnis pro mtime gecacht.
-const ogImageCache = new Map(); // key: absPath+':'+mtime → Buffer
+const ogImageCache = new Map(); // key: absPath+':'+mtime+':'+Kantenlänge → Buffer
+// ?sq=<Kantenlänge>: quadratischer Ausschnitt vom oberen Bildteil (Sperrbildschirm/Media Session).
+const OG_SQUARE_SIZES = new Set([256, 512]);
 
 app.get('/og-image/*', async (req, res) => {
   const id = req.params[0];
@@ -1100,17 +1102,18 @@ app.get('/og-image/*', async (req, res) => {
   let mtime = 0;
   try { mtime = Math.floor(fs.statSync(absPath).mtimeMs); } catch { return res.status(404).end(); }
 
-  const key = absPath + ':' + mtime;
+  const square = OG_SQUARE_SIZES.has(Number(req.query.sq)) ? Number(req.query.sq) : 0;
+  const key = absPath + ':' + mtime + ':' + square;
   res.set('Cache-Control', 'public, max-age=86400');
 
   const cached = ogImageCache.get(key);
   if (cached) return res.type('image/jpeg').send(cached);
 
   try {
-    const buf = await sharp(absPath)
-      .resize({ width: 1200, withoutEnlargement: true })
-      .jpeg({ quality: 80 })
-      .toBuffer();
+    const image = square
+      ? sharp(absPath).resize({ width: square, height: square, fit: 'cover', position: 'top' })
+      : sharp(absPath).resize({ width: 1200, withoutEnlargement: true });
+    const buf = await image.jpeg({ quality: 80 }).toBuffer();
     // Cache begrenzen (einfaches FIFO), um Speicher im kleinen LXC zu schonen.
     if (ogImageCache.size >= 200) ogImageCache.delete(ogImageCache.keys().next().value);
     ogImageCache.set(key, buf);

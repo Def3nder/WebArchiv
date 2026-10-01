@@ -25,6 +25,7 @@ const isBookMode = () => state.author === AUDIOBOOK_AUTHOR;
 
 let authorHueMap = {};  // author name → hue (0..359), gesetzt in loadMeta()
 let audioEl = null;     // shared audio element
+let articleSessionActive = false;   // Media Session gehört dem Artikel-Audio (nicht dem Hörbuch)
 let currentAudioBtn = null;
 let currentUser = null; // { email, role, allowedAuthors }
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
@@ -743,6 +744,7 @@ function stopAudio() {
     audioEl.pause();
     audioEl = null;
   }
+  releaseArticleMediaSession();
   if (currentAudioBtn) {
     currentAudioBtn.classList.remove('playing');
     currentAudioBtn = null;
@@ -1050,7 +1052,7 @@ function renderDetail(article) {
 
   // Wire up audio player
   if (article.audioUrl) {
-    wireAudioPlayer(article.audioUrl);
+    wireAudioPlayer(article.audioUrl, article);
   }
 
 
@@ -1097,7 +1099,53 @@ function renderPdfEmbed(pdfUrl) {
   </div>`;
 }
 
-function wireAudioPlayer(audioUrl) {
+// Sperrbildschirm und Kopfhörertasten: Titel, Autor und quadratischer Bildausschnitt (oberer
+// Teil des Artikelbilds) statt des Favicons. Die Vorschau-Route ist ohne Anmeldung erreichbar,
+// weil iOS das Bild außerhalb der Seite lädt.
+function setArticleMediaSession(article, audio, syncButton) {
+  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
+  articleSessionActive = true;
+  const origin = location.origin;
+  const artwork = article.imageUrl
+    ? [256, 512].map(size => ({ src: `${origin}/og-image/${encodeURIComponent(article.id)}?sq=${size}`, sizes: `${size}x${size}`, type: 'image/jpeg' }))
+    : [{ src: origin + '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }];
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: article.title || '',
+    artist: (article.author || '').replace(/_/g, ' '),
+    album: 'WebArchiv',
+    artwork,
+  });
+  const skip = 15;
+  const handlers = {
+    play: () => { if (typeof bookPlayerPause === 'function') bookPlayerPause(); audio.play().catch(() => {}); },
+    pause: () => audio.pause(),
+    seekbackward: d => { audio.currentTime = Math.max(0, audio.currentTime - (d.seekOffset || skip)); },
+    seekforward: d => { audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + (d.seekOffset || skip)); },
+    seekto: d => { if (isFinite(d.seekTime)) audio.currentTime = d.seekTime; },
+    previoustrack: null,
+    nexttrack: null,
+  };
+  for (const [action, handler] of Object.entries(handlers)) {
+    try { navigator.mediaSession.setActionHandler(action, handler); } catch { /* nicht unterstützt */ }
+  }
+}
+
+// Artikel wechselt oder Audio endet: Sperrbildschirm freigeben bzw. wieder dem Hörbuch überlassen.
+function releaseArticleMediaSession() {
+  if (!articleSessionActive) return;
+  articleSessionActive = false;
+  if (!('mediaSession' in navigator)) return;
+  if (typeof bookMediaSession === 'function' && typeof bookPlayer !== 'undefined' && bookPlayer.book) {
+    bookMediaSession();
+    return;
+  }
+  navigator.mediaSession.metadata = null;
+  for (const action of ['play', 'pause', 'seekbackward', 'seekforward', 'seekto']) {
+    try { navigator.mediaSession.setActionHandler(action, null); } catch { /* nicht unterstützt */ }
+  }
+}
+
+function wireAudioPlayer(audioUrl, article) {
   audioEl = new Audio(audioUrl);
   audioEl.preload = 'metadata';
   const btn  = document.getElementById('audio-play-btn');
@@ -1128,6 +1176,13 @@ function wireAudioPlayer(audioUrl) {
     btn.classList.remove('playing');
     fill.style.width = '0%';
   });
+  // Abspielen/Pause vom Sperrbildschirm aus: Knopf mitführen, Media Session übernehmen.
+  const audio = audioEl;
+  audio.addEventListener('play', () => {
+    btn.classList.add('playing');
+    if (article) setArticleMediaSession(article, audio);
+  });
+  audio.addEventListener('pause', () => btn.classList.remove('playing'));
 
   btn.addEventListener('click', () => {
     if (audioEl.paused) {

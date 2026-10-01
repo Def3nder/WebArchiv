@@ -267,7 +267,12 @@ function bookAudio() {
     if (!audio.paused && Date.now() - bookPlayer.lastSavedAt > BOOK_SAVE_INTERVAL_MS) bookSave();
   });
   audio.addEventListener('durationchange', bookUpdateUi);
-  audio.addEventListener('play', bookUpdateUi);
+  audio.addEventListener('play', () => {
+    // Zwischendurch lief Artikel-Audio und hatte den Sperrbildschirm: wieder übernehmen.
+    if (typeof articleSessionActive !== 'undefined' && articleSessionActive) articleSessionActive = false;
+    bookMediaSession();
+    bookUpdateUi();
+  });
   audio.addEventListener('pause', () => { bookUpdateUi(); bookSave(); });
   audio.addEventListener('ended', () => {
     if (bookPlayer.index < bookPlayer.book.tracks.length - 1) {

@@ -216,7 +216,7 @@ werden angezeigt, wenn sie im Buchordner (auch in Unterordnern) liegen.
 | `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml` und `images`; eine gruppierte Infografik liefert ihre Gruppe (`requestedId`) |
 | `GET /files/*` | Soft | Geschützte Datei (Bild/Audio/…), ACL pro Autor |
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
-| `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht) |
+| `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht); `?sq=256|512` liefert einen quadratischen Ausschnitt vom oberen Bildteil (Sperrbildschirm) |
 | `POST /api/new-infographic` | Admin | Neue Infografik `{markdown, image(base64)}` → `{id}` |
 | `GET /api/prompts` · `GET /api/prompts/:file` | Soft | Prompt-Textbausteine aus `prompts/` (Copy-Menü) |
 | `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/title/date),page,limit` |

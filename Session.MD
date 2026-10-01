@@ -320,6 +320,15 @@ Technik:
 - Geprüft am 30.09.2026: 43/43 Tests (neu: eBook-Erkennung, Inhalt, Leseposition), Browserprüfung mit Testkopie und Testnutzer (Text öffnen, Scrollen/Speichern, Wiederherstellen, A+ behält die Stelle, Escape, Miniplayer-Tipp, PDF mit Seitensprung, Handy-Breite ohne seitliches Scrollen). **Nicht geprüft:** echtes iPhone/Safari, Hörtest mit echten Büchern, Serverrouten-Rechte (Gast/ohne Autorenrecht) nur über die gemeinsame `route()`-Hülle, kein eigener Test.
 - Deployment: Backend geändert → Dienst neu starten; `public/book-reader.js` neu, `audiobooks.js?v=2`, `styles.css?v=61`. eBook-Dateien in `audio/Hoerbuecher/<Buch>/` ablegen, danach Reindex. Leserecht für `ralf` genügt.
 
+## 6c. Sperrbildschirm: Artikel-Audio mit Bild (01.10.2026)
+
+- Artikel-Audio setzte keine Media Session; iOS zeigte deshalb das Favicon. Jetzt (`setArticleMediaSession` in `public/app.js`, gesetzt beim Abspielen): Titel, Autor (ohne Unterstriche), Album „WebArchiv“ und als Bild der **obere Teil des Artikelbilds, quadratisch**. Ohne Artikelbild: `apple-touch-icon.png`.
+- Bild über die vorhandene Vorschau-Route: `GET /og-image/<id>?sq=256|512` (sharp `fit: cover, position: top`, JPEG q80, gecacht je mtime und Größe; andere Werte liefern das normale Vorschaubild). **Bewusst ohne Anmeldung**, weil iOS das Lock-Screen-Bild außerhalb der Seite lädt; es zeigt dasselbe Bild wie die schon öffentliche Link-Vorschau (Abschnitt 4), nur kleiner.
+- Steuerung vom Sperrbildschirm/Kopfhörer: Play, Pause, ±15 s, Position setzen; der Wiedergabeknopf in der Artikelansicht zieht bei Pause/Play von außen mit. Artikelwechsel oder Stopp gibt die Session frei bzw. überlässt sie dem geladenen Hörbuch; beim Abspielen holt sich das Hörbuch die Session zurück.
+- **Hörbücher unverändert:** ihr Sperrbildschirm-Bild bleibt das Cover aus `/audio-files/…`; ein quadratischer Ausschnitt ohne Anmeldung kam nicht in Frage, weil Hörbücher nie öffentlich sind.
+- Geprüft am 01.10.2026: Testserver, Route liefert 512×512 mit dem oberen Bildteil (Hochformat-Testbild), ungültige Größe liefert das normale Bild; Browser: Metadaten, Artwork-URLs, Knopfzustand, Freigabe. **Nicht geprüft:** echtes iPhone (Sperrbildschirm), ob iOS das Bild ohne Cookie lädt (dafür ist die Route offen).
+- Deployment: `server.js` geändert → Dienst neu starten; `app.js?v=48`, `audiobooks.js?v=4`.
+
 ## 7. Scraper, Bereinigung und verwandtes Projekt
 
 Der Scraper bleibt ein eigener Node-Prozess mit eigenem `package.json` und `node_modules`. Playwright/Chromium sollen nicht in die schlanken Root-Abhängigkeiten der Website wandern.
