@@ -38,6 +38,12 @@ body[data-font="system"] {
   --font-body: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+/* ── Textgröße des Artikeltexts (Einstellungen) ──────────────────────────── */
+body { --article-text-size: 1rem; }
+body[data-text-size="small"]  { --article-text-size: 0.9rem; }
+body[data-text-size="large"]  { --article-text-size: 1.15rem; }
+body[data-text-size="xlarge"] { --article-text-size: 1.3rem; }
+
 /* ── Light theme ─────────────────────────────────────────────────────────── */
 body[data-theme="light"] {
   --bg:          #faf8f4;
@@ -306,7 +312,8 @@ select { font: inherit; color: inherit; }
 }
 .header-menu-item:hover { color: var(--accent); background: var(--surface); }
 
-.theme-btn {
+/* Lesezeichen-Filter: aktiv blau wie Telegram, Symbol gefüllt. */
+.bookmark-btn {
   font-size: 1rem;
   color: var(--text-muted);
   padding: 4px 8px;
@@ -319,8 +326,14 @@ select { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
 }
-.theme-btn svg { width: 16px; height: 16px; stroke: currentColor; }
-.theme-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+.bookmark-btn[hidden] { display: none; }
+.bookmark-btn svg { width: 16px; height: 16px; stroke: currentColor; }
+.bookmark-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+.bookmark-btn.active,
+.bookmark-btn.active:hover { color: #229ED9; border-color: #229ED9; }
+.bookmark-btn.active svg { fill: currentColor; }
+/* Hörbücher haben keine Lesezeichen. */
+body.mode-audiobooks .bookmark-btn { opacity: .35; pointer-events: none; }
 
 .telegram-btn {
   font-size: 1rem;
@@ -354,7 +367,7 @@ select { font: inherit; color: inherit; }
   }
   .site-logo    { grid-column: 1; grid-row: 1; }
   .header-count { grid-column: 2; grid-row: 1; font-size: 0.7rem; margin-right: 5px; }
-  .theme-btn    { grid-column: 3; grid-row: 1; }
+  .bookmark-btn { grid-column: 3; grid-row: 1; }
   .telegram-btn { grid-column: 4; grid-row: 1; }
   .header-menu  { grid-column: 5; grid-row: 1; }
   .logout-btn   { grid-column: 6; grid-row: 1; }
@@ -1192,6 +1205,25 @@ html.overlay-open body {
   stroke: currentColor;
   flex-shrink: 0;
 }
+/* Lesezeichen im Artikel: gesetzt = blau und gefüllt (wie der Filter im Header). */
+.detail-bookmark-btn svg { width: 12px; height: 12px; stroke: currentColor; flex-shrink: 0; }
+.detail-bookmark-btn.active,
+.detail-bookmark-btn.active:hover { color: #229ED9; border-color: #229ED9; }
+.detail-bookmark-btn.active svg { fill: currentColor; }
+
+/* Kleines Lesezeichen oben rechts auf der Kachel. */
+.card-bookmark {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  color: #229ED9;
+  pointer-events: none;
+}
+.card-bookmark[hidden] { display: none; }
+.card-bookmark svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; }
+body.layout-list .card-bookmark { right: auto; left: 6px; }
 .detail-copy-wrap {
   position: relative;
   margin-left: auto;
@@ -1342,7 +1374,7 @@ html.overlay-open body {
 /* Article body prose */
 .detail-body {
   font-family: var(--font-body);
-  font-size: 1rem;
+  font-size: var(--article-text-size);
   line-height: 1.75;
   color: var(--text);
 }
@@ -1354,9 +1386,9 @@ html.overlay-open body {
   color: var(--text);
   line-height: 1.3;
 }
-.detail-body h1 { font-size: 1.4rem; }
-.detail-body h2 { font-size: 1.15rem; }
-.detail-body h3 { font-size: 1rem; font-weight: 600; margin: 1.4em 0 0.5em; }
+.detail-body h1 { font-size: 1.4em; }
+.detail-body h2 { font-size: 1.15em; }
+.detail-body h3 { font-size: 1em; font-weight: 600; margin: 1.4em 0 0.5em; }
 .detail-body p { margin-bottom: 1.1em; }
 .detail-body p:last-child { margin-bottom: 0; }
 .detail-body em { color: var(--accent); font-style: italic; }
@@ -1823,6 +1855,39 @@ html.overlay-open body {
   font-size: .85rem;
   box-shadow: var(--shadow);
 }
+
+/* Einstellungen: Auswahl als Kacheln, jede Schrift in ihrer eigenen Schriftart. */
+.settings-group { border: 0; padding: 0; margin: 0; min-width: 0; }
+.settings-group legend { margin-bottom: 8px; }
+.settings-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+.settings-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 6px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: .88rem;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+.settings-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.settings-choice:hover { color: var(--text); border-color: var(--accent-dim); }
+.settings-choice:has(input:checked) { color: var(--accent); border-color: var(--accent); background: var(--accent-glow); }
+.settings-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-font-editorial span { font-family: 'Lora', Georgia, serif; }
+.settings-font-classic span   { font-family: Georgia, 'Times New Roman', serif; }
+.settings-font-modern span    { font-family: 'Inter', system-ui, sans-serif; }
+.settings-font-system span    { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+.settings-size-small span  { font-size: .78rem; }
+.settings-size-normal span { font-size: .86rem; }
+.settings-size-large span  { font-size: .95rem; }
+.settings-size-xlarge span { font-size: 1.04rem; }
 
 .account-dialog-wide { width: min(820px, calc(100vw - 32px)); height: min(960px, calc(100dvh - 32px)); }
 .account-dialog-wide[open] { display: flex; flex-direction: column; gap: 12px; }

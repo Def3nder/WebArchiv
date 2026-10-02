@@ -8,6 +8,7 @@ const state = {
   year: '',
   category: '',
   telegram: false,
+  bookmarks: false,
   page: 1,
   limit: 24,
   total: 0,
@@ -41,8 +42,7 @@ const $filterCategory = document.getElementById('filter-category');
 const $filterLayout   = document.getElementById('filter-layout');
 const $filterLimit    = document.getElementById('filter-limit');
 const $resetFilters   = document.getElementById('reset-filters');
-const $filterFont     = document.getElementById('filter-font');
-const $reindexBtn     = document.getElementById('reindex-btn');
+const $reindexBtn    = document.getElementById('reindex-btn');
 const $adminMenu      = document.getElementById('admin-menu');
 const $scrapeOverlay  = document.getElementById('scrape-overlay');
 const $scrapeBackdrop = document.getElementById('scrape-backdrop');
@@ -50,8 +50,8 @@ const $scrapeClose    = document.getElementById('scrape-close');
 const $scrapeTitle    = document.getElementById('scrape-title');
 const $scrapeStatus   = document.getElementById('scrape-status');
 const $scrapeOutput   = document.getElementById('scrape-output');
-const $themeBtn       = document.getElementById('theme-btn');
 const $telegramBtn    = document.getElementById('telegram-btn');
+const $bookmarkBtn    = document.getElementById('bookmark-btn');
 const $logoutBtn      = document.getElementById('logout-btn');
 const $loginBtn       = document.getElementById('login-btn');
 const $loginClose     = document.getElementById('login-close');
@@ -230,30 +230,18 @@ async function navigateArticle(dir) {
   }
 }
 
-function applyFont(value) {
-  document.body.dataset.font = value;
-  localStorage.setItem('wa-font', value);
-}
-
-const SVG_SUN  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
-const SVG_MOON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
-
-function applyTheme(value) {
-  document.body.dataset.theme = value;
-  localStorage.setItem('wa-theme', value);
-  if (value === 'light') {
-    $themeBtn.innerHTML = SVG_MOON;
-    $themeBtn.title = 'Dunkel-Modus';
-  } else {
-    $themeBtn.innerHTML = SVG_SUN;
-    $themeBtn.title = 'Hell-Modus';
-  }
-}
-
 function setTelegram(on) {
   state.telegram = on;
   $telegramBtn.classList.toggle('active', on);
   $telegramBtn.setAttribute('aria-pressed', String(on));
+}
+
+// Lesezeichen-Filter im Header: nur Artikel mit Lesezeichen (Autor/Jahr/Kategorie/Suche gelten weiter).
+function setBookmarkFilter(on) {
+  state.bookmarks = on;
+  $bookmarkBtn.classList.toggle('active', on);
+  $bookmarkBtn.setAttribute('aria-pressed', String(on));
+  $bookmarkBtn.title = on ? 'Alle Artikel anzeigen' : 'Nur Artikel mit Lesezeichen anzeigen';
 }
 
 function authorHue(author) {
@@ -311,6 +299,8 @@ function applyUserUI(user) {
   if (user?.role !== 'admin') clearTtsUI();
   const isGuest = !user || user.role === 'guest';
   const isAdmin = user?.role === 'admin';
+  // Gäste bekommen immer die Vorgaben (settings.js).
+  setDisplayGuest(isGuest);
   // Aktionen-Button: Admin mit ↺, normaler Nutzer mit Personen-Icon (nur Konto-Einträge).
   $reindexBtn.hidden = isGuest;
   if (isGuest) closeAdminMenu();
@@ -320,6 +310,9 @@ function applyUserUI(user) {
     $reindexBtn.innerHTML = SVG_ACCOUNT;
   }
   $reindexBtn.classList.toggle('is-account', !isGuest && !isAdmin);
+  // Lesezeichen gibt es nur für angemeldete Nutzer.
+  $bookmarkBtn.hidden = isGuest;
+  if (isGuest && state.bookmarks) setBookmarkFilter(false);
   $adminMenu.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !isAdmin; });
   document.getElementById('header-menu-account').textContent = isGuest ? '' : `Angemeldet als ${user.email}`;
   $logoutBtn.hidden  = isGuest;
@@ -433,6 +426,7 @@ async function fetchArticles(params = {}) {
   if (params.year)     qs.set('year', params.year);
   if (params.category) qs.set('category', params.category);
   if (params.telegram) qs.set('telegram', '1');
+  if (params.bookmarks) qs.set('bookmarks', '1');
   if (params.group)    qs.set('group', '1');
   qs.set('page',  params.page  || 1);
   qs.set('limit', params.limit || 24);
@@ -504,6 +498,7 @@ function renderCard(article, idx) {
     <article class="card" data-id="${esc(article.id)}" data-author="${esc(article.author)}" style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(article.title)}">
       <div class="card-image${gallery ? ' card-gallery' : ''}">
         ${imageHtml}
+        <span class="card-bookmark" title="Lesezeichen" aria-label="Lesezeichen"${article.bookmarked ? '' : ' hidden'}>${svgBookmark()}</span>
         ${audioBadge || videoBadge || pdfBadge
           ? `<div class="card-badges">${audioBadge}${videoBadge}${pdfBadge}</div>`
           : ''}
@@ -574,6 +569,16 @@ function wireCardGallery(card) {
 }
 
 function renderGrid(items) {
+  if (!items.length && state.bookmarks) {
+    const filtered = state.q || state.author || state.externalAudio || state.year || state.category;
+    return `<div class="empty-state">
+      ${svgBookmark()}
+      <h2>${filtered ? 'Keine Lesezeichen gefunden' : 'Noch keine Lesezeichen'}</h2>
+      <p>${filtered
+        ? 'Zu diesen Filtern gibt es keine Artikel mit Lesezeichen.'
+        : 'Im Artikel setzt das Lesezeichen-Symbol neben „Teilen“ ein Lesezeichen.'}</p>
+    </div>`;
+  }
   if (!items.length) {
     return `<div class="empty-state">
       ${svgSearch()}
@@ -626,6 +631,7 @@ async function loadArticles() {
       year:     state.year,
       category: state.category,
       telegram: state.telegram,
+      bookmarks: state.bookmarks,
       group:    groupMode(),
       page:     state.page,
       limit:    state.limit,
@@ -732,6 +738,52 @@ function closeOverlay() {
   history.pushState(null, '', '#/');
   // Hörfortschritt und „zuletzt gehört“ in der Liste auffrischen.
   if (isBookMode()) loadArticles();
+  // Lesezeichen-Ansicht: entfernte Lesezeichen erst nach dem Schließen aus der Liste
+  // nehmen (beim Blättern im Artikel bleibt die Reihenfolge stabil). Verzögert, damit
+  // ein gleichzeitig gesetzter Filter (Kategorie-Klick) zuerst lädt.
+  if (bookmarksChanged && state.bookmarks && !isBookMode()) setTimeout(loadArticles, 0);
+  bookmarksChanged = false;
+}
+
+// ── Lesezeichen ───────────────────────────────────────────────────────────
+let bookmarksChanged = false;
+
+function bookmarkUrl(id) {
+  return '/api/bookmarks/' + String(id).split('/').map(encodeURIComponent).join('/');
+}
+
+function showBookmarkState(button, on) {
+  button.classList.toggle('active', on);
+  button.setAttribute('aria-pressed', String(on));
+  button.title = on ? 'Lesezeichen entfernen' : 'Lesezeichen setzen';
+}
+
+// Klick setzt bzw. löscht das Lesezeichen; Kachel und Listeneintrag ziehen mit.
+async function toggleBookmark(article, button) {
+  if (button.dataset.busy) return;
+  const on = !article.bookmarked;
+  button.dataset.busy = '1';
+  showBookmarkState(button, on);
+  try {
+    const r = await apiFetch(bookmarkUrl(article.id), { method: on ? 'PUT' : 'DELETE' });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      throw new Error(data.error || 'Lesezeichen konnte nicht gespeichert werden.');
+    }
+    article.bookmarked = on;
+    bookmarksChanged = true;
+    const item = state.currentItems.find(a => a.id === article.id);
+    if (item) item.bookmarked = on;
+    $app.querySelectorAll('.card').forEach(card => {
+      const mark = card.dataset.id === article.id && card.querySelector('.card-bookmark');
+      if (mark) mark.hidden = !on;
+    });
+  } catch (err) {
+    showBookmarkState(button, !on);
+    if (err.message !== 'Session expired') alert(err.message);
+  } finally {
+    delete button.dataset.busy;
+  }
 }
 
 function stopVideo() {
@@ -799,6 +851,9 @@ function renderDetail(article) {
         <div class="copy-prompt-menu" id="copy-prompt-menu" role="menu" hidden></div>
       </div>`
     : '';
+  const bookmarkBtnHtml = currentUser && currentUser.role !== 'guest'
+    ? `<button type="button" class="detail-cat-pill detail-bookmark-btn${article.bookmarked ? ' active' : ''}" id="detail-bookmark-btn" aria-pressed="${article.bookmarked ? 'true' : 'false'}" aria-label="Lesezeichen" title="${article.bookmarked ? 'Lesezeichen entfernen' : 'Lesezeichen setzen'}">${svgBookmark()}</button>`
+    : '';
   const shareBtnHtml = `<button class="detail-cat-pill detail-share-btn" id="detail-share-btn" aria-label="Link teilen" title="Link zum Artikel teilen">${svgShare()}<span class="detail-share-text">Teilen</span></button>`;
   const infographicBtnHtml = article.canUploadInfographic
     ? `<div class="detail-infographic-wrap">
@@ -813,6 +868,7 @@ function renderDetail(article) {
           ${currentUser?.role === 'admin' ? `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Artikel bearbeiten und Audio erzeugen">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Artikel editieren</button><button type="button" class="header-menu-item" data-tts-action="start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</button><button type="button" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></details>` : ''}
           ${infographicBtnHtml}
           ${copyBtnHtml}
+          ${bookmarkBtnHtml}
           ${shareBtnHtml}
         </div>
       </div>`;
@@ -886,6 +942,9 @@ function renderDetail(article) {
       });
     });
   });
+
+  const $bookmarkDetailBtn = document.getElementById('detail-bookmark-btn');
+  $bookmarkDetailBtn?.addEventListener('click', () => toggleBookmark(article, $bookmarkDetailBtn));
 
   // Teilen-Button → Vorschau-fähigen Link (/a/<id>) teilen bzw. kopieren.
   // navigator.share (mobil) öffnet direkt das System-Teilen-Menü (z. B. WhatsApp),
@@ -1385,14 +1444,14 @@ $filterLimit.addEventListener('change', () => {
   loadArticles();
 });
 
-$filterFont.addEventListener('change', () => applyFont($filterFont.value));
-
-$themeBtn.addEventListener('click', () => {
-  applyTheme(document.body.dataset.theme === 'light' ? 'dark' : 'light');
-});
-
 $telegramBtn.addEventListener('click', () => {
   setTelegram(!state.telegram);
+  state.page = 1;
+  loadArticles();
+});
+
+$bookmarkBtn.addEventListener('click', () => {
+  setBookmarkFilter(!state.bookmarks);
   state.page = 1;
   loadArticles();
 });
@@ -1421,7 +1480,8 @@ $resetFilters.addEventListener('click', () => {
   setLayout('tall');
   $filterLimit.value = '24';
   setTelegram(false);
-  Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false, page:1, limit:24 });
+  setBookmarkFilter(false);
+  Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false, bookmarks:false, page:1, limit:24 });
   applyBookMode();
   loadArticles();
 });
@@ -1881,6 +1941,7 @@ $adminMenu.addEventListener('click', ev => {
   else if (action === 'tts') runTts();
   else if (action === 'tts-job') showTtsJob();
   else if (action === 'new-infographic') openNewInfographic();
+  else if (action === 'settings') openSettingsDialog();
   else if (action === 'users') openUserAdmin();
   else if (action === 'password') openPasswordDialog({ forced: false });
 });
@@ -2148,7 +2209,9 @@ window.addEventListener('popstate', () => {
 // ── Global img error handler (avoids quote-nesting in onerror attr) ────────
 function handleImgError(el) {
   el.onerror = null;
-  el.parentElement.innerHTML = `<div class="card-image-placeholder">${svgImage()}</div>`;
+  // Nur das Bild ersetzen; Badges und Lesezeichen der Kachel bleiben stehen.
+  el.insertAdjacentHTML('afterend', `<div class="card-image-placeholder">${svgImage()}</div>`);
+  el.remove();
 }
 
 // ── SVG icons ──────────────────────────────────────────────────────────────
@@ -2165,6 +2228,9 @@ function svgExpand() {
 function svgSearch() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`;
 }
+function svgBookmark() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`;
+}
 function svgShare() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 3.9M15.4 6.6 8.6 10.5"/></svg>`;
 }
@@ -2173,13 +2239,6 @@ function svgShare() {
 async function init() {
   $loading.hidden = false;
   setLayout('tall');
-
-  const savedTheme = localStorage.getItem('wa-theme') || 'light';
-  applyTheme(savedTheme);
-
-  const savedFont = localStorage.getItem('wa-font') || 'system';
-  $filterFont.value = savedFont;
-  applyFont(savedFont);
 
   // Check for existing session (or anonymous guest with public-authors whitelist)
   try {

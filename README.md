@@ -157,8 +157,17 @@ Rücksprung:
 - **Datums-Tokens** in der Suche werden erkannt und als Filter angewandt
   (`2026`, `2026-03`, `03.2026`, `25.01.2026`) — kombinierbar mit Textsuche
   (z. B. „Achtsamkeit 2025").
-- **Filter**: Autor, Jahr, Kategorie, Seitengröße, Ansicht (quadratisch/länglich),
-  Schriftart. Paginierung server-seitig.
+- **Filter**: Autor, Jahr, Kategorie, Seitengröße, Ansicht (quadratisch/länglich/Liste).
+  Paginierung server-seitig.
+- **Lesezeichen** (nur angemeldet): Button zwischen Kopieren und Teilen im Artikel setzt/löscht
+  ein Lesezeichen (blau = gesetzt); Kacheln mit Lesezeichen tragen ein kleines blaues Symbol. Der
+  Lesezeichen-Button im Header (blau = aktiv) zeigt nur Artikel mit Lesezeichen, kombinierbar mit
+  Autor/Jahr/Kategorie/Suche, sortiert nach Artikeldatum; Telegram-Lesezeichen erscheinen auch ohne
+  Telegram-Schalter. Gespeichert pro Nutzer in `bookmarks.json`. Hörbücher haben keine Lesezeichen.
+- **Einstellungen** (Aktionen → *Einstellungen*, angemeldet): Schriftart (Editorial/Klassisch/
+  Modern/System), Darstellung (Hell/Dunkel/Automatisch = folgt dem Gerät), Textgröße des
+  Artikeltexts (Klein/Normal/Groß/Sehr groß). Wirkt sofort, gilt pro Gerät (Browser-Speicher).
+  Gäste bekommen immer die Vorgaben (Automatisch, System, Normal).
 - **Telegram-Sonderregel**: Artikel des Autors „Telegram" sind standardmäßig
   ausgeblendet (Toggle im Header oder `telegram=1` bzw. Autor-Filter „Telegram").
 
@@ -173,9 +182,9 @@ Rücksprung:
   - `passwordHash`: bcrypt. Erstanlage per `scripts/hash-passwords.js`, danach
     über die **Benutzerverwaltung** in der Oberfläche.
   - `role`: `admin` sieht das Aktions-Menü hinter dem **↺-Button** (Archiv neu
-    einlesen, Neue Beiträge scrapen, Scrape-Log, Benutzerverwaltung, Kennwort
-    ändern). `user` sieht denselben Button mit **Personen-Icon** und nur
-    „Kennwort ändern“.
+    einlesen, Neue Beiträge scrapen, Scrape-Log, Einstellungen, Benutzerverwaltung,
+    Kennwort ändern). `user` sieht denselben Button mit **Personen-Icon** und nur
+    „Einstellungen“ und „Kennwort ändern“.
   - `allowedAuthors`: `null` = alle Autoren; sonst Whitelist von Autor-Ordnern (ACL).
     Öffentliche Autoren kommen für angemeldete Nutzer immer hinzu.
   - `mustChangePassword`: `true` = nach der nächsten Anmeldung muss ein eigenes
@@ -226,8 +235,9 @@ Rücksprung:
 | `DELETE /api/users/:email` | Admin | Nutzer löschen |
 | `PUT /api/public-authors` | Admin | Öffentliche Autoren setzen `{authors:[…]}` |
 | `GET /api/meta` | Soft | Autoren/Jahre/Kategorien (ACL-gefiltert) |
-| `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen |
-| `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml` und `images`; eine gruppierte Infografik liefert ihre Gruppe (`requestedId`) |
+| `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen; `bookmarks=1` nur Artikel mit Lesezeichen; jeder Eintrag trägt `bookmarked` |
+| `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml`, `images` und `bookmarked`; eine gruppierte Infografik liefert ihre Gruppe (`requestedId`) |
+| `PUT /api/bookmarks/*` · `DELETE /api/bookmarks/*` | Auth | Lesezeichen setzen (Artikel muss existieren, Autorenrecht) bzw. löschen |
 | `GET /files/*` | Soft | Geschützte Datei (Bild/Audio/…), ACL pro Autor |
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht); `?sq=256|512` liefert einen quadratischen Ausschnitt vom oberen Bildteil (Sperrbildschirm) |
@@ -311,12 +321,14 @@ Facebook benötigt `scraper/cookies.txt` (Netscape-Format) und `scraper/Abonente
 server.js                     Express-App (Routen, Index, Auth-Anbindung)
 user-store.cjs                Nutzer & öffentliche Autoren: Lesen/Schreiben, Regeln, Routen
 audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
+bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
 config.json                   Einstellungen (Hörbuch-Sprungweiten)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp
 public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
 ├── user-admin.js             Kennwort ändern, Benutzerverwaltung, Öffentlicher Zugang
+├── settings.js               Einstellungen pro Gerät (Schrift, Hell/Dunkel/Automatisch, Textgröße)
 ├── audiobooks.js             Hörbuch-Liste, -Detail, Player und Miniplayer
 ├── book-reader.js            eBook-Text zum Hörbuch (Vollbild-Reiter, Leseposition)
 ├── favicon.svg               Favicon (Bücherregal, Gold auf Dunkel) – Vorlage für die beiden folgenden
@@ -338,7 +350,7 @@ LXC-container node.js Setup.txt   Server-/Deployment-Doku
 ```
 
 Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
-`www/<Autor>/2*` (Jahresinhalte), `download/`, `users.json`,
+`www/<Autor>/2*` (Jahresinhalte), `download/`, `users.json`, `audiobook-progress.json`, `bookmarks.json`,
 `scraper/cookies.txt`, `scraper/Abonenten-URL.txt`, Logs.
 
 ---
@@ -365,6 +377,7 @@ node server.js            # bzw. npm start  →  http://localhost:3000
 | `USERS_FILE` | `./users.json` | Abweichender Pfad der Nutzerdatei (z. B. für Tests) |
 | `PUBLIC_DIRS_FILE` | `./public-directories.txt` | Abweichender Pfad der Liste öffentlicher Autoren |
 | `AUDIOBOOK_PROGRESS_FILE` | `./audiobook-progress.json` | Abweichender Pfad des Hörfortschritts |
+| `BOOKMARKS_FILE` | `./bookmarks.json` | Abweichender Pfad der Lesezeichen |
 | `PLAYWRIGHT_BROWSERS_PATH` | – | Chromium-Ablage für den Scraper (siehe Setup-Doku) |
 
 Scraper zusätzlich einrichten:

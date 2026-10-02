@@ -32,8 +32,13 @@ migrate-audio.log
 ################
 users.json
 audiobook-progress.json
+bookmarks.json
 /scraper/cookies.txt
 /scraper/Abonenten-URL.txt
+
+# temporary files #
+###################
+/archiv/
 
 # other repositories #
 ######################

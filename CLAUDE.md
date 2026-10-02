@@ -27,7 +27,7 @@ npm test --prefix epub-tool
 ```
 
 There is no `npm test` script, linter, or build; run tests with
-`node --test server.test.cjs article-editor.test.cjs user-store.test.cjs audiobooks.test.cjs`. `node server.js` is the only runtime; restart it to
+`node --test server.test.cjs article-editor.test.cjs user-store.test.cjs audiobooks.test.cjs bookmarks.test.cjs`. `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button
 → `POST /api/reindex`, or restart). Frontend changes (`public/`) only need a browser reload;
 bump the `?v=` query on the `<script>`/`<link>` tags in `public/index.html` to bust caches.
@@ -95,6 +95,10 @@ object in `app.js`.
   `audio/Hoerbuecher/<book>/` (ASCII dir name, mapped to author `Hörbücher`; tracks + cover + optional `abstract.md`), has its own index and
   `/api/audiobooks*` routes (a book without tracks but with an ebook text file is an "ebook only" book: `trackCount: 0`, `ebookOnly: true`, no player), is never public (guests blocked in `canAccessAuthor`, filtered from
   `public-directories.txt`), and stores per-user playback position in `audiobook-progress.json`.
+- **Bookmarks** (`bookmarks.cjs`): per-user, logged-in only, stored in `bookmarks.json` (gitignored).
+  `PUT/DELETE /api/bookmarks/*`; `/api/articles?bookmarks=1` filters after the ACL pre-filter and
+  also includes Telegram. Display settings (font, light/dark/auto, article text size) are per device
+  in `localStorage` (`public/settings.js`); guests always get the defaults.
 - The `Telegram` author is special-cased: hidden from listings unless `?telegram=1` or explicitly
   filtered by `author=Telegram`.
 - **Link-preview exception:** `GET /a/<id>` (Open-Graph HTML for social crawlers, redirects humans

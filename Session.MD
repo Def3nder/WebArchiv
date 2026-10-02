@@ -32,6 +32,8 @@ Diese Datei ist eine thematische Zusammenfassung, kein wortgetreues Transkript. 
 | „Neue Grafik“ (25.09.) | Für alle Autoren außer `Infografiken` selbst, auch für öffentliche Autoren. |
 | Infografik-Gruppen (29.09.) | Artikel + Platzhalter-Infografiken = eine Kachel (quadratisch/länglich); Liste und Autor „Infografiken“ einzeln. Siehe Abschnitt 5a. |
 | Hörbücher (27.09.) | Eigener Autor `Hörbücher`; Ablage `audio/Hoerbuecher/<Buch>/` (ohne Umlaute, lokal und auf dem Server), nicht unter `www/`. Kein Artikel; erscheint nur bei Autorenfilter „Hörbücher“. Nie öffentlich. Siehe Abschnitt 6a. |
+| Einstellungen (02.10.) | Schrift, Hell/Dunkel/Automatisch und Textgröße über Aktionen → *Einstellungen* (pro Gerät); Schrift-Auswahl und Hell/Dunkel-Button entfallen. Gäste: immer Vorgaben. Siehe Abschnitt 8a. |
+| Lesezeichen (02.10.) | Pro Nutzer auf dem Server; Header-Button filtert (blau), Detail-Button zwischen Kopieren und Teilen, kleines Symbol auf Kacheln. Siehe Abschnitt 8a. |
 | eBook aus EPUB (01.10.) | Kein EPUB im Reader: `epub-tool/` wandelt EPUB offline in die Reader-`.md` um (Verweise, Inhaltsverzeichnis, Fuß-/Endnoten als Sprunglinks, Bilder). Siehe Abschnitt 6d. |
 
 ## 2. Projekt, Architektur und Datenmodell
@@ -68,6 +70,7 @@ WebArchiv ist ein selbst gehostetes Archiv für überwiegend deutschsprachige Ar
 | `graft/` | Kontextgraph für Entwicklung; keine Laufzeitvoraussetzung |
 | `audiobooks.cjs`, `public/audiobooks.js`, `public/book-reader.js` | Hörbücher: Index, Fortschritt, Player, eBook-Text (Abschnitte 6a, 6b) |
 | `config.json` | Einstellungen (derzeit Hörbuch-Sprungweiten) |
+| `bookmarks.cjs`, `public/settings.js` | Lesezeichen pro Nutzer; Anzeige-Einstellungen pro Gerät (Abschnitt 8a) |
 | `epub-tool/` | Eigenes ESM-Paket: EPUB → Markdown für Hörbuch-eBooks (Abschnitt 6d); nicht Teil der Laufzeit |
 
 Artikel und Medien werden getrennt vom Code synchronisiert. `users.json`, Audioablage, Cookies, Logs und Abhängigkeiten sollen nicht versehentlich veröffentlicht werden. Die tatsächlichen Ignore-Muster prüfen: Ein neuer Autorenordner oder eine neue Dateistruktur ist nicht allein deshalb sicher ignoriert, weil andere Archivdateien ignoriert werden.
@@ -455,6 +458,25 @@ Safari-Erkenntnisse (Chrome auf dem iPhone verhielt sich jeweils anders, trotz g
 - Diagnose-Hilfe (`?pulldebug`) wurde nach erfolgreichem Test wieder entfernt.
 - Offen/Vorschlag: Suchfeld und Filter-Auswahl auf dem Handy auf 16 px, damit Safari beim Antippen nicht mehr hineinzoomt (nicht beauftragt).
 
+### 8a. Einstellungen und Lesezeichen (02.10.2026)
+
+Entscheidungen des Benutzers:
+
+- **Einstellungen:** Das Auswahlfeld „Schrift“ (Filterleiste) und der Hell/Dunkel-Button (Header) entfallen. Neuer Eintrag *Einstellungen* im Aktionen-Menü vor „Benutzerverwaltung“ (Admin und Nutzer). Dialog: **Schriftart** (Editorial, Klassisch, Modern, System), **Darstellung** (Hell, Dunkel, **Automatisch** = folgt `prefers-color-scheme`, live), **Textgröße im Artikel** (Klein 0,9 / Normal 1 / Groß 1,15 / Sehr groß 1,3 rem; nur `.detail-body`, der eBook-Reader behält sein A−/A+ per Inline-Stil). Wirkt sofort, kein Speichern-Knopf; „Fertig“, Escape oder Klick daneben schließen.
+- **Speicherort pro Gerät** (`localStorage`: `wa-font`, `wa-theme`, `wa-text-size`; vorhandene Werte bleiben gültig). Neue Geräte: Automatisch/System/Normal. **Gäste bekommen immer diese Vorgaben** (kein Aktionen-Button), gespeicherte Werte gelten wieder nach der Anmeldung.
+- Ansicht und „Pro Seite“ bleiben wie bisher in der Filterleiste (nicht in den Dialog).
+- **Lesezeichen nur für angemeldete Nutzer, pro Nutzer auf dem Server.** Header-Button an der Stelle des alten Hell/Dunkel-Buttons: aktiv blau (wie Telegram, Symbol gefüllt), zeigt nur Artikel mit Lesezeichen; Autor/Jahr/Kategorie/Suche filtern weiter; Sortierung nach Artikeldatum. Im Artikel ein Button zwischen Kopieren und Teilen: Klick setzt (blau), erneuter Klick löscht. Kacheln (auch Liste) mit Lesezeichen tragen ein kleines blaues Symbol (16 px wie das Header-Symbol, ohne Hintergrund, Entscheidung 02.10.) oben rechts (Liste: auf dem Vorschaubild links).
+- Festgelegte Vorgaben: Bei aktivem Filter erscheinen Telegram-Lesezeichen auch ohne Telegram-Schalter; „Reset“ schaltet den Filter aus; Hörbücher haben keine Lesezeichen (Button dort gedimmt); leere Liste „Noch keine Lesezeichen“ bzw. „Keine Lesezeichen gefunden“; die Trefferzahl zählt im Filter jede Kachel einmal (sonst Artikel + Grafiken). Ein im Artikel entferntes Lesezeichen verschwindet erst beim Schließen aus der Lesezeichen-Liste (Blättern bleibt stabil).
+
+Technik:
+
+- `public/settings.js` (vor `app.js` geladen): `applyDisplaySettings`, `setDisplayGuest` (aus `applyUserUI`), Dialog `#settings-dialog`. CSS-Variable `--article-text-size`; Überschriften in `.detail-body` jetzt in `em` (wachsen mit).
+- `bookmarks.cjs`: `bookmarks.json` (gitignored, atomar, Modus 600, Pfad per `BOOKMARKS_FILE`), Schlüssel E-Mail (klein) → Artikel-ID → Zeitpunkt. `PUT /api/bookmarks/*` (Artikel muss im Index sein und der Autor erlaubt) und `DELETE /api/bookmarks/*` (auch verwaiste Einträge), angemeldet, Cross-Site-Schutz; `mustChangePassword` sperrt sie wie alle `/api/*`. Beim Löschen eines Nutzers entfallen seine Lesezeichen.
+- `server.js`: `/api/articles?bookmarks=1` filtert nach dem Rechtefilter und vor der Gruppierung; alle Einträge und der Einzelartikel tragen `bookmarked`. Eine Gruppe erscheint, wenn ihr Anker ein Lesezeichen hat (der Artikel-Dialog setzt es immer auf den Anker).
+- `public/app.js`: `setBookmarkFilter`, `toggleBookmark`, `.card-bookmark`; `handleImgError` ersetzt nur noch das Bild (Badges und Lesezeichen bleiben bei defektem Bild stehen).
+- Geprüft am 02.10.2026: 49/49 Tests (neu `bookmarks.test.cjs`: Speicher, Neuladen, Gast, Nutzer löschen, Routen mit Rechten/404/Cross-Site/401). Browser mit Testserver, Testnutzern und eigener `bookmarks.json` (echte Dateien unberührt): Menüeintrag, Dialog (sofortige Wirkung, Speichern über Neuladen, Automatisch folgt dem Gerät live), Textgröße, Lesezeichen setzen/entfernen, Header-Filter mit Jahr/Kategorie, Telegram-Lesezeichen, Entfernen beim Schließen, Kachel- und Listensymbol, Handy-Breite ohne seitliches Scrollen, Gast (Vorgaben, kein Button, `PUT` → 401). **Nicht geprüft:** echtes iPhone/Safari.
+- Deployment: `server.js` geändert und `bookmarks.cjs` neu → beide kopieren, Dienst neu starten. Frontend: `public/settings.js` neu, `app.js?v=52`, `styles.css?v=68`, `index.html`. `bookmarks.json` entsteht beim ersten Lesezeichen im App-Verzeichnis (Schreibrecht für `ralf` besteht wie bei `audiobook-progress.json`).
+
 ### Bildvollansicht
 
 Die endgültige Bedienung nach mehreren Korrekturen:
@@ -751,7 +773,7 @@ Vom Projektroot, mit installierten jeweiligen Abhängigkeiten:
 node --check server.js
 node --check public/app.js
 node --check public/article-editor.js
-node --test server.test.cjs article-editor.test.cjs user-store.test.cjs audiobooks.test.cjs
+node --test server.test.cjs article-editor.test.cjs user-store.test.cjs audiobooks.test.cjs bookmarks.test.cjs
 npm test --prefix scraper
 npm test --prefix tts
 python -B -m unittest discover -s tts -p test_qwen_http_service.py -v

@@ -12,6 +12,7 @@ const { createUserStore, installUserRoutes } = require('./user-store.cjs');
 const {
   AUDIOBOOK_AUTHOR, createAudiobookLibrary, createProgressStore, loadAudiobookConfig, installAudiobookRoutes,
 } = require('./audiobooks.cjs');
+const { createBookmarkStore, installBookmarkRoutes } = require('./bookmarks.cjs');
 
 const app = express();
 // Hinter dem Reverse-Proxy (Caddy/HTTPS) X-Forwarded-Proto/Host respektieren,
@@ -53,6 +54,11 @@ const audiobookProgress = createProgressStore({
   file: process.env.AUDIOBOOK_PROGRESS_FILE || path.join(__dirname, 'audiobook-progress.json'),
 });
 audiobookProgress.load();
+// Lesezeichen pro Nutzer (nur angemeldet).
+const bookmarks = createBookmarkStore({
+  file: process.env.BOOKMARKS_FILE || path.join(__dirname, 'bookmarks.json'),
+});
+bookmarks.load();
 const audiobooks = createAudiobookLibrary({
   audioRoot: AUDIO_DIR,
   directory: audiobookConfig.directory,
@@ -1435,6 +1441,8 @@ app.get('/api/scrape/log', requireAdmin, (_req, res) => {
 app.get('/api/articles', attachUser, (req, res) => {
   const { q, author, year, category, page = '1', limit = '24', telegram, externalAudio } = req.query;
   const user = req.user;
+  const marks = bookmarks.idsFor(user.email);
+  const onlyBookmarks = req.query.bookmarks === '1';
   let filtered = articles;
 
   // ACL pre-filter: restrict to allowed authors
@@ -1442,9 +1450,13 @@ app.get('/api/articles', attachUser, (req, res) => {
     filtered = filtered.filter(a => user.allowedAuthors.includes(a.author));
   }
 
-  // "Telegram"-Artikel standardmäßig ausblenden; einbeziehen bei telegram=1
-  // oder wenn explizit nach Autor "Telegram" gefiltert wird.
-  if (telegram !== '1' && author !== 'Telegram') {
+  // Nur Artikel mit Lesezeichen (Gäste: keine). Die übrigen Filter gelten weiter.
+  if (onlyBookmarks) filtered = filtered.filter(a => marks.has(a.id));
+
+  // "Telegram"-Artikel standardmäßig ausblenden; einbeziehen bei telegram=1,
+  // wenn explizit nach Autor "Telegram" gefiltert wird oder bei Lesezeichen.
+  const hideTelegram = telegram !== '1' && author !== 'Telegram' && !onlyBookmarks;
+  if (hideTelegram) {
     filtered = filtered.filter(a => a.author !== 'Telegram');
   }
 
@@ -1496,7 +1508,6 @@ app.get('/api/articles', attachUser, (req, res) => {
   // erscheint an der ersten Stelle, an der der Anker oder eine Grafik passt.
   // Nicht für die Liste und nicht beim Autorenfilter „Infografiken“.
   if (req.query.group === '1' && author !== INFOGRAPHICS_AUTHOR) {
-    const hideTelegram = telegram !== '1' && author !== 'Telegram';
     const tiles = [];
     const seen = new Set();
     let total = 0;
@@ -1505,15 +1516,18 @@ app.get('/api/articles', attachUser, (req, res) => {
       if (seen.has(tile.id)) continue;
       seen.add(tile.id);
       const images = groupImagesFor(tile, user);
-      total += 1 + (images ? images.length - (tile.ownImage ? 1 : 0) : 0);
+      // Bei Lesezeichen zählt jede Kachel einmal (ein Lesezeichen = ein Treffer).
+      total += onlyBookmarks ? 1 : 1 + (images ? images.length - (tile.ownImage ? 1 : 0) : 0);
       tiles.push(tile);
     }
-    const items = tiles.slice((p - 1) * lim, p * lim).map(tile => exposeGroupForUser(tile, user));
+    const items = tiles.slice((p - 1) * lim, p * lim)
+      .map(tile => ({ ...exposeGroupForUser(tile, user), bookmarked: marks.has(tile.id) }));
     return res.json({ total, page: p, limit: lim, pages: Math.ceil(tiles.length / lim), items });
   }
 
   const total = filtered.length;
-  const items = filtered.slice((p - 1) * lim, p * lim).map(article => exposeArticleForUser(article, user));
+  const items = filtered.slice((p - 1) * lim, p * lim)
+    .map(article => ({ ...exposeArticleForUser(article, user), bookmarked: marks.has(article.id) }));
 
   res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
 });
@@ -1537,6 +1551,7 @@ app.get('/api/articles/*', attachUser, (req, res) => {
     const rest = exposeGroupForUser(article, req.user);
     res.json({
       ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article),
+      bookmarked: bookmarks.has(req.user.email, article.id),
       ...(anchor ? { requestedId: id } : {}),
     });
   } catch (err) {
@@ -1550,7 +1565,10 @@ installTtsRoutes(app, requireAdmin, ttsJobs);
 installMarkdownRoutes(app, requireAdmin, markdownEditor);
 installUserRoutes(app, {
   store: userStore, requireAuth, requireAdmin, getAuthors: () => meta.authors,
-  onUserDeleted: email => audiobookProgress.removeUser(email),
+  onUserDeleted: email => Promise.all([audiobookProgress.removeUser(email), bookmarks.removeUser(email)]),
+});
+installBookmarkRoutes(app, {
+  store: bookmarks, requireAuth, getArticle: id => articleById.get(id), canAccessAuthor,
 });
 installAudiobookRoutes(app, {
   library: audiobooks, progress: audiobookProgress, config: audiobookConfig, requireAuth, canAccessAuthor,

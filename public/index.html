@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=64" />
+  <link rel="stylesheet" href="styles.css?v=68" />
 </head>
 <body>
 
@@ -40,7 +40,11 @@
         <button id="search-clear" class="search-clear" aria-label="Suche löschen">✕</button>
       </div>
       <div class="header-count" id="article-count"></div>
-      <button id="theme-btn" class="theme-btn" title="Hell-Modus"></button>
+      <button id="bookmark-btn" class="bookmark-btn" title="Nur Artikel mit Lesezeichen anzeigen" aria-pressed="false" aria-label="Lesezeichen anzeigen" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>
+        </svg>
+      </button>
       <button id="telegram-btn" class="telegram-btn" title="Telegram" aria-pressed="false" aria-label="Telegram-Artikel anzeigen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
@@ -57,6 +61,7 @@
           <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job" data-admin-only>Audio-Auftrag anzeigen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="new-infographic" data-admin-only>Neue Infografik</button>
           <hr class="header-menu-sep" data-admin-only>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="settings">Einstellungen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="users" data-admin-only>Benutzerverwaltung</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="password">Kennwort ändern</button>
         </div>
@@ -128,15 +133,6 @@
           <option value="24" selected>24</option>
           <option value="48">48</option>
           <option value="96">96</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label class="filter-label">Schrift</label>
-        <select id="filter-font" class="filter-select">
-          <option value="editorial">Editorial</option>
-          <option value="classic">Klassisch</option>
-          <option value="modern" selected>Modern</option>
-          <option value="system">System</option>
         </select>
       </div>
       <button id="reset-filters" class="reset-btn" title="Filter zurücksetzen">Reset</button>
@@ -353,6 +349,43 @@
     </form>
   </dialog>
 
+  <!-- Einstellungen (pro Gerät) -->
+  <dialog id="settings-dialog" class="account-dialog" aria-labelledby="settings-title">
+    <form id="settings-form" novalidate>
+      <h2 id="settings-title" class="login-title">Einstellungen</h2>
+      <fieldset class="settings-group">
+        <legend class="login-label">Schriftart</legend>
+        <div class="settings-choices">
+          <label class="settings-choice settings-font-editorial"><input type="radio" name="font" value="editorial"><span>Editorial</span></label>
+          <label class="settings-choice settings-font-classic"><input type="radio" name="font" value="classic"><span>Klassisch</span></label>
+          <label class="settings-choice settings-font-modern"><input type="radio" name="font" value="modern"><span>Modern</span></label>
+          <label class="settings-choice settings-font-system"><input type="radio" name="font" value="system"><span>System</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="settings-group">
+        <legend class="login-label">Darstellung</legend>
+        <div class="settings-choices">
+          <label class="settings-choice"><input type="radio" name="theme" value="light"><span>Hell</span></label>
+          <label class="settings-choice"><input type="radio" name="theme" value="dark"><span>Dunkel</span></label>
+          <label class="settings-choice"><input type="radio" name="theme" value="auto"><span>Automatisch</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="settings-group">
+        <legend class="login-label">Textgröße im Artikel</legend>
+        <div class="settings-choices">
+          <label class="settings-choice settings-size-small"><input type="radio" name="textSize" value="small"><span>Klein</span></label>
+          <label class="settings-choice settings-size-normal"><input type="radio" name="textSize" value="normal"><span>Normal</span></label>
+          <label class="settings-choice settings-size-large"><input type="radio" name="textSize" value="large"><span>Groß</span></label>
+          <label class="settings-choice settings-size-xlarge"><input type="radio" name="textSize" value="xlarge"><span>Sehr groß</span></label>
+        </div>
+      </fieldset>
+      <p class="account-hint">Gilt nur für dieses Gerät. „Automatisch“ folgt der Hell-/Dunkel-Einstellung des Geräts.</p>
+      <div class="account-buttons">
+        <button type="submit" class="detail-cat-pill account-primary">Fertig</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Benutzerverwaltung (Admin) -->
   <dialog id="user-admin" class="account-dialog account-dialog-wide" aria-labelledby="user-admin-title">
     <div class="article-editor-heading">
@@ -368,7 +401,8 @@
     <section id="user-admin-panel-public" role="tabpanel" aria-labelledby="user-admin-tab-public" class="user-admin-panel" hidden></section>
   </dialog>
   <script src="user-admin.js?v=10"></script>
-  <script src="app.js?v=51"></script>
+  <script src="settings.js?v=1"></script>
+  <script src="app.js?v=52"></script>
   <script src="audiobooks.js?v=5"></script>
   <script src="book-reader.js?v=5"></script>
   <script src="article-editor.js?v=2"></script>
