@@ -496,7 +496,7 @@ function renderCard(article, idx) {
 
   return `
     <article class="card" data-id="${esc(article.id)}" data-author="${esc(article.author)}" style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(article.title)}">
-      <div class="card-image${gallery ? ' card-gallery' : ''}">
+      <div class="card-image${gallery ? ' card-gallery' : ''}${!gallery && article.images?.[0]?.kind === 'infographic' ? ' is-infographic' : ''}">
         ${imageHtml}
         <span class="card-bookmark" title="Lesezeichen" aria-label="Lesezeichen"${article.bookmarked ? '' : ' hidden'}>${svgBookmark()}</span>
         ${audioBadge || videoBadge || pdfBadge

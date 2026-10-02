@@ -443,7 +443,9 @@ body.mode-audiobooks .bookmark-btn { opacity: .35; pointer-events: none; }
   transition: transform .5s ease;
 }
 .card:hover .card-image img { transform: scale(1.04); }
-.card[data-author="Infografiken"] .card-image img { object-position: top; }
+/* Infografiken von oben zeigen – auch als einziges Bild einer Gruppe (Artikel ohne eigenes Foto). */
+.card[data-author="Infografiken"] .card-image img,
+.card-image.is-infographic img { object-position: top; }
 
 /* Kachel mit mehreren Bildern (Artikel + Infografiken): Streifen, der per Maus-
    position (Desktop) oder Wischen (Touch) verschoben wird; Striche unten links. */
