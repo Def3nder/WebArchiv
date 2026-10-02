@@ -130,7 +130,9 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     const trackFiles = [...filesByLower.values()]
       .filter(name => TRACK_EXTS.has(path.extname(name).toLowerCase()))
       .sort(collator.compare);
-    if (!trackFiles.length) return null;
+    // Ein reines eBook (Text, aber kein Audio) ist ebenfalls ein Buch.
+    const ebookFile = findByName(filesByLower, EBOOK_EXTS.map(ext => bookDir.toLowerCase() + ext));
+    if (!trackFiles.length && !ebookFile) return null;
 
     const abstractName = filesByLower.get('abstract.md');
     const abstractPath = abstractName ? path.join(dirPath, abstractName) : null;
@@ -149,7 +151,6 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       if (standard) imageUrl = withVersion(mediaUrl(dirName, standard), path.join(root, standard));
     }
 
-    const ebookFile = findByName(filesByLower, EBOOK_EXTS.map(ext => bookDir.toLowerCase() + ext));
     const ebook = ebookFile ? { format: path.extname(ebookFile).slice(1).toLowerCase(), file: ebookFile } : null;
 
     const titles = trackTitles(trackFiles);
@@ -165,6 +166,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       excerpt: excerpt(abstract.description),
       imageUrl,
       trackCount: trackFiles.length,
+      ebookOnly: !trackFiles.length,
       tracks: trackFiles.map((file, i) => ({ title: titles[i], file, url: mediaUrl(dirName, bookDir, file) })),
       description: abstract.description,
       filePath: abstractPath,
@@ -232,7 +234,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     if (mode === 'date') {
       items.sort((a, b) => (b.date || '').localeCompare(a.date || '') || collator.compare(a.title, b.title));
     } else if (mode === 'recent') {
-      const heard = book => progress.get(user?.email, book.id)?.updatedAt || '';
+      const heard = book => progress.lastActivity(user?.email, book.id);
       items.sort((a, b) => heard(b).localeCompare(heard(a)) || collator.compare(a.title, b.title));
     }
     const total = items.length;
@@ -337,7 +339,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
 function resolveTrackIndex(book, entry) {
   const byFile = entry.file ? book.tracks.findIndex(t => t.file === entry.file) : -1;
   if (byFile >= 0) return byFile;
-  return Math.min(Math.max(0, entry.trackIndex | 0), book.trackCount - 1);
+  return Math.max(0, Math.min(entry.trackIndex | 0, book.trackCount - 1));
 }
 
 // ─── Hörfortschritt pro Nutzer (audiobook-progress.json) ───────────────────
@@ -366,6 +368,13 @@ function createProgressStore({ file, io = fs }) {
     load,
     get(email, bookId) {
       return (email && data[emailKey(email)]?.[bookId]) || null;
+    },
+    // Zeitpunkt der letzten Nutzung (Hören oder Lesen), für die Sortierung „zuletzt“.
+    lastActivity(email, bookId) {
+      const user = email ? data[emailKey(email)] : null;
+      const heard = user?.[bookId]?.updatedAt || '';
+      const read = user?.[TEXT_PROGRESS_KEY]?.[bookId]?.updatedAt || '';
+      return heard > read ? heard : read;
     },
     async set(email, book, input) {
       if (!email) throw fail(401, 'Nicht angemeldet.');

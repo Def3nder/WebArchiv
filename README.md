@@ -115,7 +115,7 @@ automatisch erkannten, höchstens fünf. Andere Einträge bleiben reine Anzeige-
 
 ### Hörbücher (`audio/Hoerbuecher/`)
 
-Je Buch ein Ordner unter `audio/Hoerbuecher/` mit `cover.jpg`/`.png`, nummerierten
+Je Buch ein Ordner unter `audio/Hoerbuecher/` mit `cover.jpg`/`.jpeg`/`.png`, nummerierten
 Tracks (`.mp3`/`.m4b`/`.m4a`) und optional `abstract.md`
 (`Titel:`, `Autor:`, `Datum:`, `Inhalt:` + Markdown). (EPUB-Bücher als eBook-Text: siehe `epub-tool/`
 unten.) Fallback-Cover:
@@ -126,6 +126,12 @@ beim Autorenfilter „Hörbücher“ (Sortierung zuletzt gehört / Name / Datum)
 für Gäste sichtbar und werden über `allowedAuthors` freigegeben. Der Player spielt
 das ganze Buch, springt über Dateigrenzen (Weiten in `config.json`) und merkt sich
 Position und Tempo pro Nutzer und Buch in `audiobook-progress.json`.
+
+**Reine eBooks (ohne Audio):** Ein Buchordner ohne Audiodateien, aber mit eBook-Text
+(`<Ordnername>.md`/`.txt`/`.pdf`), ist ebenfalls ein Buch. Die Kachel zeigt das Badge „eBook“ statt der
+Teile-Zahl; das Detail hat keinen Player, nur „Text lesen“ (mit Leseposition). Ein Ordner ohne Audio **und**
+ohne eBook-Datei bleibt unsichtbar. „Zuletzt gehört/gelesen“ berücksichtigt auch die Leseposition. Ein EPUB
+selbst wird nicht gelesen, sondern vorher mit `epub-tool/` in eine `.md` umgewandelt.
 
 **eBook-Text zum Hörbuch:** Liegt im Buchordner eine Datei mit dem Namen des Ordners und der
 Endung `.md`, `.txt` oder `.pdf` (Vorrang in dieser Reihenfolge; z. B. `Autor - Titel/Autor - Titel.md`),

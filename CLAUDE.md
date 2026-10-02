@@ -93,7 +93,7 @@ object in `app.js`.
   `path.basename` + prefix-check guard.
 - **Audiobooks** (`audiobooks.cjs`, `public/audiobooks.js`): author `Hörbücher` lives under
   `audio/Hoerbuecher/<book>/` (ASCII dir name, mapped to author `Hörbücher`; tracks + cover + optional `abstract.md`), has its own index and
-  `/api/audiobooks*` routes, is never public (guests blocked in `canAccessAuthor`, filtered from
+  `/api/audiobooks*` routes (a book without tracks but with an ebook text file is an "ebook only" book: `trackCount: 0`, `ebookOnly: true`, no player), is never public (guests blocked in `canAccessAuthor`, filtered from
   `public-directories.txt`), and stores per-user playback position in `audiobook-progress.json`.
 - The `Telegram` author is special-cased: hidden from listings unless `?telegram=1` or explicitly
   filtered by `author=Telegram`.

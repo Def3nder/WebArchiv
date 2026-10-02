@@ -55,14 +55,16 @@ function renderBookCard(book, idx) {
   const imageHtml = book.imageUrl
     ? `<img src="${esc(book.imageUrl)}" alt="" loading="lazy" onerror="handleImgError(this)" />`
     : `<div class="card-image-placeholder">${svgImage()}</div>`;
+  const ebookOnly = !book.trackCount;   // reines eBook: kein Audio, nur Text
   const parts = book.trackCount === 1 ? '1 Teil' : `${book.trackCount} Teile`;
-  const progress = book.progress;
+  const badge = ebookOnly ? `${svgBookEbook()}<span>eBook</span>` : `${svgHeadphones()}<span>Hörbuch · ${parts}</span>`;
+  const progress = ebookOnly ? null : book.progress;
   const pct = progress ? Math.round(((progress.trackIndex + 1) / progress.trackCount) * 100) : 0;
   return `
     <article class="card card-book" data-id="${esc(book.id)}" data-author="${esc(book.author)}" style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(book.title)}">
       <div class="card-image">
         ${imageHtml}
-        <div class="card-badges"><div class="card-audio-badge">${svgHeadphones()}<span>Hörbuch · ${parts}</span></div></div>
+        <div class="card-badges"><div class="card-audio-badge">${badge}</div></div>
       </div>
       <div class="card-body">
         <div class="card-meta">
@@ -115,20 +117,7 @@ function renderBookDetail(book) {
   const tracks = book.tracks.map((track, i) =>
     `<li><button type="button" class="book-track" data-track="${i}"><span class="book-track-num">${i + 1}</span><span class="book-track-title">${esc(track.title)}</span></button></li>`
   ).join('');
-
-  $detail.innerHTML = `
-    ${heroHtml}
-    <div class="detail-content">
-      <div class="detail-meta">
-        <span class="author-badge" style="--author-hue:${hue}">${esc(book.author)}</span>
-      </div>
-      <h1 class="detail-title">${esc(book.title)}</h1>
-      ${book.bookAuthor ? `<p class="detail-book-author">von ${esc(book.bookAuthor)}</p>` : ''}
-      <div class="detail-date-row">
-        <span class="detail-date-block">${book.date ? esc(formatDate(book.date)) : ''}</span>
-        <div class="detail-action-row detail-action-row-book">${readButton}${editMenu}</div>
-      </div>
-      <div class="detail-divider"></div>
+  const playerHtml = book.tracks.length ? `
       <div class="book-player" id="book-player">
         <div class="book-player-now">
           <span class="book-player-track" data-book-ui="track"></span>
@@ -157,7 +146,22 @@ function renderBookDetail(book) {
             <ol class="book-track-list">${tracks}</ol>
           </details>
         </div>
+      </div>` : '';
+
+  $detail.innerHTML = `
+    ${heroHtml}
+    <div class="detail-content" data-book-detail>
+      <div class="detail-meta">
+        <span class="author-badge" style="--author-hue:${hue}">${esc(book.author)}</span>
       </div>
+      <h1 class="detail-title">${esc(book.title)}</h1>
+      ${book.bookAuthor ? `<p class="detail-book-author">von ${esc(book.bookAuthor)}</p>` : ''}
+      <div class="detail-date-row">
+        <span class="detail-date-block">${book.date ? esc(formatDate(book.date)) : ''}</span>
+        <div class="detail-action-row detail-action-row-book">${readButton}${editMenu}</div>
+      </div>
+      <div class="detail-divider"></div>
+      ${playerHtml}
       <div class="detail-body">${book.descriptionHtml || ''}</div>
     </div>`;
 
@@ -186,21 +190,21 @@ function renderBookDetail(book) {
     });
   });
   $detail.querySelector('[data-book-text]')?.addEventListener('click', () => openBookReader(book));
-  $detail.querySelector('[data-book="speed"]').addEventListener('change', e => bookSetSpeed(Number(e.target.value)));
+  $detail.querySelector('[data-book="speed"]')?.addEventListener('change', e => bookSetSpeed(Number(e.target.value)));
   $detail.querySelectorAll('.book-track').forEach(btn => {
     btn.addEventListener('click', () => {
       bookEnsureLoaded(book);
       bookGoTo(Number(btn.dataset.track), { fromStart: 0 }, true);
     });
   });
-  const bar = $detail.querySelector('[data-book-ui="bar"]');
-  bar.addEventListener('click', e => {
+  const bar = $detail.querySelector('[data-book-ui="bar"]');   // fehlt bei reinen eBooks
+  bar?.addEventListener('click', e => {
     bookEnsureLoaded(book);
     const audio = bookPlayer.audio;
     const rect = bar.getBoundingClientRect();
     if (audio?.duration) audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
   });
-  bar.addEventListener('keydown', e => {
+  bar?.addEventListener('keydown', e => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
     e.stopPropagation();
@@ -246,6 +250,7 @@ function bookApiPath(book) {
 
 // Übernimmt ein Buch in den Player (ohne Start), falls noch ein anderes geladen ist.
 function bookEnsureLoaded(book) {
+  if (!book.tracks?.length) return;   // reines eBook: nichts zu spielen
   if (bookPlayer.book?.id === book.id) return;
   bookSave();
   if (bookPlayer.audio) { bookPlayer.audio.pause(); bookPlayer.audio.removeAttribute('src'); bookPlayer.audio.load(); }
@@ -518,7 +523,7 @@ function bookUpdateUi() {
 // Detail geschlossen/gewechselt → Miniplayer neu bewerten.
 new MutationObserver(() => bookUpdateUi()).observe($overlay, { attributes: true, attributeFilter: ['hidden'] });
 new MutationObserver(() => {
-  if (!document.getElementById('book-player')) currentBookDetail = null;
+  if (!$detail.querySelector('[data-book-detail]')) currentBookDetail = null;
   bookUpdateUi();
 }).observe($detail, { childList: true });
 
@@ -550,6 +555,9 @@ function bookMediaSession() {
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────
+function svgBookEbook() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z"/></svg>`;
+}
 function svgBookPlay() {
   return `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 }

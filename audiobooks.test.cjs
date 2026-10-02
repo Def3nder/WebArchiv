@@ -231,3 +231,46 @@ test('eBook-Bilder: Unterordner (Groß-/Kleinschreibung egal) wird zu /audio-fil
   ]);
   assert.match(html, /Text$/);
 });
+
+test('reines eBook (ohne Audio): erscheint, ohne Tracks; Ordner ohne Audio und ohne Text bleibt draußen', async t => {
+  const dir = await tempDir(t);
+  const root = path.join(dir, 'audio', 'Hoerbuecher');
+  const makeBook = async (name, files) => {
+    const book = path.join(root, name);
+    await fs.mkdir(book, { recursive: true });
+    for (const [file, content] of Object.entries(files)) await fs.writeFile(path.join(book, file), content);
+  };
+  await makeBook('Autor - Nur Text', { 'Autor - Nur Text.md': '# Kapitel\n\nText', 'cover.jpg': 'x', 'abstract.md': 'Titel: Nur Text\nInhalt:\nKurz' });
+  await makeBook('Autor - Nur PDF', { 'Autor - Nur PDF.pdf': '%PDF' });
+  await makeBook('Autor - Mit Audio', { '01 - Teil.mp3': 'x', 'Autor - Mit Audio.txt': 'Text' });
+  await makeBook('Autor - Leer', { 'notiz.txt': 'kein eBook', 'abstract.md': 'Titel: Leer' });
+  await makeBook('Autor - Falscher Name', { 'anderer-name.md': 'kein eBook' });
+  const progress = createProgressStore({ file: path.join(dir, 'progress.json') });
+  progress.load();
+  const library = createAudiobookLibrary({ audioRoot: path.join(dir, 'audio'), progress, excerpt: x => x, renderMarkdown: x => `<md>${x}</md>` });
+  await library.rebuild();
+  const user = { email: 'a@b.de' };
+  assert.deepEqual(library.books.map(b => b.title), ['Mit Audio', 'Nur PDF', 'Nur Text']);
+  const nurText = library.books.find(b => b.title === 'Nur Text');
+  const mitAudio = library.books.find(b => b.title === 'Mit Audio');
+  assert.equal(nurText.ebookOnly, true);
+  assert.equal(nurText.trackCount, 0);
+  assert.equal(mitAudio.ebookOnly, false);
+  assert.deepEqual(library.list(user).items.map(b => [b.title, b.trackCount, b.ebookOnly]),
+    [['Mit Audio', 1, false], ['Nur PDF', 0, true], ['Nur Text', 0, true]]);
+  const detail = library.detail(user, nurText.id);
+  assert.deepEqual(detail.tracks, []);
+  assert.equal(detail.ebook.format, 'md');
+  assert.equal(detail.progress, null);
+  assert.equal(detail.descriptionHtml, '<md>Kurz</md>');
+  assert.deepEqual(await library.ebookText(nurText), { format: 'md', html: '<md># Kapitel\n\nText</md>' });
+
+  // Kein Audio → kein Hörstand; die Leseposition geht und zählt für „zuletzt“ (auch bei Büchern mit Audio).
+  await assert.rejects(progress.set('a@b.de', nurText, { trackIndex: 0, position: 0 }), { status: 400 });
+  await progress.setText('a@b.de', nurText, { position: 0.4 });
+  assert.equal(progress.getText('a@b.de', nurText.id, 'md'), 0.4);
+  assert.deepEqual(library.list(user, { sort: 'recent' }).items.map(b => b.title), ['Nur Text', 'Mit Audio', 'Nur PDF']);
+  await progress.set('a@b.de', mitAudio, { trackIndex: 0, position: 5 });
+  assert.equal(library.list(user, { sort: 'recent' }).items[0].title, 'Mit Audio');
+  assert.equal(progress.lastActivity('andere@b.de', nurText.id), '');
+});
