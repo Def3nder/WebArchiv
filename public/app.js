@@ -1333,8 +1333,10 @@ async function loadMeta() {
   audioOpt.textContent = 'mit Audio';
   $filterAuthor.appendChild(audioOpt);
 
-  authors.forEach((a, i) => {
-    authorHueMap[a] = Math.round(i * hueStep);
+  authors.forEach((a, i) => { authorHueMap[a] = Math.round(i * hueStep); });
+  // „Hörbücher“ direkt unter „mit Audio“, danach die übrigen Autoren alphabetisch.
+  const ordered = [...authors.filter(a => a === AUDIOBOOK_AUTHOR), ...authors.filter(a => a !== AUDIOBOOK_AUTHOR)];
+  ordered.forEach(a => {
     const opt = document.createElement('option');
     opt.value = a;
     opt.textContent = a.replace(/_/g, ' ');
@@ -1492,6 +1494,19 @@ $resetFilters.addEventListener('click', () => {
   Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false, bookmarks:false, page:1, limit:24 });
   applyBookMode();
   loadArticles();
+});
+
+// Logo oben links: zurück zur Startseite – offene Ansichten schließen, dann wie „Reset“.
+document.querySelector('.site-logo').addEventListener('click', event => {
+  event.preventDefault();
+  event.currentTarget.blur();
+  if (!$imgFullscreen.hidden) closeImageFullscreen();
+  if (!$overlay.hidden) {
+    closeOverlay();
+    if (!$overlay.hidden) return;   // Editor mit ungespeicherten Änderungen: abgebrochen
+  }
+  $resetFilters.click();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 // ── Audio erzeugen: bestätigter Start und wiederaufnehmbares Status-Polling ──

@@ -106,7 +106,7 @@ select { font: inherit; color: inherit; }
 .site-logo {
   display: flex;
   align-items: baseline;
-  gap: 2px;
+  gap: 0;
   flex-shrink: 0;
   font-family: var(--font-head);
   font-size: 1.4rem;
@@ -115,7 +115,10 @@ select { font: inherit; color: inherit; }
   color: var(--text);
   transition: color var(--transition);
 }
-.site-logo:hover { color: var(--accent); }
+/* Nur mit Maus: Auf Touch-Geräten bliebe der Hover nach dem Tippen hängen. */
+@media (hover: hover) {
+  .site-logo:hover { color: var(--accent); }
+}
 .logo-mark {
   color: var(--accent);
   font-size: 1.65rem;

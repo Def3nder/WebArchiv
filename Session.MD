@@ -283,6 +283,7 @@ Entscheidungen des Benutzers:
 - Ablage: `audio/Hoerbuecher/<Ordner je Buch>/` mit `cover.jpg`/`.jpeg`/`.png`, nummerierten Tracks (`.mp3`, `.m4b`, auch `.m4a`) direkt im Ordner (keine Unterordner) und optional `abstract.md`. Fehlt das Cover, gilt `audio/Hoerbuecher/standard.*`. Ordnername und Anzeige sind getrennt (Entscheidung vom 27.09.): Angezeigt, in Rechten und Buch-IDs wird immer „Hörbücher“ verwendet; auf der Platte wird `Hoerbuecher` gesucht, ersatzweise `Hörbücher`, oder der Name aus `config.json` → `audiobooks.directory`. `/audio-files/Hoerbuecher/...` wird für die Rechteprüfung dem Autor „Hörbücher“ zugeordnet. Bewusst unter `audio/`, damit der Artikel-Scan von `www/` die `abstract.md` nicht als Artikel einliest.
 - `abstract.md` hat feste Felder `Titel:`, `Autor:`, `Datum:`, `Inhalt:`; alles ab `Inhalt:` ist Markdown und wird gerendert. Ohne Datei werden Autor und Titel aus dem Ordnernamen „Autor - Titel“ gelesen.
 - Hörbücher sind **keine Artikel**: nicht unter „Alle Autoren“, nicht in der globalen Suche, nicht im Filter „mit Audio“. Nur bei Autor = „Hörbücher“; dort Sortierung *Zuletzt gehört* (Standard, danach ungehörte nach Name), *Nach Name*, *Nach Datum*. Jahr/Kategorie sind in dieser Ansicht ausgeblendet; die Suche durchsucht Titel, Buchautor und Kurzbeschreibung.
+- **Autorenmenü (03.10.):** „Hörbücher“ steht direkt unter „mit Audio“, danach die übrigen Autoren alphabetisch (`loadMeta` in `public/app.js`; Badge-Farben unverändert nach der alphabetischen Liste). `app.js?v=56`.
 - Rechte: wie ein normaler Autor über `allowedAuthors` (Haken in der Benutzerverwaltung). **Gäste nie**, auch nicht per `public-directories.txt`; der Eintrag wird beim Laden ignoriert, beim Speichern abgewiesen und im Reiter „Öffentlicher Zugang“ nicht angeboten.
 - Player: ein Play-Button für das ganze Buch; Teil zurück/vor, große und kleine Sprünge **über Dateigrenzen hinweg**, Tempo 0,75×–2×, Trackliste, automatischer Übergang zum nächsten Teil. Sprungweiten in `config.json` (`audiobooks.skipLongSeconds` = 600, `skipShortSeconds` = 30), Neustart nötig.
 - Anzeige einfach: „Teil x von y · Titel“ und Zeit im aktuellen Teil; keine Gesamtdauer des Buches.
@@ -450,6 +451,10 @@ Quellen: [G2], [G4], [G13], [D2], [D3], [D4].
 ### Grundbedienung
 
 Aus der frühen Aufbauphase stammen Dark-/Light-Modus, persistierte Schriftwahl, quadratische/längliche Kacheln, Filter und Seitennavigation. Der Stil ist „Warm Editorial“ mit dunklem Standard und warmen Akzentfarben. Artikel lassen sich per Pfeiltasten, Buttons und Touch-Swipe wechseln. Pinch-Zoom, Panning und Textmarkierung dürfen dabei keinen unbeabsichtigten Artikelwechsel auslösen. Deep-Links werden auch nach einer erforderlichen Anmeldung wieder aufgelöst.
+
+### Logo (03.10.2026)
+
+Kein Abstand mehr zwischen dem goldenen „W“ und „ebArchiv“ (`.site-logo { gap: 0 }`). Ein Klick auf das Logo führt zur Startseite: Bild-Vollansicht und Artikel schließen (bei ungespeicherten Editor-Änderungen mit Rückfrage, Abbruch hält an), danach dasselbe wie „Reset“ (Suche, Filter, Telegram, Lesezeichen-Filter, Ansicht länglich, 24 pro Seite, Seite 1) und nach oben scrollen. Der Hover-Effekt (Akzentfarbe) gilt nur noch für Geräte mit Maus (`@media (hover: hover)`), sonst blieb „ebArchiv“ nach dem Tippen auf dem iPhone eingefärbt; das Logo verliert nach dem Klick den Fokus. Geprüft im Testserver. `app.js?v=58`, `styles.css?v=74`.
 
 ### Kopieren und Aktionen
 
