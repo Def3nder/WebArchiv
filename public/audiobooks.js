@@ -198,11 +198,22 @@ function renderBookDetail(book) {
     });
   });
   const bar = $detail.querySelector('[data-book-ui="bar"]');   // fehlt bei reinen eBooks
-  bar?.addEventListener('click', e => {
-    bookEnsureLoaded(book);
-    const audio = bookPlayer.audio;
-    const rect = bar.getBoundingClientRect();
-    if (audio?.duration) audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
+  // Tippen springt im Teil, Halten/Ziehen verschiebt relativ; gesprungen wird beim Loslassen.
+  const duration = () => {
+    const d = bookPlayer.book?.id === book.id ? bookPlayer.audio?.duration : NaN;
+    return isFinite(d) && d > 0 ? d : null;
+  };
+  const showTime = f => {
+    bar.querySelector('[data-book-ui="fill"]').style.width = `${f * 100}%`;
+    $detail.querySelector('[data-book-ui="time"]').textContent = `${bookFmt(f * duration())} / ${bookFmt(duration())}`;
+  };
+  if (bar) enableScrubBar(bar, {
+    get: () => (duration() ? bookPlayer.audio.currentTime / duration() : null),
+    set: f => { if (duration()) bookPlayer.audio.currentTime = f * duration(); },
+    preview: showTime,
+    label: f => esc(`Teil ${bookPlayer.index + 1} · ${bookFmt(f * duration())} / ${bookFmt(duration())}`),
+    onStart: () => bookEnsureLoaded(book),
+    onEnd: bookUpdateUi,
   });
   bar?.addEventListener('keydown', e => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -487,9 +498,12 @@ function bookUpdateUi() {
     const track = detailBook.tracks[index];
     root.querySelector('[data-book-ui="track"]').textContent =
       `Teil ${index + 1} von ${detailBook.tracks.length}${track ? ' · ' + track.title : ''}`;
-    root.querySelector('[data-book-ui="time"]').textContent =
-      isFinite(duration) ? `${bookFmt(current)} / ${bookFmt(duration)}` : bookFmt(current);
-    root.querySelector('[data-book-ui="fill"]').style.width = isFinite(duration) && duration ? `${(current / duration) * 100}%` : '0%';
+    // Beim Ziehen am Balken zeigen Balken und Zeit die Zielstelle (enableScrubBar).
+    if (!root.querySelector('[data-book-ui="bar"]').classList.contains('is-active')) {
+      root.querySelector('[data-book-ui="time"]').textContent =
+        isFinite(duration) ? `${bookFmt(current)} / ${bookFmt(duration)}` : bookFmt(current);
+      root.querySelector('[data-book-ui="fill"]').style.width = isFinite(duration) && duration ? `${(current / duration) * 100}%` : '0%';
+    }
     root.querySelector('[data-book="speed"]').value = String(active ? bookPlayer.speed : (progress?.speed || 1));
     const play = root.querySelector('[data-book="toggle"]');
     play.classList.toggle('playing', playing);

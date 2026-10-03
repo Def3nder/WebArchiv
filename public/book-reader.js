@@ -4,8 +4,6 @@ const BOOK_TEXT_SIZES = [0.9, 1, 1.1, 1.25, 1.45, 1.7];   // rem
 const BOOK_TEXT_SAVE_DELAY_MS = 1500;
 const BOOK_PDF_POLL_MS = 3000;
 const BOOK_BACK_LIMIT = 20;
-const BOOK_HOLD_MS = 250;        // Fortschrittslinie: länger gedrückt = Scrollmodus statt Sprung
-const BOOK_TAP_MOVE_PX = 6;      // … ebenso bei mehr Bewegung
 
 // Liegt im body außerhalb des Artikel-Overlays; der Miniplayer bleibt darüber sichtbar.
 const bookReader = {
@@ -122,10 +120,11 @@ function showBookText(body, html) {
   updateProgress();
 }
 
-// Lesefortschritt: dünne Linie unter dem Kopf und „Kapitel · %“ im Kopf. Kurz tippen
-// springt an die Stelle, halten und ziehen scrollt live durch den Text (mit Sprechblase).
-// Ein weiter Sprung merkt sich die vorige Stelle für „↩ Zurück“. Liefert die Funktion,
-// die Linie und Anzeige an die aktuelle Scrollposition anpasst.
+// Lesefortschritt: dünne Linie unter dem Kopf und „Kapitel · %“ im Kopf. Bedienung wie bei
+// den Audio-Playern (enableScrubBar in app.js): kurz tippen springt, halten und ziehen scrollt
+// live und relativ ab der aktuellen Stelle (mit Sprechblase). Ein weiter Sprung merkt sich die
+// vorige Stelle für „↩ Zurück“. Liefert die Funktion, die Linie und Anzeige an die aktuelle
+// Scrollposition anpasst.
 function prepareBookProgress(body, scroller, text) {
   const bar = document.createElement('div');
   bar.className = 'book-reader-progress';
@@ -134,14 +133,10 @@ function prepareBookProgress(body, scroller, text) {
   bar.setAttribute('aria-label', 'Leseposition');
   bar.setAttribute('aria-valuemin', '0');
   bar.setAttribute('aria-valuemax', '100');
-  bar.title = 'Tippen springt an die Stelle, Ziehen blättert durch das Buch';
+  bar.title = 'Tippen springt an die Stelle, Halten und Ziehen blättert durch das Buch';
   bar.innerHTML = '<div class="book-reader-progress-fill"></div>';
   const fill = bar.firstElementChild;
-  const bubble = document.createElement('div');
-  bubble.className = 'book-reader-bubble';
-  bubble.hidden = true;
   bookReader.el.insertBefore(bar, body);
-  bookReader.el.appendChild(bubble);
   const where = bookReader.el.querySelector('.book-reader-where');
 
   // Kapitel = letzte Überschrift (h1/h2), die das obere Drittel des Bildschirms erreicht hat;
@@ -164,9 +159,9 @@ function prepareBookProgress(body, scroller, text) {
     return chapter ? chapter + ' · ' + percent : percent;
   };
   // Nur das Kapitel wird bei Platzmangel gekürzt, die Prozentzahl bleibt immer sichtbar.
-  const showLabel = (target, fraction) => {
+  const labelHtml = fraction => {
     const chapter = chapterAt(fraction * maxScroll());
-    target.innerHTML = (chapter ? '<span class="book-reader-chapter">' + esc(chapter) + '</span>' : '')
+    return (chapter ? '<span class="book-reader-chapter">' + esc(chapter) + '</span>' : '')
       + '<span class="book-reader-percent">' + (chapter ? ' · ' : '') + Math.round(fraction * 100) + ' %</span>';
   };
   const current = () => { const max = maxScroll(); return max > 0 ? Math.min(1, scroller.scrollTop / max) : 0; };
@@ -176,75 +171,30 @@ function prepareBookProgress(body, scroller, text) {
     fill.style.width = (fraction * 100) + '%';
     bar.setAttribute('aria-valuenow', String(Math.round(fraction * 100)));
     bar.setAttribute('aria-valuetext', label(fraction));
-    showLabel(where, fraction);
+    where.innerHTML = labelHtml(fraction);
   }
 
-  // Kurz tippen = an die Stelle springen. Halten (BOOK_HOLD_MS) oder gleich ziehen =
-  // Scrollmodus ohne Sprung: der Text bewegt sich relativ zum Finger, ausgehend von der
-  // aktuellen Stelle (ganze Linienbreite = ganzes Buch).
-  let drag = null;   // { startX, startTop, lastX, scrolling, timer } solange Finger/Maus auf der Linie ist
-  const fractionAt = clientX => {
-    const r = bar.getBoundingClientRect();
-    return r.width > 0 ? Math.min(1, Math.max(0, (clientX - r.left) / r.width)) : 0;
-  };
-  const showBubble = clientX => {
-    showLabel(bubble, current());
-    bubble.hidden = false;
-    // Sprechblase über der Linie (im Kopf), damit der Finger sie nicht verdeckt;
-    // waagerecht über dem Finger, ohne über den Rand zu ragen.
-    const r = bookReader.el.getBoundingClientRect();
-    const half = bubble.offsetWidth / 2;
-    bubble.style.left = Math.min(r.width - half - 8, Math.max(half + 8, clientX - r.left)) + 'px';
-    bubble.style.top = Math.max(4, bar.offsetTop - bubble.offsetHeight - 8) + 'px';
-  };
-  const startScrolling = () => {
-    if (!drag || drag.scrolling) return;
-    drag.scrolling = true;
-    bar.classList.add('is-active');
-    showBubble(drag.lastX);
-  };
   const remember = startTop => {
     if (Math.abs(scroller.scrollTop - startTop) <= scroller.clientHeight) return;
     bookReader.backStack.push(startTop);
     if (bookReader.backStack.length > BOOK_BACK_LIMIT) bookReader.backStack.shift();
     updateBookBack();
   };
-  bar.addEventListener('pointerdown', event => {
-    if (event.button > 0) return;
-    event.preventDefault();
-    try { bar.setPointerCapture(event.pointerId); } catch { /* ohne Capture: Ziehen endet am Rand der Tippzone */ }
-    drag = { startX: event.clientX, lastX: event.clientX, startTop: scroller.scrollTop, scrolling: false, timer: setTimeout(startScrolling, BOOK_HOLD_MS) };
+  let startTop = 0;
+  enableScrubBar(bar, {
+    live: true,
+    get: current,
+    set: fraction => { scroller.scrollTop = fraction * maxScroll(); },
+    label: labelHtml,
+    onStart: () => { startTop = scroller.scrollTop; },
+    onEnd: () => { remember(startTop); update(); },
   });
-  bar.addEventListener('pointermove', event => {
-    if (!drag) return;
-    drag.lastX = event.clientX;
-    const dx = event.clientX - drag.startX;
-    if (!drag.scrolling && Math.abs(dx) > BOOK_TAP_MOVE_PX) startScrolling();
-    if (!drag.scrolling) return;
-    const width = bar.getBoundingClientRect().width || 1;
-    scroller.scrollTop = Math.min(maxScroll(), Math.max(0, drag.startTop + dx / width * maxScroll()));
-    showBubble(event.clientX);
-  });
-  const end = jumpX => {
-    if (!drag) return;
-    clearTimeout(drag.timer);
-    if (!drag.scrolling && jumpX != null) scroller.scrollTop = fractionAt(jumpX) * maxScroll();
-    remember(drag.startTop);
-    drag = null;
-    bar.classList.remove('is-active');
-    bubble.hidden = true;
-    update();
-  };
-  // Nur ein kurzes Tippen springt; Abbruch (pointercancel) springt nie.
-  bar.addEventListener('pointerup', event => end(event.clientX));
-  bar.addEventListener('pointercancel', () => end(null));
-  bar.addEventListener('lostpointercapture', () => end(null));
 
   // Tastatur (Pfeile auf der fokussierten Linie): 1 % je Schritt.
   bookReader.stepProgress = step => {
-    const startTop = scroller.scrollTop;
+    const before = scroller.scrollTop;
     scroller.scrollTop = Math.min(1, Math.max(0, current() + step)) * maxScroll();
-    remember(startTop);
+    remember(before);
   };
   return update;
 }

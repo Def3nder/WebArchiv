@@ -125,7 +125,9 @@ wird „Hörbücher“ (Alternativen: Ordner `Hörbücher` oder `audiobooks.dire
 beim Autorenfilter „Hörbücher“ (Sortierung zuletzt gehört / Name / Datum), sind nie
 für Gäste sichtbar und werden über `allowedAuthors` freigegeben. Der Player spielt
 das ganze Buch, springt über Dateigrenzen (Weiten in `config.json`) und merkt sich
-Position und Tempo pro Nutzer und Buch in `audiobook-progress.json`.
+Position und Tempo pro Nutzer und Buch in `audiobook-progress.json`. Fortschrittsbalken (Hörbuch und
+Artikel-Audio): kurz tippen springt an die Stelle; halten und ziehen verschiebt relativ ab der aktuellen
+Stelle, eine Sprechblase zeigt die Zielzeit, gesprungen wird beim Loslassen.
 
 **Reine eBooks (ohne Audio):** Ein Buchordner ohne Audiodateien, aber mit eBook-Text
 (`<Ordnername>.md`/`.txt`/`.pdf`), ist ebenfalls ein Buch. Die Kachel zeigt das Badge „eBook“ statt der

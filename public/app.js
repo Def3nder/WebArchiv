@@ -1265,10 +1265,14 @@ function wireAudioPlayer(audioUrl, article) {
     return `${m}:${sec}`;
   }
 
-  function updateAudioTime() {
-    const pct = audioEl.duration ? (audioEl.currentTime / audioEl.duration * 100) : 0;
+  function showAudioTime(seconds) {
+    const pct = audioEl.duration ? (seconds / audioEl.duration * 100) : 0;
     fill.style.width = `${pct}%`;
-    time.textContent = `${fmt(audioEl.currentTime)} / ${fmt(audioEl.duration)}`;
+    time.textContent = `${fmt(seconds)} / ${fmt(audioEl.duration)}`;
+  }
+  function updateAudioTime() {
+    if (bar.classList.contains('is-active')) return;   // beim Ziehen zeigt der Balken die Zielzeit
+    showAudioTime(audioEl.currentTime);
   }
 
   audioEl.addEventListener('loadedmetadata', updateAudioTime);
@@ -1300,12 +1304,14 @@ function wireAudioPlayer(audioUrl, article) {
     }
   });
 
-  bar.addEventListener('click', e => {
-    const rect = bar.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
-    if (audioEl.duration) {
-      audioEl.currentTime = pct * audioEl.duration;
-    }
+  // Tippen springt, Halten/Ziehen verschiebt relativ; gesprungen wird beim Loslassen.
+  const duration = () => (isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null);
+  enableScrubBar(bar, {
+    get: () => (duration() ? audio.currentTime / duration() : null),
+    set: f => { if (duration()) audio.currentTime = f * duration(); updateAudioTime(); },
+    preview: f => showAudioTime(f * duration()),
+    label: f => esc(`${fmt(f * duration())} / ${fmt(duration())}`),
+    onEnd: updateAudioTime,
   });
 }
 
@@ -2069,8 +2075,9 @@ $overlayPanel.addEventListener('touchstart', e => {
   touchStartY = e.touches[0].clientY;
   touchStartTime = Date.now();
   touchStartMulti = e.touches.length > 1;
-  // Wischen in einer scrollbaren Bildleiste blättert die Bilder, nicht den Artikel.
-  touchInGallery = !!e.target.closest?.('.detail-gallery.is-scrollable');
+  // Wischen in einer scrollbaren Bildleiste blättert die Bilder, nicht den Artikel;
+  // Ziehen auf einem Audio-Fortschrittsbalken verschiebt die Wiedergabe.
+  touchInGallery = !!e.target.closest?.('.detail-gallery.is-scrollable, .audio-progress');
 }, { passive: true });
 $overlayPanel.addEventListener('touchend', e => {
   if (touchStartMulti || touchInGallery) return;
@@ -2109,6 +2116,84 @@ $imgFs.addEventListener('touchend', e => {
     stepFullscreen(dx < 0 ? +1 : -1);
   }
 }, { passive: true });
+
+// ── Bedienbare Fortschrittslinie (eBook-Reader, Audio-Player) ──────────────
+// Kurz tippen = an die Stelle springen. Drücken und halten oder gleich ziehen = ohne
+// Sprung relativ zur Fingerbewegung ab der aktuellen Stelle verschieben (ganze Breite =
+// ganze Länge). Eine Sprechblase über der Linie zeigt die Stelle, damit der Finger sie
+// nicht verdeckt. live: Position schon beim Ziehen setzen (Text); sonst erst beim
+// Loslassen (Audio – kein Nachladen bei jeder Bewegung), dazwischen nur preview().
+const SCRUB_HOLD_MS = 250;
+const SCRUB_TAP_MOVE_PX = 6;
+let $scrubBubble = null;
+
+function showScrubBubble(bar, clientX, html) {
+  if (!$scrubBubble) {
+    $scrubBubble = document.createElement('div');
+    $scrubBubble.className = 'scrub-bubble';
+    document.body.appendChild($scrubBubble);
+  }
+  $scrubBubble.innerHTML = html;
+  $scrubBubble.hidden = false;
+  const r = bar.getBoundingClientRect();
+  const half = $scrubBubble.offsetWidth / 2;
+  $scrubBubble.style.left = Math.min(window.innerWidth - half - 8, Math.max(half + 8, clientX)) + 'px';
+  $scrubBubble.style.top = Math.max(4, r.top - $scrubBubble.offsetHeight - 8) + 'px';
+}
+
+// get(): aktueller Anteil 0–1 oder null (z. B. Audiodauer noch unbekannt); set(f): Stelle
+// setzen; label(f): HTML für die Sprechblase; onStart/onEnd: vor bzw. nach der Geste.
+function enableScrubBar(bar, { get, set, label, live = false, preview, onStart, onEnd }) {
+  let drag = null;   // { startX, lastX, startFraction, fraction, scrolling, timer }
+  const fractionAt = clientX => {
+    const r = bar.getBoundingClientRect();
+    return r.width > 0 ? Math.min(1, Math.max(0, (clientX - r.left) / r.width)) : 0;
+  };
+  const startScrolling = () => {
+    if (!drag || drag.scrolling || drag.startFraction == null) return;
+    drag.scrolling = true;
+    bar.classList.add('is-active');
+    showScrubBubble(bar, drag.lastX, label(drag.startFraction));
+  };
+  bar.addEventListener('pointerdown', event => {
+    if (event.button > 0) return;
+    event.preventDefault();
+    try { bar.setPointerCapture(event.pointerId); } catch { /* ohne Capture: Ziehen endet am Rand der Tippzone */ }
+    onStart?.();
+    drag = { startX: event.clientX, lastX: event.clientX, startFraction: get(), fraction: null, scrolling: false, timer: setTimeout(startScrolling, SCRUB_HOLD_MS) };
+  });
+  bar.addEventListener('pointermove', event => {
+    if (!drag) return;
+    drag.lastX = event.clientX;
+    if (drag.startFraction == null) drag.startFraction = get();   // Audiodauer inzwischen bekannt
+    const dx = event.clientX - drag.startX;
+    if (!drag.scrolling && Math.abs(dx) > SCRUB_TAP_MOVE_PX) startScrolling();
+    if (!drag.scrolling) return;
+    const width = bar.getBoundingClientRect().width || 1;
+    const fraction = Math.min(1, Math.max(0, drag.startFraction + dx / width));
+    drag.fraction = fraction;
+    if (live) set(fraction); else preview?.(fraction);
+    showScrubBubble(bar, event.clientX, label(fraction));
+  });
+  // Nur ein kurzes Tippen springt; Abbruch (pointercancel) übernimmt nichts.
+  const end = (clientX, commit) => {
+    if (!drag) return;
+    const gesture = drag;
+    drag = null;
+    clearTimeout(gesture.timer);
+    bar.classList.remove('is-active');
+    if ($scrubBubble) $scrubBubble.hidden = true;
+    if (commit && !gesture.scrolling) {
+      if (get() != null) set(fractionAt(clientX));
+    } else if (commit && !live && gesture.fraction != null) {
+      set(gesture.fraction);
+    }
+    onEnd?.();
+  };
+  bar.addEventListener('pointerup', event => end(event.clientX, true));
+  bar.addEventListener('pointercancel', () => end(null, false));
+  bar.addEventListener('lostpointercapture', () => end(null, false));
+}
 
 // Nach unten wegziehen (Touch): Steht die Ansicht ganz oben, folgt sie dem Finger
 // nach unten; ab PULL_CLOSE_DISTANCE schließt sie beim Loslassen, sonst federt sie
