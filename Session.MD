@@ -327,6 +327,20 @@ Technik:
 - Geprüft am 30.09.2026: 43/43 Tests (neu: eBook-Erkennung, Inhalt, Leseposition), Browserprüfung mit Testkopie und Testnutzer (Text öffnen, Scrollen/Speichern, Wiederherstellen, A+ behält die Stelle, Escape, Miniplayer-Tipp, PDF mit Seitensprung, Handy-Breite ohne seitliches Scrollen). **Nicht geprüft:** echtes iPhone/Safari, Hörtest mit echten Büchern, Serverrouten-Rechte (Gast/ohne Autorenrecht) nur über die gemeinsame `route()`-Hülle, kein eigener Test.
 - Deployment: Backend geändert → Dienst neu starten; `public/book-reader.js` neu, `audiobooks.js?v=2`, `styles.css?v=61`. eBook-Dateien in `audio/Hoerbuecher/<Buch>/` ablegen, danach Reindex. Leserecht für `ralf` genügt.
 
+### Lesefortschritt im eBook-Reader (03.10.2026)
+
+Entscheidungen des Benutzers: dünne Fortschrittslinie unter dem Kopf, **immer sichtbar** und bedienbar: **kurz tippen springt** an die entsprechende Stelle, **halten und ziehen scrollt live** durch das Buch. Im Kopf dauerhaft **„Kapitel · %“**, beim Ziehen zusätzlich eine Sprechblase mit Kapitel und Prozent. Nur für `.md`/`.txt` (der PDF-Viewer zeigt die Seite selbst).
+
+- Linie optisch 3 px (Akzentfarbe auf `--border`), Tippzone per `::before` rund 27 px hoch; beim Halten bzw. mit Tastaturfokus dicker (`scaleY`). Pointer-Events mit `setPointerCapture` (abgesichert), `touch-action: none`, damit waagerechtes Ziehen nicht scrollt.
+- Kapitel = letzte `h1`/`h2`, deren Überschrift das obere Drittel des Bildschirms erreicht hat (binäre Suche über `offsetTop`; `.book-reader-scroll` ist dafür `position: relative`). Vor der ersten Überschrift nur „x %“. Bei Platzmangel wird nur der Kapitelname gekürzt, die Prozentzahl bleibt sichtbar.
+- **Tippen vs. Halten (03.10., ersetzt „Ziehen = absolute Position“):** Nur ein **kurzes Tippen** (unter 250 ms und höchstens 6 px Bewegung) springt an die angetippte Stelle. **Drücken und Halten** oder sofortiges Ziehen schaltet in den **Scrollmodus ohne Sprung**: Der Text bewegt sich **relativ** zur Fingerbewegung ab der aktuellen Stelle (ganze Linienbreite = ganzes Buch); Halten ohne Bewegung ändert nichts. Ein Abbruch (`pointercancel`) springt nie. Konstanten `BOOK_HOLD_MS`, `BOOK_TAP_MOVE_PX`. Geprüft: Tippen 80 % → 80 %; Halten → bleibt; Halten + 10 % ziehen → +10 %; sofort −30 % ziehen → −30 % (kein Sprung zum Startpunkt); echtes Ziehen mit der Maus 60 % → 80 %.
+- Die Sprechblase steht **über** der Linie im Kopfbereich (Entscheidung 03.10.), damit der Finger sie nicht verdeckt; sie hängt am Reiter und wird per Skript über der Linie und über dem Finger ausgerichtet.
+- Ein Sprung oder Ziehen über mehr als eine Bildschirmhöhe legt die vorige Stelle auf den Stapel von „↩ Zurück“. Leseposition wird wie bisher 1,5 s nach dem Scrollen gespeichert.
+- Barrierefreiheit: `role="slider"` mit `aria-valuenow`/`aria-valuetext`; Pfeil links/rechts auf der fokussierten Linie verschiebt um 1 %.
+- Technik: `prepareBookProgress` in `public/book-reader.js`; Aktualisierung pro Frame beim Scrollen (`requestAnimationFrame`).
+- Geprüft am 03.10.2026 im Testserver mit „Komm, wie du willst“: Tippen auf die Mitte → 50 % mit Kapitel, Ziehen 10 → 90 % („Quellen“), Sprechblase, Zurück-Stapel, Wiederherstellen der gespeicherten Stelle, Pfeiltasten, A+ behält Stelle und Anzeige, Handy-Breite ohne seitliches Scrollen. **Nicht geprüft:** echtes iPhone (Fingerbedienung).
+- Deployment: `book-reader.js?v=8`, `styles.css?v=71`; kein Neustart nötig.
+
 ## 6c. Sperrbildschirm: Artikel-Audio mit Bild (01.10.2026)
 
 - Artikel-Audio setzte keine Media Session; iOS zeigte deshalb das Favicon. Jetzt (`setArticleMediaSession` in `public/app.js`, gesetzt beim Abspielen): Titel, Autor (ohne Unterstriche), Album „WebArchiv“ und als Bild der **obere Teil des Artikelbilds, quadratisch**; gibt es mehrere Bilder (Artikel + Infografiken, `article.images`), gilt **immer das zweite** (Entscheidung 01.10.). Die Anzeige wird schon beim Klick auf Abspielen gesetzt (vor `play()`), damit iOS das Bild sofort übernimmt. Ohne Artikelbild: `apple-touch-icon.png`.

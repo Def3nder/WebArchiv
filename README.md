@@ -138,7 +138,9 @@ Endung `.md`, `.txt` oder `.pdf` (Vorrang in dieser Reihenfolge; z. B. `Autor - 
 zeigt das Detail den Button *Text lesen*. Er öffnet einen Vollbild-Reiter (Schriftgröße A−/A+ bei
 Markdown/Text, PDF im eingebauten Viewer); der Miniplayer bleibt unten sichtbar und führt zurück zum
 Detail. Die Leseposition (Scrollanteil bzw. PDF-Seite) wird pro Nutzer und Buch in
-`audiobook-progress.json` gemerkt, getrennt vom Hörstand. Text läuft nicht mit dem Audio mit. Interne Verweise (`[…](#kürzel)`) springen zur
+`audiobook-progress.json` gemerkt, getrennt vom Hörstand. Text läuft nicht mit dem Audio mit. Bei Markdown/Text zeigt der Kopf
+„Kapitel · %“; die dünne Linie darunter ist bedienbar (kurz tippen = an die Stelle springen, halten und ziehen =
+relativ ab der aktuellen Stelle scrollen, mit Sprechblase). Interne Verweise (`[…](#kürzel)`) springen zur
 passenden Überschrift (Kürzel wie bei GitHub); „↩ Zurück“ kehrt zur Ausgangsstelle zurück. Bilder im Markdown (`![](images/x.jpg)`)
 werden angezeigt, wenn sie im Buchordner (auch in Unterordnern) liegen.
 

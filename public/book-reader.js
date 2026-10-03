@@ -4,6 +4,8 @@ const BOOK_TEXT_SIZES = [0.9, 1, 1.1, 1.25, 1.45, 1.7];   // rem
 const BOOK_TEXT_SAVE_DELAY_MS = 1500;
 const BOOK_PDF_POLL_MS = 3000;
 const BOOK_BACK_LIMIT = 20;
+const BOOK_HOLD_MS = 250;        // Fortschrittslinie: länger gedrückt = Scrollmodus statt Sprung
+const BOOK_TAP_MOVE_PX = 6;      // … ebenso bei mehr Bewegung
 
 // Liegt im body außerhalb des Artikel-Overlays; der Miniplayer bleibt darüber sichtbar.
 const bookReader = {
@@ -16,6 +18,7 @@ const bookReader = {
   pollTimer: null,
   token: 0,             // verwirft Antworten geschlossener Reiter
   backStack: [],        // Scrollpositionen vor internen Sprüngen (für „Zurück“)
+  stepProgress: null,   // Tastatur auf der Fortschrittslinie (±Anteil)
 };
 
 function bookTextApiPath(book, kind) {
@@ -56,7 +59,10 @@ async function openBookReader(book) {
   el.innerHTML = `
     <header class="book-reader-head">
       <button type="button" class="book-btn book-reader-close" data-reader="close" aria-label="Text schließen" title="Schließen">${svgBookClose()}</button>
-      <span class="book-reader-title">${esc(book.title)}</span>${sizeButtons}
+      <span class="book-reader-heading">
+        <span class="book-reader-title">${esc(book.title)}</span>
+        <span class="book-reader-where"></span>
+      </span>${sizeButtons}
     </header>
     <div class="book-reader-body"><p class="book-reader-status">Text wird geladen …</p></div>`;
   document.body.appendChild(el);
@@ -92,6 +98,7 @@ function showBookText(body, html) {
   text.innerHTML = html;
   prepareBookLinks(text, scroller);
   prepareBookBack(body, scroller);
+  const updateProgress = prepareBookProgress(body, scroller, text);
   applyBookTextSize();
   // Zur gespeicherten Stelle springen (das Auslesen der Höhe erzwingt das Layout); nach
   // dem nächsten Frame nochmals, falls Schrift oder Bilder die Höhe noch verändern.
@@ -106,10 +113,140 @@ function showBookText(body, html) {
   for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) scroller.addEventListener(type, () => { touched = true; }, { once: true, passive: true });
   text.addEventListener('load', event => { if (!touched && event.target.tagName === 'IMG') restore(); }, true);
   scroller.focus({ preventScroll: true });
+  let progressFrame = 0;
   scroller.addEventListener('scroll', () => {
     clearTimeout(bookReader.saveTimer);
     bookReader.saveTimer = setTimeout(() => bookReaderSave(), BOOK_TEXT_SAVE_DELAY_MS);
+    if (!progressFrame) progressFrame = requestAnimationFrame(() => { progressFrame = 0; updateProgress(); });
   }, { passive: true });
+  updateProgress();
+}
+
+// Lesefortschritt: dünne Linie unter dem Kopf und „Kapitel · %“ im Kopf. Kurz tippen
+// springt an die Stelle, halten und ziehen scrollt live durch den Text (mit Sprechblase).
+// Ein weiter Sprung merkt sich die vorige Stelle für „↩ Zurück“. Liefert die Funktion,
+// die Linie und Anzeige an die aktuelle Scrollposition anpasst.
+function prepareBookProgress(body, scroller, text) {
+  const bar = document.createElement('div');
+  bar.className = 'book-reader-progress';
+  bar.tabIndex = 0;
+  bar.setAttribute('role', 'slider');
+  bar.setAttribute('aria-label', 'Leseposition');
+  bar.setAttribute('aria-valuemin', '0');
+  bar.setAttribute('aria-valuemax', '100');
+  bar.title = 'Tippen springt an die Stelle, Ziehen blättert durch das Buch';
+  bar.innerHTML = '<div class="book-reader-progress-fill"></div>';
+  const fill = bar.firstElementChild;
+  const bubble = document.createElement('div');
+  bubble.className = 'book-reader-bubble';
+  bubble.hidden = true;
+  bookReader.el.insertBefore(bar, body);
+  bookReader.el.appendChild(bubble);
+  const where = bookReader.el.querySelector('.book-reader-where');
+
+  // Kapitel = letzte Überschrift (h1/h2), die das obere Drittel des Bildschirms erreicht hat;
+  // offsetTop bezieht sich auf den Scrollbereich (position: relative) und folgt
+  // Schriftgröße und Bildern.
+  const headings = [...text.querySelectorAll('h1, h2')];
+  const maxScroll = () => Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  const chapterAt = top => {
+    const limit = top + scroller.clientHeight / 3;
+    let lo = 0, hi = headings.length - 1, found = null;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (headings[mid].offsetTop <= limit) { found = headings[mid]; lo = mid + 1; } else hi = mid - 1;
+    }
+    return found ? found.textContent.replace(/\s+/g, ' ').trim() : '';
+  };
+  const label = fraction => {
+    const percent = Math.round(fraction * 100) + ' %';
+    const chapter = chapterAt(fraction * maxScroll());
+    return chapter ? chapter + ' · ' + percent : percent;
+  };
+  // Nur das Kapitel wird bei Platzmangel gekürzt, die Prozentzahl bleibt immer sichtbar.
+  const showLabel = (target, fraction) => {
+    const chapter = chapterAt(fraction * maxScroll());
+    target.innerHTML = (chapter ? '<span class="book-reader-chapter">' + esc(chapter) + '</span>' : '')
+      + '<span class="book-reader-percent">' + (chapter ? ' · ' : '') + Math.round(fraction * 100) + ' %</span>';
+  };
+  const current = () => { const max = maxScroll(); return max > 0 ? Math.min(1, scroller.scrollTop / max) : 0; };
+
+  function update() {
+    const fraction = current();
+    fill.style.width = (fraction * 100) + '%';
+    bar.setAttribute('aria-valuenow', String(Math.round(fraction * 100)));
+    bar.setAttribute('aria-valuetext', label(fraction));
+    showLabel(where, fraction);
+  }
+
+  // Kurz tippen = an die Stelle springen. Halten (BOOK_HOLD_MS) oder gleich ziehen =
+  // Scrollmodus ohne Sprung: der Text bewegt sich relativ zum Finger, ausgehend von der
+  // aktuellen Stelle (ganze Linienbreite = ganzes Buch).
+  let drag = null;   // { startX, startTop, lastX, scrolling, timer } solange Finger/Maus auf der Linie ist
+  const fractionAt = clientX => {
+    const r = bar.getBoundingClientRect();
+    return r.width > 0 ? Math.min(1, Math.max(0, (clientX - r.left) / r.width)) : 0;
+  };
+  const showBubble = clientX => {
+    showLabel(bubble, current());
+    bubble.hidden = false;
+    // Sprechblase über der Linie (im Kopf), damit der Finger sie nicht verdeckt;
+    // waagerecht über dem Finger, ohne über den Rand zu ragen.
+    const r = bookReader.el.getBoundingClientRect();
+    const half = bubble.offsetWidth / 2;
+    bubble.style.left = Math.min(r.width - half - 8, Math.max(half + 8, clientX - r.left)) + 'px';
+    bubble.style.top = Math.max(4, bar.offsetTop - bubble.offsetHeight - 8) + 'px';
+  };
+  const startScrolling = () => {
+    if (!drag || drag.scrolling) return;
+    drag.scrolling = true;
+    bar.classList.add('is-active');
+    showBubble(drag.lastX);
+  };
+  const remember = startTop => {
+    if (Math.abs(scroller.scrollTop - startTop) <= scroller.clientHeight) return;
+    bookReader.backStack.push(startTop);
+    if (bookReader.backStack.length > BOOK_BACK_LIMIT) bookReader.backStack.shift();
+    updateBookBack();
+  };
+  bar.addEventListener('pointerdown', event => {
+    if (event.button > 0) return;
+    event.preventDefault();
+    try { bar.setPointerCapture(event.pointerId); } catch { /* ohne Capture: Ziehen endet am Rand der Tippzone */ }
+    drag = { startX: event.clientX, lastX: event.clientX, startTop: scroller.scrollTop, scrolling: false, timer: setTimeout(startScrolling, BOOK_HOLD_MS) };
+  });
+  bar.addEventListener('pointermove', event => {
+    if (!drag) return;
+    drag.lastX = event.clientX;
+    const dx = event.clientX - drag.startX;
+    if (!drag.scrolling && Math.abs(dx) > BOOK_TAP_MOVE_PX) startScrolling();
+    if (!drag.scrolling) return;
+    const width = bar.getBoundingClientRect().width || 1;
+    scroller.scrollTop = Math.min(maxScroll(), Math.max(0, drag.startTop + dx / width * maxScroll()));
+    showBubble(event.clientX);
+  });
+  const end = jumpX => {
+    if (!drag) return;
+    clearTimeout(drag.timer);
+    if (!drag.scrolling && jumpX != null) scroller.scrollTop = fractionAt(jumpX) * maxScroll();
+    remember(drag.startTop);
+    drag = null;
+    bar.classList.remove('is-active');
+    bubble.hidden = true;
+    update();
+  };
+  // Nur ein kurzes Tippen springt; Abbruch (pointercancel) springt nie.
+  bar.addEventListener('pointerup', event => end(event.clientX));
+  bar.addEventListener('pointercancel', () => end(null));
+  bar.addEventListener('lostpointercapture', () => end(null));
+
+  // Tastatur (Pfeile auf der fokussierten Linie): 1 % je Schritt.
+  bookReader.stepProgress = step => {
+    const startTop = scroller.scrollTop;
+    scroller.scrollTop = Math.min(1, Math.max(0, current() + step)) * maxScroll();
+    remember(startTop);
+  };
+  return update;
 }
 
 // Überschriften-Kürzel exakt wie bei GitHub: klein, Satzzeichen entfallen, jedes Leerzeichen → "-"
@@ -248,6 +385,7 @@ function closeBookReader() {
   bookReader.el.remove();
   bookReader.el = null;
   bookReader.loaded = false;
+  bookReader.stepProgress = null;
   document.body.classList.remove('book-reader-open');
   bookUpdateUi();
 }
@@ -272,7 +410,13 @@ function onBookReaderClick(event) {
 document.addEventListener('keydown', event => {
   if (!bookReader.el) return;
   if (event.key === 'Escape') { event.stopImmediatePropagation(); closeBookReader(); }
-  else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') event.stopImmediatePropagation();
+  else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.stopImmediatePropagation();
+    if (event.target.classList?.contains('book-reader-progress') && bookReader.stepProgress) {
+      event.preventDefault();
+      bookReader.stepProgress(event.key === 'ArrowRight' ? 0.01 : -0.01);
+    }
+  }
 }, true);
 
 window.addEventListener('pagehide', () => bookReaderSave({ keepalive: true }));

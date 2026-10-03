@@ -2268,8 +2268,53 @@ body.book-reader-open .mini-player { z-index: 215; }
   background: var(--surface);
   flex-shrink: 0;
 }
+.book-reader-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.book-reader-where {
+  display: flex;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: pre;
+}
+.book-reader-where:empty { display: none; }
+.book-reader-chapter { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.book-reader-percent { flex-shrink: 0; }
+/* Lesefortschritt: optisch 3 px, Tippzone per ::before deutlich höher (für den Finger). */
+.book-reader-progress {
+  position: relative;
+  z-index: 3;
+  flex-shrink: 0;
+  height: 3px;
+  background: var(--border);
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+  transform-origin: top;
+  transition: transform .15s ease;
+}
+.book-reader-progress::before { content: ''; position: absolute; left: 0; right: 0; top: -10px; bottom: -14px; }
+.book-reader-progress.is-active,
+.book-reader-progress:focus-visible { transform: scaleY(2.3); }
+.book-reader-progress-fill { width: 0; height: 100%; background: var(--accent); }
+.book-reader-bubble {
+  position: absolute;   /* im Reiter, über der Linie (Position per Skript) */
+  top: 0;
+  z-index: 4;
+  transform: translateX(-50%);
+  max-width: min(80%, 24rem);
+  padding: 6px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  white-space: pre;
+  pointer-events: none;
+  box-shadow: var(--shadow-lg);
+}
+.book-reader-bubble:not([hidden]) { display: flex; }
+.book-reader-bubble[hidden] { display: none; }
 .book-reader-title {
-  flex: 1;
   min-width: 0;
   font-family: var(--font-head);
   font-weight: 600;
@@ -2283,6 +2328,7 @@ body.book-reader-open .mini-player { z-index: 215; }
 .book-reader-body { flex: 1; min-height: 0; position: relative; }
 .book-reader-status { padding: 32px 20px; text-align: center; color: var(--text-muted); }
 .book-reader-scroll {
+  position: relative;   /* Bezug für offsetTop der Überschriften (Kapitelanzeige) */
   height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
