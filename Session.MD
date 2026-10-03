@@ -458,6 +458,7 @@ Safari-Erkenntnisse (Chrome auf dem iPhone verhielt sich jeweils anders, trotz g
 - Safari meldete `visualViewport.scale = 1.15` (Auto-Zoom nach Antippen von Suchfeld/Filtern < 16 px oder Seitenzoom „Aa“). Deshalb zählt als Zoom nur, was über der Grundvergrößerung beim Laden liegt (`pinchZoomed`), und bei Vergrößerung ist die Geste erlaubt, wenn der sichtbare Ausschnitt oben steht (`visualViewport.offsetTop`). Gilt auch für `swipeAllowed`.
 - `index.html` wird mit `Cache-Control: no-cache` ausgeliefert (server.js), damit Safari keine alte Seite mit alten `?v=`-Verweisen hält.
 - Diagnose-Hilfe (`?pulldebug`) wurde nach erfolgreichem Test wieder entfernt.
+- **Weitere Dialoge (03.10.):** Auf Benutzerwunsch lassen sich alle Dialoge mit Schließen-Möglichkeit ebenfalls nach unten wegziehen: Audio-Auftrag, Anbieterwahl, Scrape-Log, Anmeldung, Einstellungen, Kennwort, Benutzerverwaltung, Artikel-Editor, Neue Infografik (`PULL_DIALOGS` in `public/app.js`). Ziehen löst denselben Knopf aus wie ✕/Abbrechen, also auch die Rückfrage bei ungespeicherten Änderungen. Nicht beim Pflicht-Kennwortdialog (Knopf ausgeblendet), nicht aus Eingabefeldern und nicht aus bereits gescrollten Bereichen (Log, Listen). Ein Dialog über dem Artikel schließt nur sich selbst. Der eBook-Reader ist bewusst nicht dabei. Geprüft mit simulierten Touch-Gesten in Handy-Breite, nicht auf einem echten iPhone.
 - Offen/Vorschlag: Suchfeld und Filter-Auswahl auf dem Handy auf 16 px, damit Safari beim Antippen nicht mehr hineinzoomt (nicht beauftragt).
 
 ### 8a. Einstellungen und Lesezeichen (02.10.2026)
@@ -477,7 +478,7 @@ Technik:
 - `server.js`: `/api/articles?bookmarks=1` filtert nach dem Rechtefilter und vor der Gruppierung; alle Einträge und der Einzelartikel tragen `bookmarked`. Eine Gruppe erscheint, wenn ihr Anker ein Lesezeichen hat (der Artikel-Dialog setzt es immer auf den Anker).
 - `public/app.js`: `setBookmarkFilter`, `toggleBookmark`, `.card-bookmark`; `handleImgError` ersetzt nur noch das Bild (Badges und Lesezeichen bleiben bei defektem Bild stehen).
 - Geprüft am 02.10.2026: 49/49 Tests (neu `bookmarks.test.cjs`: Speicher, Neuladen, Gast, Nutzer löschen, Routen mit Rechten/404/Cross-Site/401). Browser mit Testserver, Testnutzern und eigener `bookmarks.json` (echte Dateien unberührt): Menüeintrag, Dialog (sofortige Wirkung, Speichern über Neuladen, Automatisch folgt dem Gerät live), Textgröße, Lesezeichen setzen/entfernen, Header-Filter mit Jahr/Kategorie, Telegram-Lesezeichen, Entfernen beim Schließen, Kachel- und Listensymbol, Handy-Breite ohne seitliches Scrollen, Gast (Vorgaben, kein Button, `PUT` → 401). **Nicht geprüft:** echtes iPhone/Safari.
-- Deployment: `server.js` geändert und `bookmarks.cjs` neu → beide kopieren, Dienst neu starten. Frontend: `public/settings.js` neu, `app.js?v=53`, `styles.css?v=69`, `index.html`. `bookmarks.json` entsteht beim ersten Lesezeichen im App-Verzeichnis (Schreibrecht für `ralf` besteht wie bei `audiobook-progress.json`).
+- Deployment: `server.js` geändert und `bookmarks.cjs` neu → beide kopieren, Dienst neu starten. Frontend: `public/settings.js` neu, `app.js?v=54`, `styles.css?v=69`, `index.html`. `bookmarks.json` entsteht beim ersten Lesezeichen im App-Verzeichnis (Schreibrecht für `ralf` besteht wie bei `audiobook-progress.json`).
 
 ### Bildvollansicht
 
@@ -489,6 +490,7 @@ Die endgültige Bedienung nach mehreren Korrekturen:
 - Ein vergrößertes Bild lässt sich mit der Maus verschieben.
 - Desktop-Einfachklick auf das Bild ist neutral; Hintergrundklick und Escape schließen.
 - Touch-Geräte: Ein einfacher Tap auf das Bild schließt die Vollansicht wieder. Diese Ausnahme wurde nach einem iPhone-Problem ergänzt. Pinch-Zoom bleibt zu berücksichtigen.
+- **Bild herunterladen (03.10.):** Auf dem iPhone ließ sich Safaris Abfrage für `<a download>` nicht abbrechen. Auf Touch-Geräten mit `navigator.canShare` öffnen beide Download-Knöpfe (Artikelbild und Vollansicht) jetzt das System-Teilen-Menü mit der Bilddatei („Bild sichern“ → Fotos), jederzeit abbrechbar. Am PC bleibt der normale Download. Weil iOS das Teilen-Menü nur direkt nach dem Tippen öffnet, wird das Bild beim Anzeigen schon geladen (`prepareImageFile`, die letzten 3 Bilder im Speicher). Ist es noch nicht bereit, erscheint „Bitte noch einmal tippen“; ohne Teilen-Funktion öffnet sich das Bild in einem neuen Tab. Geprüft mit einem Stellvertreter für `navigator.share` (Datei, Name, Typ, Abbrechen), nicht auf einem echten iPhone.
 
 ### PDF.js
 

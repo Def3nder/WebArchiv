@@ -167,6 +167,7 @@ function showFullscreenImage(index) {
   $counter.hidden = count < 2;
   $counter.textContent = `${index + 1} / ${count}`;
   document.getElementById('img-fullscreen-download').href = url;
+  prepareImageFile(url);
   if (fsGallery.articleId && count > 1) {
     history.replaceState(null, '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
   }
@@ -906,6 +907,7 @@ function renderDetail(article) {
     });
   } else if (article.imageUrl) {
     const openFs = () => openImageFullscreen(article.imageUrl);
+    prepareImageFile(article.imageUrl); // für „Bild herunterladen“ (Teilen-Menü)
     document.getElementById('detail-hero-expand')?.addEventListener('click', e => { e.stopPropagation(); openFs(); });
     document.getElementById('detail-hero-img')?.addEventListener('click', openFs);
   }
@@ -2184,6 +2186,94 @@ enablePullToClose({
   fading: null,
   canStart: () => imageZoom.scale <= 1,
   onClose: closeImageFullscreen,
+});
+
+// Weitere Dialoge: Nach-unten-Ziehen löst dasselbe aus wie ihr Schließen-Knopf
+// (also auch die Rückfrage bei ungespeicherten Änderungen). Nicht aus Eingabefeldern
+// oder bereits gescrollten Bereichen (Log, Listen) und nicht, solange der Knopf
+// ausgeblendet ist (Pflicht-Kennwortdialog).
+function scrolledWithin(target, root) {
+  for (let el = target; el && el !== root; el = el.parentElement) {
+    if (el.scrollTop > 1) return true;
+  }
+  return false;
+}
+const PULL_DIALOGS = [
+  // [Panel, Schließen-Knopf, abgedunkelter Hintergrund]
+  ['#tts-overlay .scrape-panel', '#tts-close', '#tts-backdrop'],
+  ['#scrape-overlay .scrape-panel', '#scrape-close', '#scrape-backdrop'],
+  ['#login-overlay .login-panel', '#login-close', '#login-overlay .login-backdrop'],
+  ['#tts-provider-dialog', '#tts-provider-dialog button[value="cancel"]'],
+  ['#article-editor', '#article-editor-close'],
+  ['#infographic-new', '#infographic-new-cancel'],
+  ['#password-dialog', '#password-cancel'],
+  ['#settings-dialog', '#settings-form button[type="submit"]'],
+  ['#user-admin', '#user-admin-close'],
+];
+for (const [panelSel, closeSel, fadeSel] of PULL_DIALOGS) {
+  const panel = document.querySelector(panelSel);
+  const closeBtn = document.querySelector(closeSel);
+  if (!panel || !closeBtn) continue;
+  enablePullToClose({
+    scroller: panel,
+    moving: panel,
+    fading: fadeSel ? document.querySelector(fadeSel) : null,
+    canStart: e => !closeBtn.hidden && !closeBtn.disabled
+      && !e.target.closest?.('textarea, input, select, [contenteditable]')
+      && !scrolledWithin(e.target, panel),
+    onClose: () => closeBtn.click(),
+  });
+}
+
+// ── Bild herunterladen ─────────────────────────────────────────────────────
+// Auf Touch-Geräten mit Teilen-Funktion (iPhone/iPad) öffnet der Button das System-
+// Teilen-Menü mit dem Bild („Bild sichern“ → Fotos), das sich jederzeit abbrechen
+// lässt; Safaris Abfrage für <a download> hat dort keinen Abbrechen-Knopf. Sonst
+// bleibt es beim normalen Download. Das Bild wird beim Anzeigen schon vorbereitet,
+// weil iOS das Teilen-Menü nur unmittelbar nach dem Tippen öffnet.
+const shareImages = () => typeof navigator.canShare === 'function' && matchMedia('(pointer: coarse)').matches;
+const imageFiles = new Map(); // URL → Promise<File|null>
+const readyImageFiles = new Map(); // URL → File|null (fertig geladen)
+const IMAGE_FILE_CACHE = 3;
+
+function prepareImageFile(url) {
+  if (!shareImages() || !url) return Promise.resolve(null);
+  if (imageFiles.has(url)) return imageFiles.get(url);
+  const name = decodeURIComponent(new URL(url, location.href).pathname.split('/').pop() || 'bild.jpg');
+  const promise = fetch(url)
+    .then(r => (r.ok ? r.blob() : null))
+    .then(blob => (blob ? new File([blob], name, { type: blob.type || 'image/jpeg' }) : null))
+    .catch(() => null)
+    .then(file => { readyImageFiles.set(url, file); return file; });
+  imageFiles.set(url, promise);
+  // Nur die letzten Bilder behalten.
+  while (imageFiles.size > IMAGE_FILE_CACHE) {
+    const oldest = imageFiles.keys().next().value;
+    imageFiles.delete(oldest);
+    readyImageFiles.delete(oldest);
+  }
+  return promise;
+}
+
+document.addEventListener('click', async e => {
+  const link = e.target.closest?.('.detail-hero-download, #img-fullscreen-download');
+  if (!link || !shareImages()) return;
+  e.preventDefault();
+  const url = link.getAttribute('href');
+  const ready = readyImageFiles.has(url);
+  const file = ready ? readyImageFiles.get(url) : await prepareImageFile(url);
+  if (!file || !navigator.canShare({ files: [file] })) {
+    // Teilen mit Datei nicht möglich: Bild in neuem Tab öffnen (dort per langem Druck sichern).
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  try {
+    await navigator.share({ files: [file] });
+  } catch (err) {
+    // AbortError = abgebrochen. NotAllowedError: Bild war noch nicht geladen und iOS
+    // verlangt ein neues Tippen – jetzt liegt es bereit.
+    if (err.name === 'NotAllowedError' && !ready) alert('Das Bild ist jetzt bereit. Bitte noch einmal tippen.');
+  }
 });
 
 // Handle back button
