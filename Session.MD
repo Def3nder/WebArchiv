@@ -23,7 +23,7 @@ Diese Datei ist eine thematische Zusammenfassung, kein wortgetreues Transkript. 
 | Artikel bearbeiten | Admin bearbeitet die vollständige Original-Markdown-Datei; Versionskonflikte dürfen keine fremden Änderungen überschreiben. |
 | TTS-Menü | „Audio erzeugen“ gehört in die Detailansicht eines Artikels, nicht in das globale Admin-Menü der Kachelansicht. |
 | TTS-Auswahl | Radio-Buttons; verfügbares Qwen vorausgewählt. OpenAI wird bei Qwen-Ausfall nicht automatisch ausgewählt. Start erst durch Bestätigung. |
-| Qwen-Verarbeitung | Protokoll `webarchiv-qwen-v4`: vollständiges Original-Markdown hinein, fertige MP3 heraus; Originalscript entscheidet über Verarbeitung und Seed. |
+| Qwen-Verarbeitung | Protokoll `webarchiv-qwen-v5`: vollständiges Original-Markdown hinein, fertige MP3 heraus; Originalscript entscheidet über Verarbeitung und Seed. |
 | Providerwechsel | Kein automatischer Wechsel eines laufenden Auftrags zu OpenAI und keine erneute Synthese wegen eines Reindex-Fehlers. |
 | PDF.js | Lokal unter `public/vendor/pdfjs`; der zuvor erwogene CDN-Umbau wurde nicht umgesetzt. |
 | Inhaltsaktualisierung | Reindex statt Dienstneustart. Beim Cron-Wrapper besteht noch eine Abweichung vom dokumentierten Soll, siehe Abschnitt 10. |
@@ -556,7 +556,7 @@ Gemeinsam für OpenAI und Qwen:
 
 Das Popup orientiert sich am Scrape-Dialog und zeigt Titel, Status, neue CLI-Meldungen, Fehler und Ergebnislink. Schließen, Escape oder Backdrop beenden nur die Anzeige und ihr Polling. „Auftrag abbrechen“ ist eine getrennte Serveraktion. Wiederöffnen und Browser-Reload sollen einen vorhandenen Auftrag anzeigen, ohne ihn nochmals zu starten.
 
-Unveränderte Logs werden nicht ständig neu angehängt; die Scrollposition bleibt erhalten. Polling läuft für Status und beim Qwen-Dienst zusätzlich für die Lease weiter. Die UI wartet zwischen Abfragen, vermeidet überlappende Requests und bietet nach Verbindungsfehlern eine Wiederaufnahme der Anzeige.
+Unveränderte Logs werden nicht ständig neu angehängt; die Scrollposition bleibt erhalten. Polling läuft für Status und beim Qwen-Dienst zusätzlich für die Lease weiter. Die UI wartet zwischen Abfragen, vermeidet überlappende Requests und bietet nach Verbindungsfehlern eine Wiederaufnahme der Anzeige. **Nachtrag 04.10.:** Zeitstempel aller Audio-Logzeilen werden im Browser in dessen lokaler Zeit als `YYYY-MM-DD HH:MM:SS` angezeigt (keine Millisekunden und kein `Z`).
 
 Der Spawn-Adapter liest stdout/stderr zeilenweise, verarbeitet NDJSON-Fortschritt und sendet einen kooperativen IPC-Abbruch; nach zehn Sekunden gibt es einen harten Rückfall. Jobs liegen nur im RAM. Ein Serverneustart stellt den Verlauf nicht wieder her. Fertige Jobs werden begrenzt aufbewahrt; Fehlerarbeitsverzeichnisse können zur Diagnose verbleiben. Verwaiste `.tts-lock`-Dateien erst nach Prüfung laufender Prozesse behandeln.
 
@@ -605,7 +605,7 @@ Auf ausdrücklichen Benutzerwunsch verarbeitet `generate_mp3_with_embedding.py` 
 - Die v3-Zusage „gleicher Seed für alle Chunks“ ist aufgehoben. `seed` und `seed_strategy` des Originalscripts gelten; bei `increment` können sich die Chunk-Seeds unterscheiden.
 - Qwen liefert immer eine fertige MP3. WebArchiv prüft Codec und positive Dauer mit FFprobe und dekodiert vollständig mit FFmpeg zur Validierung; es kodiert nicht erneut.
 - Die validierten MP3-Bytes werden unverändert unter dem parallelen `audio/`-Pfad veröffentlicht.
-- Der derzeitige HTTP-Vertrag überträgt keine interne Chunkanzahl. Die UI zeigt einen laufenden Artikelauftrag; `chunks: 1` im Worker-Ergebnis bedeutet einen Remote-Auftrag, nicht einen internen Qwen-Chunk.
+- **Chunk-Fortschritt (04.10.):** Der Worker filtert nur die unveränderten Startzeilen des Originalscripts (`Chunk 3/26: 346/520 characters (boundary: paragraph)`) und überträgt sie nummeriert. Alle anderen Qwen-Ausgaben werden verworfen. WebArchiv schreibt neue Einträge genau einmal als `[SYNTHESIS]` ins Log; `chunks: 1` im Worker-Ergebnis bedeutet weiterhin einen Remote-Auftrag.
 
 ### Qwen-HTTP-Vertrag
 
@@ -613,9 +613,9 @@ Alle Requests verwenden ein gemeinsames Bearer-Token. Keine direkte Browserverbi
 
 | Request | Bedeutung |
 | --- | --- |
-| `GET /v1/health` | `protocol: webarchiv-qwen-v4`, `full_markdown: true`, `audio_format: mp3`, Byte-Limit und Lease |
+| `GET /v1/health` | `protocol: webarchiv-qwen-v5`, `full_markdown: true`, `audio_format: mp3`, `chunk_progress: true`, Byte-Limit und Lease |
 | `PUT /v1/jobs/<UUIDv4>` | JSON mit vollständigem `markdown`; 202 nach Annahme |
-| `GET /v1/jobs/<id>` | Zustand `running`, `succeeded`, `failed` oder `cancelled`; erneuert Lease |
+| `GET /v1/jobs/<id>` | Zustand und bis zu 100 nummerierte Chunk-Startmeldungen; erneuert Lease |
 | `GET /v1/jobs/<id>/audio` | Fertige MP3 mit `audio/mpeg` und definierter Länge |
 | `DELETE /v1/jobs/<id>` | Abbruch/Aufräumen; unbekannte IDs werden gegen verspäteten Start markiert |
 

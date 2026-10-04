@@ -1,6 +1,6 @@
 # Qwen3-TTS: vollständiges Markdown → fertige MP3
 
-Aktueller Vertrag: **webarchiv-qwen-v4**. Auf Benutzerwunsch übernimmt
+Aktueller Vertrag: **webarchiv-qwen-v5**. Auf Benutzerwunsch übernimmt
 `generate_mp3_with_embedding.py` die gesamte Artikelverarbeitung. Die frühere
 Aufteilung und Kalibrierung durch WebArchiv (v2/v3) gilt für Qwen nicht mehr.
 
@@ -12,7 +12,8 @@ WebArchiv prüft bei jedem Klick auf „Audio erzeugen“ unabhängig vom CLI-St
 `tts.provider` serverseitig den authentifizierten Qwen-Endpunkt `/v1/health`
 und das Vorhandensein des konfigurierten OpenAI-Schlüssels.
 Das Zeitlimit beträgt drei Sekunden einschließlich Antwortkörper. Nur eine
-gültige v4-Antwort mit Markdown-/MP3-Unterstützung gilt als erreichbar.
+gültige v4-Antwort mit Markdown-/MP3- und Chunk-Fortschrittsunterstützung gilt
+als erreichbar.
 Der Dialog zeigt beide Anbieter mit Status. Nur verfügbare Anbieter sind
 auswählbar; es gibt keine Vorauswahl. Für OpenAI werden Gültigkeit/Guthaben
 nicht abgefragt, sondern nur das Vorhandensein des Schlüssels geprüft.
@@ -78,7 +79,7 @@ Zwischen Artikeln wird der Worker beendet und der GPU-Speicher freigegeben.
 .\tts\Test-QwenServer.ps1
 ```
 
-Erwartet: `protocol: webarchiv-qwen-v4`, `full_markdown: true`, `audio_format: mp3`.
+Erwartet: `protocol: webarchiv-qwen-v5`, `full_markdown: true`, `audio_format: mp3`.
 Alte Brücken werden vor einer Synthese abgewiesen. Danach einen kurzen und langen
 Artikel über die normale Bestätigung im Archiv testen.
 
@@ -122,9 +123,9 @@ auf den Modellserver, kein CORS. Job-IDs sind clientseitig erzeugte UUIDv4.
 
 | Request | Vertrag |
 | --- | --- |
-| `GET /v1/health` | `protocol: webarchiv-qwen-v4`, `full_markdown: true`, `audio_format: mp3`, `max_markdown_bytes: 1000000`, `lease_seconds: 90` |
+| `GET /v1/health` | `protocol: webarchiv-qwen-v5`, `full_markdown: true`, `audio_format: mp3`, `chunk_progress: true`, `max_markdown_bytes: 1000000`, `lease_seconds: 90` |
 | `PUT /v1/jobs/<id>` | JSON `{ "markdown": "vollständiger Originalinhalt" }`; 202 mit ID und Status |
-| `GET /v1/jobs/<id>` | ID und `running`, `succeeded`, `failed` oder `cancelled`; erneuert die Lease |
+| `GET /v1/jobs/<id>` | ID, Zustand und bis zu 100 nummerierte `progress`-Einträge; erneuert die Lease |
 | `GET /v1/jobs/<id>/audio` | Erst nach Erfolg: `audio/mpeg`, exakte `Content-Length`, fertige MP3 |
 | `DELETE /v1/jobs/<id>` | Abbruch/Aufräumen; unbekannte IDs erhalten eine Abbruchmarkierung |
 
@@ -136,10 +137,11 @@ Worker. Die Providerwahl vor der Bestätigung ist oben beschrieben.
 
 Polling läuft zur Statuskontrolle und Lease-Erneuerung weiter, schreibt aber
 keine unveränderten Logmeldungen. Das Log behält seine Scrollposition.
-Die interne Chunkanzahl des Originalscripts wird derzeit nicht über HTTP
-übertragen: WebArchiv zeigt den laufenden Artikelauftrag ohne erfundene Chunkzahl.
-Der Worker-Ergebnisvertrag enthält `chunks: 1` als einen Remote-Auftrag,
-nicht als Behauptung über die internen Qwen-Chunks.
+Der Worker filtert ausschließlich unveränderte Startmeldungen des Originalscripts
+wie `Chunk 3/26: 346/520 characters (boundary: paragraph)` und überträgt sie
+nummeriert an WebArchiv. Alle übrigen Modellmeldungen werden verworfen. WebArchiv
+zeigt jeden neuen Chunk-Start einmal als `[SYNTHESIS]`-Logzeile; `chunks: 1` im
+Worker-Ergebnis bezeichnet weiterhin einen Remote-Auftrag.
 
 Abbruch beendet die Prozessgruppe (Linux) bzw. den Prozessbaum (Windows).
 Nach 90 Sekunden ohne Kontakt wird ein laufender Auftrag ebenfalls beendet.

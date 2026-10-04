@@ -13,8 +13,8 @@ test('Providerwahl prüft live: gesund, gestoppt, stumm, HTTP-Fehler und falsche
     if (mode === 'silent') return;
     if (mode === 'body-stalled') { res.writeHead(200); res.write('{'); return; }
     if (mode === 'unauthorized') { res.writeHead(401); res.end(); return; }
-    res.end(JSON.stringify({ protocol: mode === 'old' ? 'webarchiv-qwen-v3' : 'webarchiv-qwen-v4',
-      full_markdown: true, audio_format: 'mp3', max_markdown_bytes: 1000000 }));
+    res.end(JSON.stringify({ protocol: mode === 'old' ? 'webarchiv-qwen-v3' : 'webarchiv-qwen-v5',
+      full_markdown: true, audio_format: 'mp3', chunk_progress: mode !== 'no-progress', max_markdown_bytes: 1000000 }));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const config = { tts: { provider: 'openai', api_key_environment_variable: 'TEST_KEY' },
@@ -23,7 +23,7 @@ test('Providerwahl prüft live: gesund, gestoppt, stumm, HTTP-Fehler und falsche
   const select = () => providerInfo({ config, env, timeoutMs: 100 });
   try {
     assert.deepEqual((await select()).providers.map(p => p.available), [true, true]);
-    for (mode of ['unauthorized', 'old', 'silent', 'body-stalled']) {
+    for (mode of ['unauthorized', 'old', 'no-progress', 'silent', 'body-stalled']) {
       const before = Date.now();
       const info = await select();
       assert.deepEqual(info.providers.map(p => p.available), [false, true]);
@@ -39,7 +39,7 @@ test('Providerwahl prüft live: gesund, gestoppt, stumm, HTTP-Fehler und falsche
     assert.deepEqual((await select()).providers.map(p => p.available), [false, true]);
     delete env.TEST_KEY;
     assert.deepEqual((await select()).providers.map(p => p.available), [false, false]);
-    assert.equal(requests, 6);
+    assert.equal(requests, 7);
   } finally { server.closeAllConnections(); server.close(); }
 });
 

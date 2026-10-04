@@ -37,7 +37,7 @@ Artikel, vorhandene Audiodateien und `users.json` bleiben erhalten.
 
 Die Python-Dateien `qwen_http_service.py` und `qwen_chunk_worker.py` gehören auf
 den separaten Qwen-Rechner. Für die neue Anbieterauswahl brauchen sie kein
-Update, sofern dort bereits **webarchiv-qwen-v4** läuft. Bei älteren Versionen
+Update, sofern dort bereits **webarchiv-qwen-v5** läuft. Bei älteren Versionen
 beide Python-Dateien gemeinsam aktualisieren und den Qwen-Dienst neu starten.
 Details: [Qwen-Anbindung](QWEN-ANBINDUNG.md).
 

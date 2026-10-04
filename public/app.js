@@ -1690,6 +1690,18 @@ async function refreshTtsArticle(articleId) {
     }
   }
 }
+function formatTtsOutput(output) {
+  const pad = value => String(value).padStart(2, '0');
+  return String(output || '').replace(
+    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)(?= \[)/gm,
+    (original, timestamp) => {
+      const date = new Date(timestamp);
+      if (!Number.isFinite(date.getTime())) return original;
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+        + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    }
+  );
+}
 async function watchTts(jobId) {
   const generation = ++ttsPollGeneration;
   let failures = 0;
@@ -1714,7 +1726,7 @@ async function watchTts(jobId) {
       ttsActive = !s.done;
       updateTtsActions();
       document.getElementById('tts-article').textContent = s.title;
-      const nextOutput = s.output || '';
+      const nextOutput = formatTtsOutput(s.output);
       if ($ttsOutput.textContent !== nextOutput) {
         const scrollTop = $ttsOutput.scrollTop;
         const atBottom = scrollTop + $ttsOutput.clientHeight >= $ttsOutput.scrollHeight - 24;

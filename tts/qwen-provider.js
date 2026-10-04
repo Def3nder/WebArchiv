@@ -4,13 +4,15 @@ import { setTimeout as delay } from 'node:timers/promises';
 import settings from './provider-config.cjs';
 import { requestQwen } from './qwen-http.js';
 
+const CHUNK_PROGRESS = /^Chunk \d+\/\d+: \d+\/\d+ characters \(boundary: [^)]+\)$/;
+
 // Vertrag des mitgelieferten qwen_http_service.py, keine OpenAI-Kompatibilität.
 export async function synthesizeQwen(text, file, c, signal, emit = () => {}, fetchImpl = requestQwen) {
   const { baseUrl, token } = settings.providerSettings(c);
   if (!text.trim() || Buffer.byteLength(text, 'utf8') > 1_000_000) throw new Error('Markdown ist leer oder größer als 1 MB.');
   const id = randomUUID(), endpoint = `${baseUrl}/v1/jobs/${id}`;
   const headers = { Authorization: `Bearer ${token}` };
-  let attempted = false, complete = false;
+  let attempted = false, complete = false, lastProgress = 0;
   async function request(url, options = {}, independent = false) {
     const timeout = AbortSignal.timeout(independent ? 5000 : 15000);
     const response = await fetchImpl(url, { ...options, redirect: 'error',
@@ -22,8 +24,9 @@ export async function synthesizeQwen(text, file, c, signal, emit = () => {}, fet
   try {
     signal?.throwIfAborted();
     const health = await (await request(`${baseUrl}/v1/health`)).json();
-    if (health.protocol !== 'webarchiv-qwen-v4' || health.full_markdown !== true || health.audio_format !== 'mp3') {
-      throw new Error('Qwen-Dienst benötigt das Update auf webarchiv-qwen-v4 (vollständiges Markdown → fertige MP3). Bitte HTTP-Brücke und Worker aktualisieren.');
+    if (health.protocol !== 'webarchiv-qwen-v5' || health.full_markdown !== true
+        || health.audio_format !== 'mp3' || health.chunk_progress !== true) {
+      throw new Error('Qwen-Dienst benötigt webarchiv-qwen-v5 mit Chunk-Fortschritt (vollständiges Markdown → fertige MP3). Bitte HTTP-Brücke und Worker aktualisieren.');
     }
     if (!Number.isInteger(health.max_markdown_bytes) || Buffer.byteLength(text, 'utf8') > health.max_markdown_bytes) throw new Error('Markdown überschreitet das Serverlimit.');
     attempted = true;
@@ -33,7 +36,18 @@ export async function synthesizeQwen(text, file, c, signal, emit = () => {}, fet
     for (;;) {
       signal?.throwIfAborted();
       const status = await (await request(endpoint)).json();
-      if (status.id !== id || !['running', 'succeeded', 'failed', 'cancelled'].includes(status.status)) throw new Error('Ungültiger Qwen-Auftragsstatus.');
+      if (status.id !== id || !['running', 'succeeded', 'failed', 'cancelled'].includes(status.status)
+          || !Array.isArray(status.progress) || status.progress.length > 100) throw new Error('Ungültiger Qwen-Auftragsstatus.');
+      let previous = 0;
+      for (const progress of status.progress) {
+        if (!Number.isInteger(progress?.sequence) || progress.sequence < 1 || progress.sequence <= previous
+            || typeof progress.message !== 'string' || !CHUNK_PROGRESS.test(progress.message)) {
+          throw new Error('Ungültiger Qwen-Chunk-Fortschritt.');
+        }
+        previous = progress.sequence;
+        if (progress.sequence > lastProgress) emit('synthesis', progress.message);
+      }
+      lastProgress = Math.max(lastProgress, previous);
       if (status.status === 'succeeded') break;
       if (status.status !== 'running') throw new Error(`Qwen-Auftrag ${status.status}.`);
       await delay(1000, undefined, { signal });

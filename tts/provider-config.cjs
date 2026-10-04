@@ -29,8 +29,9 @@ async function providerInfo({ config, env = process.env, request, timeoutMs = 30
         throw new Error('health');
       }
       const health = await response.json();
-      if (health.protocol !== 'webarchiv-qwen-v4' || health.full_markdown !== true
-          || health.audio_format !== 'mp3' || !Number.isInteger(health.max_markdown_bytes)
+      if (health.protocol !== 'webarchiv-qwen-v5' || health.full_markdown !== true
+          || health.audio_format !== 'mp3' || health.chunk_progress !== true
+          || !Number.isInteger(health.max_markdown_bytes)
           || health.max_markdown_bytes < 1) throw new Error('contract');
       qwenAvailable = true;
     } catch { /* Verfügbarkeit wird angezeigt; kein automatischer Providerwechsel. */ }

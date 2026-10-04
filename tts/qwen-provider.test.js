@@ -24,14 +24,16 @@ async function temporary(fn) {
   try { await fn(dir); } finally { await fs.rm(dir, { recursive: true, force: true }); }
 }
 
-function server({ audio = 'MP3', status = 'succeeded', health = 'webarchiv-qwen-v4', startError, audioLength, contentType = 'audio/mpeg', onStatus, seed = 123 } = {}) {
+function server({ audio = 'MP3', status = 'succeeded', health = 'webarchiv-qwen-v5', chunkProgress = true,
+  progress = [], startError, audioLength, contentType = 'audio/mpeg', onStatus, seed = 123 } = {}) {
   const calls = [];
   const fetch = async (url, options) => {
     assert.ok(url.startsWith('http://qwen.invalid:8765/v1/'));
     assert.equal(options.redirect, 'error');
     calls.push([url, options.method || 'GET']);
     const id = url.split('/')[5];
-    if (url.endsWith('/health')) return Response.json({ protocol: health, full_markdown: true, audio_format: 'mp3', max_markdown_bytes: 1_000_000 });
+    if (url.endsWith('/health')) return Response.json({ protocol: health, full_markdown: true,
+      audio_format: 'mp3', chunk_progress: chunkProgress, max_markdown_bytes: 1_000_000 });
     if (options.method === 'PUT') {
       assert.deepEqual(Object.keys(JSON.parse(options.body)), ['markdown']);
       if (startError) throw new Error('Startantwort verloren');
@@ -45,6 +47,7 @@ function server({ audio = 'MP3', status = 'succeeded', health = 'webarchiv-qwen-
       'content-type': contentType, 'content-length': String(audioLength ?? Buffer.byteLength(audio)) } });
     onStatus?.();
     return Response.json({ id, status: Array.isArray(status) ? status.shift() || 'succeeded' : status,
+      progress: typeof progress === 'function' ? progress() : progress,
       seed: typeof seed === 'function' ? seed() : seed });
   };
   return { calls, fetch };
@@ -58,9 +61,16 @@ test('Qwen-Vertrag: eine Synthese, MP3-Download, Aufräumen; kein OpenAI', () =>
   assert.deepEqual(mock.calls.map(x => x[1]), ['GET', 'PUT', 'GET', 'GET', 'DELETE']);
 }));
 
-test('Vollständiges Markdown in einem Request; identisches Polling bleibt still', () => temporary(async dir => {
+test('Vollständiges Markdown in einem Request; neue Chunk-Starts genau einmal und unverändert', () => temporary(async dir => {
   const markdown = '\ufeff# Titel\r\nDatum: 2026-09-17\r\n\r\n**Text** [Link](https://example.org)\r\n'.repeat(120);
-  const mock = server({ status: ['running', 'running', 'succeeded'] });
+  const first = 'Chunk 1/2: 338/520 characters (boundary: sentence)';
+  const second = 'Chunk 2/2: 346/520 characters (boundary: paragraph)';
+  const progress = [
+    [{ sequence: 1, message: first }],
+    [{ sequence: 1, message: first }],
+    [{ sequence: 1, message: first }, { sequence: 2, message: second }],
+  ];
+  const mock = server({ status: ['running', 'running', 'succeeded'], progress: () => progress.shift() });
   const bodies = [], events = [];
   const fetch = (url, options) => {
     if (options.method === 'PUT') bodies.push(JSON.parse(options.body));
@@ -68,15 +78,16 @@ test('Vollständiges Markdown in einem Request; identisches Polling bleibt still
   };
   await synthesizeQwen(markdown, path.join(dir, 'out.mp3'), config, undefined, (...event) => events.push(event), fetch);
   assert.deepEqual(bodies, [{ markdown }]);
-  assert.deepEqual(events, []);
+  assert.deepEqual(events, [['synthesis', first], ['synthesis', second]]);
 }));
 
 test('Qwen: inkompatibler Dienst startet nichts; Fehler/Verlust werden nicht wiederholt', () => temporary(async dir => {
-  for (const options of [{ health: 'webarchiv-qwen-v3' }, { status: 'failed' }, { startError: true }, { audioLength: 20 }, { contentType: 'audio/wav' }]) {
+  for (const options of [{ health: 'webarchiv-qwen-v3' }, { chunkProgress: false }, { status: 'failed' },
+    { startError: true }, { audioLength: 20 }, { contentType: 'audio/wav' }]) {
     const mock = server(options);
     await assert.rejects(synthesizeQwen('Test', path.join(dir, String(mock.calls.length) + Math.random()), config, undefined, undefined, mock.fetch));
     assert.ok(mock.calls.filter(x => x[1] === 'PUT').length <= 1);
-    if (options.health) assert.equal(mock.calls.length, 1);
+    if (options.health || options.chunkProgress === false) assert.equal(mock.calls.length, 1);
     else assert.equal(mock.calls.at(-1)[1], 'DELETE');
   }
 }));
@@ -207,8 +218,9 @@ test('Qwen-Abbruch hinterlässt keine MP3 oder Sperre', () => temporary(async di
 
 test('Status-Polling lässt unverändertes Log und manuelle Scrollposition stehen', async () => {
   const source = await fs.readFile(path.join(root, '../public/app.js'), 'utf8');
-  const start = source.indexOf('async function watchTts(jobId) {');
-  const end = source.indexOf('\n}', start) + 2;
+  const start = source.indexOf('function formatTtsOutput(output) {');
+  const watchStart = source.indexOf('async function watchTts(jobId) {', start);
+  const end = source.indexOf('\n}', watchStart) + 2;
   let polls = 0, writes = 0, value = 'Bestehende Zeile';
   const output = { scrollTop: 50, clientHeight: 100, scrollHeight: 500,
     get textContent() { return value; },
@@ -227,6 +239,21 @@ test('Status-Polling lässt unverändertes Log und manuelle Scrollposition stehe
   assert.equal(polls, 3);
   assert.equal(writes, 1);
   assert.equal(output.scrollTop, 50);
+});
+
+test('Audio-Log formatiert ISO-Zeit in lokale Browserzeit mit vollen Sekunden', async () => {
+  const source = await fs.readFile(path.join(root, '../public/app.js'), 'utf8');
+  const start = source.indexOf('function formatTtsOutput(output) {');
+  const watchStart = source.indexOf('async function watchTts(jobId) {', start);
+  const end = source.indexOf('\n}', watchStart) + 2;
+  const stamp = '2026-10-04T12:34:56.789Z';
+  const date = new Date(stamp);
+  const pad = value => String(value).padStart(2, '0');
+  const expected = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+    + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  const actual = vm.runInNewContext(source.slice(start, end) + `\nformatTtsOutput('${stamp} [START] Test\\n')`, { Date });
+  assert.equal(actual, `${expected} [START] Test\n`);
+  assert.doesNotMatch(actual.split(' [')[0], /[TZ]/);
 });
 
 test('Echter HTTP-Dienst und Original-CLI-Vertrag: Markdown rein, fertige MP3 unverändert zurück', () => temporary(async dir => {
