@@ -124,6 +124,10 @@ select { font: inherit; color: inherit; }
   font-size: 1.65rem;
   line-height: 1;
 }
+.logo-text {
+  /* Ersetzt das Kerning des durch die Farbtrennung aufgeteilten „We“. */
+  margin-inline-start: -0.055em;
+}
 
 .search-wrap {
   flex: 1;
@@ -1588,7 +1592,7 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
 .login-logo {
   display: flex;
   align-items: baseline;
-  gap: 2px;
+  gap: 0;
   justify-content: center;
   font-family: var(--font-head);
   font-size: 1.6rem;

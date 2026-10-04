@@ -869,8 +869,8 @@ function renderDetail(article) {
           ${currentUser?.role === 'admin' ? `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Artikel bearbeiten und Audio erzeugen">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Artikel editieren</button><button type="button" class="header-menu-item" data-tts-action="start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</button><button type="button" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></details>` : ''}
           ${infographicBtnHtml}
           ${copyBtnHtml}
-          ${bookmarkBtnHtml}
           ${shareBtnHtml}
+          ${bookmarkBtnHtml}
         </div>
       </div>`;
   const summaryHtml = article.summary
