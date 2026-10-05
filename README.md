@@ -30,6 +30,10 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Audio/Video/PDF)
 
 - **Backend**: ein einzelnes `server.js` (Express 4). CommonJS (`require`), kein Build-Schritt.
 - **Frontend**: statische SPA unter `public/` (kein Framework), Hash-Routing (`#/article/<id>`), Cache-Busting per `?v=N`.
+  Die aktuelle Ansicht wird pro Benutzer auf dem Gerät gespeichert: Suche, Filter, Seite, Layout,
+  Listenposition sowie geöffneter Artikel bzw. Hörbuch-/eBook-Reader werden nach einem vollständigen
+  Browser- oder PWA-Neustart wiederhergestellt. Ein ausdrücklich anderer Artikel-Link hat Vorrang;
+  beim Abmelden wird der lokale Sitzungsstand des Benutzers gelöscht.
 - **Daten**: reine Dateien unter `www/` — keine Datenbank. Der Index wird beim Start und auf Anforderung neu aufgebaut.
 
 ---
@@ -333,6 +337,7 @@ public/
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
 ├── user-admin.js             Kennwort ändern, Benutzerverwaltung, Öffentlicher Zugang
 ├── settings.js               Einstellungen pro Gerät (Schrift, Hell/Dunkel/Automatisch, Textgröße)
+├── session-state.js          Lokaler Sitzungsstand pro Benutzer (Ansicht, Navigation, Scrollposition)
 ├── audiobooks.js             Hörbuch-Liste, -Detail, Player und Miniplayer
 ├── book-reader.js            eBook-Text zum Hörbuch (Vollbild-Reiter, Leseposition)
 ├── favicon.svg               Favicon (Bücherregal, Gold auf Dunkel) – Vorlage für die beiden folgenden

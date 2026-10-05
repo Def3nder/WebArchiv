@@ -30,6 +30,13 @@ let articleSessionActive = false;   // Media Session gehört dem Artikel-Audio (
 let currentAudioBtn = null;
 let currentUser = null; // { email, role, allowedAuthors }
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
+const sessionViewStore = window.WebArchivSessionState;
+let currentViewItemId = '';
+let lastListPosition = null;
+let lastDetailPosition = null;
+let restoringSessionView = false;
+let sessionViewSaveTimer = null;
+let layoutChangeGeneration = 0;
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
 const $app            = document.getElementById('app');
@@ -70,6 +77,154 @@ const $loginBtnText   = document.getElementById('login-btn-text');
 const $loginSpinner   = document.getElementById('login-spinner');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+function deviceStorage() {
+  try { return window.localStorage; } catch { return null; }
+}
+
+function nextPaint() {
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+function listViewportTop() {
+  const bar = document.getElementById('filter-bar');
+  return bar ? bar.getBoundingClientRect().bottom : 0;
+}
+
+function activeAuthorScope() {
+  return state.externalAudio ? '__external_audio__' : state.author;
+}
+
+function captureListPosition() {
+  const cards = [...$app.querySelectorAll('.card[data-id]')];
+  const viewportTop = listViewportTop();
+  let anchorIndex = cards.findIndex(card => card.getBoundingClientRect().bottom > viewportTop);
+  if (anchorIndex < 0) anchorIndex = Math.max(0, cards.length - 1);
+  const anchor = cards[anchorIndex] || null;
+  return {
+    authorScope: activeAuthorScope(),
+    anchorId: anchor?.dataset.id || '',
+    anchorIndex,
+    offset: anchor ? anchor.getBoundingClientRect().top - viewportTop : 0,
+    top: Math.max(0, window.scrollY),
+    ratio: 0,
+  };
+}
+
+async function restoreListPosition(position) {
+  if (!position) return;
+  if (position.authorScope !== activeAuthorScope()) {
+    scrollToResults('auto');
+    return;
+  }
+  await nextPaint();
+  const cards = [...$app.querySelectorAll('.card[data-id]')];
+  const anchor = cards.find(card => card.dataset.id === position.anchorId)
+    || cards[Math.min(position.anchorIndex || 0, Math.max(0, cards.length - 1))];
+  if (!anchor) {
+    window.scrollTo({ top: position.top || 0, behavior: 'auto' });
+    return;
+  }
+  const viewportTop = listViewportTop();
+  const wantedTop = viewportTop + (position.offset || 0);
+  window.scrollBy({ top: anchor.getBoundingClientRect().top - wantedTop, behavior: 'auto' });
+}
+
+function captureDetailPosition() {
+  const panel = $overlay.querySelector('.overlay-panel');
+  if (!panel) return null;
+  const max = Math.max(0, panel.scrollHeight - panel.clientHeight);
+  return {
+    anchorId: '', anchorIndex: 0, offset: 0,
+    top: Math.max(0, panel.scrollTop),
+    ratio: max > 0 ? panel.scrollTop / max : 0,
+  };
+}
+
+async function restoreDetailPosition(position) {
+  const panel = $overlay.querySelector('.overlay-panel');
+  if (!panel || !position) return;
+  const apply = () => {
+    const max = Math.max(0, panel.scrollHeight - panel.clientHeight);
+    panel.scrollTop = Math.min(max, position.top || (position.ratio || 0) * max);
+  };
+  await nextPaint();
+  apply();
+
+  // Hero- und Artikelbilder verändern die Dialoghöhe oft erst nach dem Rendern.
+  // Erst danach ist die gespeicherte absolute Position wieder erreichbar.
+  const pendingImages = [...$detail.querySelectorAll('img')].filter(image => !image.complete);
+  if (pendingImages.length) {
+    await Promise.race([
+      Promise.all(pendingImages.map(image => new Promise(resolve => {
+        image.addEventListener('load', resolve, { once: true });
+        image.addEventListener('error', resolve, { once: true });
+      }))),
+      new Promise(resolve => setTimeout(resolve, 1200)),
+    ]);
+    await nextPaint();
+    apply();
+  }
+  // Auch bereits gecachte Bilder und Webfonts können ihre endgültigen Maße erst
+  // einige Frames später liefern (besonders beim Wiederaufbau einer mobilen PWA).
+  await new Promise(resolve => setTimeout(resolve, 250));
+  await nextPaint();
+  apply();
+  lastDetailPosition = captureDetailPosition();
+}
+
+function activeViewKind() {
+  if (typeof bookReader !== 'undefined' && bookReader.el) return 'reader';
+  return !$overlay.hidden && currentViewItemId ? 'detail' : 'list';
+}
+
+function snapshotSessionView() {
+  const kind = activeViewKind();
+  if (kind === 'list') lastListPosition = captureListPosition();
+  const readerId = typeof bookReader !== 'undefined' && bookReader.book?.id ? bookReader.book.id : '';
+  return {
+    list: {
+      q: state.q,
+      author: state.author,
+      externalAudio: state.externalAudio,
+      year: state.year,
+      category: state.category,
+      telegram: state.telegram,
+      bookmarks: state.bookmarks,
+      page: state.page,
+      limit: state.limit,
+      layout: currentLayout(),
+      bookSort: state.bookSort,
+    },
+    view: {
+      kind,
+      itemId: kind === 'reader' ? readerId : (kind === 'detail' ? currentViewItemId : ''),
+      listPosition: lastListPosition || captureListPosition(),
+      detailPosition: kind === 'detail' || kind === 'reader'
+        ? (lastDetailPosition || captureDetailPosition())
+        : null,
+    },
+  };
+}
+
+function saveCurrentViewState() {
+  clearTimeout(sessionViewSaveTimer);
+  sessionViewSaveTimer = null;
+  if (!sessionViewStore || !currentUser || restoringSessionView) return;
+  const snapshot = snapshotSessionView();
+  sessionViewStore.save(deviceStorage(), currentUser, snapshot);
+}
+
+function scheduleCurrentViewSave() {
+  clearTimeout(sessionViewSaveTimer);
+  sessionViewSaveTimer = setTimeout(saveCurrentViewState, 180);
+}
+
+function clearCurrentViewState(user = currentUser) {
+  clearTimeout(sessionViewSaveTimer);
+  sessionViewSaveTimer = null;
+  sessionViewStore?.clear(deviceStorage(), user);
+}
+
 const imageZoom = {
   scale: 1,
   x: 0,
@@ -350,10 +505,7 @@ async function login(email, password) {
     hideLogin();
     applyUserUI(currentUser);
     if (!(await ensurePasswordChanged())) return;
-    await loadMeta();
-    await loadArticles();
-    const deepLink = parseArticleHash(location.hash);
-    if (deepLink) openArticle(deepLink.id, { image: deepLink.image, deepLink: true });
+    await restoreSessionView();
   } catch {
     $loginError.textContent = 'Netzwerkfehler. Bitte erneut versuchen.';
     $loginError.hidden = false;
@@ -367,6 +519,7 @@ async function login(email, password) {
 async function logout() {
   // Hörposition vor dem Abmelden sichern und Wiedergabe beenden.
   if (typeof bookPlayerClose === 'function') await bookPlayerClose();
+  clearCurrentViewState(currentUser);
   try { await fetch('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
   // Auf Guest-User umstellen (oder null, falls keine Public-Autoren konfiguriert)
   try {
@@ -378,10 +531,21 @@ async function logout() {
   [$filterAuthor, $filterYear, $filterCategory].forEach(sel => {
     while (sel.options.length > 1) sel.remove(1);
   });
-  state.page = 1;
-  state.author = '';
-  state.year = '';
-  state.category = '';
+  Object.assign(state, {
+    q: '', author: '', externalAudio: false, year: '', category: '', telegram: false,
+    bookmarks: false, page: 1, limit: 24, bookSort: 'recent',
+  });
+  currentViewItemId = '';
+  lastListPosition = null;
+  lastDetailPosition = null;
+  $searchInput.value = '';
+  $searchClear.classList.remove('visible');
+  setTelegram(false);
+  setBookmarkFilter(false);
+  setLayout('tall');
+  $filterLimit.value = '24';
+  const bookSort = document.getElementById('filter-book-sort');
+  if (bookSort) bookSort.value = 'recent';
   applyBookMode();
   $filterAuthor.value = '';
   $filterYear.value = '';
@@ -389,6 +553,7 @@ async function logout() {
   if (currentUser) {
     await loadMeta();
     await loadArticles();
+    saveCurrentViewState();
   } else {
     showLogin();
   }
@@ -612,11 +777,11 @@ function renderPagination(page, pages) {
 // ── Load & display articles ────────────────────────────────────────────────
 // Zum Anfang der Ergebnisliste scrollen: erste Kachel direkt unter der
 // (klebenden) Filterleiste, unabhängig von deren Höhe auf Desktop oder Handy.
-function scrollToResults() {
+function scrollToResults(behavior = 'smooth') {
   const bar = document.querySelector('.filter-bar');
   const covered = bar ? (parseFloat(getComputedStyle(bar).top) || 0) + bar.offsetHeight : 0;
   const top = window.scrollY + $app.getBoundingClientRect().top - covered;
-  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  window.scrollTo({ top: Math.max(0, top), behavior });
 }
 
 async function loadArticles() {
@@ -668,6 +833,8 @@ async function loadArticles() {
       });
     });
 
+    if (!restoringSessionView) scheduleCurrentViewSave();
+
   } catch (err) {
     $app.innerHTML = `<div class="empty-state"><p>Fehler beim Laden: ${esc(err.message)}</p></div>`;
   } finally {
@@ -678,8 +845,17 @@ async function loadArticles() {
 // ── Article detail overlay ─────────────────────────────────────────────────
 // dir: Richtung beim Blättern (für die Vollansicht: erstes/letztes Bild);
 // image/deepLink: Link auf ein Bild der Gruppe → direkt in der Vollansicht öffnen.
-async function openArticle(id, { dir = 0, image = null, deepLink = false } = {}) {
+async function openArticle(id, {
+  dir = 0,
+  image = null,
+  deepLink = false,
+  historyMode = 'push',
+  detailPosition = null,
+  restoring = false,
+} = {}) {
   if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) return;
+  if ($overlay.hidden) lastListPosition = captureListPosition();
+  if (!detailPosition) lastDetailPosition = null;
   selectedTtsArticle = null;
   updateTtsActions();
   $overlay.hidden = false;
@@ -689,8 +865,10 @@ async function openArticle(id, { dir = 0, image = null, deepLink = false } = {})
   stopVideo();
   $detail.innerHTML = `<div style="padding:80px 40px;text-align:center;color:var(--text-muted)"><div class="spinner" style="margin:0 auto"></div></div>`;
 
-  // Update hash without triggering popstate
-  history.pushState(null, '', `#/article/${sanitizeForId(id)}`);
+  // Beim Wiederherstellen/Zurücknavigieren keinen zusätzlichen Verlaufseintrag erzeugen.
+  const articleHash = `#/article/${sanitizeForId(id)}`;
+  if (historyMode === 'replace') history.replaceState(null, '', articleHash);
+  else if (historyMode === 'push') history.pushState(null, '', articleHash);
 
   try {
     const article = await fetchArticle(id);
@@ -698,8 +876,14 @@ async function openArticle(id, { dir = 0, image = null, deepLink = false } = {})
     state.currentArticleIdx = state.currentItems.findIndex(a => a.id === id);
     if (state.currentArticleIdx < 0) state.currentArticleIdx = state.currentItems.findIndex(a => a.id === article.id);
     if (article.id !== id) history.replaceState(null, '', `#/article/${sanitizeForId(article.id)}`);
+    currentViewItemId = article.id;
     updateNavButtons();
     renderDetail(article);
+    const panel = $overlay.querySelector('.overlay-panel');
+    if (panel && !detailPosition) {
+      panel.scrollTop = 0;
+      lastDetailPosition = captureDetailPosition();
+    }
 
     const urls = detailImageUrls(article);
     const $fs = document.getElementById('img-fullscreen');
@@ -713,6 +897,9 @@ async function openArticle(id, { dir = 0, image = null, deepLink = false } = {})
       if (urls.length) openGalleryFullscreen(urls, dir < 0 ? urls.length - 1 : 0, article.id);
       else closeImageFullscreen();
     }
+    if (detailPosition) await restoreDetailPosition(detailPosition);
+    if (!restoring) saveCurrentViewState();
+    return true;
   } catch (err) {
     // Geschützter Artikel + Gast (403) → Anmeldung anbieten statt "nicht gefunden".
     // Overlay ausblenden, aber Deep-Link im Hash lassen, damit die Anmeldung den
@@ -722,9 +909,18 @@ async function openArticle(id, { dir = 0, image = null, deepLink = false } = {})
       stopAudio();
       stopVideo();
       showLogin('Dieser Artikel ist geschützt. Bitte melden Sie sich an.');
-      return;
+      return false;
+    }
+    if (restoring) {
+      $overlay.hidden = true;
+      document.body.style.overflow = '';
+      currentViewItemId = '';
+      lastDetailPosition = null;
+      history.replaceState(null, '', '#/');
+      return false;
     }
     $detail.innerHTML = `<div style="padding:40px"><p>Artikel nicht gefunden.</p></div>`;
+    return false;
   }
 }
 
@@ -734,6 +930,8 @@ function closeOverlay() {
   updateTtsActions();
   $overlay.hidden = true;
   document.body.style.overflow = '';
+  currentViewItemId = '';
+  lastDetailPosition = null;
   stopAudio();
   stopVideo();
   history.pushState(null, '', '#/');
@@ -744,6 +942,7 @@ function closeOverlay() {
   // ein gleichzeitig gesetzter Filter (Kategorie-Klick) zuerst lädt.
   if (bookmarksChanged && state.bookmarks && !isBookMode()) setTimeout(loadArticles, 0);
   bookmarksChanged = false;
+  saveCurrentViewState();
 }
 
 // ── Lesezeichen ───────────────────────────────────────────────────────────
@@ -1358,15 +1557,95 @@ async function loadMeta() {
   });
 }
 
+function applySavedListState(saved) {
+  if (!saved) return;
+  Object.assign(state, saved.list);
+  $searchInput.value = state.q;
+  $searchClear.classList.toggle('visible', !!state.q);
+  setTelegram(state.telegram);
+  setBookmarkFilter(state.bookmarks);
+  setLayout(state.layout);
+  if ([...$filterLimit.options].some(option => Number(option.value) === state.limit)) {
+    $filterLimit.value = String(state.limit);
+  } else {
+    state.limit = 24;
+    $filterLimit.value = '24';
+  }
+  const bookSort = document.getElementById('filter-book-sort');
+  if (bookSort) bookSort.value = state.bookSort;
+}
+
+function applySavedFilterControls() {
+  const authorValue = state.externalAudio ? '__external_audio__' : state.author;
+  if ([...$filterAuthor.options].some(option => option.value === authorValue)) {
+    $filterAuthor.value = authorValue;
+  } else {
+    state.author = '';
+    state.externalAudio = false;
+    $filterAuthor.value = '';
+  }
+  for (const [select, key] of [[$filterYear, 'year'], [$filterCategory, 'category']]) {
+    if ([...select.options].some(option => option.value === state[key])) select.value = state[key];
+    else { state[key] = ''; select.value = ''; }
+  }
+  applyBookMode();
+}
+
+async function restoreSessionView() {
+  const explicitDeepLink = parseArticleHash(location.hash);
+  const saved = sessionViewStore?.load(deviceStorage(), currentUser);
+  restoringSessionView = true;
+  try {
+    applySavedListState(saved);
+    await loadMeta();
+    applySavedFilterControls();
+    await loadArticles();
+
+    // Eine inzwischen kürzere Ergebnismenge darf nicht auf einer leeren alten Seite landen.
+    if (state.pages > 0 && state.page > state.pages) {
+      state.page = state.pages;
+      await loadArticles();
+    }
+
+    lastListPosition = saved?.view.listPosition || null;
+    await restoreListPosition(lastListPosition);
+
+    const target = explicitDeepLink || (saved?.view.kind !== 'list' && saved?.view.itemId
+      ? { id: saved.view.itemId, image: null }
+      : null);
+    if (target) {
+      const restoresSavedView = !!saved?.view.itemId && saved.view.itemId === target.id;
+      const restored = await openArticle(target.id, {
+        image: target.image,
+        deepLink: !!explicitDeepLink,
+        historyMode: 'replace',
+        detailPosition: restoresSavedView ? saved?.view.detailPosition : null,
+        restoring: true,
+      });
+      if (restored && restoresSavedView && saved?.view.kind === 'reader'
+          && typeof currentBookDetail !== 'undefined' && currentBookDetail?.ebook
+          && typeof openBookReader === 'function') {
+        await openBookReader(currentBookDetail);
+      }
+    } else if (!explicitDeepLink) {
+      history.replaceState(null, '', '#/');
+    }
+  } finally {
+    restoringSessionView = false;
+    saveCurrentViewState();
+  }
+}
+
 // ── Event wiring ───────────────────────────────────────────────────────────
 let searchTimer = null;
 $searchInput.addEventListener('input', () => {
   const val = $searchInput.value.trim();
   $searchClear.classList.toggle('visible', val.length > 0);
+  state.q = val;
+  state.page = 1;
+  scheduleCurrentViewSave();
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
-    state.q = val;
-    state.page = 1;
     loadArticles();
   }, 300);
 });
@@ -1384,13 +1663,23 @@ function applyBookMode() {
   document.body.classList.toggle('mode-audiobooks', isBookMode());
 }
 
-$filterAuthor.addEventListener('change', () => {
+$filterAuthor.addEventListener('change', async () => {
+  restoringSessionView = true;
   state.externalAudio = $filterAuthor.value === '__external_audio__';
   state.author = state.externalAudio ? '' : $filterAuthor.value;
   if (state.author === 'Telegram') setTelegram(true);
   applyBookMode();
   state.page = 1;
-  loadArticles();
+  lastListPosition = null;
+  try {
+    await loadArticles();
+    scrollToResults('auto');
+    await nextPaint();
+    lastListPosition = captureListPosition();
+  } finally {
+    restoringSessionView = false;
+    saveCurrentViewState();
+  }
 });
 
 $filterYear.addEventListener('change', () => {
@@ -1425,13 +1714,36 @@ function currentLayout() {
 function groupMode() {
   return currentLayout() !== 'list' && state.author !== 'Infografiken';
 }
-// Wechsel zwischen Liste und Kacheln ändert die Einträge → neu laden.
-function changeLayout(layout) {
+// Die Darstellung wechselt am aktuellen Ort. Liste und Kacheln verwenden zwar
+// unterschiedliche Gruppierung, setzen aber weder Seite noch sichtbaren Anker zurück.
+async function changeLayout(layout) {
+  if (!LAYOUTS.includes(layout) || layout === currentLayout()) return;
+  const generation = ++layoutChangeGeneration;
+  const position = captureListPosition();
   const wasGrouped = groupMode();
   setLayout(layout);
-  if (groupMode() !== wasGrouped) {
-    state.page = 1;
-    loadArticles();
+  restoringSessionView = true;
+  try {
+    // Ein bereits laufender Filter-/Seitenabruf darf nicht anschließend Daten
+    // der alten Gruppierung in das gerade gewählte Layout schreiben.
+    while (state.loading && generation === layoutChangeGeneration) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    if (generation !== layoutChangeGeneration) return;
+    if (groupMode() !== wasGrouped) {
+      await loadArticles();
+      if (state.pages > 0 && state.page > state.pages) {
+        state.page = state.pages;
+        await loadArticles();
+      }
+    }
+    await restoreListPosition(position);
+    lastListPosition = captureListPosition();
+  } finally {
+    if (generation === layoutChangeGeneration) {
+      restoringSessionView = false;
+      saveCurrentViewState();
+    }
   }
 }
 $filterLayout.addEventListener('click', event => {
@@ -2399,13 +2711,33 @@ window.addEventListener('popstate', () => {
     if (!$overlay.hidden) {
       $overlay.hidden = true;
       document.body.style.overflow = '';
+      currentViewItemId = '';
+      lastDetailPosition = null;
       stopAudio();
       stopVideo();
     }
+    saveCurrentViewState();
   } else if (hash.startsWith('#/article/')) {
     const link = parseArticleHash(hash);
-    openArticle(link.id, { image: link.image, deepLink: true });
+    openArticle(link.id, { image: link.image, deepLink: true, historyMode: 'none' });
   }
+});
+
+// Mobile Browser dürfen die App im Hintergrund vollständig verwerfen. Deshalb
+// während der Bedienung speichern; pagehide/visibilitychange sind nur die letzte Sicherung.
+window.addEventListener('scroll', () => {
+  if ($overlay.hidden && (typeof bookReader === 'undefined' || !bookReader.el)) {
+    lastListPosition = captureListPosition();
+    scheduleCurrentViewSave();
+  }
+}, { passive: true });
+$overlay.querySelector('.overlay-panel')?.addEventListener('scroll', () => {
+  lastDetailPosition = captureDetailPosition();
+  scheduleCurrentViewSave();
+}, { passive: true });
+window.addEventListener('pagehide', saveCurrentViewState);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveCurrentViewState();
 });
 
 // ── Global img error handler (avoids quote-nesting in onerror attr) ────────
@@ -2459,13 +2791,7 @@ async function init() {
   }
   if (!(await ensurePasswordChanged())) return;
 
-  // Check for article deep-link in hash
-  const deepLink = parseArticleHash(location.hash);
-
-  await loadMeta();
-  await loadArticles();
-
-  if (deepLink) openArticle(deepLink.id, { image: deepLink.image, deepLink: true });
+  await restoreSessionView();
 }
 
 init();

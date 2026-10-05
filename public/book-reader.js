@@ -66,7 +66,20 @@ async function openBookReader(book) {
   document.body.appendChild(el);
   document.body.classList.add('book-reader-open');
   bookReader.el = el;
+  if (typeof saveCurrentViewState === 'function') saveCurrentViewState();
   el.addEventListener('click', onBookReaderClick);
+  const head = el.querySelector('.book-reader-head');
+  if (head && typeof enablePullToClose === 'function') {
+    enablePullToClose({
+      scroller: head,
+      moving: el,
+      fading: null,
+      // Titel sowie Kapitel-/Prozentanzeige dienen als Griff. Die Knöpfe behalten
+      // ihre eigene Bedienung und lösen beim Ziehen keine Schließgeste aus.
+      canStart: event => !event.target.closest?.('.book-btn'),
+      onClose: closeBookReader,
+    });
+  }
   bookUpdateUi();
   el.querySelector('[data-reader="close"]').focus();
 
@@ -338,6 +351,7 @@ function closeBookReader() {
   bookReader.stepProgress = null;
   document.body.classList.remove('book-reader-open');
   bookUpdateUi();
+  if (typeof saveCurrentViewState === 'function') saveCurrentViewState();
 }
 
 function onBookReaderClick(event) {

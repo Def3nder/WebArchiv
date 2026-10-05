@@ -24,6 +24,7 @@ Diese Datei ist eine thematische Zusammenfassung, kein wortgetreues Transkript. 
 | TTS-Menü | „Audio erzeugen“ gehört in die Detailansicht eines Artikels, nicht in das globale Admin-Menü der Kachelansicht. |
 | TTS-Auswahl | Radio-Buttons; verfügbares Qwen vorausgewählt. OpenAI wird bei Qwen-Ausfall nicht automatisch ausgewählt. Start erst durch Bestätigung. |
 | Qwen-Verarbeitung | Protokoll `webarchiv-qwen-v5`: vollständiges Original-Markdown hinein, fertige MP3 heraus; Originalscript entscheidet über Verarbeitung und Seed. |
+| Sitzungsansicht (05.10.) | Pro Benutzer und Gerät werden Suche, Filter, Seite, Layout, Listen-/Detailposition sowie geöffneter Artikel, Hörbuch oder eBook-Reader lokal wiederhergestellt. Abmelden löscht diesen lokalen Benutzerstand. |
 | Providerwechsel | Kein automatischer Wechsel eines laufenden Auftrags zu OpenAI und keine erneute Synthese wegen eines Reindex-Fehlers. |
 | PDF.js | Lokal unter `public/vendor/pdfjs`; der zuvor erwogene CDN-Umbau wurde nicht umgesetzt. |
 | Inhaltsaktualisierung | Reindex statt Dienstneustart. Beim Cron-Wrapper besteht noch eine Abweichung vom dokumentierten Soll, siehe Abschnitt 10. |
@@ -455,6 +456,17 @@ Aus der frühen Aufbauphase stammen Dark-/Light-Modus, persistierte Schriftwahl,
 ### Logo (03.10.2026)
 
 Kein Abstand mehr zwischen dem goldenen „W“ und „ebArchiv“ (`.site-logo { gap: 0 }`). Ein Klick auf das Logo führt zur Startseite: Bild-Vollansicht und Artikel schließen (bei ungespeicherten Editor-Änderungen mit Rückfrage, Abbruch hält an), danach dasselbe wie „Reset“ (Suche, Filter, Telegram, Lesezeichen-Filter, Ansicht länglich, 24 pro Seite, Seite 1) und nach oben scrollen. Der Hover-Effekt (Akzentfarbe) gilt nur noch für Geräte mit Maus (`@media (hover: hover)`), sonst blieb „ebArchiv“ nach dem Tippen auf dem iPhone eingefärbt; das Logo verliert nach dem Klick den Fokus. Geprüft im Testserver. `app.js?v=58`, `styles.css?v=74`.
+
+### Sitzungsansicht und Layoutwechsel (05.10.2026)
+
+- Mobile Browser und PWA-Fenster dürfen im Hintergrund vollständig verworfen werden. `public/session-state.js` speichert deshalb einen versionierten Zustand in `localStorage`, getrennt nach Benutzer bzw. Gast; keine Zugangsdaten, Tokens oder Artikeltexte.
+- Wiederhergestellt werden Suche, Autor-/Audio-/Jahr-/Kategorie-/Telegram-/Lesezeichenfilter, Seite, Seitengröße, Kachel-/Listenlayout, Hörbuchsortierung, Listenanker, geöffneter Artikel oder Hörbuch, dessen Dialogposition und ein geöffneter eBook-Reader. Der eBook-Lesestand und Hörbuch-Hörstand bleiben wie zuvor serverseitig pro Nutzer gespeichert.
+- Ein anderer expliziter `#/article/...`-Link hat Vorrang. Entspricht der Hash jedoch der gespeicherten Ansicht, gilt er als wiederaufgebautes PWA-Fenster und erhält auch Dialogposition bzw. eBook-Reader. Nicht mehr zugängliche Einträge fallen auf die gespeicherte Liste zurück.
+- Das Umschalten zwischen quadratisch, länglich und Liste setzt weder Filter noch Seite zurück. Weil Liste und Kacheln unterschiedliche Gruppierung verwenden, wird erforderlichenfalls neu geladen; sichtbarer Kartenanker und Offset werden danach wiederhergestellt. Ist die alte Seite nicht mehr vorhanden, wird nur bis zur letzten gültigen Seite begrenzt.
+- Die Listenposition ist an den aktuell ausgewählten Autor bzw. „mit Audio“ gebunden, nicht an das Layout. Beim Layoutwechsel desselben Autors bleibt sie erhalten; nach einem Autorenwechsel beginnt die neue Ergebnisliste oben und übernimmt nicht die Scrollposition des vorherigen Autors.
+- Gespeichert wird nach relevanten Zustandsänderungen und gedrosselt beim Scrollen, zusätzlich bei `visibilitychange` und `pagehide`. Der zuletzt beobachtete Dialogstand bleibt im Speicher, damit ein Browser ihn beim Entladen nicht mit `0` überschreibt. Bild- und Fontlayout wird vor der endgültigen Scrollwiederherstellung abgewartet.
+- Bewusst nicht automatisch fortgesetzt werden Audio-/Videowiedergabe sowie Login-, Einstellungen-, Admin-, Editor- und TTS-Dialoge. Beim ausdrücklichen Abmelden wird der lokale Zustand dieses Benutzers gelöscht.
+- Dateien/Cache: `public/session-state.js?v=2`, `public/app.js?v=66`, `public/book-reader.js?v=10`. Automatisiert geprüft: Normalisierung, Benutzertrennung, Löschen, beschädigte Daten und Zuordnung der Listenposition zum Autor. Im Browser geprüft: Filter, Seitengröße, Seite 2, Layoutwechsel ohne Seitenreset, Artikeldetail und dessen Scrollposition über vollständigen Reload; keine Konsolenfehler. eBook-Reader-Wiederöffnung wurde mangels angemeldetem Testnutzer nicht im Browser ausgeführt.
 
 ### Kopieren und Aktionen
 
