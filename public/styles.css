@@ -2248,23 +2248,29 @@ body.has-mini-player #app { padding-bottom: 84px; }
   .book-player { padding: 14px 12px; }
   .book-player-now { flex-direction: column; gap: 2px; }
   .book-player-track { white-space: normal; }
-  /* Oben: Teil zurück, −kurz, Play, +kurz, Teil vor; darunter die großen Sprünge. */
+  /* Alle sieben Transporttasten passen auch auf schmalen iPhones in eine Zeile. */
   .book-player-buttons {
-    display: grid;
-    grid-template-columns: repeat(5, auto);
+    display: flex;
     justify-content: center;
     align-items: center;
-    gap: 8px 6px;
+    flex-wrap: nowrap;
+    gap: clamp(1px, 0.8vw, 4px);
   }
-  .book-player-buttons [data-book="prev"] { grid-area: 1 / 1; }
-  .book-player-buttons [data-book="back-short"] { grid-area: 1 / 2; }
-  .book-player-buttons [data-book="toggle"] { grid-area: 1 / 3; }
-  .book-player-buttons [data-book="forward-short"] { grid-area: 1 / 4; }
-  .book-player-buttons [data-book="next"] { grid-area: 1 / 5; }
-  .book-player-buttons [data-book="back-long"] { grid-area: 2 / 1 / 3 / 3; justify-self: center; }
-  .book-player-buttons [data-book="forward-long"] { grid-area: 2 / 4 / 3 / 6; justify-self: center; }
+  .book-player-buttons .book-btn:not(.book-btn-play) {
+    min-width: 30px;
+    height: 32px;
+    padding: 0 clamp(2px, 0.8vw, 5px);
+    border-radius: 16px;
+    font-size: clamp(0.64rem, 2.8vw, 0.72rem);
+  }
+  .book-player-buttons .book-btn-play {
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+  }
+  .book-player-buttons .book-btn svg { width: 16px; height: 16px; }
+  .book-player-buttons .book-btn-play svg { width: 20px; height: 20px; }
   .book-btn { min-width: 40px; padding: 0 8px; font-size: 0.74rem; }
-  .book-btn-play { width: 48px; height: 48px; }
   .mini-player { gap: 8px; padding: 6px 8px; bottom: 8px; }
 }
 
