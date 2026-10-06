@@ -1169,6 +1169,14 @@ html.overlay-open body {
     justify-content: flex-start;
     margin-left: 0;
   }
+  [data-book-detail] .detail-date-row {
+    align-items: center;
+    flex-direction: row;
+  }
+  [data-book-detail] .detail-action-row-book {
+    justify-content: flex-end;
+    margin-left: auto;
+  }
 }
 .detail-copy-btn {
   display: inline-flex;
@@ -1484,9 +1492,6 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
 }
 /* Hörbuch: Aktionen-Button sitzt rechts, das Menü öffnet bündig mit ihm nach links. */
 .detail-action-row-book .detail-tts-menu .copy-prompt-menu { left: auto; right: 0; }
-@media (max-width: 560px) {
-  .detail-action-row-book .detail-tts-menu .copy-prompt-menu { left: 0; right: auto; }
-}
 .header-menu-item:disabled, .detail-cat-pill:disabled { opacity: .5; cursor: not-allowed; }
 
 .scrape-overlay {
