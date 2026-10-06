@@ -152,10 +152,11 @@ function prepareBookProgress(body, scroller, text) {
   bookReader.el.insertBefore(bar, body);
   const where = bookReader.el.querySelector('.book-reader-where');
 
-  // Kapitel = letzte Überschrift bzw. letztes internes Sprungziel, das das obere
-  // Drittel des Bildschirms erreicht hat. EPUB-Konvertierungen enthalten teils
-  // bildbasierte Überschriften oder nur ein unsichtbares <a id="…"></a>; deren
-  // Namen kommen aus dem Bild-alt-Text bzw. dem verweisenden Inhaltsverzeichnis.
+  // Kapitel = letzte Level-2-Überschrift bzw. letztes eigenständiges internes
+  // Sprungziel, das das obere Drittel des Bildschirms erreicht hat. Gibt es keine
+  // h2, dienen h1 als Fallback. EPUB-Konvertierungen enthalten teils bildbasierte
+  // Überschriften oder nur ein unsichtbares <a id="…"></a>; deren Namen kommen
+  // aus dem Bild-alt-Text bzw. dem verweisenden Inhaltsverzeichnis.
   const cleanChapterName = value => (value || '').replace(/\s+/g, ' ').trim();
   const targetNames = new Map();
   text.querySelectorAll('a[href^="#"]').forEach(link => {
@@ -176,8 +177,21 @@ function prepareBookProgress(body, scroller, text) {
     const target = marker.matches?.('[id]') ? marker : marker.querySelector?.('[id]');
     return target?.id ? (targetNames.get(target.id) || '') : '';
   };
-  const chapters = [...text.querySelectorAll('h1, h2, a[id]')]
-    .filter(marker => marker.tagName !== 'A' || !marker.closest('h1, h2'))
+  const headingSelector = text.querySelector('h2') ? 'h2' : 'h1';
+  const isChapterMarker = marker => {
+    if (marker.tagName !== 'A') return true;
+    if (marker.closest('h1, h2')) return false; // Die umgebende Überschrift genügt.
+    const adjacentImage = marker.nextElementSibling?.matches?.('img[alt]')
+      ? marker.nextElementSibling : null;
+    if (cleanChapterName(adjacentImage?.getAttribute('alt'))) return true;
+    const block = marker.parentElement;
+    // Ein leerer Anker unmittelbar vor einer Überschrift bezeichnet dieselbe Stelle;
+    // Fußnotenanker stehen dagegen in Textabsätzen und dürfen nie Kapitel werden.
+    if (block?.nextElementSibling?.matches?.('h1, h2')) return false;
+    return !cleanChapterName(block?.textContent) && !!targetNames.get(marker.id);
+  };
+  const chapters = [...text.querySelectorAll(`${headingSelector}, a[id]`)]
+    .filter(isChapterMarker)
     .map(marker => ({ marker, name: markerName(marker) }))
     .filter(chapter => chapter.name);
   const maxScroll = () => Math.max(0, scroller.scrollHeight - scroller.clientHeight);
