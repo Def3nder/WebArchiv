@@ -152,19 +152,43 @@ function prepareBookProgress(body, scroller, text) {
   bookReader.el.insertBefore(bar, body);
   const where = bookReader.el.querySelector('.book-reader-where');
 
-  // Kapitel = letzte Überschrift (h1/h2), die das obere Drittel des Bildschirms erreicht hat;
-  // offsetTop bezieht sich auf den Scrollbereich (position: relative) und folgt
-  // Schriftgröße und Bildern.
-  const headings = [...text.querySelectorAll('h1, h2')];
+  // Kapitel = letzte Überschrift bzw. letztes internes Sprungziel, das das obere
+  // Drittel des Bildschirms erreicht hat. EPUB-Konvertierungen enthalten teils
+  // bildbasierte Überschriften oder nur ein unsichtbares <a id="…"></a>; deren
+  // Namen kommen aus dem Bild-alt-Text bzw. dem verweisenden Inhaltsverzeichnis.
+  const cleanChapterName = value => (value || '').replace(/\s+/g, ' ').trim();
+  const targetNames = new Map();
+  text.querySelectorAll('a[href^="#"]').forEach(link => {
+    let id = link.getAttribute('href').slice(1);
+    try { id = decodeURIComponent(id); } catch { /* unverändert verwenden */ }
+    const name = cleanChapterName(link.textContent)
+      || cleanChapterName(link.querySelector('img[alt]')?.getAttribute('alt'));
+    if (id && name && !targetNames.has(id)) targetNames.set(id, name);
+  });
+  const markerName = marker => {
+    const visible = cleanChapterName(marker.textContent);
+    if (visible) return visible;
+    const image = marker.querySelector?.('img[alt]')
+      || (marker.tagName === 'A' && marker.nextElementSibling?.matches?.('img[alt]')
+        ? marker.nextElementSibling : null);
+    const imageName = cleanChapterName(image?.getAttribute('alt'));
+    if (imageName) return imageName;
+    const target = marker.matches?.('[id]') ? marker : marker.querySelector?.('[id]');
+    return target?.id ? (targetNames.get(target.id) || '') : '';
+  };
+  const chapters = [...text.querySelectorAll('h1, h2, a[id]')]
+    .filter(marker => marker.tagName !== 'A' || !marker.closest('h1, h2'))
+    .map(marker => ({ marker, name: markerName(marker) }))
+    .filter(chapter => chapter.name);
   const maxScroll = () => Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   const chapterAt = top => {
     const limit = top + scroller.clientHeight / 3;
-    let lo = 0, hi = headings.length - 1, found = null;
+    let lo = 0, hi = chapters.length - 1, found = null;
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
-      if (headings[mid].offsetTop <= limit) { found = headings[mid]; lo = mid + 1; } else hi = mid - 1;
+      if (chapters[mid].marker.offsetTop <= limit) { found = chapters[mid]; lo = mid + 1; } else hi = mid - 1;
     }
-    return found ? found.textContent.replace(/\s+/g, ' ').trim() : '';
+    return found?.name || '';
   };
   const label = fraction => {
     const percent = Math.round(fraction * 100) + ' %';
