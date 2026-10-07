@@ -194,9 +194,11 @@ select { font: inherit; color: inherit; }
   z-index: 90;
 }
 .filter-bar-inner {
-  max-width: 1400px;
+  /* Mit dem Kachelbereich bündig: auf Tablets waren die Filterränder bislang
+     sichtbar breiter als die Ränder der darunterliegenden Karten. */
+  max-width: 1920px;
   margin: 0 auto;
-  padding: 8px 24px;
+  padding: 8px clamp(16px, 2vw, 32px);
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -215,6 +217,10 @@ select { font: inherit; color: inherit; }
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+/* Wenn Autor, Jahr und Kategorie mit Beschriftungen nicht gemeinsam in die
+   erste Zeile passen, schaltet app.js gezielt auf die kompakte Variante um. */
+.filter-bar-inner.filter-labels-compact .filter-label { display: none; }
+body[data-filter-labels="hidden"] .filter-label { display: none; }
 .filter-select {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -1980,6 +1986,7 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
 .settings-group { border: 0; padding: 0; margin: 0; min-width: 0; }
 .settings-group legend { margin-bottom: 8px; }
 .settings-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+.settings-choices-short { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .settings-choice {
   position: relative;
   display: flex;

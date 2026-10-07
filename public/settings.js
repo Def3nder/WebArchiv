@@ -1,23 +1,37 @@
-/* WebArchiv — Einstellungen (pro Gerät im Browser): Schriftart, Darstellung, Textgröße.
+/* WebArchiv — Anzeige-Einstellungen im Browser.
    Gäste bekommen immer die Vorgaben. Wird vor app.js geladen. */
 
-const DISPLAY_DEFAULTS = { font: 'system', theme: 'auto', textSize: 'normal' };
+const DISPLAY_DEFAULTS = { font: 'system', theme: 'auto', textSize: 'normal', filterLabels: 'auto' };
 const DISPLAY_OPTIONS = {
   font: ['editorial', 'classic', 'modern', 'system'],
   theme: ['light', 'dark', 'auto'],
   textSize: ['small', 'normal', 'large', 'xlarge'],
+  filterLabels: ['auto', 'hidden'],
 };
-const DISPLAY_STORAGE_KEYS = { font: 'wa-font', theme: 'wa-theme', textSize: 'wa-text-size' };
+const DISPLAY_STORAGE_KEYS = {
+  font: 'wa-font',
+  theme: 'wa-theme',
+  textSize: 'wa-text-size',
+  filterLabels: 'wa-filter-labels',
+};
 const darkSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
 let displayGuest = false;
+let displayUserKey = '';
 let displaySettings = readDisplaySettings();
+
+function displayStorageKey(key) {
+  const base = DISPLAY_STORAGE_KEYS[key];
+  // Nur die Filter-Einstellung ist zusätzlich nach Nutzer getrennt. Da
+  // localStorage gerätegebunden ist, ergibt sich Nutzer + Gerät ohne Serverdaten.
+  return key === 'filterLabels' && displayUserKey ? `${base}:${displayUserKey}` : base;
+}
 
 function readDisplaySettings() {
   const settings = {};
-  for (const [key, storageKey] of Object.entries(DISPLAY_STORAGE_KEYS)) {
+  for (const key of Object.keys(DISPLAY_STORAGE_KEYS)) {
     let value = null;
-    try { value = localStorage.getItem(storageKey); } catch { /* Speicher gesperrt */ }
+    try { value = localStorage.getItem(displayStorageKey(key)); } catch { /* Speicher gesperrt */ }
     settings[key] = DISPLAY_OPTIONS[key].includes(value) ? value : DISPLAY_DEFAULTS[key];
   }
   return settings;
@@ -31,17 +45,26 @@ function applyDisplaySettings() {
     ? (darkSchemeQuery.matches ? 'dark' : 'light')
     : settings.theme;
   document.body.dataset.textSize = settings.textSize;
+  document.body.dataset.filterLabels = settings.filterLabels;
+  if (typeof updateFilterLabelLayout === 'function') requestAnimationFrame(updateFilterLabelLayout);
 }
 
-function setDisplayGuest(isGuest) {
-  displayGuest = isGuest;
+function setDisplayUser(user) {
+  displayGuest = !user || user.role === 'guest';
+  const nextUserKey = displayGuest
+    ? ''
+    : encodeURIComponent(String(user.email || 'user').trim().toLowerCase());
+  if (nextUserKey !== displayUserKey) {
+    displayUserKey = nextUserKey;
+    displaySettings = readDisplaySettings();
+  }
   applyDisplaySettings();
 }
 
 function setDisplaySetting(key, value) {
   if (!DISPLAY_OPTIONS[key]?.includes(value)) return;
   displaySettings[key] = value;
-  try { localStorage.setItem(DISPLAY_STORAGE_KEYS[key], value); } catch { /* Speicher gesperrt */ }
+  try { localStorage.setItem(displayStorageKey(key), value); } catch { /* Speicher gesperrt */ }
   applyDisplaySettings();
 }
 

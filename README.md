@@ -185,8 +185,9 @@ Rücksprung:
   Telegram-Schalter. Gespeichert pro Nutzer in `bookmarks.json`. Hörbücher haben keine Lesezeichen.
 - **Einstellungen** (Aktionen → *Einstellungen*, angemeldet): Schriftart (Editorial/Klassisch/
   Modern/System), Darstellung (Hell/Dunkel/Automatisch = folgt dem Gerät), Textgröße des
-  Artikeltexts (Klein/Normal/Groß/Sehr groß). Wirkt sofort, gilt pro Gerät (Browser-Speicher).
-  Gäste bekommen immer die Vorgaben (Automatisch, System, Normal).
+  Artikeltexts (Klein/Normal/Groß/Sehr groß) und Filter-Beschriftungen (Automatisch/Ausblenden).
+  Alles wirkt sofort und liegt im Browser-Speicher; die Filter-Beschriftungen sind darin zusätzlich
+  nach Nutzer getrennt. Gäste bekommen immer die Vorgaben (Automatisch, System, Normal).
 - **Telegram-Sonderregel**: Artikel des Autors „Telegram" sind standardmäßig
   ausgeblendet (Toggle im Header oder `telegram=1` bzw. Autor-Filter „Telegram").
 
@@ -362,7 +363,7 @@ public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
 ├── user-admin.js             Kennwort ändern, Benutzerverwaltung, Öffentlicher Zugang
-├── settings.js               Einstellungen pro Gerät (Schrift, Hell/Dunkel/Automatisch, Textgröße)
+├── settings.js               Anzeige-Einstellungen (inkl. Filter-Beschriftungen pro Nutzer/Gerät)
 ├── session-state.js          Lokaler Sitzungsstand pro Benutzer (Ansicht, Navigation, Scrollposition)
 ├── pwa-update.js             Erkennt neue App-Versionen und bietet kontrolliertes Aktualisieren an
 ├── audiobooks.js             Hörbuch-Liste, -Detail, Player und Miniplayer

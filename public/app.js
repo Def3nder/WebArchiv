@@ -51,6 +51,7 @@ const $filterCategory = document.getElementById('filter-category');
 const $filterLayout   = document.getElementById('filter-layout');
 const $filterLimit    = document.getElementById('filter-limit');
 const $resetFilters   = document.getElementById('reset-filters');
+const $filterBarInner = document.querySelector('.filter-bar-inner');
 const $gridDensityStatus = document.getElementById('grid-density-status');
 const $reindexBtn    = document.getElementById('reindex-btn');
 const $adminMenu      = document.getElementById('admin-menu');
@@ -86,6 +87,23 @@ function deviceStorage() {
 
 function nextPaint() {
   return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+function updateFilterLabelLayout() {
+  if (!$filterBarInner) return;
+
+  // Immer zuerst mit Beschriftungen messen. Dadurch erscheinen sie nach einem
+  // Wechsel ins Querformat automatisch wieder, sobald Kategorie noch in Zeile 1 passt.
+  $filterBarInner.classList.remove('filter-labels-compact');
+  if (document.body.dataset.filterLabels === 'hidden'
+      || window.matchMedia('(max-width: 600px)').matches || isBookMode()) return;
+
+  const authorGroup = $filterAuthor.closest('.filter-group');
+  const categoryGroup = $filterCategory.closest('.filter-group');
+  if (!authorGroup || !categoryGroup || categoryGroup.getClientRects().length === 0) return;
+
+  const categoryWrapped = categoryGroup.offsetTop > authorGroup.offsetTop + 1;
+  $filterBarInner.classList.toggle('filter-labels-compact', categoryWrapped);
 }
 
 function listViewportTop() {
@@ -459,8 +477,9 @@ function applyUserUI(user) {
   if (user?.role !== 'admin') clearTtsUI();
   const isGuest = !user || user.role === 'guest';
   const isAdmin = user?.role === 'admin';
-  // Gäste bekommen immer die Vorgaben (settings.js).
-  setDisplayGuest(isGuest);
+  // Gäste bekommen immer die Vorgaben; die Filter-Beschriftungen sind für
+  // angemeldete Nutzer lokal pro Nutzer und Gerät gespeichert (settings.js).
+  setDisplayUser(user);
   // Aktionen-Button: Admin mit ↺, normaler Nutzer mit Personen-Icon (nur Konto-Einträge).
   $reindexBtn.hidden = isGuest;
   if (isGuest) closeAdminMenu();
@@ -1555,6 +1574,7 @@ async function loadMeta() {
     opt.textContent = c;
     $filterCategory.appendChild(opt);
   });
+  requestAnimationFrame(updateFilterLabelLayout);
 }
 
 function applySavedListState(saved) {
@@ -1661,6 +1681,7 @@ $searchClear.addEventListener('click', () => {
 // Hörbuch-Ansicht: Jahr/Kategorie ausblenden, Sortierung einblenden.
 function applyBookMode() {
   document.body.classList.toggle('mode-audiobooks', isBookMode());
+  requestAnimationFrame(updateFilterLabelLayout);
 }
 
 $filterAuthor.addEventListener('change', async () => {
@@ -1936,7 +1957,10 @@ $app.addEventListener('wheel', event => {
 let gridResizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(gridResizeTimer);
-  gridResizeTimer = setTimeout(applyGridColumns, 120);
+  gridResizeTimer = setTimeout(() => {
+    applyGridColumns();
+    updateFilterLabelLayout();
+  }, 120);
 });
 
 $filterLimit.addEventListener('change', () => {

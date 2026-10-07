@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=80" />
+  <link rel="stylesheet" href="styles.css?v=82" />
 </head>
 <body>
 
@@ -391,7 +391,14 @@
           <label class="settings-choice settings-size-xlarge"><input type="radio" name="textSize" value="xlarge"><span>Sehr groß</span></label>
         </div>
       </fieldset>
-      <p class="account-hint">Gilt nur für dieses Gerät. „Automatisch“ folgt der Hell-/Dunkel-Einstellung des Geräts.</p>
+      <fieldset class="settings-group">
+        <legend class="login-label">Filter-Beschriftungen</legend>
+        <div class="settings-choices settings-choices-short">
+          <label class="settings-choice"><input type="radio" name="filterLabels" value="auto"><span>Automatisch</span></label>
+          <label class="settings-choice"><input type="radio" name="filterLabels" value="hidden"><span>Ausblenden</span></label>
+        </div>
+      </fieldset>
+      <p class="account-hint">Die Filter-Beschriftungen werden pro Nutzer und Gerät gespeichert. „Automatisch“ zeigt sie nur, wenn genug Platz vorhanden ist.</p>
       <div class="account-buttons">
         <button type="submit" class="detail-cat-pill account-primary">Fertig</button>
       </div>
@@ -413,11 +420,11 @@
     <section id="user-admin-panel-public" role="tabpanel" aria-labelledby="user-admin-tab-public" class="user-admin-panel" hidden></section>
   </dialog>
   <script src="user-admin.js?v=10"></script>
-  <script src="settings.js?v=1"></script>
+  <script src="settings.js?v=2"></script>
   <script src="session-state.js?v=4"></script>
   <script src="grid-density.js?v=1"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=69"></script>
+  <script src="app.js?v=71"></script>
   <script src="audiobooks.js?v=6"></script>
   <script src="book-reader.js?v=13"></script>
   <script src="article-editor.js?v=2"></script>
