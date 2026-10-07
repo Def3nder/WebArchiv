@@ -17,7 +17,7 @@ const state = {
   currentItems: [],
   currentArticleIdx: -1,
   bookSort: 'recent',
-  gridColumns: { square: null, tall: null },
+  gridCardWidths: { square: null, tall: null },
 };
 
 // Hörbücher sind kein Artikel-Autor: eigene Liste, eigene Detailansicht (audiobooks.js).
@@ -32,6 +32,7 @@ let currentAudioBtn = null;
 let currentUser = null; // { email, role, allowedAuthors }
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const sessionViewStore = window.WebArchivSessionState;
+const gridDensityMath = window.WebArchivGridDensity;
 let currentViewItemId = '';
 let lastListPosition = null;
 let lastDetailPosition = null;
@@ -195,7 +196,7 @@ function snapshotSessionView() {
       page: state.page,
       limit: state.limit,
       layout: currentLayout(),
-      gridColumns: { ...state.gridColumns },
+      gridCardWidths: { ...state.gridCardWidths },
       bookSort: state.bookSort,
     },
     view: {
@@ -537,7 +538,7 @@ async function logout() {
   Object.assign(state, {
     q: '', author: '', externalAudio: false, year: '', category: '', telegram: false,
     bookmarks: false, page: 1, limit: 24, bookSort: 'recent',
-    gridColumns: { square: null, tall: null },
+    gridCardWidths: { square: null, tall: null },
   });
   currentViewItemId = '';
   lastListPosition = null;
@@ -1698,6 +1699,7 @@ const LAYOUTS = ['square', 'tall', 'list'];
 const GRID_MIN_COLUMNS = 1;
 const GRID_MAX_COLUMNS = 8;
 const GRID_MIN_CARD_WIDTH = 110;
+const GRID_MAX_CARD_WIDTH = 1920;
 const GRID_PINCH_THRESHOLD = 0.12;
 const GRID_CLICK_SUPPRESS_MS = 500;
 let gridClickSuppressedUntil = 0;
@@ -1731,12 +1733,27 @@ function touchDistance(first, second) {
 
 function maxGridColumns(grid) {
   if (!grid) return GRID_MAX_COLUMNS;
-  const style = getComputedStyle(grid);
-  const gap = parseFloat(style.columnGap) || 0;
-  return Math.max(GRID_MIN_COLUMNS, Math.min(
-    GRID_MAX_COLUMNS,
-    Math.floor((grid.clientWidth + gap) / (GRID_MIN_CARD_WIDTH + gap))
-  ));
+  return gridDensityMath.maxColumns(grid.clientWidth, gridGap(grid), {
+    minColumns: GRID_MIN_COLUMNS,
+    maxColumns: GRID_MAX_COLUMNS,
+    minCardWidth: GRID_MIN_CARD_WIDTH,
+  });
+}
+
+function gridGap(grid) {
+  return parseFloat(getComputedStyle(grid).columnGap) || 0;
+}
+
+function cardWidthForColumns(grid, columns) {
+  return gridDensityMath.cardWidthForColumns(grid.clientWidth, gridGap(grid), columns);
+}
+
+function columnsForCardWidth(grid, preferredWidth) {
+  return gridDensityMath.columnsForCardWidth(grid.clientWidth, gridGap(grid), preferredWidth, {
+    minColumns: GRID_MIN_COLUMNS,
+    maxColumns: GRID_MAX_COLUMNS,
+    minCardWidth: GRID_MIN_CARD_WIDTH,
+  });
 }
 
 function currentGridColumns(grid = $app.querySelector('.article-grid')) {
@@ -1753,15 +1770,13 @@ function applyGridColumns() {
     document.body.style.removeProperty('--grid-columns');
     return;
   }
-  const requested = state.gridColumns?.[layout];
-  if (!Number.isInteger(requested)) {
+  const grid = $app.querySelector('.article-grid');
+  const preferredWidth = state.gridCardWidths?.[layout];
+  if (!grid || !Number.isFinite(preferredWidth)) {
     document.body.style.removeProperty('--grid-columns');
     return;
   }
-  const effective = Math.max(GRID_MIN_COLUMNS, Math.min(
-    maxGridColumns($app.querySelector('.article-grid')),
-    requested
-  ));
+  const effective = columnsForCardWidth(grid, preferredWidth);
   document.body.style.setProperty('--grid-columns', String(effective));
 }
 
@@ -1786,7 +1801,11 @@ async function changeGridColumns(step) {
   if (next === current) return;
 
   const position = captureListPosition();
-  state.gridColumns = { ...state.gridColumns, [layout]: next };
+  const preferredWidth = Math.max(GRID_MIN_CARD_WIDTH, Math.min(
+    GRID_MAX_CARD_WIDTH,
+    cardWidthForColumns(grid, next)
+  ));
+  state.gridCardWidths = { ...state.gridCardWidths, [layout]: Math.round(preferredWidth * 10) / 10 };
   document.body.style.setProperty('--grid-columns', String(next));
   scheduleCurrentViewSave();
   await restoreListPosition(position);
@@ -1959,7 +1978,7 @@ $resetFilters.addEventListener('click', () => {
   $filterAuthor.value = '';
   $filterYear.value = '';
   $filterCategory.value = '';
-  state.gridColumns = { square: null, tall: null };
+  state.gridCardWidths = { square: null, tall: null };
   setLayout('tall');
   $filterLimit.value = '24';
   setTelegram(false);

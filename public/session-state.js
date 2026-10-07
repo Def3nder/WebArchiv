@@ -26,9 +26,11 @@
     return Number.isInteger(number) && number >= 1 && number <= max ? number : fallback;
   }
 
-  function gridColumn(value) {
+  function gridCardWidth(value) {
     const number = Number(value);
-    return Number.isInteger(number) && number >= 1 && number <= 8 ? number : null;
+    return Number.isFinite(number) && number >= 110 && number <= 1920
+      ? Math.round(number * 10) / 10
+      : null;
   }
 
   function position(value, fallbackAuthorScope = '') {
@@ -56,8 +58,8 @@
     const author = shortString(list.author, 500);
     const externalAudio = list.externalAudio === true;
     const authorScope = externalAudio ? '__external_audio__' : author;
-    const gridColumns = list.gridColumns && typeof list.gridColumns === 'object'
-      ? list.gridColumns
+    const gridCardWidths = list.gridCardWidths && typeof list.gridCardWidths === 'object'
+      ? list.gridCardWidths
       : {};
 
     return {
@@ -74,9 +76,9 @@
         page: positiveInteger(list.page, 1),
         limit: positiveInteger(list.limit, 24, 200),
         layout,
-        gridColumns: {
-          square: gridColumn(gridColumns.square),
-          tall: gridColumn(gridColumns.tall),
+        gridCardWidths: {
+          square: gridCardWidth(gridCardWidths.square),
+          tall: gridCardWidth(gridCardWidths.tall),
         },
         bookSort,
       },

@@ -405,6 +405,11 @@ body.mode-audiobooks .bookmark-btn { opacity: .35; pointer-events: none; }
   grid-template-columns: repeat(var(--grid-columns, var(--grid-default-columns)), minmax(0, 1fr));
   gap: 16px;
 }
+body:not(.layout-list) .article-grid {
+  /* Vertikales Scrollen bleibt nativ; Zwei-Finger-Skalierung gehört überall
+     im Raster der Kacheldichte und wird nicht vom Seitenzoom übernommen. */
+  touch-action: pan-y;
+}
 @media (min-width: 1451px) { .article-grid { --grid-default-columns: 5; } }
 @media (min-width: 1751px) { .article-grid { --grid-default-columns: 6; } }
 @media (max-width: 1100px) { .article-grid { --grid-default-columns: 3; } }

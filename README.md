@@ -168,10 +168,12 @@ Rücksprung:
 - **Filter**: Autor, Jahr, Kategorie, Seitengröße, Ansicht (quadratisch/länglich/Liste).
   Paginierung server-seitig.
 - **Kacheldichte**: In der quadratischen und länglichen Ansicht verändert Zusammenziehen
-  bzw. Spreizen mit zwei Fingern die Spaltenzahl; am Desktop dient dazu `Strg`+Mausrad.
-  Die beiden Ansichten merken sich ihre Dichte getrennt pro Benutzer und Gerät. Das Raster
-  nutzt auf normalen Desktopbildschirmen nahezu die volle Breite und bleibt auf Ultrawide
-  bei 1920 px begrenzt. Reset stellt die responsive Vorgabe wieder her.
+  bzw. Spreizen mit zwei Fingern die Kachelgröße; am Desktop dient dazu `Strg`+Mausrad.
+  Die beiden Ansichten merken sich ihre bevorzugte Kachelbreite getrennt pro Benutzer und
+  Gerät. Bei Drehung oder Größenänderung berechnet das Raster daraus automatisch mehr oder
+  weniger Spalten, sodass die Kacheln ungefähr gleich groß bleiben. Das Raster nutzt auf
+  normalen Desktopbildschirmen nahezu die volle Breite und bleibt auf Ultrawide bei 1920 px
+  begrenzt. Reset stellt die responsive Vorgabe wieder her.
 - **Lesezeichen** (nur angemeldet): Button zwischen Kopieren und Teilen im Artikel setzt/löscht
   ein Lesezeichen (blau = gesetzt); Kacheln mit Lesezeichen tragen ein kleines blaues Symbol. Der
   Lesezeichen-Button im Header (blau = aktiv) zeigt nur Artikel mit Lesezeichen, kombinierbar mit

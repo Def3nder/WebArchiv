@@ -20,7 +20,7 @@ test('Sitzungsansicht wird pro Benutzer vollständig und normalisiert gespeicher
     list: {
       q: 'Liebe', author: 'Joe Turan', externalAudio: false, year: '2026', category: 'Beziehungen',
       telegram: true, bookmarks: true, page: 4, limit: 48, layout: 'list', bookSort: 'title',
-      gridColumns: { square: 7, tall: 4 },
+      gridCardWidths: { square: 182.5, tall: 248 },
     },
     view: {
       kind: 'detail', itemId: 'Joe Turan/2026/artikel.md',
@@ -32,7 +32,7 @@ test('Sitzungsansicht wird pro Benutzer vollständig und normalisiert gespeicher
   const restored = sessionState.load(device, { email: 'ralf@example.de', role: 'user' });
   assert.equal(restored.list.page, 4);
   assert.equal(restored.list.layout, 'list');
-  assert.deepEqual(restored.list.gridColumns, { square: 7, tall: 4 });
+  assert.deepEqual(restored.list.gridCardWidths, { square: 182.5, tall: 248 });
   assert.equal(restored.view.kind, 'detail');
   assert.equal(restored.view.listPosition.authorScope, 'Joe Turan');
   assert.equal(restored.view.detailPosition.ratio, 0.42);
@@ -76,20 +76,20 @@ test('Beschädigte, unbekannte und übergroße Werte fallen sicher auf Standardw
   assert.equal(normalized.list.page, 1);
   assert.equal(normalized.list.limit, 24);
   assert.equal(normalized.list.layout, 'tall');
-  assert.deepEqual(normalized.list.gridColumns, { square: null, tall: null });
+  assert.deepEqual(normalized.list.gridCardWidths, { square: null, tall: null });
   assert.equal(normalized.view.kind, 'list');
 });
 
-test('Spaltenzahlen werden getrennt gespeichert und auf 1 bis 8 begrenzt', () => {
+test('Bevorzugte Kachelbreiten werden getrennt gespeichert und sicher begrenzt', () => {
   assert.deepEqual(sessionState.normalize({
     version: 1,
-    list: { gridColumns: { square: 1, tall: 8 } },
+    list: { gridCardWidths: { square: 110, tall: 1920 } },
     view: { kind: 'list' },
-  }).list.gridColumns, { square: 1, tall: 8 });
+  }).list.gridCardWidths, { square: 110, tall: 1920 });
 
   assert.deepEqual(sessionState.normalize({
     version: 1,
-    list: { gridColumns: { square: 0, tall: 9 } },
+    list: { gridCardWidths: { square: 109, tall: 1921 } },
     view: { kind: 'list' },
-  }).list.gridColumns, { square: null, tall: null });
+  }).list.gridCardWidths, { square: null, tall: null });
 });

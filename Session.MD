@@ -470,10 +470,10 @@ Kein Abstand mehr zwischen dem goldenen „W“ und „ebArchiv“ (`.site-logo 
 
 ### Kacheldichte per Geste (07.10.2026)
 
-- Quadratische und längliche Ansicht besitzen getrennt gespeicherte Spaltenzahlen. Zwei Finger dürfen auf unterschiedlichen Kacheln oder Zwischenräumen desselben Rasters starten: Zusammenziehen erhöht, Spreizen verringert die Spaltenzahl. Nach jeder Zwei-Finger-Geste werden Kartenklicks kurz unterdrückt. In der Listenansicht bleibt die Geste wirkungslos.
+- Quadratische und längliche Ansicht besitzen getrennt gespeicherte bevorzugte Kachelbreiten. Zwei Finger dürfen auf unterschiedlichen Kacheln oder Zwischenräumen desselben Rasters starten: Zusammenziehen verkleinert, Spreizen vergrößert die Kacheln. `touch-action: pan-y` auf dem gesamten Raster hält die Zwei-Finger-Geste bei der Anwendung, erlaubt aber weiterhin normales vertikales Scrollen; zuvor galt diese Regel nur für Bildergalerien, sodass der Browser Gesten auf Textflächen übernehmen konnte. Nach jeder Zwei-Finger-Geste werden Kartenklicks kurz unterdrückt. In der Listenansicht bleibt die Geste wirkungslos.
 - Am Desktop steuert `Strg`+Mausrad über dem Raster dieselbe Funktion (nach unten = mehr, nach oben = weniger Spalten). Normales Scrollen, Bildvollansicht und Seitenzoom außerhalb des Rasters bleiben unverändert.
-- Möglich sind eine bis acht Spalten; auf schmalen Geräten begrenzt eine Mindestbreite von 110 px die effektive Zahl. Ein kurzer Statushinweis zeigt die neue Anzahl. Der sichtbare Kartenanker wird nach dem Umfluss wiederhergestellt.
-- `#app` nutzt nun bis zu 1920 px statt 1400 px. Responsive Vorgaben: zwei Spalten bis 720 px, drei bis 1100 px, vier bis 1450 px, fünf bis 1750 px, darüber sechs. Reset entfernt die manuelle Dichte. Cache: `styles.css?v=78`, `session-state.js?v=3`, `app.js?v=68`.
+- Möglich sind eine bis acht Spalten; auf schmalen Geräten begrenzt eine Mindestbreite von 110 px die effektive Zahl. Bei Drehung oder Fenstergrößenänderung wird aus der bevorzugten Breite eine neue Spaltenzahl berechnet, sodass die Kachelgröße ungefähr erhalten bleibt. Ein kurzer Statushinweis zeigt nach einer Geste die neue Anzahl. Der sichtbare Kartenanker wird nach dem Umfluss wiederhergestellt.
+- `#app` nutzt nun bis zu 1920 px statt 1400 px. Responsive Vorgaben: zwei Spalten bis 720 px, drei bis 1100 px, vier bis 1450 px, fünf bis 1750 px, darüber sechs. Sie gelten, solange noch keine bevorzugte Kachelbreite gewählt wurde; Reset stellt sie wieder her. Die Größenberechnung liegt testbar in `public/grid-density.js`; der Hoch-/Querformatfall und getrennte Breiten je Ansicht sind automatisiert geprüft. Cache: `styles.css?v=79`, `session-state.js?v=4`, `grid-density.js?v=1`, `app.js?v=69`.
 
 ### Kopieren und Aktionen
 
