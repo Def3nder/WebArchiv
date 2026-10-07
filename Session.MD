@@ -473,6 +473,7 @@ Kein Abstand mehr zwischen dem goldenen „W“ und „ebArchiv“ (`.site-logo 
 - Der frühere zweiteilige Copy-Button wurde ersetzt: **nur das Kopiersymbol**, kein sichtbares „copy“ und keine Trennlinie.
 - Ein Klick öffnet immer das Kopiermenü. „Artikel“ kopiert ohne Prompt; die weiteren Einträge kommen aus `prompts/`.
 - Dateinamen wie `1_...txt` bestimmen Reihenfolge und bereinigte Menübezeichnung. Der ausgewählte Prompt wird dem Artikeltext vorangestellt.
+- **Nachtrag 06.10.2026:** Prompt-Dateien enthalten nun getrennte Abschnitte `URL:` und `PROMPT:`. Bei allen Menüeinträgen außer „Artikel“ wird weiterhin nur der Prompt vor den Artikeltext in die Zwischenablage kopiert; zusätzlich öffnet sich die validierte HTTP(S)-URL in einem neuen Tab. Ungültig formatierte Prompt-Dateien werden nicht im Menü angeboten.
 - Tooltip für das Kopiersymbol: „Kopieroptionen“. Tooltip für Aktionen: „Artikel bearbeiten und Audio erzeugen“.
 - Die Aktionsleisten-Buttons wurden auf einheitlich 22 px Höhe und 20 px Radius gebracht; regulärer Abstand 8 px.
 - Ein leeres Upload-Statusfeld darf zwischen „neue Grafik“ und Kopieren keinen zusätzlichen Abstand erzeugen.

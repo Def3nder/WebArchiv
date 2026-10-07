@@ -1,3 +1,7 @@
+URL:
+https://gemini.google.com/app
+
+PROMPT:
 Bitte erstelle eine detaillierte Infografik über das nach den Anweisungen beschriebene Thema. Verwende dabei bitte ausschließlich deutsche Sprach und keine Phantasieworte.
 #####################
 STIL & ÄSTHETIK:

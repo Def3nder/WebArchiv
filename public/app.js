@@ -1279,21 +1279,15 @@ function renderDetail(article) {
         if (r.ok) items.push(...await r.json());
       } catch { /* nur "Artikel" anbieten */ }
       $copyMenu.innerHTML = items.map((it, i) =>
-        `<button type="button" role="menuitem" class="copy-prompt-item${i === 0 ? ' is-article' : ''}" data-prompt-file="${it.file ? esc(it.file) : ''}">${esc(it.label)}</button>`
+        `<button type="button" role="menuitem" class="copy-prompt-item${i === 0 ? ' is-article' : ''}" data-prompt-index="${i}">${esc(it.label)}</button>`
       ).join('');
       $copyMenu.querySelectorAll('.copy-prompt-item').forEach(item => {
-        item.addEventListener('click', async ev => {
+        item.addEventListener('click', ev => {
           ev.stopPropagation();
-          const file = item.dataset.promptFile;
-          let promptText = '';
-          if (file) {
-            try {
-              const r = await fetch(`/api/prompts/${encodeURIComponent(file)}`);
-              if (r.ok) promptText = await r.text();
-            } catch { /* Fallback: Artikel ohne Prompt */ }
-          }
+          const selected = items[Number(item.dataset.promptIndex)] || items[0];
           closeMenu();
-          copyArticle(promptText);
+          copyArticle(selected.prompt || '');
+          if (selected.file && selected.url) window.open(selected.url, '_blank', 'noopener,noreferrer');
         });
       });
     };

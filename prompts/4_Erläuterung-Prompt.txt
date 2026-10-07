@@ -1,1 +1,7 @@
+URL:
+https://chatgpt.com/
+
+PROMPT:
 Erläutere in einfach verständlichen Worten die Kernaussagen und Zusammenhänge des folgenden Textes: 
+
+

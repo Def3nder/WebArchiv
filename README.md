@@ -179,6 +179,21 @@ Rücksprung:
 - **Telegram-Sonderregel**: Artikel des Autors „Telegram" sind standardmäßig
   ausgeblendet (Toggle im Header oder `telegram=1` bzw. Autor-Filter „Telegram").
 
+### Kopiermenü und Prompt-Dateien
+
+Der erste Eintrag des Kopiermenüs kopiert nur den Artikeltext. Die weiteren Einträge
+stammen aus `prompts/*.txt`, kopieren den jeweiligen Prompt gefolgt vom Artikeltext
+und öffnen zusätzlich die hinterlegte HTTP(S)-URL in einem neuen Browser-Tab. Das
+Dateiformat lautet:
+
+```text
+URL:
+https://example.com/
+
+PROMPT:
+Anweisung, die vor den Artikeltext gesetzt wird.
+```
+
 ---
 
 ## Authentifizierung & Rechte

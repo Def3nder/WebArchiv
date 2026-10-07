@@ -1144,6 +1144,27 @@ app.get('/api/reindex/status', requireAuth, (_req, res) => res.json(reindexState
 
 const PROMPTS_DIR = path.join(__dirname, 'prompts');
 
+function parsePromptDefinition(content) {
+  const lines = String(content).replace(/^\uFEFF/, '').split(/\r?\n/);
+  const urlMarker = lines.findIndex(line => line.trim().toUpperCase() === 'URL:');
+  const promptMarker = lines.findIndex((line, index) => index > urlMarker && line.trim().toUpperCase() === 'PROMPT:');
+  if (urlMarker < 0 || promptMarker < 0) throw new Error('URL:- oder PROMPT:-Abschnitt fehlt.');
+
+  const urlText = lines.slice(urlMarker + 1, promptMarker).map(line => line.trim()).find(Boolean);
+  if (!urlText) throw new Error('Die Prompt-URL fehlt.');
+  let url;
+  try {
+    url = new URL(urlText);
+  } catch {
+    throw new Error('Die Prompt-URL ist ungültig.');
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Die Prompt-URL muss HTTP oder HTTPS verwenden.');
+
+  const prompt = lines.slice(promptMarker + 1).join('\n').trim();
+  if (!prompt) throw new Error('Der Prompt ist leer.');
+  return { url: url.href, prompt };
+}
+
 // Liste der verfügbaren Prompt-Dateien; Zahlen-Präfix steuert Reihenfolge
 // und wird aus dem Label entfernt (z. B. "1_Infografik-Prompt-ChatGPT.txt").
 app.get('/api/prompts', attachUser, (_req, res) => {
@@ -1153,14 +1174,22 @@ app.get('/api/prompts', attachUser, (_req, res) => {
       .map(file => {
         const stem = file.slice(0, -4);
         const m = stem.match(/^(\d+)_(.*)$/);
-        return {
-          file,
-          label: m ? m[2] : stem,
-          order: m ? parseInt(m[1], 10) : Infinity,
-        };
+        try {
+          const definition = parsePromptDefinition(fs.readFileSync(path.join(PROMPTS_DIR, file), 'utf8'));
+          return {
+            file,
+            label: m ? m[2] : stem,
+            order: m ? parseInt(m[1], 10) : Infinity,
+            ...definition,
+          };
+        } catch (err) {
+          console.warn(`Prompt-Datei „${file}“ wird ignoriert: ${err.message}`);
+          return null;
+        }
       })
+      .filter(Boolean)
       .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
-      .map(({ file, label }) => ({ file, label }));
+      .map(({ file, label, url, prompt }) => ({ file, label, url, prompt }));
     res.json(prompts);
   } catch {
     res.json([]);
@@ -1175,8 +1204,11 @@ app.get('/api/prompts/:file', attachUser, (req, res) => {
   if (!absPath.startsWith(PROMPTS_DIR + path.sep)) return res.status(400).end();
   try {
     const txt = fs.readFileSync(absPath, 'utf8');
-    res.type('text/plain').send(txt);
-  } catch {
+    const { prompt } = parsePromptDefinition(txt);
+    res.type('text/plain').send(prompt);
+  } catch (err) {
+    if (err?.code === 'ENOENT') return res.status(404).end();
+    if (err instanceof Error) return res.status(422).type('text/plain').send(err.message);
     res.status(404).end();
   }
 });
@@ -1610,4 +1642,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseArticle, linkInfographics, buildInfographicMarkdown, removeCategoryLines, slugify, normalizeNewInfographicMarkdown, mergeCategories };
+module.exports = { parseArticle, linkInfographics, buildInfographicMarkdown, removeCategoryLines, slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition };

@@ -1,3 +1,7 @@
+URL:
+https://chatgpt.com/
+
+PROMPT:
 Fasse den folgenden Text einfach verständlich zusammen:
 
 

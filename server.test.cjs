@@ -1,7 +1,33 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseArticle, linkInfographics, buildInfographicMarkdown, slugify, normalizeNewInfographicMarkdown, mergeCategories } = require('./server.js');
+const { parseArticle, linkInfographics, buildInfographicMarkdown, slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition } = require('./server.js');
+
+test('liest URL und Prompt aus einer Prompt-Datei getrennt', () => {
+  const definition = parsePromptDefinition([
+    '\uFEFFURL:',
+    'https://chatgpt.com/example?mode=test',
+    '',
+    'PROMPT:',
+    'Erste Zeile.',
+    '',
+    'Zweite Zeile.',
+  ].join('\r\n'));
+
+  assert.equal(definition.url, 'https://chatgpt.com/example?mode=test');
+  assert.equal(definition.prompt, 'Erste Zeile.\n\nZweite Zeile.');
+});
+
+test('Prompt-Dateien erlauben nur HTTP(S)-URLs und einen nicht leeren Prompt', () => {
+  assert.throws(
+    () => parsePromptDefinition('URL:\nfile:///tmp/test\n\nPROMPT:\nText'),
+    /HTTP oder HTTPS/
+  );
+  assert.throws(
+    () => parsePromptDefinition('URL:\nhttps://example.com\n\nPROMPT:\n'),
+    /Prompt ist leer/
+  );
+});
 
 test('beginnt einen Blogartikel mit dem ersten Inhalt nach dem Datum', () => {
   const markdown = [

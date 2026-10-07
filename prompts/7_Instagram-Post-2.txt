@@ -1,3 +1,7 @@
+URL:
+https://chatgpt.com/g/g-p-6aba966220548191992ef049024aac70-instagram-grafik/project
+
+PROMPT:
 Erstelle mir eine 9:16 Instagram-Post-Grafik mit dem Titel des folgenden Artikels. 
 
 Wähle ein zum Thema passendes Hintergrundbild und füge noch ein paar erklärende kurze Sätze unter den Titel hinzu.
