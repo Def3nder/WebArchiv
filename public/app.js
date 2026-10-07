@@ -17,6 +17,7 @@ const state = {
   currentItems: [],
   currentArticleIdx: -1,
   bookSort: 'recent',
+  gridColumns: { square: null, tall: null },
 };
 
 // Hörbücher sind kein Artikel-Autor: eigene Liste, eigene Detailansicht (audiobooks.js).
@@ -49,6 +50,7 @@ const $filterCategory = document.getElementById('filter-category');
 const $filterLayout   = document.getElementById('filter-layout');
 const $filterLimit    = document.getElementById('filter-limit');
 const $resetFilters   = document.getElementById('reset-filters');
+const $gridDensityStatus = document.getElementById('grid-density-status');
 const $reindexBtn    = document.getElementById('reindex-btn');
 const $adminMenu      = document.getElementById('admin-menu');
 const $scrapeOverlay  = document.getElementById('scrape-overlay');
@@ -193,6 +195,7 @@ function snapshotSessionView() {
       page: state.page,
       limit: state.limit,
       layout: currentLayout(),
+      gridColumns: { ...state.gridColumns },
       bookSort: state.bookSort,
     },
     view: {
@@ -534,6 +537,7 @@ async function logout() {
   Object.assign(state, {
     q: '', author: '', externalAudio: false, year: '', category: '', telegram: false,
     bookmarks: false, page: 1, limit: 24, bookSort: 'recent',
+    gridColumns: { square: null, tall: null },
   });
   currentViewItemId = '';
   lastListPosition = null;
@@ -724,7 +728,7 @@ function wireCardGallery(card) {
     startY = e.touches[0].clientY;
   }, { passive: true });
   gallery.addEventListener('touchend', e => {
-    if (multi) return;
+    if (multi || gridInteractionSuppressed()) return;
     const dx = e.changedTouches[0].clientX - startX;
     const dy = e.changedTouches[0].clientY - startY;
     if (Math.abs(dx) < 30 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
@@ -809,6 +813,7 @@ async function loadArticles() {
 
     $count.textContent = `${data.total.toLocaleString('de-DE')} ${bookMode ? (data.total === 1 ? 'Hörbuch' : 'Hörbücher') : 'Artikel'}`;
     $app.innerHTML = (bookMode ? renderBookGrid(data.items) : renderGrid(data.items)) + renderPagination(state.page, state.pages);
+    applyGridColumns();
 
     // Attach card click handlers
     $app.querySelectorAll('.card').forEach(card => {
@@ -816,7 +821,7 @@ async function loadArticles() {
       wireCardGallery(card);
       card.addEventListener('click', () => {
         // Ein Wischen durch die Bilder der Kachel öffnet den Artikel nicht.
-        if (Date.now() - (Number(card.dataset.swipedAt) || 0) < 500) return;
+        if (gridInteractionSuppressed() || Date.now() - (Number(card.dataset.swipedAt) || 0) < 500) return;
         handler();
       });
       card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') handler(); });
@@ -1690,6 +1695,104 @@ $filterCategory.addEventListener('change', () => {
 
 // Ansicht quadratisch/länglich/Liste als Piktogramm-Umschalter (Radio-Gruppe).
 const LAYOUTS = ['square', 'tall', 'list'];
+const GRID_MIN_COLUMNS = 1;
+const GRID_MAX_COLUMNS = 8;
+const GRID_MIN_CARD_WIDTH = 110;
+const GRID_PINCH_THRESHOLD = 0.12;
+const GRID_CLICK_SUPPRESS_MS = 500;
+let gridClickSuppressedUntil = 0;
+let gridTouchGesture = null;
+let gridDensityStatusTimer = null;
+let gridWheelTotal = 0;
+let gridWheelResetTimer = null;
+let gridWheelLastStep = 0;
+
+function gridInteractionSuppressed() {
+  return !!gridTouchGesture || Date.now() < gridClickSuppressedUntil;
+}
+
+function gridForTouch(touch) {
+  const target = touch?.target?.nodeType === Node.ELEMENT_NODE
+    ? touch.target
+    : touch?.target?.parentElement;
+  return target?.closest?.('.article-grid') || null;
+}
+
+function touchInsideGrid(touch, grid) {
+  if (!touch || !grid) return false;
+  const rect = grid.getBoundingClientRect();
+  return touch.clientX >= rect.left && touch.clientX <= rect.right
+    && touch.clientY >= rect.top && touch.clientY <= rect.bottom;
+}
+
+function touchDistance(first, second) {
+  return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+}
+
+function maxGridColumns(grid) {
+  if (!grid) return GRID_MAX_COLUMNS;
+  const style = getComputedStyle(grid);
+  const gap = parseFloat(style.columnGap) || 0;
+  return Math.max(GRID_MIN_COLUMNS, Math.min(
+    GRID_MAX_COLUMNS,
+    Math.floor((grid.clientWidth + gap) / (GRID_MIN_CARD_WIDTH + gap))
+  ));
+}
+
+function currentGridColumns(grid = $app.querySelector('.article-grid')) {
+  if (!grid) return null;
+  const tracks = getComputedStyle(grid).gridTemplateColumns
+    .split(' ')
+    .filter(Boolean);
+  return tracks.length || null;
+}
+
+function applyGridColumns() {
+  const layout = currentLayout();
+  if (layout === 'list') {
+    document.body.style.removeProperty('--grid-columns');
+    return;
+  }
+  const requested = state.gridColumns?.[layout];
+  if (!Number.isInteger(requested)) {
+    document.body.style.removeProperty('--grid-columns');
+    return;
+  }
+  const effective = Math.max(GRID_MIN_COLUMNS, Math.min(
+    maxGridColumns($app.querySelector('.article-grid')),
+    requested
+  ));
+  document.body.style.setProperty('--grid-columns', String(effective));
+}
+
+function showGridDensityStatus(columns) {
+  if (!$gridDensityStatus || !columns) return;
+  $gridDensityStatus.textContent = columns === 1 ? '1 Spalte' : `${columns} Spalten`;
+  $gridDensityStatus.classList.add('is-visible');
+  clearTimeout(gridDensityStatusTimer);
+  gridDensityStatusTimer = setTimeout(() => {
+    $gridDensityStatus.classList.remove('is-visible');
+  }, 900);
+}
+
+async function changeGridColumns(step) {
+  const layout = currentLayout();
+  const grid = $app.querySelector('.article-grid');
+  if (!grid || layout === 'list' || !step) return;
+  const current = currentGridColumns(grid);
+  if (!current) return;
+  const next = Math.max(GRID_MIN_COLUMNS, Math.min(maxGridColumns(grid), current + step));
+  showGridDensityStatus(next);
+  if (next === current) return;
+
+  const position = captureListPosition();
+  state.gridColumns = { ...state.gridColumns, [layout]: next };
+  document.body.style.setProperty('--grid-columns', String(next));
+  scheduleCurrentViewSave();
+  await restoreListPosition(position);
+  lastListPosition = captureListPosition();
+}
+
 function setLayout(layout) {
   document.body.classList.toggle('layout-tall', layout === 'tall');
   document.body.classList.toggle('layout-list', layout === 'list');
@@ -1698,6 +1801,7 @@ function setLayout(layout) {
     button.setAttribute('aria-checked', String(active));
     button.tabIndex = active ? 0 : -1;
   });
+  applyGridColumns();
 }
 function currentLayout() {
   if (document.body.classList.contains('layout-list')) return 'list';
@@ -1754,6 +1858,68 @@ $filterLayout.addEventListener('keydown', event => {
   $filterLayout.querySelector(`[data-layout="${next}"]`).focus();
 });
 
+// Zwei Finger dürfen auf unterschiedlichen Kacheln oder in den Zwischenräumen
+// liegen. Sobald beide innerhalb desselben Rasters starten, gehört die Geste der
+// Spaltensteuerung und darf weder eine Kachel öffnen noch die Seite vergrößern.
+$app.addEventListener('touchstart', event => {
+  if (currentLayout() === 'list' || event.touches.length !== 2) return;
+  const first = event.touches[0];
+  const second = event.touches[1];
+  const grid = gridForTouch(first);
+  if (!grid || gridForTouch(second) !== grid
+      || !touchInsideGrid(first, grid) || !touchInsideGrid(second, grid)) return;
+  const distance = touchDistance(first, second);
+  if (distance <= 0) return;
+  event.preventDefault();
+  gridTouchGesture = { grid, startDistance: distance, committed: false };
+  gridClickSuppressedUntil = Date.now() + 10000;
+}, { passive: false });
+
+$app.addEventListener('touchmove', event => {
+  if (!gridTouchGesture || event.touches.length < 2) return;
+  event.preventDefault();
+  if (gridTouchGesture.committed) return;
+  const distance = touchDistance(event.touches[0], event.touches[1]);
+  const ratio = distance / gridTouchGesture.startDistance;
+  if (Math.abs(ratio - 1) < GRID_PINCH_THRESHOLD) return;
+  gridTouchGesture.committed = true;
+  // Zusammenziehen entspricht Herauszoomen: mehr, Spreizen: weniger Spalten.
+  changeGridColumns(ratio < 1 ? 1 : -1);
+}, { passive: false });
+
+function finishGridTouchGesture() {
+  if (!gridTouchGesture) return;
+  gridTouchGesture = null;
+  gridClickSuppressedUntil = Date.now() + GRID_CLICK_SUPPRESS_MS;
+}
+
+$app.addEventListener('touchend', event => {
+  if (gridTouchGesture && event.touches.length < 2) finishGridTouchGesture();
+}, { passive: true });
+$app.addEventListener('touchcancel', finishGridTouchGesture, { passive: true });
+
+// Strg+Mausrad wirkt nur über dem Kachelraster. Normales Scrollen und der
+// bestehende Mausrad-Zoom in der Bildvollansicht bleiben unberührt.
+$app.addEventListener('wheel', event => {
+  if (!event.ctrlKey || !isDesktopPointer() || currentLayout() === 'list'
+      || !event.target.closest?.('.article-grid')) return;
+  event.preventDefault();
+  gridWheelTotal += event.deltaY;
+  clearTimeout(gridWheelResetTimer);
+  gridWheelResetTimer = setTimeout(() => { gridWheelTotal = 0; }, 240);
+  if (Math.abs(gridWheelTotal) < 30 || Date.now() - gridWheelLastStep < 150) return;
+  const step = gridWheelTotal > 0 ? 1 : -1;
+  gridWheelTotal = 0;
+  gridWheelLastStep = Date.now();
+  changeGridColumns(step);
+}, { passive: false });
+
+let gridResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(gridResizeTimer);
+  gridResizeTimer = setTimeout(applyGridColumns, 120);
+});
+
 $filterLimit.addEventListener('change', () => {
   state.limit = parseInt($filterLimit.value);
   state.page = 1;
@@ -1793,6 +1959,7 @@ $resetFilters.addEventListener('click', () => {
   $filterAuthor.value = '';
   $filterYear.value = '';
   $filterCategory.value = '';
+  state.gridColumns = { square: null, tall: null };
   setLayout('tall');
   $filterLimit.value = '24';
   setTelegram(false);

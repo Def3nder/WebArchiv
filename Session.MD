@@ -468,6 +468,13 @@ Kein Abstand mehr zwischen dem goldenen „W“ und „ebArchiv“ (`.site-logo 
 - Bewusst nicht automatisch fortgesetzt werden Audio-/Videowiedergabe sowie Login-, Einstellungen-, Admin-, Editor- und TTS-Dialoge. Beim ausdrücklichen Abmelden wird der lokale Zustand dieses Benutzers gelöscht.
 - Dateien/Cache: `public/session-state.js?v=2`, `public/app.js?v=66`, `public/book-reader.js?v=10`. Automatisiert geprüft: Normalisierung, Benutzertrennung, Löschen, beschädigte Daten und Zuordnung der Listenposition zum Autor. Im Browser geprüft: Filter, Seitengröße, Seite 2, Layoutwechsel ohne Seitenreset, Artikeldetail und dessen Scrollposition über vollständigen Reload; keine Konsolenfehler. eBook-Reader-Wiederöffnung wurde mangels angemeldetem Testnutzer nicht im Browser ausgeführt.
 
+### Kacheldichte per Geste (07.10.2026)
+
+- Quadratische und längliche Ansicht besitzen getrennt gespeicherte Spaltenzahlen. Zwei Finger dürfen auf unterschiedlichen Kacheln oder Zwischenräumen desselben Rasters starten: Zusammenziehen erhöht, Spreizen verringert die Spaltenzahl. Nach jeder Zwei-Finger-Geste werden Kartenklicks kurz unterdrückt. In der Listenansicht bleibt die Geste wirkungslos.
+- Am Desktop steuert `Strg`+Mausrad über dem Raster dieselbe Funktion (nach unten = mehr, nach oben = weniger Spalten). Normales Scrollen, Bildvollansicht und Seitenzoom außerhalb des Rasters bleiben unverändert.
+- Möglich sind eine bis acht Spalten; auf schmalen Geräten begrenzt eine Mindestbreite von 110 px die effektive Zahl. Ein kurzer Statushinweis zeigt die neue Anzahl. Der sichtbare Kartenanker wird nach dem Umfluss wiederhergestellt.
+- `#app` nutzt nun bis zu 1920 px statt 1400 px. Responsive Vorgaben: zwei Spalten bis 720 px, drei bis 1100 px, vier bis 1450 px, fünf bis 1750 px, darüber sechs. Reset entfernt die manuelle Dichte. Cache: `styles.css?v=78`, `session-state.js?v=3`, `app.js?v=68`.
+
 ### Kopieren und Aktionen
 
 - Der frühere zweiteilige Copy-Button wurde ersetzt: **nur das Kopiersymbol**, kein sichtbares „copy“ und keine Trennlinie.

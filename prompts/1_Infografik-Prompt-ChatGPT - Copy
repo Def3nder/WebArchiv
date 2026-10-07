@@ -42,27 +42,17 @@ FARBPALETTE:
 - sanfte Lavendeltöne
 - weiche Beige-/Pfirsichtöne
 
-INHALTLICHE TREUE – ZWINGEND:  
-- Übernimm ausschließlich Strukturen, Kategorien, Aufzählungen und Nummerierungen, die im ARTIKELTEXT ausdrücklich vorhanden sind.
-- Erfinde keine nummerierten Punkte, Schritte, Regeln, Phasen, Kategorien oder Checklisten.
-- Wenn der ARTIKELTEXT keine nummerierte Aufzählung enthält, darf die Grafik ebenfalls keine Nummerierung enthalten.
-- Verwandle Fließtext nicht eigenständig in „5 Punkte“, „7 Zeichen“, „8 Merkmale“, „Schritte“ oder ähnliche künstliche Systeme.
-- Die visuelle Gliederung darf den Inhalt ordnen, aber keine neue inhaltliche Struktur suggerieren.
-- Überschriften für einzelne Bereiche dürfen nur verwendet werden, wenn sie den tatsächlich vorhandenen Aussagen des Textes entsprechen und keine zusätzliche Systematik vortäuschen.
-- Keine erfundenen Inhalte, Dummy-Texte, zusätzlichen Aussagen oder scheinbaren Zitate.
-- Grundregel: Die Grafik visualisiert die Struktur des Artikels – sie erfindet keine eigene Struktur.
-
-LAYOUT:  
+LAYOUT:
 - vertikale 9:16-Komposition
 - große Hero-Zone oben
-- zentrale visuelle Hauptaussage
-- modulare Bereiche nur dort, wo sie sich inhaltlich aus dem Artikel ergeben
-- unterschiedliche Panelgrößen für visuelle Dynamik
-- viel Weißraum und klare Leserichtung
-- Illustrationen und symbolische Motive zur Unterstützung des Inhalts
-- Diagramme, Pfeile, nummerierte Elemente und Prozessdarstellungen nur dann, wenn der Artikel selbst eine entsprechende Struktur enthält
-- keine Dummy-Inhalte
-- keine künstliche Checkliste oder nummerierte Systematik
+- zentrale Hauptkarte
+- mehrere modulare Info-Boxen
+- visuelle Symmetrie
+- verschiedene Panelgrößen
+- kleine Diagrammflächen
+- zyklische Pfeile
+- Karten mit Dummy-Inhalten
+- moderne UI-artige Struktur
 
 TYPOGRAFIE:
 - große elegante Script-/Brush-Headline

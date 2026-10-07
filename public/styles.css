@@ -394,24 +394,50 @@ body.mode-audiobooks .bookmark-btn { opacity: .35; pointer-events: none; }
 
 /* ── Main / grid ─────────────────────────────────────────────────────────── */
 #app {
-  max-width: 1400px;
+  max-width: 1920px;
   margin: 0 auto;
-  padding: 32px 24px 80px;
+  padding: 32px clamp(16px, 2vw, 32px) 80px;
 }
 
 .article-grid {
+  --grid-default-columns: 4;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(var(--grid-columns, var(--grid-default-columns)), minmax(0, 1fr));
   gap: 16px;
 }
-@media (max-width: 1100px) { .article-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 720px)  { .article-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 440px)  { .article-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
+@media (min-width: 1451px) { .article-grid { --grid-default-columns: 5; } }
+@media (min-width: 1751px) { .article-grid { --grid-default-columns: 6; } }
+@media (max-width: 1100px) { .article-grid { --grid-default-columns: 3; } }
+@media (max-width: 720px)  { .article-grid { --grid-default-columns: 2; } }
+@media (max-width: 440px)  { .article-grid { --grid-default-columns: 2; gap: 10px; } }
 /* Handy: schmalere Ränder, damit die Kacheln mehr Inhalt zeigen. */
 @media (max-width: 600px) {
   #app { padding: 16px 8px 60px; }
   .article-grid { gap: 8px; }
 }
+
+.grid-density-status {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 95;
+  padding: 7px 13px;
+  border: 1px solid var(--border-hi);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity var(--transition), transform var(--transition);
+  backdrop-filter: blur(8px);
+}
+.grid-density-status.is-visible { opacity: 1; transform: translate(-50%, 0); }
+body.has-mini-player .grid-density-status { bottom: 88px; }
 
 /* ── Article card ────────────────────────────────────────────────────────── */
 .card {

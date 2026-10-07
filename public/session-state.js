@@ -26,6 +26,11 @@
     return Number.isInteger(number) && number >= 1 && number <= max ? number : fallback;
   }
 
+  function gridColumn(value) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 1 && number <= 8 ? number : null;
+  }
+
   function position(value, fallbackAuthorScope = '') {
     if (!value || typeof value !== 'object') return null;
     return {
@@ -51,6 +56,9 @@
     const author = shortString(list.author, 500);
     const externalAudio = list.externalAudio === true;
     const authorScope = externalAudio ? '__external_audio__' : author;
+    const gridColumns = list.gridColumns && typeof list.gridColumns === 'object'
+      ? list.gridColumns
+      : {};
 
     return {
       version: VERSION,
@@ -66,6 +74,10 @@
         page: positiveInteger(list.page, 1),
         limit: positiveInteger(list.limit, 24, 200),
         layout,
+        gridColumns: {
+          square: gridColumn(gridColumns.square),
+          tall: gridColumn(gridColumns.tall),
+        },
         bookSort,
       },
       view: {
