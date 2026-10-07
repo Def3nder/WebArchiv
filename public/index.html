@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=79" />
+  <link rel="stylesheet" href="styles.css?v=80" />
 </head>
 <body>
 
@@ -144,6 +144,17 @@
     <!-- Rendered by app.js -->
   </main>
   <div id="grid-density-status" class="grid-density-status" role="status" aria-live="polite" aria-atomic="true"></div>
+  <aside id="pwa-update-notice" class="pwa-update-notice" role="status" aria-live="polite" hidden>
+    <svg class="pwa-update-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M20 11a8 8 0 1 0 2 5.3"/><path d="M20 4v7h-7"/><path d="M12 8v5l3 2"/>
+    </svg>
+    <div class="pwa-update-copy">
+      <strong>Neue Version verfügbar</strong>
+      <span>WebArchiv kann ohne Neuinstallation aktualisiert werden.</span>
+    </div>
+    <button type="button" id="pwa-update-button" class="pwa-update-button">Jetzt aktualisieren</button>
+    <button type="button" id="pwa-update-dismiss" class="pwa-update-dismiss" aria-label="Später aktualisieren">×</button>
+  </aside>
 
   <!-- Article detail overlay -->
   <div id="article-overlay" class="overlay" role="dialog" aria-modal="true" hidden>
@@ -405,6 +416,7 @@
   <script src="settings.js?v=1"></script>
   <script src="session-state.js?v=4"></script>
   <script src="grid-density.js?v=1"></script>
+  <script src="pwa-update.js?v=1"></script>
   <script src="app.js?v=69"></script>
   <script src="audiobooks.js?v=6"></script>
   <script src="book-reader.js?v=13"></script>

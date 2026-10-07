@@ -34,6 +34,10 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Audio/Video/PDF)
   Listenposition sowie geöffneter Artikel bzw. Hörbuch-/eBook-Reader werden nach einem vollständigen
   Browser- oder PWA-Neustart wiederhergestellt. Ein ausdrücklich anderer Artikel-Link hat Vorrang;
   beim Abmelden wird der lokale Sitzungsstand des Benutzers gelöscht.
+- **PWA-Aktualisierung**: Änderungen an den Frontend-Dateien werden automatisch erkannt. Eine
+  installierte Web-App zeigt „Neue Version verfügbar“ und übernimmt sie über „Jetzt aktualisieren“
+  ohne Löschen oder erneutes Anlegen des Home-Screen-Symbols. Der Update-Worker cached selbst keine
+  App-Dateien; reguläres Cache-Busting per `?v=N` bleibt maßgeblich.
 - **Daten**: reine Dateien unter `www/` — keine Datenbank. Der Index wird beim Start und auf Anforderung neu aufgebaut.
 
 ---
@@ -360,6 +364,7 @@ public/
 ├── user-admin.js             Kennwort ändern, Benutzerverwaltung, Öffentlicher Zugang
 ├── settings.js               Einstellungen pro Gerät (Schrift, Hell/Dunkel/Automatisch, Textgröße)
 ├── session-state.js          Lokaler Sitzungsstand pro Benutzer (Ansicht, Navigation, Scrollposition)
+├── pwa-update.js             Erkennt neue App-Versionen und bietet kontrolliertes Aktualisieren an
 ├── audiobooks.js             Hörbuch-Liste, -Detail, Player und Miniplayer
 ├── book-reader.js            eBook-Text zum Hörbuch (Vollbild-Reiter, Leseposition)
 ├── favicon.svg               Favicon (Bücherregal, Gold auf Dunkel) – Vorlage für die beiden folgenden

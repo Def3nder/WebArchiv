@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { marked } = require('marked');
 const Fuse = require('fuse.js');
 const session = require('express-session');
@@ -19,10 +20,46 @@ const app = express();
 // damit absolute og:*-URLs (Link-Vorschau) korrekt https:// und Host tragen.
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
+const PUBLIC_DIR = path.join(__dirname, 'public');
 const WWW_DIR = path.join(__dirname, 'www');
 const AUDIO_DIR = path.join(__dirname, 'audio');
 const INFOGRAPHICS_AUTHOR = 'Infografiken';
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
+const PWA_SHELL_EXTENSIONS = new Set(['.css', '.html', '.ico', '.js', '.json', '.png', '.svg']);
+
+function computeAppShellVersion(publicDir = PUBLIC_DIR) {
+  const hash = crypto.createHash('sha256');
+  const files = fs.readdirSync(publicDir, { withFileTypes: true })
+    .filter(entry => entry.isFile() && PWA_SHELL_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+    .map(entry => entry.name)
+    .sort((a, b) => a.localeCompare(b, 'en'));
+
+  for (const file of files) {
+    hash.update(file);
+    hash.update('\0');
+    hash.update(fs.readFileSync(path.join(publicDir, file)));
+    hash.update('\0');
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
+function serviceWorkerSource(version) {
+  return `'use strict';
+const APP_VERSION = ${JSON.stringify(version)};
+
+self.addEventListener('install', () => {
+  // Aktualisierte Worker warten, bis der Benutzer im Hinweis zustimmt.
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+`;
+}
 
 // ─── Users ─────────────────────────────────────────────────────────────────
 
@@ -943,9 +980,19 @@ app.use((req, res, next) => {
   }
   next();
 });
+// Der Worker cached selbst keine Dateien. Sein automatisch berechneter Inhalt ändert
+// sich aber bei jeder Änderung der App-Shell und löst damit den Update-Hinweis aus.
+app.get('/service-worker.js', (_req, res) => {
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Service-Worker-Allowed': '/',
+  });
+  res.type('application/javascript').send(serviceWorkerSource(computeAppShellVersion()));
+});
+
 // index.html immer beim Server nachfragen (sonst hält v. a. Safari eine alte Seite
 // mit alten ?v=-Verweisen); JS/CSS werden über ?v= in index.html aktualisiert.
-app.use(express.static(path.join(__dirname, 'public'), {
+app.use(express.static(PUBLIC_DIR, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
   },
@@ -1642,4 +1689,8 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseArticle, linkInfographics, buildInfographicMarkdown, removeCategoryLines, slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition };
+module.exports = {
+  parseArticle, linkInfographics, buildInfographicMarkdown, removeCategoryLines, slugify,
+  normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
+  computeAppShellVersion, serviceWorkerSource,
+};
