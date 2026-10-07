@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { computeAppShellVersion, serviceWorkerSource } = require('./server.js');
+const ROOT = path.join(__dirname, '..');
+const { computeAppShellVersion, serviceWorkerSource } = require('../server.js');
 
 test('App-Shell-Version ändert sich automatisch mit ausgelieferten Frontend-Dateien', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'webarchiv-pwa-'));
@@ -30,8 +31,8 @@ test('Service Worker wartet auf Zustimmung und cached keine veraltete App-Shell'
 });
 
 test('Update-Oberfläche und Registrierung sind in der App-Shell eingebunden', () => {
-  const html = fs.readFileSync('./public/index.html', 'utf8');
-  const client = fs.readFileSync('./public/pwa-update.js', 'utf8');
+  const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+  const client = fs.readFileSync(path.join(ROOT, 'public', 'pwa-update.js'), 'utf8');
   assert.match(html, /id="pwa-update-notice"/);
   assert.match(html, /pwa-update\.js\?v=1/);
   assert.match(client, /serviceWorker\.register\('\/service-worker\.js'/);

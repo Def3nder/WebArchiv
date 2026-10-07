@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const bcrypt = require('bcryptjs');
-const { createUserStore } = require('./user-store.cjs');
+const { createUserStore } = require('../user-store.cjs');
 
 async function fixture(t, { users, publicDirs = ['Videos'] } = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'webarchiv-users-'));

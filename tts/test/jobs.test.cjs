@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { createTtsJobs } = require('./jobs.cjs');
-const { installTtsRoutes } = require('./jobs.cjs');
+const { createTtsJobs } = require('../jobs.cjs');
+const { installTtsRoutes } = require('../jobs.cjs');
 
 test('Audio-Spiegelstruktur, MP3-Link und Schutz vorhandener Dateien ohne API-Aufruf', async () => {
   const dir = await fs.mkdtemp(path.join(__dirname, '.test-audio-'));

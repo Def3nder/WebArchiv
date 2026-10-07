@@ -5,10 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
-import { loadConfig, speechBlocks, chunkText, sseEvents, synthesize, decodeWav, wavHeader, trimPrefill, convert, parseArgs, runTool } from './markdown_tts.js';
+import { loadConfig, speechBlocks, chunkText, sseEvents, synthesize, decodeWav, wavHeader, trimPrefill, convert, parseArgs, runTool } from '../markdown_tts.js';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const TTS_ROOT = path.join(ROOT, '..');
 const require = createRequire(import.meta.url);
-const { startTts } = require('./spawn_tts.cjs');
+const { startTts } = require('../spawn_tts.cjs');
 const cfg = await loadConfig();
 cfg.tts.provider = 'openai'; // Bestehende OpenAI-Pipeline ausschließlich mit Simulation testen.
 const emit = () => {};
@@ -138,7 +139,7 @@ test('spawn adapter splits lines, waits for close and supports IPC cancellation'
   const rejected = assert.rejects(cancel.completion, { cancelled: true }); cancel.cancel(); await rejected;
 }));
 test('actual CLI invalid arguments returns structured stderr and no stdout result', async () => {
-  const child = spawn(process.execPath, [path.join(ROOT, 'markdown_tts.js'), '--json-progress'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [path.join(TTS_ROOT, 'markdown_tts.js'), '--json-progress'], { stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '', err = ''; child.stdout.on('data', s => { out += s; }); child.stderr.on('data', s => { err += s; });
   const code = await new Promise(resolve => child.on('close', resolve));
   assert.equal(code, 2); assert.equal(out, ''); assert.equal(JSON.parse(err).code, 'ARGUMENT_ERROR');

@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const express = require('express');
-const { createBookmarkStore, installBookmarkRoutes } = require('./bookmarks.cjs');
+const { createBookmarkStore, installBookmarkRoutes } = require('../bookmarks.cjs');
 
 async function tempFile(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'webarchiv-bookmarks-'));

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const sessionState = require('./public/session-state.js');
+const sessionState = require('../public/session-state.js');
 
 function storage() {
   const values = new Map();

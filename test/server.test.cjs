@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseArticle, linkInfographics, buildInfographicMarkdown, slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition } = require('./server.js');
+const { parseArticle, linkInfographics, buildInfographicMarkdown, slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition } = require('../server.js');
 
 test('liest URL und Prompt aus einer Prompt-Datei getrennt', () => {
   const definition = parsePromptDefinition([

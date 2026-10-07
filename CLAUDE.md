@@ -26,8 +26,9 @@ node epub-tool/epub-to-md.js "Buch.epub" --out "audio/Hoerbuecher/<Buch>" [--dry
 npm test --prefix epub-tool
 ```
 
-There is no `npm test` script, linter, or build; run tests with
-`node --test server.test.cjs article-editor.test.cjs user-store.test.cjs audiobooks.test.cjs bookmarks.test.cjs`. `node server.js` is the only runtime; restart it to
+Run the complete Node and Python test suite with `npm test`. Tests live under
+`test/`, `scraper/test/`, `epub-tool/test/`, and `tts/test/`. There is no linter or build.
+`node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button
 → `POST /api/reindex`, or restart). Frontend changes (`public/`) only need a browser reload;
 bump the `?v=` query on the `<script>`/`<link>` tags in `public/index.html` to bust caches.

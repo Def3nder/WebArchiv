@@ -8,7 +8,7 @@ import {
   postAuthorName,
   stripLeadingDuplicateTitle,
   stripLeadingIntro,
-} from "./scrape_all.js";
+} from "../scrape_all.js";
 
 const TITLE =
   "Warum du dich selbst verlierst, wenn du kontrollieren willst, wie andere dich sehen";
@@ -37,9 +37,9 @@ test("behält einen nur ähnlichen ersten Absatz bei", () => {
 test("lädt alle konfigurierten Quellen aus scraper-config.json", () => {
   const config = loadScraperConfig();
   assert.deepEqual(config.blog.map((source) => source.name), ["Joe Turan"]);
-  assert.deepEqual(config.facebook.map((source) => source.name), ["Facebook", "Nawal Boussi"]);
+  assert.deepEqual(config.facebook.map((source) => source.name), ["Facebook", "Joe Turan Facebook"]);
   assert.deepEqual(config.telegram.map((source) => source.name), ["Telegram"]);
-  assert.match(config.facebook[1].outputDir, /www[\\/]Nawal Boussi$/);
+  assert.match(config.facebook[1].outputDir, /www[\\/]Joe Turan Facebook$/);
 });
 
 test("verwendet den konfigurierten Autor im neuen Facebook-Dateinamen", () => {

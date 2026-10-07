@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { providerInfo } = require('./provider-config.cjs');
+const { providerInfo } = require('../provider-config.cjs');
 
 test('Providerwahl prüft live: gesund, gestoppt, stumm, HTTP-Fehler und falscher Vertrag', async () => {
   let mode = 'healthy', requests = 0;
@@ -52,7 +52,7 @@ test('Fehlende Qwen-Konfiguration bietet OpenAI nur mit vorhandenem Schlüssel a
 });
 
 test('Bestätigter Provider wird im Worker vor der Konfigurationsprüfung gebunden', async () => {
-  const { loadConfig } = await import('./markdown_tts.js');
+  const { loadConfig } = await import('../markdown_tts.js');
   assert.equal((await loadConfig(undefined, 'openai')).tts.provider, 'openai');
   assert.equal((await loadConfig(undefined, 'qwen')).tts.provider, 'qwen');
   await assert.rejects(loadConfig(undefined, 'other'), /Unbekannter bestätigter/);

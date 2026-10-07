@@ -416,6 +416,11 @@ body:not(.layout-list) .article-grid {
      im Raster der Kacheldichte und wird nicht vom Seitenzoom übernommen. */
   touch-action: pan-y;
 }
+body.layout-list .article-grid {
+  /* Einfinger-Wischen im Listeninhalt blättert Seiten; Pinch-Zoom bleibt hier
+     möglich, weil die Kacheldichte in der Listenansicht nicht verändert wird. */
+  touch-action: pan-y pinch-zoom;
+}
 @media (min-width: 1451px) { .article-grid { --grid-default-columns: 5; } }
 @media (min-width: 1751px) { .article-grid { --grid-default-columns: 6; } }
 @media (max-width: 1100px) { .article-grid { --grid-default-columns: 3; } }

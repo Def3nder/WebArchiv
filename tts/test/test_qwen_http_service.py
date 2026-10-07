@@ -1,6 +1,7 @@
 """Offline-Vertragstests mit simuliertem CLI-Generator; kein Modellimport."""
 import json
 import io
+import sys
 from pathlib import Path
 import tempfile
 import threading
@@ -9,6 +10,8 @@ import unittest
 import urllib.error
 import urllib.request
 import uuid
+TTS_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(TTS_ROOT))
 from qwen_chunk_worker import ChunkProgressRelay, generate_article
 from http.server import ThreadingHTTPServer
 from qwen_http_service import Jobs, handler, LEASE

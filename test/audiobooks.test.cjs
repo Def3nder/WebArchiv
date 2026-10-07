@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   AUDIOBOOK_AUTHOR, resolveAudiobookDirectory, parseAbstract, trackTitles, createAudiobookLibrary, createProgressStore, loadAudiobookConfig,
-} = require('./audiobooks.cjs');
+} = require('../audiobooks.cjs');
 
 async function tempDir(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'webarchiv-books-'));

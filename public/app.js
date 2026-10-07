@@ -33,6 +33,7 @@ let currentUser = null; // { email, role, allowedAuthors }
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const sessionViewStore = window.WebArchivSessionState;
 const gridDensityMath = window.WebArchivGridDensity;
+const pageSwipeMath = window.WebArchivPageSwipe;
 let currentViewItemId = '';
 let lastListPosition = null;
 let lastDetailPosition = null;
@@ -752,6 +753,15 @@ function wireCardGallery(card) {
     const dx = e.changedTouches[0].clientX - startX;
     const dy = e.changedTouches[0].clientY - startY;
     if (Math.abs(dx) < 30 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    // Reicht die Bewegung bis an den gegenüberliegenden Fensterrand, gehört
+    // sie der Ergebnisseite. Kürzere Bewegungen blättern weiterhin die Galerie.
+    if (pageSwipeMath?.pageDirection({
+      startX,
+      startY,
+      endX: e.changedTouches[0].clientX,
+      endY: e.changedTouches[0].clientY,
+      viewportWidth: pageSwipeViewportWidth(),
+    })) return;
     // Über das Ende hinaus geht es beim ersten Bild weiter (und umgekehrt).
     show((index + (dx < 0 ? 1 : -1) + dots.length) % dots.length);
     card.dataset.swipedAt = String(Date.now());
@@ -808,6 +818,20 @@ function scrollToResults(behavior = 'smooth') {
   window.scrollTo({ top: Math.max(0, top), behavior });
 }
 
+// Seitenbuttons und Wischgesten verwenden denselben Weg, damit Seite,
+// Scrollposition und gespeicherter Sitzungszustand nicht auseinanderlaufen.
+async function changeResultsPage(page, behavior = 'smooth') {
+  const target = Math.max(1, Math.min(state.pages, Number(page)));
+  if (!Number.isInteger(target) || target === state.page || state.loading) return false;
+  state.page = target;
+  await loadArticles();
+  scrollToResults(behavior);
+  await nextPaint();
+  lastListPosition = captureListPosition();
+  saveCurrentViewState();
+  return true;
+}
+
 async function loadArticles() {
   if (state.loading) return;
   state.loading = true;
@@ -851,10 +875,7 @@ async function loadArticles() {
     $app.querySelectorAll('.page-btn[data-page]').forEach(btn => {
       btn.addEventListener('click', () => {
         const p = parseInt(btn.dataset.page);
-        if (p !== state.page) {
-          state.page = p;
-          loadArticles().then(scrollToResults);
-        }
+        if (p !== state.page) void changeResultsPage(p);
       });
     });
 
@@ -1725,6 +1746,7 @@ const GRID_PINCH_THRESHOLD = 0.12;
 const GRID_CLICK_SUPPRESS_MS = 500;
 let gridClickSuppressedUntil = 0;
 let gridTouchGesture = null;
+let pageSwipeGesture = null;
 let gridDensityStatusTimer = null;
 let gridWheelTotal = 0;
 let gridWheelResetTimer = null;
@@ -1750,6 +1772,14 @@ function touchInsideGrid(touch, grid) {
 
 function touchDistance(first, second) {
   return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+}
+
+function pageSwipeViewportWidth() {
+  return window.visualViewport?.width || document.documentElement.clientWidth || window.innerWidth;
+}
+
+function pageSwipeBlockedTarget(target) {
+  return !!target?.closest?.('a, button, input, select, textarea, [contenteditable="true"]');
 }
 
 function maxGridColumns(grid) {
@@ -1898,10 +1928,90 @@ $filterLayout.addEventListener('keydown', event => {
   $filterLayout.querySelector(`[data-layout="${next}"]`).focus();
 });
 
+// Einfinger-Wischen aus dem Ergebnisraster bis in die gegenüberliegende äußere
+// 30-px-Zone blättert eine Seite. Die äußersten 30 px bleiben als Startbereich
+// ausdrücklich dem Browser für Zurück/Vorwärts vorbehalten. In Bildergalerien
+// blättern kürzere Wischer nur das Bild; vertikales Scrollen bleibt nativ.
+$app.addEventListener('touchstart', event => {
+  if (!pageSwipeMath || event.touches.length !== 1 || state.loading) {
+    pageSwipeGesture = null;
+    return;
+  }
+  const touch = event.touches[0];
+  const grid = gridForTouch(touch);
+  const target = event.target?.nodeType === Node.ELEMENT_NODE
+    ? event.target
+    : event.target?.parentElement;
+  if (!grid || pageSwipeBlockedTarget(target)) {
+    pageSwipeGesture = null;
+    return;
+  }
+  pageSwipeGesture = {
+    startX: touch.clientX,
+    startY: touch.clientY,
+    viewportWidth: pageSwipeViewportWidth(),
+    intent: 'pending',
+    multiple: false,
+    blocked: false,
+  };
+}, { passive: true });
+
+$app.addEventListener('touchmove', event => {
+  if (!pageSwipeGesture) return;
+  if (event.touches.length !== 1 || gridTouchGesture || pinchZoomed() || hasActiveSelection()) {
+    pageSwipeGesture = null;
+    return;
+  }
+  const touch = event.touches[0];
+  if (pageSwipeGesture.intent === 'pending') {
+    const intent = pageSwipeMath.movementIntent({
+      ...pageSwipeGesture,
+      currentX: touch.clientX,
+      currentY: touch.clientY,
+    });
+    if (intent === 'pending') return;
+    if (intent === 'vertical') {
+      pageSwipeGesture = null;
+      return;
+    }
+    pageSwipeGesture.intent = 'horizontal';
+  }
+  // Auf iOS muss bereits die erste klar horizontale Bewegung übernommen werden;
+  // ein späteres preventDefault() käme nach Beginn des Seitenscrollens zu spät.
+  if (event.cancelable) event.preventDefault();
+}, { passive: false });
+
+function finishPageSwipe(event) {
+  const gesture = pageSwipeGesture;
+  pageSwipeGesture = null;
+  if (!gesture || gesture.intent !== 'horizontal' || !event.changedTouches.length
+      || gridTouchGesture || pinchZoomed()) return;
+  const touch = event.changedTouches[0];
+  const direction = pageSwipeMath.pageDirection({
+    ...gesture,
+    endX: touch.clientX,
+    endY: touch.clientY,
+  });
+  if (!direction) return;
+
+  // Auch an der ersten/letzten Seite darf aus der beabsichtigten Wischgeste
+  // kein nachfolgender Klick entstehen.
+  gridClickSuppressedUntil = Date.now() + GRID_CLICK_SUPPRESS_MS;
+  const targetPage = state.page + direction;
+  if (targetPage < 1 || targetPage > state.pages) return;
+  void changeResultsPage(targetPage);
+}
+
+$app.addEventListener('touchend', finishPageSwipe, { passive: true });
+// Safari beendet langsame Gesten gelegentlich mit touchcancel. Wenn die Bewegung
+// bereits klar horizontal war, wird sie wie ein normales Loslassen ausgewertet.
+$app.addEventListener('touchcancel', finishPageSwipe, { passive: true });
+
 // Zwei Finger dürfen auf unterschiedlichen Kacheln oder in den Zwischenräumen
 // liegen. Sobald beide innerhalb desselben Rasters starten, gehört die Geste der
 // Spaltensteuerung und darf weder eine Kachel öffnen noch die Seite vergrößern.
 $app.addEventListener('touchstart', event => {
+  if (event.touches.length > 1) pageSwipeGesture = null;
   if (currentLayout() === 'list' || event.touches.length !== 2) return;
   const first = event.touches[0];
   const second = event.touches[1];

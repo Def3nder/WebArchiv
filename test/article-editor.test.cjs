@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const express = require('express');
-const { createMarkdownEditor, installMarkdownRoutes } = require('./article-editor.cjs');
+const { createMarkdownEditor, installMarkdownRoutes } = require('../article-editor.cjs');
 
 const admin = { role: 'admin', allowedAuthors: null };
 const original = '\uFEFF# Prüfung\r\n\r\nDatum: 2026-09-11\r\nKategorien: Wissen\r\n****\r\nEin **Text** mit Umlauten: äöü.\r\n';

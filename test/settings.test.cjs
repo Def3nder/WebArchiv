@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const ROOT = __dirname;
+const ROOT = path.join(__dirname, '..');
 const SETTINGS_SOURCE = fs.readFileSync(path.join(ROOT, 'public', 'settings.js'), 'utf8');
 
 function loadSettings(initialStorage = {}) {

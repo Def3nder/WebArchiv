@@ -11,7 +11,7 @@ Python-Compact-Pipeline. Die Website wurde **nicht verändert**.
 | `config.json` | Sprechprofil, Chunking, Schnitt, FFmpeg, Cache und Zeitlimit |
 | `package.json`, `package-lock.json` | Eigenes npm-Paket mit fixierten Abhängigkeiten |
 | `spawn_tts.cjs` | Optionaler, getesteter CommonJS-Adapter für `server.js` |
-| `markdown_tts.test.js` | Offline-Tests, einschließlich FFmpeg und Prozessanbindung |
+| `test/markdown_tts.test.js` | Offline-Tests, einschließlich FFmpeg und Prozessanbindung |
 | `INTEGRATION.md` | Diese Anleitung und Umsetzungsvorgaben für WebArchiv |
 
 Nur `markdown-it` und `markdown-it-footnote` sind npm-Abhängigkeiten. Die API wird
@@ -57,7 +57,7 @@ WebArchiv/
     config.json
     package.json
     package-lock.json
-    markdown_tts.test.js
+    test/markdown_tts.test.js
   public/...
   www/...
 ```

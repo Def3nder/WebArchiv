@@ -170,7 +170,15 @@ Rücksprung:
   (`2026`, `2026-03`, `03.2026`, `25.01.2026`) — kombinierbar mit Textsuche
   (z. B. „Achtsamkeit 2025").
 - **Filter**: Autor, Jahr, Kategorie, Seitengröße, Ansicht (quadratisch/länglich/Liste).
-  Paginierung server-seitig.
+  Paginierung server-seitig. Auf Touch-Geräten wechselt eine horizontale Einfinger-Geste
+  in allen drei Ansichten zur nächsten oder vorherigen Seite: Sie beginnt außerhalb
+  der äußersten 30 px und wirft die aktuelle Seite bis in die 30-px-Zone links bzw.
+  rechts aus dem Bildschirm. Kurzes Wischen auf einer Bildergalerie blättert deren
+  Bilder; eine bis zum Fensterrand geführte Geste blättert die Ergebnisseite. Auch
+  langsame Bewegungen gelten, sofern sie mindestens 80 px weit und überwiegend
+  horizontal sind. Auf iOS wird die Richtung bei der ersten Bewegung festgelegt,
+  bevor Safari das vertikale Scrollen übernehmen kann. Das Verhalten einschließlich
+  Start auf der rechten Kachel ist in der installierten iPhone-PWA bestätigt.
 - **Kacheldichte**: In der quadratischen und länglichen Ansicht verändert Zusammenziehen
   bzw. Spreizen mit zwei Fingern die Kachelgröße; am Desktop dient dazu `Strg`+Mausrad.
   Die beiden Ansichten merken sich ihre bevorzugte Kachelbreite getrennt pro Benutzer und
@@ -359,6 +367,7 @@ audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, 
 bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
 config.json                   Einstellungen (Hörbuch-Sprungweiten)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp
+test/                         Tests der Hauptanwendung
 public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
@@ -373,12 +382,13 @@ public/
 ├── apple-touch-icon.png      180 px ohne Eckenradius für den iOS-Homescreen
 ├── styles.css                Styles (Light/Dark, Layouts)
 └── pdfjs/                    PDF-Anzeige
-epub-tool/                    Eigenständiges Werkzeug: EPUB → Markdown für Hörbuch-eBooks (eigene package.json)
+epub-tool/                    Eigenständiges Werkzeug: EPUB → Markdown; Tests unter epub-tool/test/
 scripts/hash-passwords.js     bcrypt-Hashes für users.json erzeugen
 scripts/make-favicons.js      favicon.ico + apple-touch-icon.png aus public/favicon.svg erzeugen
 scripts/strip-infographic-categories.js  „Kategorien:“ aus Infografik-.md entfernen (--dry-run, Sicherung)
 prompts/*.txt                 Prompt-Bausteine fürs Copy-Menü (Zahl-Präfix = Reihenfolge)
-scraper/                      Eigenständiger Scraper (schreibt nach ../www)
+scraper/                      Eigenständiger Scraper; Tests unter scraper/test/
+tts/                          Text-zu-Sprache-Anbindung; Tests unter tts/test/
 www/<Autor>/<Jahr>/           Inhalte (per .gitignore ausgenommen)
 download/                     Arbeitsordner (ignored)
 users.json                    Nutzer/Rechte (ignored)
@@ -403,6 +413,23 @@ node scripts/hash-passwords.js
 # optional öffentliche Autoren für Gäste festlegen (public-directories.txt)
 
 node server.js            # bzw. npm start  →  http://localhost:3000
+```
+
+### Tests
+
+Alle Testskripte liegen in `test/`-Unterordnern. Der gemeinsame Einstieg im
+Projektroot führt 16 Node-Testdateien und den Python-Vertragstest aus:
+
+```bash
+npm test
+```
+
+Die eigenständigen Node-Pakete lassen sich weiterhin getrennt prüfen:
+
+```bash
+npm test --prefix scraper
+npm test --prefix epub-tool
+npm test --prefix tts
 ```
 
 **Konfiguration (Env):**

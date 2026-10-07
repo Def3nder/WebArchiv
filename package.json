@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "scrape": "node scraper/scrape_all.js"
+    "scrape": "node scraper/scrape_all.js",
+    "test": "npm run test:node && npm run test:python",
+    "test:node": "node --test --test-isolation=none \"test/*.test.cjs\" \"scraper/test/*.test.js\" \"epub-tool/test/*.test.js\" \"tts/test/*.test.cjs\" \"tts/test/*.test.js\"",
+    "test:python": "python -B -m unittest discover -s tts/test -p \"test_*.py\" -v"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

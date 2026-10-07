@@ -1,17 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
 const vm = require('node:vm');
-const gridDensity = require('./public/grid-density.js');
+const ROOT = path.join(__dirname, '..');
+const gridDensity = require('../public/grid-density.js');
 
 test('Browser-Script stellt die Berechnung vor app.js global bereit', () => {
   const context = { globalThis: {} };
-  vm.runInNewContext(fs.readFileSync('./public/grid-density.js', 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'public', 'grid-density.js'), 'utf8'), context);
   assert.equal(typeof context.globalThis.WebArchivGridDensity?.columnsForCardWidth, 'function');
 });
 
 test('Das gesamte Raster reserviert Pinch-Gesten und lässt vertikales Scrollen zu', () => {
-  const css = fs.readFileSync('./public/styles.css', 'utf8');
+  const css = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
   assert.match(css, /body:not\(\.layout-list\) \.article-grid\s*\{[^}]*touch-action:\s*pan-y;/s);
 });
 

@@ -8,12 +8,12 @@ import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { synthesizeQwen } from './qwen-provider.js';
-import { loadConfig, convert, runTool } from './markdown_tts.js';
-import { requestQwen } from './qwen-http.js';
-import settings from './provider-config.cjs';
+import { synthesizeQwen } from '../qwen-provider.js';
+import { loadConfig, convert, runTool } from '../markdown_tts.js';
+import { requestQwen } from '../qwen-http.js';
+import settings from '../provider-config.cjs';
 
-const root = path.dirname(fileURLToPath(import.meta.url));
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = await loadConfig();
 config.tts.provider = 'qwen';
 config.qwen = { base_url: 'http://qwen.invalid:8765', token_environment_variable: 'QWEN_OFFLINE_TEST_TOKEN' };

@@ -171,7 +171,7 @@ Technik:
 - Schutzregeln: eigene Rolle nicht änderbar, eigener Zugang nicht löschbar, letzter Admin nicht herabstufbar/löschbar, E-Mail eindeutig (ohne Groß-/Kleinschreibung) und nachträglich nicht änderbar, Cross-Site-Schreibanfragen abgewiesen, Session-ID wird nach dem Login neu vergeben, unbekannte E-Mails werden gegen einen Dummy-Hash geprüft.
 - Deployment: Der Dienstbenutzer `ralf` braucht Schreibrecht auf `users.json`, `public-directories.txt` und `/opt/nodeapp` (für die temporäre Datei); `users.json` sinnvollerweise `600`. Nach dem Einspielen Dienst neu starten. Hinweis: `public-directories.txt` ist im Git eingecheckt; beim Code-Deployment die produktive Fassung nicht versehentlich überschreiben.
 - Für Tests lassen sich die Dateipfade über `USERS_FILE` und `PUBLIC_DIRS_FILE` umlenken.
-- Geprüft am 25.09.2026: 10 neue Tests in `user-store.test.cjs` (zusammen mit Parser- und Editortests 21/21 bestanden) sowie Browserprüfung mit Testdateien: Menü je Rolle, Nutzer bearbeiten/anlegen/löschen, Kennwort neu vergeben, Pflichtdialog (Escape gesperrt, Fehlermeldungen, Serversperre 403, Freigabe nach Änderung), Öffentlicher Zugang inklusive sofortiger Wirkung für Gäste. Die echte `users.json` wurde dabei nicht verwendet.
+- Geprüft am 25.09.2026: 10 neue Tests in `test/user-store.test.cjs` (zusammen mit Parser- und Editortests 21/21 bestanden) sowie Browserprüfung mit Testdateien: Menü je Rolle, Nutzer bearbeiten/anlegen/löschen, Kennwort neu vergeben, Pflichtdialog (Escape gesperrt, Fehlermeldungen, Serversperre 403, Freigabe nach Änderung), Öffentlicher Zugang inklusive sofortiger Wirkung für Gäste. Die echte `users.json` wurde dabei nicht verwendet.
 
 ## 5. Infografiken erstellen und verknüpfen
 
@@ -300,7 +300,7 @@ Technik:
 - Editor (`article-editor.cjs`) akzeptiert mehrere Wurzeln (`www/` und `audio/`).
 - Frontend: `public/audiobooks.js` (Liste, Detail, Player, Miniplayer).
 - Deployment: `audio/Hoerbuecher` auf dem Server anlegen (Leserecht für `ralf`), `config.json` mitkopieren; Schreibrecht im App-Verzeichnis für `audiobook-progress.json` besteht bereits (wie `users.json`). Danach Dienst neu starten.
-- Geprüft am 27.09.2026: 29/29 Tests (neu `audiobooks.test.cjs`, erweiterte Editor-/Nutzer-Tests) sowie Browserprüfung mit Testnutzern und Testdateien (Gastsperre, Rechte je Nutzer, Wiedergabe, ±10 Min über Dateigrenzen, Buchende, Tempo, Wiederaufnahme nach Reload, Miniplayer, Artikel-Audio-Wechsel, Abstract-Editor lesend, Handy-Layout). Echte `users.json` und echte `abstract.md` wurden nicht verändert; ein Hörtest auf iPhone/Sperrbildschirm steht aus.
+- Geprüft am 27.09.2026: 29/29 Tests (neu `test/audiobooks.test.cjs`, erweiterte Editor-/Nutzer-Tests) sowie Browserprüfung mit Testnutzern und Testdateien (Gastsperre, Rechte je Nutzer, Wiedergabe, ±10 Min über Dateigrenzen, Buchende, Tempo, Wiederaufnahme nach Reload, Miniplayer, Artikel-Audio-Wechsel, Abstract-Editor lesend, Handy-Layout). Echte `users.json` und echte `abstract.md` wurden nicht verändert; ein Hörtest auf iPhone/Sperrbildschirm steht aus.
 
 ### ToDo für später (Ideen, noch nicht beauftragt)
 
@@ -475,12 +475,21 @@ Kein Abstand mehr zwischen dem goldenen „W“ und „ebArchiv“ (`.site-logo 
 - Möglich sind eine bis acht Spalten; auf schmalen Geräten begrenzt eine Mindestbreite von 110 px die effektive Zahl. Bei Drehung oder Fenstergrößenänderung wird aus der bevorzugten Breite eine neue Spaltenzahl berechnet, sodass die Kachelgröße ungefähr erhalten bleibt. Ein kurzer Statushinweis zeigt nach einer Geste die neue Anzahl. Der sichtbare Kartenanker wird nach dem Umfluss wiederhergestellt.
 - `#app` nutzt nun bis zu 1920 px statt 1400 px. Responsive Vorgaben: zwei Spalten bis 720 px, drei bis 1100 px, vier bis 1450 px, fünf bis 1750 px, darüber sechs. Sie gelten, solange noch keine bevorzugte Kachelbreite gewählt wurde; Reset stellt sie wieder her. Die Größenberechnung liegt testbar in `public/grid-density.js`; der Hoch-/Querformatfall und getrennte Breiten je Ansicht sind automatisiert geprüft. Cache: `styles.css?v=80`, `session-state.js?v=4`, `grid-density.js?v=1`, `app.js?v=69`.
 
+### Ergebnisseiten per Wischgeste (07.10.2026)
+
+- In quadratischer, länglicher und Listenansicht wechselt eine deutliche horizontale Einfinger-Geste innerhalb des Artikelbereichs zur nächsten bzw. vorherigen Ergebnisseite. Dadurch springt sie abhängig von der gewählten Seitengröße um 12, 24, 48 oder 96 Artikel; Filter und Seitengröße bleiben erhalten, anschließend steht die Ansicht wieder am Anfang des Artikelbereichs.
+- Ein Wisch muss mindestens 80 px horizontal sein und die horizontale Bewegung gegenüber der vertikalen überwiegen. Es gibt bewusst kein Zeitlimit, damit auch langsame Bewegungen gelten. Nur die äußersten 30 px bleiben als Startbereich für die Browsergesten Zurück/Vorwärts frei; dadurch kann die gesamte rechte und linke Kachel bis auf diesen schmalen Rand als Startfläche dienen. Der Finger muss beim Loslassen die äußerste 30-px-Zone der Zielseite erreicht haben (links hinaus = nächste, rechts hinaus = vorherige Seite). Auf iOS wird die Richtung bei der ersten Bewegung festgelegt: horizontal übernimmt WebArchiv die Geste sofort mit `preventDefault()`, vertikal bleibt sie beim nativen Scrollen. Ein `touchcancel` nach bereits eindeutig horizontaler Bewegung wird wie Loslassen ausgewertet.
+- Bildergalerien in Kacheln behalten ihre eigene kurze Wischgeste. Erreicht ein langer Wisch aus einer Galerie den gegenüberliegenden Fensterrand, hat der Ergebnisseitenwechsel Vorrang. Mehrfinger-Gesten, Pinch-Zoom, überwiegend vertikales Scrollen und interaktive Bedienelemente lösen keinen Seitenwechsel aus. Ein erkannter Wisch unterdrückt den nachfolgenden Kachelklick; an erster und letzter Seite bleibt die nicht mögliche Richtung ohne Seitenwechsel.
+- Seitenbuttons und Wischgesten verwenden denselben Seitenwechselweg. Seite, Seitengröße und die neue Listenposition werden im vorhandenen Sitzungszustand gespeichert. Technik: `public/page-swipe.js`, Integration in `public/app.js`, Cache `page-swipe.js?v=5`, `app.js?v=75`.
+- **Praxistest auf dem iPhone am 07.10.2026 bestätigt:** langsames Wischen funktioniert in der installierten PWA. Der zunächst verwendete Startschutz von 80 px war auf der rechten Kachel zu breit und wurde nach dem Praxistest auf die äußersten 30 px reduziert. Seitdem funktioniert auch ein Start auf der rechten Kachel zuverlässig; die Browser-Randgesten bleiben in der 30-px-Zone verfügbar.
+
 ### PWA-Aktualisierung (07.10.2026)
 
 - `GET /service-worker.js` wird dynamisch mit einer aus den obersten Dateien unter `public/` berechneten Versionssignatur ausgeliefert (`no-cache`, Gültigkeitsbereich `/`). Der Worker besitzt bewusst keinen Fetch-Handler und keinen Offline-Cache; er dient nur als zuverlässiges Änderungssignal und kann deshalb keine alte App-Shell festhalten.
 - `public/pwa-update.js` registriert den Worker mit `updateViaCache: none` und prüft beim Laden, beim Wiederanzeigen der App, nach Rückkehr der Verbindung und alle 15 Minuten. Eine neue Worker-Version wartet auf die ausdrückliche Zustimmung des Benutzers.
 - Der feststehende Hinweis „Neue Version verfügbar“ bietet „Jetzt aktualisieren“ und „Später“. Beim Aktualisieren aktiviert `SKIP_WAITING` den neuen Worker; anschließend wird dieselbe URL einschließlich Artikel-Hash mit einem einmaligen Cache-Buster geladen. Gespeicherte Sitzungsansicht und Login bleiben erhalten. Solange ein Dialog geöffnet ist, fordert der Hinweis zuerst zum Schließen auf, damit keine Eingabe verloren geht.
 - Diese Version muss einmal regulär geladen werden, um den Update-Worker in einer bereits angelegten iPhone-Web-App zu registrieren. Danach benötigen normale HTML-/CSS-/JavaScript-Aktualisierungen keine Neuinstallation. Vom Betriebssystem verwaltete Eigenschaften des Home-Screen-Eintrags wie Name oder Icon können von iOS weiterhin separat gecacht werden. Cache: `styles.css?v=82`, `pwa-update.js?v=1`.
+- **Praxistest auf dem iPhone am 07.10.2026 bestätigt:** Der Hinweis „Neue Version verfügbar“ erscheint in der bestehenden installierten PWA und aktualisiert sie erfolgreich. Ein Löschen oder erneutes Anlegen der PWA ist nicht erforderlich.
 
 ### Filterleiste auf Tablets (07.10.2026)
 
@@ -529,7 +538,7 @@ Technik:
 - `bookmarks.cjs`: `bookmarks.json` (gitignored, atomar, Modus 600, Pfad per `BOOKMARKS_FILE`), Schlüssel E-Mail (klein) → Artikel-ID → Zeitpunkt. `PUT /api/bookmarks/*` (Artikel muss im Index sein und der Autor erlaubt) und `DELETE /api/bookmarks/*` (auch verwaiste Einträge), angemeldet, Cross-Site-Schutz; `mustChangePassword` sperrt sie wie alle `/api/*`. Beim Löschen eines Nutzers entfallen seine Lesezeichen.
 - `server.js`: `/api/articles?bookmarks=1` filtert nach dem Rechtefilter und vor der Gruppierung; alle Einträge und der Einzelartikel tragen `bookmarked`. Eine Gruppe erscheint, wenn ihr Anker ein Lesezeichen hat (der Artikel-Dialog setzt es immer auf den Anker).
 - `public/app.js`: `setBookmarkFilter`, `toggleBookmark`, `.card-bookmark`; `handleImgError` ersetzt nur noch das Bild (Badges und Lesezeichen bleiben bei defektem Bild stehen).
-- Geprüft am 02.10.2026: 49/49 Tests (neu `bookmarks.test.cjs`: Speicher, Neuladen, Gast, Nutzer löschen, Routen mit Rechten/404/Cross-Site/401). Browser mit Testserver, Testnutzern und eigener `bookmarks.json` (echte Dateien unberührt): Menüeintrag, Dialog (sofortige Wirkung, Speichern über Neuladen, Automatisch folgt dem Gerät live), Textgröße, Lesezeichen setzen/entfernen, Header-Filter mit Jahr/Kategorie, Telegram-Lesezeichen, Entfernen beim Schließen, Kachel- und Listensymbol, Handy-Breite ohne seitliches Scrollen, Gast (Vorgaben, kein Button, `PUT` → 401). **Nicht geprüft:** echtes iPhone/Safari.
+- Geprüft am 02.10.2026: 49/49 Tests (neu `test/bookmarks.test.cjs`: Speicher, Neuladen, Gast, Nutzer löschen, Routen mit Rechten/404/Cross-Site/401). Browser mit Testserver, Testnutzern und eigener `bookmarks.json` (echte Dateien unberührt): Menüeintrag, Dialog (sofortige Wirkung, Speichern über Neuladen, Automatisch folgt dem Gerät live), Textgröße, Lesezeichen setzen/entfernen, Header-Filter mit Jahr/Kategorie, Telegram-Lesezeichen, Entfernen beim Schließen, Kachel- und Listensymbol, Handy-Breite ohne seitliches Scrollen, Gast (Vorgaben, kein Button, `PUT` → 401). **Nicht geprüft:** echtes iPhone/Safari.
 - Deployment: `server.js` geändert und `bookmarks.cjs` neu → beide kopieren, Dienst neu starten. Frontend: `public/settings.js` neu, `app.js?v=54`, `styles.css?v=69`, `index.html`. `bookmarks.json` entsteht beim ersten Lesezeichen im App-Verzeichnis (Schreibrecht für `ralf` besteht wie bei `audiobook-progress.json`).
 
 ### Bildvollansicht
@@ -561,7 +570,7 @@ Ein CDN-Laden wurde besprochen, dann ausdrücklich ein anderer Weg gewählt: Der
 - Nach Speichern Index, Detailansicht, Liste und Filter aktualisieren. Dateiname/Artikel-ID bleiben stabil; Jahresordner werden nicht durch Datumsänderung umbenannt.
 - „Datei gespeichert, Aktualisierung fehlgeschlagen“ muss von einem gescheiterten Schreibvorgang unterschieden werden.
 
-Zur Einführung mussten sechs Laufzeitdateien auf den Server: `server.js`, `article-editor.cjs`, `public/app.js`, `public/article-editor.js`, `public/index.html`, `public/styles.css`. Keine neuen npm-Abhängigkeiten. `article-editor.test.cjs` und `graft/` sind Entwicklungsbestandteile. Damals wurden neun automatisierte Tests sowie Browserprüfungen für Speichern, Abbrechen, Konflikte und mobiles Layout als erfolgreich protokolliert.
+Zur Einführung mussten sechs Laufzeitdateien auf den Server: `server.js`, `article-editor.cjs`, `public/app.js`, `public/article-editor.js`, `public/index.html`, `public/styles.css`. Keine neuen npm-Abhängigkeiten. `test/article-editor.test.cjs` und `graft/` sind Entwicklungsbestandteile. Damals wurden neun automatisierte Tests sowie Browserprüfungen für Speichern, Abbrechen, Konflikte und mobiles Layout als erfolgreich protokolliert.
 
 Quellen: [G5], [G6], [G7], [G8], [G9], [G10], [D1].
 
@@ -801,7 +810,9 @@ Die alte Idee, Nutzdaten unter `www/data` abzulegen, war ein Mount-Vorschlag. Si
 
 ## 12. Prüfstand und sinnvolle Prüfkommandos
 
-Die frühere Projektbeschreibung „keine Tests“ ist überholt. Es existieren inzwischen Parser-, Editor-, Scraper-, TTS- und Qwen-Brückentests. Im Root gibt es weiterhin keinen allgemeinen `npm test`-Eintrag und keinen Build-/Lint-Schritt.
+Die frühere Projektbeschreibung „keine Tests“ ist überholt. Tests der Hauptanwendung liegen gesammelt unter `test/`; eigenständige Pakete behalten eigene Unterordner `scraper/test/`, `epub-tool/test/` und `tts/test/`. `npm test` im Projektroot führt alle Node- und Python-Tests aus. Ein Build-/Lint-Schritt existiert weiterhin nicht.
+
+**Aufräumen am 07.10.2026:** Alle 17 Testskripte wurden ohne Änderung der Paketgrenzen in diese vier `test`-Unterordner verschoben. Relative Modul- und Dateipfade, die Paket-Testbefehle sowie AGENTS-, README-, Claude- und TTS-Dokumentation wurden angepasst. Der neue gemeinsame Lauf bestand mit 123/123 Node-Tests und 9/9 Python-Tests; zusätzlich wurden die separaten Testbefehle für Scraper (8/8), EPUB-Werkzeug (5/5) und TTS (33/33) erfolgreich geprüft.
 
 ### Historisch protokollierte Nachweise
 
@@ -829,10 +840,11 @@ Vom Projektroot, mit installierten jeweiligen Abhängigkeiten:
 node --check server.js
 node --check public/app.js
 node --check public/article-editor.js
-node --test server.test.cjs article-editor.test.cjs user-store.test.cjs audiobooks.test.cjs bookmarks.test.cjs
+npm test
 npm test --prefix scraper
+npm test --prefix epub-tool
 npm test --prefix tts
-python -B -m unittest discover -s tts -p test_qwen_http_service.py -v
+python -B -m unittest discover -s tts/test -p test_qwen_http_service.py -v
 git diff --check
 ```
 

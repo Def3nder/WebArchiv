@@ -183,7 +183,7 @@ Die Synthese wurde simuliert; FFmpeg und HTTP-Verbindungen waren lokal echt.
 
 ```sh
 npm test --prefix tts
-python -B -m unittest discover -s tts -p test_qwen_http_service.py -v
+python -B -m unittest discover -s tts/test -p test_qwen_http_service.py -v
 ```
 
 Kein echter Modell-/OpenAI-Aufruf durch den Assistenten. Die vorherige Version

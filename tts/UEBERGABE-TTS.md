@@ -61,7 +61,7 @@ Vor der Umsetzung wurde die dortige `INTEGRATION.md` gelesen, anschließend die
 Projektregeln, Server, Frontend und Scraper-Anbindung geprüft.
 
 Übernommen wurden `markdown_tts.js`, `spawn_tts.cjs`, `config.json`,
-`package.json`, `package-lock.json`, `markdown_tts.test.js` und `INTEGRATION.md`
+`package.json`, `package-lock.json`, `test/markdown_tts.test.js` und `INTEGRATION.md`
 nach `WebArchiv/tts/`. Die Root-Anwendung bleibt CommonJS; das Unterpaket ist
 über seine eigene `package.json` ein ES-Modul-Paket. Kein Python zur Laufzeit.
 
@@ -79,8 +79,8 @@ Popups. Vor jedem neuen Start muss der Benutzer ausdrücklich bestätigen.
 | `tts/spawn_tts.cjs` | Getesteter CommonJS-Adapter: Child-Spawn, stdout/stderr zeilenweise lesen, Exit abwarten, IPC-Abbruch |
 | `tts/markdown_tts.js` | Markdown-Sprechtext, Chunking, OpenAI-Anfragen, Audioverarbeitung, CLI und atomare Veröffentlichung |
 | `tts/config.json` | Modell, Stimme, Sprechstil, Parser, Chunking, FFmpeg, Cache und Zeitlimits; keine Schlüsselwerte |
-| `tts/markdown_tts.test.js` | Offline-Tests des Workers, der Audioverarbeitung und des Spawn-Adapters |
-| `tts/jobs.test.cjs` | Test der neuen Audio-Spiegelstruktur und des Schutzes bereits vorhandener MP3s |
+| `tts/test/markdown_tts.test.js` | Offline-Tests des Workers, der Audioverarbeitung und des Spawn-Adapters |
+| `tts/test/jobs.test.cjs` | Test der neuen Audio-Spiegelstruktur und des Schutzes bereits vorhandener MP3s |
 | `public/app.js` | Artikelaktionen, native Bestätigung, TTS-Popup-Steuerung, Polling und Aktualisierung der Artikelansicht |
 | `public/index.html` | TTS-Overlay mit Status, Log, Abbruch, Statusaktualisierung, Reindex und MP3-Link |
 | `public/styles.css` | Vorhandenen Scrape-Popup-Stil wiederverwenden; Artikel-Aktionsmenü und TTS-Bedienelemente |
@@ -324,7 +324,7 @@ Tatsächlich im Verlauf ausgeführt:
   Abgedeckt: CLI, Markdown, Unicode, SSE-Paketgrenzen und `[DONE]`, WAV-Schnitt,
   kurzer und langer Pfad, Pre-Fill/Cache, belegtes Ziel, konkurrierender Zugriff,
   Abbruch, Tool-Zeitlimit, fehlendes Programm und Spawn-Abschluss.
-- `node --test --test-isolation=none tts/jobs.test.cjs`: **ein zusätzlicher
+- `node --test --test-isolation=none tts/test/jobs.test.cjs`: **ein zusätzlicher
   Test bestanden** nach Umstellung auf `audio/`. Er prüft verschachtelte
   Spiegelpfade, MP3-Link, keine Ausgabe unter `www/` und Startverweigerung bei
   vorhandener MP3 an beiden Ablageorten. Der Worker ist dabei simuliert;
