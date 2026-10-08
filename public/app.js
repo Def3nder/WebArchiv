@@ -818,7 +818,7 @@ function scrollToResults(behavior = 'smooth') {
   window.scrollTo({ top: Math.max(0, top), behavior });
 }
 
-// Seitenbuttons und Wischgesten verwenden denselben Weg, damit Seite,
+// Seitenbuttons, Wischgesten und Pfeiltasten verwenden denselben Weg, damit Seite,
 // Scrollposition und gespeicherter Sitzungszustand nicht auseinanderlaufen.
 async function changeResultsPage(page, behavior = 'smooth') {
   const target = Math.max(1, Math.min(state.pages, Number(page)));
@@ -2073,10 +2073,34 @@ window.addEventListener('resize', () => {
   }, 120);
 });
 
-$filterLimit.addEventListener('change', () => {
-  state.limit = parseInt($filterLimit.value);
-  state.page = 1;
-  loadArticles();
+$filterLimit.addEventListener('change', async () => {
+  const nextLimit = parseInt($filterLimit.value);
+  if (state.loading) {
+    $filterLimit.value = String(state.limit);
+    return;
+  }
+
+  const position = captureListPosition();
+  const anchoredItemIndex = (state.page - 1) * state.limit + position.anchorIndex;
+  const nextPage = sessionViewStore.pageForLimitChange(
+    state.page,
+    state.limit,
+    nextLimit,
+    position.anchorIndex,
+  );
+  position.anchorIndex = anchoredItemIndex % nextLimit;
+
+  restoringSessionView = true;
+  try {
+    state.page = nextPage;
+    state.limit = nextLimit;
+    await loadArticles();
+    await restoreListPosition(position);
+    lastListPosition = captureListPosition();
+  } finally {
+    restoringSessionView = false;
+    saveCurrentViewState();
+  }
 });
 
 $telegramBtn.addEventListener('click', () => {
@@ -2677,12 +2701,29 @@ document.addEventListener('keydown', e => {
     if (!$loginOverlay.hidden && currentUser) { hideLogin(); return; }
     return;
   }
-  if ($overlay.hidden) return;
-  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-  const dir = e.key === 'ArrowRight' ? +1 : -1;
-  // In der Vollansicht erst durch die Bilder der Gruppe, danach zum Nachbarartikel.
-  if (!document.getElementById('img-fullscreen').hidden) stepFullscreen(dir);
-  else navigateArticle(dir);
+  const dir = pageSwipeMath?.keyDirection(e) || 0;
+  if (!dir) return;
+
+  if (!$overlay.hidden) {
+    // In der Vollansicht erst durch die Bilder der Gruppe, danach zum Nachbarartikel.
+    if (!document.getElementById('img-fullscreen').hidden) stepFullscreen(dir);
+    else navigateArticle(dir);
+    return;
+  }
+
+  // In der Kachelansicht blättern die Pfeiltasten wie eine Wischgeste um die
+  // aktuell gewählte Anzahl Artikel. Bedienelemente und Dialoge behalten die Tasten.
+  const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
+  const interactive = target?.closest(
+    'input, textarea, select, button, a, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
+  );
+  if (currentLayout() === 'list' || interactive || !$loginOverlay.hidden
+      || !$scrapeOverlay.hidden || !$ttsOverlay.hidden || document.querySelector('dialog[open]')) return;
+
+  const targetPage = state.page + dir;
+  if (targetPage < 1 || targetPage > state.pages) return;
+  e.preventDefault();
+  void changeResultsPage(targetPage);
 });
 
 // Grundvergrößerung der Seite: Safari meldet bei Seitenzoom (Aa, z. B. 115 %)

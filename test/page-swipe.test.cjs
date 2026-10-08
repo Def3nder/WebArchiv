@@ -35,6 +35,20 @@ test('Wischen nach links und rechts wechselt in die passende Richtung', () => {
   assert.equal(pageSwipe.pageDirection(gesture({ endX: 370 })), -1);
 });
 
+test('Cursor rechts und links blättert in dieselbe Richtung wie die Wischgeste', () => {
+  assert.equal(pageSwipe.keyDirection({ key: 'ArrowRight' }), 1);
+  assert.equal(pageSwipe.keyDirection({ key: 'ArrowLeft' }), -1);
+  assert.equal(pageSwipe.keyDirection({ key: 'ArrowUp' }), 0);
+});
+
+test('Modifizierte oder bereits behandelte Cursortasten bleiben unberührt', () => {
+  assert.equal(pageSwipe.keyDirection({ key: 'ArrowRight', altKey: true }), 0);
+  assert.equal(pageSwipe.keyDirection({ key: 'ArrowLeft', ctrlKey: true }), 0);
+  assert.equal(pageSwipe.keyDirection({ key: 'ArrowRight', metaKey: true }), 0);
+  assert.equal(pageSwipe.keyDirection({ key: 'ArrowLeft', shiftKey: true }), 0);
+  assert.equal(pageSwipe.keyDirection({ key: 'ArrowRight', defaultPrevented: true }), 0);
+});
+
 test('Die äußersten 30 Pixel bleiben den Browsergesten vorbehalten', () => {
   assert.equal(pageSwipe.EDGE_INSET, 30);
   assert.equal(pageSwipe.pageDirection(gesture({ startX: 29, endX: 370 })), 0);
@@ -86,4 +100,11 @@ test('Die Browserintegration übernimmt horizontale touchmove-Ereignisse aktiv',
   assert.match(app, /addEventListener\('touchcancel',\s*finishPageSwipe/);
   assert.doesNotMatch(app, /pageSwipeBlockedTarget\(target\)[\s\S]{0,300}card-gallery/);
   assert.match(app, /Reicht die Bewegung bis an den gegenüberliegenden Fensterrand[\s\S]*?pageSwipeMath\?\.pageDirection/);
+});
+
+test('Die Browserintegration blättert per Cursortaste nur in der Kachelansicht', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  assert.match(app, /pageSwipeMath\?\.keyDirection\(e\)/);
+  assert.match(app, /currentLayout\(\) === 'list'[\s\S]*?state\.page \+ dir[\s\S]*?changeResultsPage\(targetPage\)/);
+  assert.match(app, /input, textarea, select, button, a, audio, video/);
 });

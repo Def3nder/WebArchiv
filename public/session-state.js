@@ -33,6 +33,20 @@
       : null;
   }
 
+  // Beim Wechsel der Seitengröße bleibt die erste aktuell sichtbare Kachel als
+  // Anker erhalten. Bei einem größeren Limit landet sie auf der Seite, die sie enthält.
+  function pageForLimitChange(page, oldLimit, newLimit, anchorIndex = 0) {
+    const currentPage = positiveInteger(page, 1);
+    const previousLimit = positiveInteger(oldLimit, 24);
+    const nextLimit = positiveInteger(newLimit, 24);
+    const visibleIndex = Math.min(
+      previousLimit - 1,
+      Math.max(0, Math.floor(Number(anchorIndex) || 0)),
+    );
+    const anchoredItemIndex = (currentPage - 1) * previousLimit + visibleIndex;
+    return Math.floor(anchoredItemIndex / nextLimit) + 1;
+  }
+
   function position(value, fallbackAuthorScope = '') {
     if (!value || typeof value !== 'object') return null;
     return {
@@ -137,5 +151,5 @@
     }
   }
 
-  return { VERSION, storageKey, normalize, load, save, clear };
+  return { VERSION, storageKey, normalize, pageForLimitChange, load, save, clear };
 }));

@@ -1,4 +1,4 @@
-/* WebArchiv — Auswertung horizontaler Wischgesten für Ergebnisseiten */
+/* WebArchiv — Richtungssteuerung für Ergebnisseiten per Wischgeste und Tastatur */
 (function exposePageSwipe(root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -24,6 +24,16 @@
     const dy = finiteNumber(gesture.currentY) - finiteNumber(gesture.startY);
     if (dx === 0 && dy === 0) return 'pending';
     return Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+  }
+
+  // Rückgabe wie bei pageDirection: +1 = nächste, -1 = vorherige Seite.
+  // Modifizierte Pfeiltasten bleiben Browser- und Betriebssystem-Kürzeln vorbehalten.
+  function keyDirection(event) {
+    if (!event || event.defaultPrevented || event.altKey || event.ctrlKey
+        || event.metaKey || event.shiftKey) return 0;
+    if (event.key === 'ArrowRight') return 1;
+    if (event.key === 'ArrowLeft') return -1;
+    return 0;
   }
 
   // Rückgabe: +1 = nächste Seite, -1 = vorherige Seite, 0 = keine Seitengeste.
@@ -55,5 +65,13 @@
     return 0;
   }
 
-  return { EDGE_INSET, TARGET_EDGE_ZONE, MIN_X, X_DOMINANCE, movementIntent, pageDirection };
+  return {
+    EDGE_INSET,
+    TARGET_EDGE_ZONE,
+    MIN_X,
+    X_DOMINANCE,
+    movementIntent,
+    keyDirection,
+    pageDirection,
+  };
 }));

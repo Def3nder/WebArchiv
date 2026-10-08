@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const sessionState = require('../public/session-state.js');
 
 function storage() {
@@ -13,6 +15,20 @@ function storage() {
 }
 
 const user = { email: 'Ralf@Example.de', role: 'admin' };
+
+test('Eine neue Seitengröße behält die erste gerade sichtbare Kachel im Sichtfeld', () => {
+  assert.equal(sessionState.pageForLimitChange(2, 96, 24), 5);
+  assert.equal(sessionState.pageForLimitChange(2, 96, 24, 30), 6);
+  assert.equal(sessionState.pageForLimitChange(5, 24, 96, 12), 2);
+  assert.equal(sessionState.pageForLimitChange(5, 24, 96), 2);
+  assert.equal(sessionState.pageForLimitChange(3, 24, 48), 2);
+  assert.equal(sessionState.pageForLimitChange(1, 96, 12), 1);
+});
+
+test('Der Limit-Handler sichert und restauriert die erste gerade sichtbare Kachel', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(app, /const position = captureListPosition\(\)[\s\S]*?pageForLimitChange\([\s\S]*?position\.anchorIndex[\s\S]*?await loadArticles\(\)[\s\S]*?await restoreListPosition\(position\)/);
+});
 
 test('Sitzungsansicht wird pro Benutzer vollständig und normalisiert gespeichert', () => {
   const device = storage();
