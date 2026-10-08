@@ -1,7 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseArticle, linkInfographics, buildInfographicMarkdown, slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition } = require('../server.js');
+const {
+  parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
+  buildInfographicMarkdown, slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
+} = require('../server.js');
 
 test('liest URL und Prompt aus einer Prompt-Datei getrennt', () => {
   const definition = parsePromptDefinition([
@@ -70,6 +73,23 @@ test('liest bekannte Metadaten direkt nach dem Datum weiterhin', () => {
   assert.equal(article.episodeNum, 42);
   assert.deepEqual(article.tags, ['Körper', 'Gesundheit']);
   assert.equal(article.body, 'Artikelinhalt.');
+});
+
+test('Audioquickie-Nummern sind als Zahl und mit Raute durchsuchbar', () => {
+  const index = buildArticleSearchIndex([
+    { id: 'Stefan/2961', title: 'Ein anderer Titel', author: 'Stefan Hiene', episodeNum: 2961, categories: [], excerpt: '' },
+    { id: 'Stefan/2962', title: 'Noch ein Titel', author: 'Stefan Hiene', episodeNum: 2962, categories: [], excerpt: '' },
+  ]);
+  for (const query of ['2961', '#2961']) {
+    const parsed = parseArticleSearchQuery(query, ['2025', '2026']);
+    assert.equal(parsed.text, '2961');
+    assert.deepEqual(parsed.dateConstraints, []);
+    assert.equal(index.search(parsed.text)[0].item.id, 'Stefan/2961');
+  }
+  assert.deepEqual(parseArticleSearchQuery('2026 2961', ['2025', '2026']), {
+    dateConstraints: [{ kind: 'prefix', value: '2026' }],
+    text: '2961',
+  });
 });
 
 // ── Infografik-Gruppen ─────────────────────────────────────────────────────

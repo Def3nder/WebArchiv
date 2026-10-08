@@ -144,6 +144,25 @@ function parseDateQuery(q) {
   return null;
 }
 
+function parseArticleSearchQuery(query, knownYears = []) {
+  const dateConstraints = [];
+  const textTokens = [];
+  const years = new Set(knownYears);
+  for (const token of String(query || '').trim().split(/\s+/).filter(Boolean)) {
+    const explicitEpisode = token.match(/^#(\d+)$/);
+    if (explicitEpisode) {
+      textTokens.push(explicitEpisode[1]);
+      continue;
+    }
+    const dateQuery = parseDateQuery(token);
+    // Nur tatsächlich vorhandene vierstellige Jahre als Datumsfilter behandeln.
+    // Andere Zahlen sind unter anderem Audioquickie-Nummern (z. B. 2961).
+    if (dateQuery && (!/^\d{4}$/.test(token) || years.has(token))) dateConstraints.push(dateQuery);
+    else textTokens.push(token);
+  }
+  return { dateConstraints, text: textTokens.join(' ').trim() };
+}
+
 function normalizeDate(raw) {
   if (!raw) return '';
   const s = String(raw).trim();
@@ -607,6 +626,22 @@ function linkInfographics(articleList, authorPriority = []) {
   return { groups, anchorOf };
 }
 
+function buildArticleSearchIndex(articleList) {
+  return new Fuse(articleList, {
+    keys: [
+      { name: 'title',      weight: 3 },
+      { name: 'episodeNum', weight: 2 },
+      { name: 'author',     weight: 1.5 },
+      { name: 'categories', weight: 1 },
+      { name: 'excerpt',    weight: 0.8 },
+    ],
+    threshold: 0.35,
+    includeScore: true,
+    ignoreLocation: true,
+    minMatchCharLength: 2,
+  });
+}
+
 // Nur interne Felder entfernen und geerbtes Audio ohne Recht am Ursprung verbergen.
 function exposeArticleForUser(article, user) {
   const {
@@ -704,18 +739,7 @@ async function rebuildIndex() {
     categories: [...catsSet].filter(Boolean).sort((a, b) => a.localeCompare(b, 'de')),
   };
 
-  fuseIndex = new Fuse(articles, {
-    keys: [
-      { name: 'title',      weight: 3 },
-      { name: 'author',     weight: 1.5 },
-      { name: 'categories', weight: 1 },
-      { name: 'excerpt',    weight: 0.8 },
-    ],
-    threshold: 0.35,
-    includeScore: true,
-    ignoreLocation: true,
-    minMatchCharLength: 2,
-  });
+  fuseIndex = buildArticleSearchIndex(articles);
 
   reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
   console.log(`✓ ${articles.length} articles, ${audiobooks.books.length} Hörbücher indexed in ${Date.now() - t0}ms`);
@@ -1564,14 +1588,7 @@ app.get('/api/articles', attachUser, (req, res) => {
   if (q) {
     // Query in Tokens zerlegen: Datums-Tokens → Datumsfilter, Rest → Fuse-Text.
     // So sind Text-Suche und Datumseingrenzung kombinierbar ("Achtsamkeit 2025").
-    const tokens = q.trim().split(/\s+/);
-    const dateConstraints = [];
-    const textTokens = [];
-    for (const t of tokens) {
-      const dq = parseDateQuery(t);
-      if (dq) dateConstraints.push(dq);
-      else textTokens.push(t);
-    }
+    const { dateConstraints, text } = parseArticleSearchQuery(q, meta.years);
     // Datums-Tokens als Filter anwenden (AND)
     for (const dq of dateConstraints) {
       filtered = dq.kind === 'exact'
@@ -1579,7 +1596,6 @@ app.get('/api/articles', attachUser, (req, res) => {
         : filtered.filter(a => a.date && a.date.startsWith(dq.value));
     }
     // Restlicher Text über Fuse, auf die datums-gefilterte Teilmenge eingeschränkt
-    const text = textTokens.join(' ').trim();
     if (text && fuseIndex) {
       const filteredIds = new Set(filtered.map(a => a.id));
       const results = fuseIndex.search(text, { limit: 2000 });
@@ -1698,7 +1714,8 @@ if (require.main === module) {
 }
 
 module.exports = {
-  parseArticle, linkInfographics, buildInfographicMarkdown, removeCategoryLines, slugify,
+  parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
+  buildInfographicMarkdown, removeCategoryLines, slugify,
   normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
   computeAppShellVersion, serviceWorkerSource,
 };
