@@ -68,7 +68,7 @@ the ACL filter, so users who cannot see the article get the infographic as its o
 **Frontend: `public/` (no framework).** `index.html` is the shell, `app.js` is a hash-routed SPA
 (`#/article/<id>` deep-links), `styles.css` the styling. It talks only to the `/api/*` JSON
 endpoints and renders cards, an article overlay, audio/video players, and an embedded PDF viewer
-(`public/pdfjs/`). State (search query, filters, pagination, current user) lives in the `state`
+(`public/vendor/pdfjs/`). State (search query, filters, pagination, current user) lives in the `state`
 object in `app.js`.
 
 ## Auth & access control

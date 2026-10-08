@@ -11,6 +11,7 @@ async function fixture(t, { users, publicDirs = ['Videos'] } = {}) {
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const usersFile = path.join(dir, 'users.json');
   const publicFile = path.join(dir, 'public-directories.txt');
+  const settingsFile = path.join(dir, 'config.json');
   const hash = await bcrypt.hash('altes-kennwort', 4);
   const initial = users ?? {
     _comment: 'bleibt erhalten',
@@ -21,10 +22,11 @@ async function fixture(t, { users, publicDirs = ['Videos'] } = {}) {
   };
   await fs.writeFile(usersFile, JSON.stringify(initial));
   await fs.writeFile(publicFile, JSON.stringify({ 'public-directories': publicDirs, note: 'x' }));
-  const store = createUserStore({ usersFile, publicFile });
+  await fs.writeFile(settingsFile, JSON.stringify({ authorPriority: ['Joe Turan', 'Facebook'], audiobooks: { skipShortSeconds: 30 } }));
+  const store = createUserStore({ usersFile, publicFile, settingsFile });
   store.load();
   const readUsers = async () => JSON.parse(await fs.readFile(usersFile, 'utf8'));
-  return { store, dir, usersFile, publicFile, readUsers };
+  return { store, dir, usersFile, publicFile, settingsFile, readUsers };
 }
 const newUser = { email: 'neu@example.org', role: 'user', allowedAuthors: ['PDF'], password: 'geheim123', mustChangePassword: true };
 
@@ -37,7 +39,7 @@ test('Anlegen erhält Dateiformat und unbekannte Felder, speichert nur den Hash'
   assert.equal(saved.users[1].extra, 1);
   assert.equal(saved.users[2].password, undefined);
   assert.ok(await bcrypt.compare('geheim123', saved.users[2].passwordHash));
-  assert.deepEqual((await fs.readdir(f.dir)).sort(), ['public-directories.txt', 'users.json']);
+  assert.deepEqual((await fs.readdir(f.dir)).sort(), ['config.json', 'public-directories.txt', 'users.json']);
   await assert.rejects(f.store.create({ ...newUser, email: 'NEU@example.org' }), { status: 409 });
 });
 
@@ -143,6 +145,18 @@ test('Öffentliche Autoren werden gespeichert und wirken sofort', async t => {
   assert.deepEqual(JSON.parse(await fs.readFile(f.publicFile, 'utf8')), { 'public-directories': ['PDF', 'Infografiken'], note: 'x' });
   assert.deepEqual(f.store.sessionUser({ email: 'leser@example.org' }).allowedAuthors, ['Joe Turan', 'PDF', 'Infografiken']);
   await assert.rejects(f.store.setPublicAuthors(null), { status: 400 });
+});
+
+test('Autoren-Priorität wird getrennt von öffentlichen Autoren in config.json gespeichert', async t => {
+  const f = await fixture(t);
+  await f.store.setAuthorPriority(['Telegram', 'Facebook', 'Telegram', ' Joe Turan ']);
+  assert.deepEqual(f.store.authorPriority, ['Telegram', 'Facebook', 'Joe Turan']);
+  assert.deepEqual(JSON.parse(await fs.readFile(f.settingsFile, 'utf8')), {
+    authorPriority: ['Telegram', 'Facebook', 'Joe Turan'],
+    audiobooks: { skipShortSeconds: 30 },
+  });
+  assert.deepEqual(JSON.parse(await fs.readFile(f.publicFile, 'utf8')), { 'public-directories': ['Videos'], note: 'x' });
+  await assert.rejects(f.store.setAuthorPriority(null), { status: 400 });
 });
 
 test('Private Autoren (Hörbücher) sind nie öffentlich', async t => {

@@ -2116,6 +2116,45 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
 .ua-picker-body:not([hidden]) { display: flex; flex-direction: column; flex: 1 1 0; }
 .ua-picker-body .ua-author-list { flex: 1 1 0; min-height: 140px; }
 .ua-author-list li[hidden] { display: none; }
+.ua-priority-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  gap: 8px;
+  padding: 0 10px 5px;
+  color: var(--text-muted);
+  font-size: .72rem;
+}
+.ua-priority-heading span:last-child { text-align: center; }
+.ua-author-list.has-priority .ua-author-priority-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  align-items: center;
+  gap: 8px;
+  padding-right: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.ua-author-list.has-priority .ua-author-priority-row:last-child { border-bottom: 0; }
+.ua-author-list.has-priority .ua-author { min-width: 0; border-bottom: 0; }
+.ua-priority-controls { display: grid; grid-template-columns: 40px 40px 40px; align-items: center; justify-content: end; }
+.ua-priority-controls button {
+  min-width: 40px;
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid var(--border-hi);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.ua-priority-controls button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.ua-priority-controls button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.ua-priority-controls button:hover:not(:disabled),
+.ua-priority-controls button:focus-visible { border-color: var(--accent); color: var(--accent); z-index: 1; }
+.ua-priority-controls button:disabled { opacity: .28; cursor: default; }
+.ua-priority-rank { text-align: center; font-variant-numeric: tabular-nums; font-size: .82rem; color: var(--text-muted); }
 .ua-author {
   display: flex;
   align-items: center;
@@ -2154,6 +2193,10 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
   .ua-fieldset-inline .account-hint { flex-basis: 100%; }
   .ua-radio-row { gap: 4px 14px; margin-bottom: 6px; }
   .ua-author { padding: 5px 10px; font-size: .85rem; }
+  .ua-priority-heading,
+  .ua-author-list.has-priority .ua-author-priority-row { grid-template-columns: minmax(0, 1fr) 134px; }
+  .ua-priority-controls { grid-template-columns: 44px 40px 44px; }
+  .ua-priority-controls button { min-width: 44px; min-height: 44px; }
   .ua-picker-body .ua-author-list { min-height: 160px; }
   .ua-picker-count { margin-top: 4px; font-size: .75rem; }
   .ua-form-footer { padding-top: 8px; gap: 6px; }

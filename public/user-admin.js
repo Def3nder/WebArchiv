@@ -124,7 +124,7 @@ const $ua = document.getElementById('user-admin');
 const $uaUsers = document.getElementById('user-admin-panel-users');
 const $uaPublic = document.getElementById('user-admin-panel-public');
 const $uaStatus = document.getElementById('user-admin-status');
-const ua = { users: [], authors: [], publicAuthors: [], privateAuthors: [], self: '', tab: 'users', view: 'list', target: null, dirty: false, busy: false };
+const ua = { users: [], authors: [], publicAuthors: [], authorPriority: [], privateAuthors: [], self: '', tab: 'users', view: 'list', target: null, dirty: false, busy: false };
 
 function uaSetStatus(message, isError = false) {
   $uaStatus.textContent = message || '';
@@ -140,6 +140,7 @@ async function uaLoad() {
   ua.users = data.users;
   ua.authors = data.authors;
   ua.publicAuthors = data.publicAuthors;
+  ua.authorPriority = data.authorPriority || [];
   ua.privateAuthors = data.privateAuthors || [];
   ua.self = data.self;
 }
@@ -232,24 +233,32 @@ function uaRenderList() {
 }
 
 // Autorenauswahl: Schalter „alle/ausgewählte“ plus durchsuchbare Checkliste.
-function uaAuthorPickerHtml({ id, selected, lockPublic, allowAll, exclude = [] }) {
+function uaAuthorPickerHtml({ id, selected, lockPublic, allowAll, exclude = [], withPriority = false }) {
   const all = allowAll && selected === null;
   const chosen = new Set(selected || []);
-  const names = [...new Set([...ua.authors, ...chosen])]
-    .filter(name => !exclude.includes(name))
-    .sort((a, b) => a.localeCompare(b, 'de'));
-  const rows = names.map(name => {
+  const priorityByAuthor = new Map(ua.authorPriority.map((name, index) => [name, index]));
+  const names = [...new Set([...ua.authors, ...chosen])].filter(name => !exclude.includes(name));
+  names.sort((a, b) => withPriority
+    ? (priorityByAuthor.has(a) ? priorityByAuthor.get(a) : Number.MAX_SAFE_INTEGER)
+      - (priorityByAuthor.has(b) ? priorityByAuthor.get(b) : Number.MAX_SAFE_INTEGER)
+      || a.localeCompare(b, 'de')
+    : a.localeCompare(b, 'de'));
+  const rows = names.map((name, index) => {
     const locked = lockPublic && ua.publicAuthors.includes(name);
     const tags = [];
     if (!ua.authors.includes(name)) tags.push('<span class="ua-tag is-warn">nicht mehr vorhanden</span>');
     if (locked) tags.push('<span class="ua-tag">durch öffentlichen Zugang</span>');
     else if (ua.publicAuthors.includes(name)) tags.push('<span class="ua-tag">öffentlich</span>');
     if (name === TELEGRAM_AUTHOR) tags.push('<span class="ua-tag">standardmäßig ausgeblendet</span>');
-    return `<li data-name="${esc(name.toLowerCase())}">
+    return `<li data-name="${esc(name.toLowerCase())}"${withPriority ? ' class="ua-author-priority-row"' : ''}>
       <label class="ua-author${locked ? ' is-locked' : ''}">
         <input type="checkbox" value="${esc(name)}" ${chosen.has(name) || locked ? 'checked' : ''} ${locked ? 'disabled data-locked' : ''} />
         <span class="ua-author-name">${esc(name)}</span>${tags.join('')}
-      </label>
+      </label>${withPriority ? `<div class="ua-priority-controls" aria-label="Priorität für ${esc(name)}">
+        <button type="button" data-priority="earlier" aria-label="${esc(name)} höher priorisieren" title="Höher priorisieren">←</button>
+        <span class="ua-priority-rank" aria-label="Priorität ${index + 1}">${index + 1}</span>
+        <button type="button" data-priority="later" aria-label="${esc(name)} niedriger priorisieren" title="Niedriger priorisieren">→</button>
+      </div>` : ''}
     </li>`;
   }).join('');
   return `
@@ -264,7 +273,8 @@ function uaAuthorPickerHtml({ id, selected, lockPublic, allowAll, exclude = [] }
           <button type="button" class="detail-cat-pill" data-picker="all">Alle</button>
           <button type="button" class="detail-cat-pill" data-picker="none">Keine</button>
         </div>
-        <ul class="ua-author-list">${rows || '<li class="ua-empty">Keine Autoren im Archiv gefunden.</li>'}</ul>
+        ${withPriority ? '<div class="ua-priority-heading"><span>Autor und öffentliche Freigabe</span><span>Priorität</span></div>' : ''}
+        <ul class="ua-author-list${withPriority ? ' has-priority' : ''}">${rows || '<li class="ua-empty">Keine Autoren im Archiv gefunden.</li>'}</ul>
         <p class="ua-picker-count" aria-live="polite"></p>
       </div>
     </div>`;
@@ -287,6 +297,22 @@ function uaPickerValue(picker) {
   return [...picker.querySelectorAll('.ua-author-list input:not([data-locked])')]
     .filter(box => box.checked)
     .map(box => box.value);
+}
+
+function uaPriorityValue(picker) {
+  return [...picker.querySelectorAll('.ua-author-priority-row input[type="checkbox"]')].map(box => box.value);
+}
+
+function uaPriorityUpdate(picker) {
+  const rows = [...picker.querySelectorAll('.ua-author-priority-row')];
+  rows.forEach((row, index) => {
+    const name = row.querySelector('input[type="checkbox"]').value;
+    const rank = row.querySelector('.ua-priority-rank');
+    rank.textContent = index + 1;
+    rank.setAttribute('aria-label', `Priorität ${index + 1} für ${name}`);
+    row.querySelector('[data-priority="earlier"]').disabled = index === 0;
+    row.querySelector('[data-priority="later"]').disabled = index === rows.length - 1;
+  });
 }
 
 function uaPasswordFieldsHtml() {
@@ -362,13 +388,14 @@ function uaRenderPublic() {
   $uaPublic.innerHTML = `
     <form class="ua-form" id="ua-public-form" novalidate>
       <p class="account-hint">Diese Autoren sieht jeder <strong>ohne Anmeldung</strong>. Angemeldete Nutzer sehen sie zusätzlich zu ihren eigenen Autoren.</p>
-      ${uaAuthorPickerHtml({ id: 'ua-public-picker', selected: ua.publicAuthors, lockPublic: false, allowAll: false, exclude: ua.privateAuthors })}
+      <p class="account-hint">Die Priorität löst gleichnamige Artikel verschiedener Autoren auf. Rang 1 gewinnt; mit ← wird ein Autor bevorzugt, mit → zurückgestuft.</p>
+      ${uaAuthorPickerHtml({ id: 'ua-public-picker', selected: ua.publicAuthors, lockPublic: false, allowAll: false, exclude: ua.privateAuthors, withPriority: true })}
       ${ua.privateAuthors.length ? `<p class="account-hint">Nie öffentlich: ${esc(ua.privateAuthors.join(', '))}.</p>` : ''}
       <p id="ua-public-warning" class="ua-warning" hidden>Kein öffentlicher Zugang: Das Archiv ist dann nur mit Anmeldung nutzbar.</p>
       <div class="ua-form-footer">
         <p id="ua-form-error" class="login-error" role="alert" hidden></p>
         <div class="account-buttons">
-          <button type="submit" class="detail-cat-pill account-primary">Öffentlichen Zugang speichern</button>
+          <button type="submit" class="detail-cat-pill account-primary">Autoren-Einstellungen speichern</button>
         </div>
       </div>
     </form>`;
@@ -379,6 +406,7 @@ function uaPublicUpdate() {
   const picker = document.getElementById('ua-public-picker');
   if (!picker) return;
   uaPickerUpdate(picker);
+  uaPriorityUpdate(picker);
   document.getElementById('ua-public-warning').hidden = uaPickerValue(picker).length > 0;
 }
 
@@ -454,17 +482,34 @@ $ua.addEventListener('submit', event => {
       body: { password, mustChangePassword: uaMustChange() } }), `Neues Kennwort für ${target} gespeichert.`);
   }
   if (form.id === 'ua-public-form') {
-    const authors = uaPickerValue(document.getElementById('ua-public-picker'));
+    const picker = document.getElementById('ua-public-picker');
+    const authors = uaPickerValue(picker);
+    const authorPriority = uaPriorityValue(picker);
     return uaSubmit(async () => {
       await accountRequest('/api/public-authors', { method: 'PUT', body: { authors } });
+      await accountRequest('/api/author-priority', { method: 'PUT', body: { authors: authorPriority } });
       ua.tab = 'public';
       // Eigene Sicht (Autorenfilter, Liste) auf den neuen Stand bringen.
       loadMeta().then(() => loadArticles()).catch(() => {});
-    }, 'Öffentlicher Zugang gespeichert.');
+    }, 'Autoren-Einstellungen gespeichert.');
   }
 });
 
 $ua.addEventListener('click', async event => {
+  const priorityButton = event.target.closest('[data-priority]');
+  if (priorityButton && !priorityButton.disabled) {
+    const row = priorityButton.closest('.ua-author-priority-row');
+    const list = row.parentElement;
+    if (priorityButton.dataset.priority === 'earlier' && row.previousElementSibling) {
+      list.insertBefore(row, row.previousElementSibling);
+    } else if (priorityButton.dataset.priority === 'later' && row.nextElementSibling) {
+      list.insertBefore(row.nextElementSibling, row);
+    }
+    ua.dirty = true;
+    uaPriorityUpdate(list.closest('.ua-picker'));
+    priorityButton.focus();
+    return;
+  }
   const pickerButton = event.target.closest('[data-picker]');
   if (pickerButton) {
     const picker = pickerButton.closest('.ua-picker');

@@ -555,7 +555,7 @@ Die endgültige Bedienung nach mehreren Korrekturen:
 
 ### PDF.js
 
-Ein CDN-Laden wurde besprochen, dann ausdrücklich ein anderer Weg gewählt: Der vollständige Viewer wurde nach `public/vendor/pdfjs/` verschoben und die iframe-URL angepasst. Dadurch wird die Drittanbieterbibliothek nicht mehr vom Graft-Kontextgraphen indexiert. Alte Hinweise auf `public/pdfjs/` sind überholt. Die PDF-Dateien selbst werden weiterhin über die geschützte Medienroute geladen.
+Ein CDN-Laden wurde besprochen, dann ausdrücklich ein anderer Weg gewählt: Der vollständige Viewer wurde nach `public/vendor/pdfjs/` verschoben und die iframe-URL angepasst. Dadurch wird die Drittanbieterbibliothek nicht mehr vom Graft-Kontextgraphen indexiert. Alte Hinweise auf einen direkten Ablageort unter `public/` sind überholt. Die PDF-Dateien selbst werden weiterhin über die geschützte Medienroute geladen.
 
 ### Vollständigen Artikel editieren
 
@@ -860,7 +860,7 @@ Für eine echte Abnahme gezielt Rechte, vorhandene MP3, parallele Starts, Abbruc
 2. ~~**Qwen-v4-Liveabnahme**~~ **Erledigt (30.09.2026, vom Benutzer bestätigt):** Der Benutzer bestätigte, dass eine frühere Fassung den Modellserver aufrief und nach der Transport-/Chunkänderung funktionierte; die Liveabnahme der endgültigen v4-Verarbeitung mit der jüngsten Providerwahl wurde am 30.09.2026 vom Benutzer als durchgeführt gemeldet. Einzelheiten des Hörtests sind nicht protokolliert.
 3. **Produktionsstand:** In dieser Sitzung kein SSH-Zugriff, keine Prüfung der installierten Dateiversionen, Mountrechte, Dienstvariablen oder tatsächlichen Cron-Konfiguration.
 4. **Dokumentationswidersprüche:** `tts/QWEN-ANBINDUNG.md`, `tts/UEBERGABE-TTS.md` und `tts/DEPLOYMENT-NODE-SERVER.md` enthalten noch „keine Vorauswahl“. Geltend ist Qwen-Vorauswahl bei Verfügbarkeit. Die Übergabedatei enthält zusätzlich ausdrücklich historische v2-/v3-Abschnitte.
-5. **Frühe Projektnotizen:** Aussagen über ausschließlich `server.js`, fehlende Tests, `public/pdfjs`, zweigeteiltes Copy und offene kombinierte Datums-/Textsuche sind teilweise überholt. README und Setup-Datei enthalten noch alte Facebook-URL-Eingaben und ältere Strukturangaben.
+5. **Frühe Projektnotizen:** Aussagen über ausschließlich `server.js`, fehlende Tests, frühere PDF.js-Pfade, zweigeteiltes Copy und offene kombinierte Datums-/Textsuche sind teilweise überholt. README und Setup-Datei enthalten noch alte Facebook-URL-Eingaben und ältere Strukturangaben.
 6. **BlogDownloader:** Spätere Übereinstimmung der Node- und Python-Scraper ist nicht erneut nachgewiesen. Die historisch beschlossene Synchronität bei künftigen Änderungen berücksichtigen.
 7. **Vorhandene lokale Änderungen:** Bereits zu Beginn dieser Dokumentationsarbeit waren `scraper/scrape_all.js` und `scraper/scraper-config.json` verändert; `www/Joe Turan Facebook/` war unversioniert. Diese Änderungen wurden nicht als eigene Arbeit übernommen oder zurückgesetzt. Ihre Aufnahme in Git bedarf einer gesonderten inhaltlichen Sichtung, besonders bei Archivdaten.
 

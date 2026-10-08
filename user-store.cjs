@@ -81,11 +81,13 @@ function checkMustChange(value) {
 }
 
 // privateAuthors: Autoren, die nie öffentlich sein dürfen (z. B. Hörbücher).
-function createUserStore({ usersFile, publicFile, privateAuthors = [], io = fs }) {
+function createUserStore({ usersFile, publicFile, settingsFile = null, privateAuthors = [], io = fs }) {
   let users = [];
   let usersShape = null;   // null = reine Liste, sonst Objekt mit weiteren Schlüsseln (z. B. _comment)
   let publicDoc = {};
   let publicAuthors = [];
+  let settingsDoc = {};
+  let authorPriority = [];
   let queue = Promise.resolve();
 
   function parseUsers(parsed) {
@@ -102,6 +104,14 @@ function createUserStore({ usersFile, publicFile, privateAuthors = [], io = fs }
     publicDoc = readJson(publicFile, {}) || {};
     const list = publicDoc['public-directories'];
     publicAuthors = Array.isArray(list) ? list.filter(a => typeof a === 'string' && !privateAuthors.includes(a)) : [];
+  }
+  function loadAuthorPriority() {
+    if (!settingsFile) return;
+    settingsDoc = readJson(settingsFile, {}) || {};
+    const list = settingsDoc.authorPriority;
+    authorPriority = Array.isArray(list)
+      ? [...new Set(list.filter(a => typeof a === 'string').map(a => a.trim()).filter(Boolean))]
+      : [];
   }
   // Schreibvorgänge nacheinander; jede Änderung liest die Datei frisch ein,
   // damit Handänderungen (z. B. per hash-passwords.js) nicht überschrieben werden.
@@ -142,8 +152,10 @@ function createUserStore({ usersFile, publicFile, privateAuthors = [], io = fs }
     load() {
       try { loadUsers(); } catch (err) { console.error('WARNING: users.json nicht geladen —', err.message); }
       try { loadPublic(); } catch (err) { console.warn('public-directories.txt nicht geladen —', err.message); }
+      try { loadAuthorPriority(); } catch (err) { console.warn('Autoren-Priorität nicht geladen —', err.message); }
     },
     get publicAuthors() { return publicAuthors; },
+    get authorPriority() { return authorPriority; },
     get privateAuthors() { return privateAuthors; },
     list: () => users.map(publicView),
 
@@ -255,10 +267,23 @@ function createUserStore({ usersFile, publicFile, privateAuthors = [], io = fs }
         return { publicAuthors };
       });
     },
+    async setAuthorPriority(value) {
+      if (!settingsFile) throw fail(500, 'Für die Autoren-Priorität ist keine Konfigurationsdatei eingerichtet.');
+      const authors = normalizeAuthors(value, 'Autoren-Priorität');
+      if (authors === null) throw fail(400, 'Autoren-Priorität ist ungültig.');
+      return exclusive(async () => {
+        loadAuthorPriority();
+        const doc = { ...settingsDoc, authorPriority: authors };
+        await writeJsonAtomic(settingsFile, doc, io, 0o644);
+        settingsDoc = doc;
+        authorPriority = authors;
+        return { authorPriority };
+      });
+    },
   };
 }
 
-function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors, onUserDeleted }) {
+function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors, onUserDeleted, onAuthorPriorityChanged }) {
   const route = handler => async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
@@ -276,6 +301,7 @@ function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors, 
     users: store.list(),
     authors: getAuthors(),
     publicAuthors: store.publicAuthors,
+    authorPriority: store.authorPriority,
     privateAuthors: store.privateAuthors,
     self: actor(req),
   });
@@ -297,6 +323,11 @@ function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors, 
     return result;
   }));
   app.put('/api/public-authors', requireAdmin, route(req => store.setPublicAuthors(req.body?.authors)));
+  app.put('/api/author-priority', requireAdmin, route(async req => {
+    const result = await store.setAuthorPriority(req.body?.authors);
+    if (onAuthorPriorityChanged) await onAuthorPriorityChanged();
+    return result;
+  }));
   app.post('/api/me/password', requireAuth, route(async req => {
     const { sessionVersion } = await store.changeOwnPassword(actor(req), req.body);
     req.session.user = { ...store.sessionUser({ email: actor(req), sessionVersion }) };

@@ -1,4 +1,9 @@
 {
+  "authorPriority": [
+    "Joe Turan",
+    "Facebook",
+    "Telegram"
+  ],
   "audiobooks": {
     "skipLongSeconds": 600,
     "skipShortSeconds": 30

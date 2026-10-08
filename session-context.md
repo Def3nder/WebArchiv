@@ -26,9 +26,10 @@ WebArchiv/
     ├── index.html           ← SPA-Shell
     ├── styles.css           ← Design-System (CSS-Variablen, Dark/Light, Layout)
     ├── app.js               ← Frontend: Routing, Suche, Auth, Rendering
-    └── pdfjs/               ← PDF.js Viewer (manuell von GitHub herunterladen)
-        ├── web/viewer.html
-        └── build/pdf.mjs …
+    └── vendor/
+        └── pdfjs/           ← PDF.js Viewer (manuell von GitHub herunterladen)
+            ├── web/viewer.html
+            └── build/pdf.mjs …
 ```
 
 **Tech-Stack:** Node.js 18+ · Express 4 · `express-session` · `bcryptjs` ·
@@ -354,8 +355,9 @@ Light-Mode über `body[data-theme="light"]`-Overrides der CSS-Variablen.
   Server-Neustart sind alle Sessions weg → erneuter Login. Für Produktion
   Store (SQLite/Redis) erwägen.
 - **Parser-Robustheit:** Separator `****` gegen `raw.trim()` geprüft (kritisch).
-- **PDF.js nicht im Repo** — `public/pdfjs/` manuell von
-  `github.com/mozilla/pdf.js/releases` (`pdfjs-X.X.X-dist.zip`) bereitstellen.
+- **PDF.js liegt im Repo** — der Viewer wird unter `public/vendor/pdfjs/`
+  mit der Anwendung ausgeliefert. Aktualisierungen stammen aus den offiziellen
+  Releases unter `github.com/mozilla/pdf.js/releases` (`pdfjs-X.X.X-dist.zip`).
 - **Medien-Erkennung:** `findSibling()` nur exakt gleichnamige Dateien;
   case-sensitiv auf Linux, case-insensitiv auf Windows.
 - **Public-Whitelist:** Namen in `public-directories.txt` müssen exakt den

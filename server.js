@@ -23,6 +23,7 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const WWW_DIR = path.join(__dirname, 'www');
 const AUDIO_DIR = path.join(__dirname, 'audio');
+const CONFIG_FILE = path.join(__dirname, 'config.json');
 const INFOGRAPHICS_AUTHOR = 'Infografiken';
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const PWA_SHELL_EXTENSIONS = new Set(['.css', '.html', '.ico', '.js', '.json', '.png', '.svg']);
@@ -63,11 +64,12 @@ self.addEventListener('message', event => {
 
 // ─── Users ─────────────────────────────────────────────────────────────────
 
-// Nutzer (users.json) und öffentliche Autoren (public-directories.txt) werden
+// Nutzer, öffentliche Autoren und die davon unabhängige Autoren-Priorität werden
 // über die Benutzerverwaltung gepflegt und zur Laufzeit geschrieben.
 const userStore = createUserStore({
   usersFile: process.env.USERS_FILE || path.join(__dirname, 'users.json'),
   publicFile: process.env.PUBLIC_DIRS_FILE || path.join(__dirname, 'public-directories.txt'),
+  settingsFile: CONFIG_FILE,
   // Hörbücher sind nie öffentlich, auch nicht per public-directories.txt.
   privateAuthors: [AUDIOBOOK_AUTHOR],
 });
@@ -86,7 +88,7 @@ let scrapeState = { running: false, sources: null, exitCode: null, startedAt: nu
 let infographicWrites = 0;
 
 // Hörbücher: je ein Ordner unter audio/Hoerbuecher/ (oder audio/Hörbücher/), eigener Index neben den Artikeln.
-const audiobookConfig = loadAudiobookConfig(path.join(__dirname, 'config.json'));
+const audiobookConfig = loadAudiobookConfig(CONFIG_FILE);
 const audiobookProgress = createProgressStore({
   file: process.env.AUDIOBOOK_PROGRESS_FILE || path.join(__dirname, 'audiobook-progress.json'),
 });
@@ -525,11 +527,12 @@ function resolveInfographicStem(stem, hasArticle, hasInfographic) {
 //    gehören zu ihr (deren doppelter Text wird nicht angezeigt).
 //  - Mitglieder erben Kategorien/Tags des Ankers, Infografiken ohne eigenes Audio
 //    das Audio der Basis-Infografik bzw. des Artikels (Zugriff bleibt beim Ursprung).
-// Mehrdeutige Basis (gleicher Stamm bei mehreren Autoren): eindeutiger Kandidat mit
-// Audio, sonst keine Zuordnung.
-function linkInfographics(articleList) {
+// Mehrdeutige Basis (gleicher Stamm bei mehreren Autoren): zuerst konfigurierte
+// Autoren-Priorität, danach eindeutiger Kandidat mit Audio, sonst keine Zuordnung.
+function linkInfographics(articleList, authorPriority = []) {
   const key = (year, stem) => `${year || ''}/${stem}`;
   const stemOf = article => path.basename(article.filePath, '.md');
+  const priorityByAuthor = new Map(authorPriority.map((author, index) => [author, index]));
   const candidatesByKey = new Map();
   const infographicsByKey = new Map();
   for (const article of articleList) {
@@ -539,6 +542,10 @@ function linkInfographics(articleList) {
   }
   const baseArticleFor = k => {
     const candidates = candidatesByKey.get(k) || [];
+    const ranked = candidates
+      .filter(article => priorityByAuthor.has(article.author))
+      .sort((a, b) => priorityByAuthor.get(a.author) - priorityByAuthor.get(b.author));
+    if (ranked.length) return ranked[0];
     const withAudio = candidates.filter(article => article.audioUrl);
     if (withAudio.length === 1) return withAudio[0];
     return candidates.length === 1 ? candidates[0] : null;
@@ -675,7 +682,7 @@ async function rebuildIndex() {
     return true;
   });
 
-  ({ groups: infographicGroups, anchorOf: groupAnchorOf } = linkInfographics(articles));
+  ({ groups: infographicGroups, anchorOf: groupAnchorOf } = linkInfographics(articles, userStore.authorPriority));
   articleById = new Map(articles.map(article => [article.id, article]));
   await audiobooks.rebuild();
 
@@ -1645,6 +1652,7 @@ installMarkdownRoutes(app, requireAdmin, markdownEditor);
 installUserRoutes(app, {
   store: userStore, requireAuth, requireAdmin, getAuthors: () => meta.authors,
   onUserDeleted: email => Promise.all([audiobookProgress.removeUser(email), bookmarks.removeUser(email)]),
+  onAuthorPriorityChanged: buildIndex,
 });
 installBookmarkRoutes(app, {
   store: bookmarks, requireAuth, getArticle: id => articleById.get(id), canAccessAuthor,

@@ -136,6 +136,21 @@ test('Mehrdeutiger Basisartikel: eindeutiger Kandidat mit Audio, sonst keine Gru
   assert.equal(linkInfographics(ambiguous).anchorOf.size, 0);
 });
 
+test('Mehrdeutiger Basisartikel folgt der konfigurierten Autoren-Priorität', () => {
+  const list = [
+    entry('Telegram', '2026-10-07_thema'),
+    entry('Facebook', '2026-10-07_thema'),
+    entry('Joe Turan', '2026-10-07_thema'),
+    entry('Infografiken', '2026-10-07_thema'),
+  ];
+  const { groups } = linkInfographics(list, ['Joe Turan', 'Facebook', 'Telegram']);
+  assert.deepEqual(memberIds(groups, 'Joe Turan/2026/2026-10-07_thema'), ['Infografiken/2026/2026-10-07_thema']);
+
+  const withoutJoe = list.filter(article => article.author !== 'Joe Turan');
+  const fallback = linkInfographics(withoutJoe, ['Joe Turan', 'Facebook', 'Telegram']);
+  assert.deepEqual(memberIds(fallback.groups, 'Facebook/2026/2026-10-07_thema'), ['Infografiken/2026/2026-10-07_thema']);
+});
+
 test('Varianten _2 eines normalen Artikels und gleiches Jahr als Bedingung', () => {
   const list = [
     entry('Joe Turan', '2026-04-01_blog'),

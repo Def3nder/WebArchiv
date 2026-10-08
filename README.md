@@ -236,7 +236,10 @@ Anweisung, die vor den Artikeltext gesetzt wird.
     damit die übrigen Sitzungen des Nutzers.
 - **Benutzerverwaltung** (Admin, Aktionen → *Benutzerverwaltung*): Nutzer anzeigen,
   anlegen, Rolle/Autoren ändern, Kennwort neu vergeben (wahlweise mit Pflicht zur
-  Änderung), löschen; Reiter *Öffentlicher Zugang* pflegt `public-directories.txt`.
+  Änderung), löschen. Der Reiter *Autorenverwaltung* pflegt die öffentliche Freigabe
+  in `public-directories.txt` und getrennt davon die Autoren-Priorität in `config.json`.
+  Die Priorität entscheidet bei gleichnamigen Artikeln mehrerer Autoren, welchem
+  Artikel eine Infografik zugeordnet wird.
   Rechteänderungen wirken sofort, weil die Session nur E-Mail und `sessionVersion`
   trägt und Rolle/Autoren bei jeder Anfrage frisch aufgelöst werden. Schutzregeln:
   eigene Rolle nicht änderbar, eigener Zugang nicht löschbar, letzter Admin bleibt.
@@ -254,7 +257,7 @@ Anweisung, die vor den Artikeltext gesetzt wird.
   `users.json` bei laufendem Server von Hand bearbeitet (z. B. `hash-passwords.js`),
   gilt der neue Stand für Anmeldungen erst nach der nächsten Änderung über die
   Oberfläche oder einem Neustart. Der Dienstbenutzer braucht Schreibrecht auf
-  `users.json`, `public-directories.txt` **und** das App-Verzeichnis.
+  `users.json`, `public-directories.txt`, `config.json` **und** das App-Verzeichnis.
 - **Sessions** via `express-session` (Cookie 7 Tage, `httpOnly`, `sameSite=lax`);
   Secret über `SESSION_SECRET` (Env) setzen. Nach dem Login wird die Session-ID
   neu vergeben.
@@ -362,16 +365,16 @@ Facebook benötigt `scraper/cookies.txt` (Netscape-Format) und `scraper/Abonente
 
 ```
 server.js                     Express-App (Routen, Index, Auth-Anbindung)
-user-store.cjs                Nutzer & öffentliche Autoren: Lesen/Schreiben, Regeln, Routen
+user-store.cjs                Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen
 audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
 bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
-config.json                   Einstellungen (Hörbuch-Sprungweiten)
+config.json                   Einstellungen (Autoren-Priorität, Hörbuch-Sprungweiten)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp
 test/                         Tests der Hauptanwendung
 public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
-├── user-admin.js             Kennwort ändern, Benutzerverwaltung, Öffentlicher Zugang
+├── user-admin.js             Kennwort ändern, Benutzer- und Autorenverwaltung
 ├── settings.js               Anzeige-Einstellungen (inkl. Filter-Beschriftungen pro Nutzer/Gerät)
 ├── session-state.js          Lokaler Sitzungsstand pro Benutzer (Ansicht, Navigation, Scrollposition)
 ├── pwa-update.js             Erkennt neue App-Versionen und bietet kontrolliertes Aktualisieren an
@@ -381,7 +384,8 @@ public/
 ├── favicon.ico               16/32/48 px (PNG-Einträge), aus favicon.svg erzeugt
 ├── apple-touch-icon.png      180 px ohne Eckenradius für den iOS-Homescreen
 ├── styles.css                Styles (Light/Dark, Layouts)
-└── pdfjs/                    PDF-Anzeige
+└── vendor/
+    └── pdfjs/                PDF.js-Anzeige (Drittanbieterbibliothek)
 epub-tool/                    Eigenständiges Werkzeug: EPUB → Markdown; Tests unter epub-tool/test/
 scripts/hash-passwords.js     bcrypt-Hashes für users.json erzeugen
 scripts/make-favicons.js      favicon.ico + apple-touch-icon.png aus public/favicon.svg erzeugen
