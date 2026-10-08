@@ -1234,13 +1234,17 @@ function renderDetail(article) {
     $infographicFile.addEventListener('change', async () => {
       const file = $infographicFile.files?.[0];
       if (!file) return;
+      const detailPosition = captureDetailPosition();
       $infographicBtn.disabled = true;
       $infographicBtn.setAttribute('aria-busy', 'true');
       setUploadStatus('Wird hochgeladen ...');
       try {
         await uploadInfographic(article, file);
         setUploadStatus('Gespeichert.', 'success');
-        loadArticles().catch(err => console.warn('Artikel-Liste konnte nicht aktualisiert werden', err));
+        await loadArticles();
+        if (!$overlay.hidden && currentViewItemId === article.id) {
+          await openArticle(article.id, { historyMode: 'none', detailPosition });
+        }
       } catch (err) {
         setUploadStatus(err.message || 'Upload fehlgeschlagen.', 'error');
       } finally {
