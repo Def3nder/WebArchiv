@@ -1378,6 +1378,19 @@ function renderDetail(article) {
       }
     };
 
+    const isIosPromptNavigation = () => /iPad|iPhone|iPod/.test(navigator.userAgent || '')
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    const iosPromptTarget = url => {
+      try {
+        // Die normale Gemini-Webadresse bleibt innerhalb des iOS-Webviews.
+        // Das von der Gemini-App registrierte Schema öffnet stattdessen direkt
+        // einen neuen Chat; der Prompt liegt bereits in der Zwischenablage.
+        if (new URL(url).hostname === 'gemini.google.com') return 'googlegemini://';
+      } catch { /* Die Serverantwort enthält regulär bereits eine geprüfte URL. */ }
+      return url;
+    };
+
     let promptsLoaded = false;
     const closeMenu = () => {
       $copyMenu.hidden = true;
@@ -1401,12 +1414,21 @@ function renderDetail(article) {
         `<button type="button" role="menuitem" class="copy-prompt-item${i === 0 ? ' is-article' : ''}" data-prompt-index="${i}">${esc(it.label)}</button>`
       ).join('');
       $copyMenu.querySelectorAll('.copy-prompt-item').forEach(item => {
-        item.addEventListener('click', ev => {
+        item.addEventListener('click', async ev => {
           ev.stopPropagation();
           const selected = items[Number(item.dataset.promptIndex)] || items[0];
           closeMenu();
-          copyArticle(selected.prompt || '');
-          if (selected.file && selected.url) window.open(selected.url, '_blank', 'noopener,noreferrer');
+          const opensExternalPrompt = !!(selected.file && selected.url);
+          if (opensExternalPrompt && isIosPromptNavigation()) {
+            // iOS hinterlässt bei window.open aus einer installierten Web-App
+            // gelegentlich einen leeren weißen Browserkontext. Eine Navigation
+            // im aktuellen Kontext übergibt externe URLs direkt an Safari.
+            await copyArticle(selected.prompt || '');
+            window.location.assign(iosPromptTarget(selected.url));
+            return;
+          }
+          void copyArticle(selected.prompt || '');
+          if (opensExternalPrompt) window.open(selected.url, '_blank', 'noopener,noreferrer');
         });
       });
     };
