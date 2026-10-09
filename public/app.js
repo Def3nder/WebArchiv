@@ -3110,6 +3110,7 @@ function enablePullToClose({ scroller, moving, fading, canStart, onClose }) {
   const reset = animate => {
     moving.style.transition = animate ? 'transform .2s ease' : '';
     moving.style.transform = '';
+    moving.style.pointerEvents = '';
     if (fading) { fading.style.transition = animate ? 'opacity .2s ease' : ''; fading.style.opacity = ''; }
     state = 'idle';
   };
@@ -3147,6 +3148,10 @@ function enablePullToClose({ scroller, moving, fading, canStart, onClose }) {
     if (state !== 'pulling') { state = 'idle'; return; }
     if (dy < PULL_CLOSE_DISTANCE) { reset(true); return; }
     moving.style.transition = 'transform .2s ease';
+    // Während die weggezogene Ebene noch ausblendet, darf sie keine darunterliegenden
+    // Bedienelemente abfangen. Das verhindert insbesondere veraltete iOS-Hit-Flächen
+    // nach einem Wechsel zwischen Hoch- und Querformat.
+    moving.style.pointerEvents = 'none';
     moving.style.transform = `translateY(${window.innerHeight}px)`;
     state = 'idle';
     setTimeout(() => { reset(false); onClose(); }, 200);

@@ -282,8 +282,18 @@ function openBookExtras(book) {
 }
 
 function closeBookExtras() {
-  document.getElementById('book-extras')?.remove();
+  const el = document.getElementById('book-extras');
+  if (!el) return;
+  // Safari behält nach Rotation gelegentlich die Trefferfläche einer entfernten,
+  // transformierten fixed-Ebene. Erst aus dem Hit-Test nehmen, Layout bestätigen,
+  // dann entfernen und den Fokus sichtbar in die Hörbuchansicht zurückgeben.
+  el.style.pointerEvents = 'none';
+  el.style.display = 'none';
+  void el.offsetHeight;
+  el.remove();
   if (!bookReader?.el) document.body.classList.remove('book-reader-open');
+  void $detail.offsetHeight;
+  requestAnimationFrame(() => $detail.querySelector('[data-book-extras]')?.focus({ preventScroll: true }));
 }
 
 document.addEventListener('keydown', event => {
