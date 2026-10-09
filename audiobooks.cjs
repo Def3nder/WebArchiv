@@ -11,6 +11,8 @@ const AUDIOBOOK_AUTHOR = 'Hörbücher';
 const DIRECTORY_CANDIDATES = ['Hoerbuecher', AUDIOBOOK_AUTHOR];
 const TRACK_EXTS = new Set(['.mp3', '.m4b', '.m4a']);
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png'];
+const EXTRA_IMAGE_EXTS = new Set([...IMAGE_EXTS, '.gif']);
+const EXTRA_EXTS = new Set([...EXTRA_IMAGE_EXTS, '.md']);
 const SORTS = ['recent', 'title', 'date'];
 // eBook zum Hörbuch: Datei heißt wie der Ordner (Reihenfolge = Vorrang).
 const EBOOK_EXTS = ['.md', '.txt', '.pdf'];
@@ -105,6 +107,15 @@ function findByName(filesByLower, names) {
   return null;
 }
 
+function extraTitle(file, bookTitle) {
+  let title = path.parse(file).name.replace(/^\s*\d+\s*[-–._)]*\s*/, '').trim();
+  const prefix = String(bookTitle || '').trim();
+  if (prefix && title.toLocaleLowerCase('de').startsWith(prefix.toLocaleLowerCase('de') + ' - ')) {
+    title = title.slice(prefix.length + 3).trim();
+  }
+  return title || path.parse(file).name;
+}
+
 // ─── Bibliothek (In-Memory-Index, wird beim Reindex neu aufgebaut) ─────────
 
 // Konfiguriertes Verzeichnis oder das erste vorhandene aus DIRECTORY_CANDIDATES.
@@ -152,6 +163,24 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     }
 
     const ebook = ebookFile ? { format: path.extname(ebookFile).slice(1).toLowerCase(), file: ebookFile } : null;
+    const extrasDir = entries.find(entry => entry.isDirectory() && entry.name.toLowerCase() === 'extras');
+    let extras = [];
+    if (extrasDir) {
+      const extraPath = path.join(dirPath, extrasDir.name);
+      const extraEntries = await fs.readdir(extraPath, { withFileTypes: true });
+      extras = extraEntries
+        .filter(entry => entry.isFile() && EXTRA_EXTS.has(path.extname(entry.name).toLowerCase()))
+        .map(entry => {
+          const ext = path.extname(entry.name).toLowerCase();
+          return {
+            file: entry.name,
+            title: extraTitle(entry.name, title),
+            type: ext === '.md' ? 'markdown' : 'image',
+            ...(ext === '.md' ? {} : { url: withVersion(mediaUrl(dirName, bookDir, extrasDir.name, entry.name), path.join(extraPath, entry.name)) }),
+          };
+        })
+        .sort((a, b) => collator.compare(a.file, b.file));
+    }
 
     const titles = trackTitles(trackFiles);
     return {
@@ -171,6 +200,8 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       description: abstract.description,
       filePath: abstractPath,
       ebook,
+      extras,
+      extrasDirName: extrasDir?.name || null,
       bookDir,
     };
   }
@@ -218,8 +249,8 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
   }
 
   function listView(book, user) {
-    const { tracks, description, filePath, bookDir, ...rest } = book;
-    return { ...rest, progress: progressSummary(user, book) };
+    const { tracks, description, filePath, bookDir, extras, extrasDirName, ...rest } = book;
+    return { ...rest, hasExtras: extras.length > 0, progress: progressSummary(user, book) };
   }
 
   function list(user, { q, sort, page = 1, limit = 24 } = {}) {
@@ -249,7 +280,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
   function detail(user, id) {
     const book = books.find(b => b.id === id);
     if (!book) return null;
-    const { description, filePath, bookDir, ...rest } = book;
+    const { description, filePath, bookDir, extrasDirName, ...rest } = book;
     const entry = progress.get(user?.email, book.id);
     return {
       ...rest,
@@ -324,11 +355,42 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     return { format, html };
   }
 
+  async function extraText(book, file) {
+    const extra = book?.extras?.find(item => item.type === 'markdown' && item.file === file);
+    if (!extra) throw fail(404, 'Das Extra wurde nicht gefunden.');
+    const extrasDir = path.join(root, book.bookDir, book.extrasDirName);
+    const abs = path.join(extrasDir, extra.file);
+    const stat = await fs.stat(abs);
+    if (stat.size > EBOOK_MAX_BYTES) throw fail(413, 'Der Text ist zu groß.');
+    const cacheKey = `${book.id}\0extra\0${extra.file}`;
+    const cached = textCache.get(cacheKey);
+    if (cached && cached.mtimeMs === stat.mtimeMs) return { format: 'md', title: extra.title, html: cached.html };
+    const raw = await fs.readFile(abs, 'utf8');
+    let html = renderMarkdown(raw.replace(/^﻿/, ''));
+    const tags = [...new Set(html.match(/<img\b[^>]*>/gi) || [])];
+    for (const tag of tags) {
+      const match = tag.match(/\bsrc="([^"]*)"/i);
+      if (!match || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(match[1])) continue;
+      let rel = match[1];
+      try { rel = decodeURIComponent(rel); } catch { /* unverändert */ }
+      const parts = path.posix.normalize(rel.split('\\').join('/').split(/[?#]/)[0]).split('/').filter(part => part && part !== '.');
+      let url = null;
+      if (parts.length > 1 && parts[0].toLowerCase() === 'images' && !parts.includes('..')) {
+        const resolved = await resolveEbookImage(book.bookDir, [book.extrasDirName, ...parts].join('/'));
+        url = resolved.url || null;
+      }
+      html = html.split(tag).join(url ? tag.replace(match[0], 'src="' + url + '"') : '');
+    }
+    textCache.set(cacheKey, { mtimeMs: stat.mtimeMs, html });
+    return { format: 'md', title: extra.title, html };
+  }
+
   return {
     rebuild,
     list,
     detail,
     ebookText,
+    extraText,
     get: id => books.find(b => b.id === id),
     get books() { return books; },
     get directory() { return dirName; },
@@ -468,6 +530,11 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
     if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
     const text = await library.ebookText(book);
     return { ...text, position: progress.getText(user.email, book.id, text.format) };
+  }));
+  app.get('/api/audiobook-extra/*', requireAuth, route(async req => {
+    const book = library.get(req.params[0]);
+    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    return library.extraText(book, String(req.query.file || ''));
   }));
   app.put('/api/audiobook-text-progress/*', requireAuth, route(async (req, user) => {
     const book = library.get(req.params[0]);

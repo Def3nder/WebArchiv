@@ -24,6 +24,13 @@ async function fixture(t) {
   }
   await fs.writeFile(path.join(book, 'abstract.md'),
     '﻿Titel: 50 Fragen\r\n\r\nAutor: Karin Kuschik\r\n\r\nDatum: 25.09.2025\r\n\r\nInhalt:\r\n\r\n**Fett** und Text.\r\n');
+  const extras = path.join(book, 'extras');
+  await fs.mkdir(path.join(extras, 'images'), { recursive: true });
+  await fs.writeFile(path.join(extras, '01 - Praxisübungen.md'), '# Übung\n\n![Grafik](images/grafik.jpg)');
+  await fs.writeFile(path.join(extras, '02 - Übersicht.jpg'), 'x');
+  await fs.writeFile(path.join(extras, '10 - Animation.GIF'), 'x');
+  await fs.writeFile(path.join(extras, 'ignorieren.pdf'), 'x');
+  await fs.writeFile(path.join(extras, 'images', 'grafik.jpg'), 'x');
   const bare = path.join(root, 'Emily Nagoski - Kommt Zusammen!');
   await fs.mkdir(bare);
   await fs.writeFile(path.join(bare, '01 - Vorspann - Kommt Zusammen - Emily Nagoski.m4b'), 'x');
@@ -33,7 +40,8 @@ async function fixture(t) {
   const progress = createProgressStore({ file: path.join(dir, 'progress.json') });
   progress.load();
   const library = createAudiobookLibrary({
-    audioRoot: path.join(dir, 'audio'), progress, excerpt: text => text.replace(/\*/g, '').slice(0, 320), renderMarkdown: text => `<p>${text}</p>`,
+    audioRoot: path.join(dir, 'audio'), progress, excerpt: text => text.replace(/\*/g, '').slice(0, 320),
+    renderMarkdown: text => `<p>${text.replace(/!\[[^\]]*\]\(([^)]+)\)/g, '<img src="$1">')}</p>`,
   });
   await library.rebuild();
   return { dir, root, library, progress };
@@ -72,7 +80,26 @@ test('Bibliothek: natürliche Sortierung, Cover, Fallbacks, leere Ordner übersp
   assert.equal(detail.descriptionHtml, '<p>**Fett** und Text.</p>');
   assert.equal(detail.hasAbstract, true);
   assert.equal(detail.filePath, undefined);
+  assert.equal(detail.extrasDirName, undefined);
+  assert.deepEqual(detail.extras.map(extra => [extra.file, extra.title, extra.type]), [
+    ['01 - Praxisübungen.md', 'Praxisübungen', 'markdown'],
+    ['02 - Übersicht.jpg', 'Übersicht', 'image'],
+    ['10 - Animation.GIF', 'Animation', 'image'],
+  ]);
+  assert.match(detail.extras[1].url, /\/extras\/02%20-%20%C3%9Cbersicht\.jpg\?v=\d+$/);
   assert.equal(library.list({ email: 'a@b.de' }).items[0].tracks, undefined);
+  assert.equal(library.list({ email: 'a@b.de' }).items[0].hasExtras, true);
+});
+
+test('Extras: Markdown wird gerendert, Bilder nur aus extras/images aufgelöst und Dateiname geprüft', async t => {
+  const { library } = await fixture(t);
+  const book = library.books.find(item => item.title === '50 Fragen');
+  const result = await library.extraText(book, '01 - Praxisübungen.md');
+  assert.equal(result.format, 'md');
+  assert.equal(result.title, 'Praxisübungen');
+  assert.match(result.html, /\/audio-files\/Hoerbuecher\/Karin%20Kuschik%20-%2050%20Fragen\/extras\/images\/grafik\.jpg\?v=\d+/);
+  await assert.rejects(library.extraText(book, '../abstract.md'), { status: 404 });
+  await assert.rejects(library.extraText(book, '02 - Übersicht.jpg'), { status: 404 });
 });
 
 test('Hörfortschritt pro Nutzer: speichern, Sortierung „zuletzt gehört“, Nutzer löschen', async t => {

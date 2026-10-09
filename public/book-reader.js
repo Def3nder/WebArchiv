@@ -17,6 +17,7 @@ const bookReader = {
   token: 0,             // verwirft Antworten geschlossener Reiter
   backStack: [],        // Scrollpositionen vor internen Sprüngen (für „Zurück“)
   stepProgress: null,   // Tastatur auf der Fortschrittslinie (±Anteil)
+  extra: null,          // Extra-Markdown: keine Leseposition speichern
 };
 
 function bookTextApiPath(book, kind) {
@@ -35,15 +36,16 @@ function svgBookClose() {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
 }
 
-async function openBookReader(book) {
-  if (bookReader.el || !book.ebook) return;
+async function openBookReader(book, extra = null) {
+  if (bookReader.el || (!extra && !book.ebook)) return;
   const token = ++bookReader.token;
-  Object.assign(bookReader, { book, format: book.ebook.format, loaded: false, position: book.ebookPosition ?? null, backStack: [] });
+  const format = extra ? 'md' : book.ebook.format;
+  Object.assign(bookReader, { book, extra, format, loaded: false, position: extra ? null : (book.ebookPosition ?? null), backStack: [] });
   // Der Miniplayer zeigt dieses Hörbuch (mit gespeichertem Hörstand), sofern nicht gerade
   // ein anderes läuft.
   if (!bookPlayer.book || (bookPlayer.audio?.paused && bookPlayer.book.id !== book.id)) bookEnsureLoaded(book);
 
-  const sizeButtons = book.ebook.format === 'pdf' ? '' : `
+  const sizeButtons = format === 'pdf' ? '' : `
       <span class="book-reader-size">
         <button type="button" class="book-btn" data-reader="smaller" aria-label="Schrift kleiner" title="Schrift kleiner">A−</button>
         <button type="button" class="book-btn" data-reader="larger" aria-label="Schrift größer" title="Schrift größer">A+</button>
@@ -53,12 +55,12 @@ async function openBookReader(book) {
   el.className = 'book-reader';
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
-  el.setAttribute('aria-label', 'Text: ' + book.title);
+  el.setAttribute('aria-label', (extra ? 'Extra: ' + extra.title : 'Text: ' + book.title));
   el.innerHTML = `
     <header class="book-reader-head">
       <button type="button" class="book-btn book-reader-close" data-reader="close" aria-label="Text schließen" title="Schließen">${svgBookClose()}</button>
       <span class="book-reader-heading">
-        <span class="book-reader-title">${esc(book.title)}</span>
+        <span class="book-reader-title">${esc(extra?.title || book.title)}</span>
         <span class="book-reader-where"></span>
       </span>${sizeButtons}
     </header>
@@ -85,7 +87,10 @@ async function openBookReader(book) {
 
   const body = el.querySelector('.book-reader-body');
   try {
-    const r = await apiFetch(bookTextApiPath(book, 'text'));
+    const url = extra
+      ? bookTextApiPath(book, 'extra') + '?file=' + encodeURIComponent(extra.file)
+      : bookTextApiPath(book, 'text');
+    const r = await apiFetch(url);
     const data = await r.json().catch(() => ({}));
     if (token !== bookReader.token) return;
     if (!r.ok) throw new Error(data.error || 'Der Text konnte nicht geladen werden.');
@@ -365,6 +370,7 @@ function bookReaderPosition() {
 }
 
 function bookReaderSave({ keepalive = false } = {}) {
+  if (bookReader.extra) return Promise.resolve();
   const position = bookReaderPosition();
   if (position == null || position === bookReader.position) return Promise.resolve();
   bookReader.position = position;
@@ -386,8 +392,9 @@ function closeBookReader() {
   bookReader.el.remove();
   bookReader.el = null;
   bookReader.loaded = false;
+  bookReader.extra = null;
   bookReader.stepProgress = null;
-  document.body.classList.remove('book-reader-open');
+  if (!document.getElementById('book-extras')) document.body.classList.remove('book-reader-open');
   bookUpdateUi();
   if (typeof saveCurrentViewState === 'function') saveCurrentViewState();
 }
@@ -426,4 +433,8 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') bookReaderSave({ keepalive: true });
 });
 // Wird das Artikel-Overlay geschlossen (Zurück-Taste, Abmelden), endet auch der Text-Reiter.
-new MutationObserver(() => { if ($overlay.hidden) closeBookReader(); }).observe($overlay, { attributes: true, attributeFilter: ['hidden'] });
+new MutationObserver(() => {
+  if (!$overlay.hidden) return;
+  closeBookReader();
+  if (typeof closeBookExtras === 'function') closeBookExtras();
+}).observe($overlay, { attributes: true, attributeFilter: ['hidden'] });

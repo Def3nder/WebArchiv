@@ -111,6 +111,9 @@ function renderBookDetail(book) {
   const readButton = book.ebook
     ? `<button type="button" class="detail-cat-pill" data-book-text title="Text zum Hörbuch lesen">Text lesen</button>`
     : '';
+  const extrasButton = book.extras?.length
+    ? `<button type="button" class="detail-cat-pill" data-book-extras title="Extra-Material anzeigen">Extras</button>`
+    : '';
   const editMenu = currentUser?.role === 'admin' && book.hasAbstract
     ? `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Kurzbeschreibung bearbeiten">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Abstract editieren</button></div></details>`
     : '';
@@ -158,7 +161,7 @@ function renderBookDetail(book) {
       ${book.bookAuthor ? `<p class="detail-book-author">von ${esc(book.bookAuthor)}</p>` : ''}
       <div class="detail-date-row">
         <span class="detail-date-block">${book.date ? esc(formatDate(book.date)) : ''}</span>
-        <div class="detail-action-row detail-action-row-book">${readButton}${editMenu}</div>
+        <div class="detail-action-row detail-action-row-book">${readButton}${extrasButton}${editMenu}</div>
       </div>
       <div class="detail-divider"></div>
       ${playerHtml}
@@ -190,6 +193,7 @@ function renderBookDetail(book) {
     });
   });
   $detail.querySelector('[data-book-text]')?.addEventListener('click', () => openBookReader(book));
+  $detail.querySelector('[data-book-extras]')?.addEventListener('click', () => openBookExtras(book));
   $detail.querySelector('[data-book="speed"]')?.addEventListener('change', e => bookSetSpeed(Number(e.target.value)));
   $detail.querySelectorAll('.book-track').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -227,6 +231,67 @@ function renderBookDetail(book) {
   bookUpdateUi();
   $overlay.querySelector('.overlay-panel').scrollTop = 0;
 }
+
+function svgBookExtraDocument() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M6 2.5h8l4 4V21.5H6z"/><path d="M14 2.5v4h4M9 11h6M9 15h6"/></svg>';
+}
+
+function openBookExtras(book) {
+  if (!book.extras?.length || document.getElementById('book-extras')) return;
+  const images = book.extras.filter(extra => extra.type === 'image');
+  const el = document.createElement('div');
+  el.id = 'book-extras';
+  el.className = 'book-reader book-extras';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-label', 'Extras: ' + book.title);
+  el.innerHTML = `
+    <header class="book-reader-head">
+      <button type="button" class="book-btn book-reader-close" data-extras-close aria-label="Zurück zum Hörbuch" title="Zurück zum Hörbuch">${svgBookClose()}</button>
+      <span class="book-reader-heading"><span class="book-reader-title">Extras</span><span class="book-reader-where">${esc(book.title)}</span></span>
+    </header>
+    <div class="book-extras-scroll"><div class="book-extras-grid">
+      ${book.extras.map((extra, index) => `<button type="button" class="book-extra-card${extra.type === 'markdown' ? ' is-document' : ''}" data-extra="${index}" aria-label="${esc(extra.title)}">
+        <span class="book-extra-preview ${extra.type === 'markdown' ? 'is-document' : ''}">
+          ${extra.type === 'image' ? `<img src="${esc(extra.url)}" alt="" loading="lazy">` : svgBookExtraDocument()}
+        </span><span class="book-extra-title">${esc(extra.title)}</span>
+      </button>`).join('')}
+    </div></div>`;
+  document.body.appendChild(el);
+  document.body.classList.add('book-reader-open');
+  el.querySelector('[data-extras-close]').addEventListener('click', closeBookExtras);
+  const scroller = el.querySelector('.book-extras-scroll');
+  if (scroller && typeof enablePullToClose === 'function') {
+    enablePullToClose({
+      scroller,
+      moving: el,
+      fading: null,
+      canStart: () => true,
+      onClose: closeBookExtras,
+    });
+  }
+  el.querySelectorAll('[data-extra]').forEach(button => button.addEventListener('click', () => {
+    const extra = book.extras[Number(button.dataset.extra)];
+    if (extra.type === 'image') {
+      openGalleryFullscreen(images.map(item => item.url), images.indexOf(extra), book.title);
+    } else {
+      openBookReader(book, extra);
+    }
+  }));
+  el.querySelector('[data-extras-close]').focus();
+}
+
+function closeBookExtras() {
+  document.getElementById('book-extras')?.remove();
+  if (!bookReader?.el) document.body.classList.remove('book-reader-open');
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !document.getElementById('book-extras') || bookReader?.el) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  closeBookExtras();
+}, true);
 
 function bookConfig(book = bookPlayer.book) {
   return book?.config || { skipLongSeconds: 600, skipShortSeconds: 30 };

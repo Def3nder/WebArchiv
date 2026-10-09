@@ -2577,3 +2577,50 @@ body.book-reader-open .mini-player { z-index: 215; }
 /* Platz für den Miniplayer unten */
 body.has-mini-player .book-reader-body { padding-bottom: 76px; }
 body.has-mini-player .book-reader-back { bottom: 92px; }
+
+/* ── Extra-Material zum Hörbuch ────────────────────────────────────────── */
+.book-extras { z-index: 204; }
+.book-extras-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: clamp(18px, 4vw, 38px); }
+.book-extras-grid {
+  width: min(100%, 72rem);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+  gap: clamp(14px, 2.5vw, 24px);
+}
+.book-extra-card {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.book-extra-card:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: var(--shadow-lg); }
+.book-extra-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.book-extra-preview { display: grid; place-items: center; width: 100%; aspect-ratio: 1; overflow: hidden; background: var(--surface-raised); }
+.book-extra-preview img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+.book-extra-preview.is-document { color: var(--accent); background: var(--accent-glow); }
+.book-extra-preview.is-document svg { width: 42%; max-width: 76px; }
+.book-extra-title { display: block; padding: 12px 14px 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.book-extra-card.is-document {
+  align-self: start;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  padding: 8px 10px;
+}
+.book-extra-card.is-document .book-extra-preview {
+  width: 42px;
+  height: 42px;
+  aspect-ratio: auto;
+  border-radius: 7px;
+}
+.book-extra-card.is-document .book-extra-preview svg { width: 24px; }
+.book-extra-card.is-document .book-extra-title { padding: 4px 8px 4px 12px; }
