@@ -15,10 +15,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=83" />
+  <link rel="stylesheet" href="styles.css?v=100" />
 </head>
 <body>
 
+  <div id="navigation-chrome" class="navigation-chrome">
   <!-- Header -->
   <header class="site-header">
     <div class="header-inner">
@@ -137,6 +138,7 @@
       </div>
       <button id="reset-filters" class="reset-btn" title="Filter zurücksetzen">Reset</button>
     </div>
+  </div>
   </div>
 
   <!-- Main content area -->
@@ -362,41 +364,46 @@
   </dialog>
 
   <!-- Einstellungen (pro Gerät) -->
-  <dialog id="settings-dialog" class="account-dialog" aria-labelledby="settings-title">
+  <dialog id="settings-dialog" class="account-dialog" aria-labelledby="settings-title" tabindex="-1">
     <form id="settings-form" novalidate>
       <h2 id="settings-title" class="login-title">Einstellungen</h2>
       <fieldset class="settings-group">
         <legend class="login-label">Schriftart</legend>
-        <div class="settings-choices">
-          <label class="settings-choice settings-font-editorial"><input type="radio" name="font" value="editorial"><span>Editorial</span></label>
-          <label class="settings-choice settings-font-classic"><input type="radio" name="font" value="classic"><span>Klassisch</span></label>
-          <label class="settings-choice settings-font-modern"><input type="radio" name="font" value="modern"><span>Modern</span></label>
-          <label class="settings-choice settings-font-system"><input type="radio" name="font" value="system"><span>System</span></label>
-        </div>
+        <select class="settings-select" name="font">
+          <option value="editorial">Editorial</option><option value="classic">Klassisch</option>
+          <option value="modern">Modern</option><option value="system">System</option>
+        </select>
       </fieldset>
       <fieldset class="settings-group">
         <legend class="login-label">Darstellung</legend>
-        <div class="settings-choices">
-          <label class="settings-choice"><input type="radio" name="theme" value="light"><span>Hell</span></label>
-          <label class="settings-choice"><input type="radio" name="theme" value="dark"><span>Dunkel</span></label>
-          <label class="settings-choice"><input type="radio" name="theme" value="auto"><span>Automatisch</span></label>
-        </div>
+        <select class="settings-select" name="theme">
+          <option value="light">Hell</option><option value="dark">Dunkel</option><option value="auto">Automatisch</option>
+        </select>
       </fieldset>
       <fieldset class="settings-group">
         <legend class="login-label">Textgröße im Artikel</legend>
-        <div class="settings-choices">
-          <label class="settings-choice settings-size-small"><input type="radio" name="textSize" value="small"><span>Klein</span></label>
-          <label class="settings-choice settings-size-normal"><input type="radio" name="textSize" value="normal"><span>Normal</span></label>
-          <label class="settings-choice settings-size-large"><input type="radio" name="textSize" value="large"><span>Groß</span></label>
-          <label class="settings-choice settings-size-xlarge"><input type="radio" name="textSize" value="xlarge"><span>Sehr groß</span></label>
-        </div>
+        <select class="settings-select" name="textSize">
+          <option value="small">Klein</option><option value="normal">Normal</option>
+          <option value="large">Groß</option><option value="xlarge">Sehr groß</option>
+        </select>
       </fieldset>
       <fieldset class="settings-group">
         <legend class="login-label">Filter-Beschriftungen</legend>
-        <div class="settings-choices settings-choices-short">
-          <label class="settings-choice"><input type="radio" name="filterLabels" value="auto"><span>Automatisch</span></label>
-          <label class="settings-choice"><input type="radio" name="filterLabels" value="hidden"><span>Ausblenden</span></label>
-        </div>
+        <select class="settings-select" name="filterLabels">
+          <option value="auto">Automatisch</option><option value="hidden">Ausblenden</option>
+        </select>
+      </fieldset>
+      <fieldset class="settings-group">
+        <legend class="login-label">Kategorien auf Kacheln</legend>
+        <select class="settings-select" name="cardCategories">
+          <option value="visible">Einblenden</option><option value="hidden">Ausblenden</option>
+        </select>
+      </fieldset>
+      <fieldset class="settings-group">
+        <legend class="login-label">Reset-Button bei Filtern</legend>
+        <select class="settings-select" name="resetFilters">
+          <option value="visible">Einblenden</option><option value="hidden">Ausblenden</option>
+        </select>
       </fieldset>
       <p class="account-hint">Die Filter-Beschriftungen werden pro Nutzer und Gerät gespeichert. „Automatisch“ zeigt sie nur, wenn genug Platz vorhanden ist.</p>
       <div class="account-buttons">
@@ -420,12 +427,12 @@
     <section id="user-admin-panel-public" role="tabpanel" aria-labelledby="user-admin-tab-public" class="user-admin-panel" hidden></section>
   </dialog>
   <script src="user-admin.js?v=11"></script>
-  <script src="settings.js?v=2"></script>
+  <script src="settings.js?v=4"></script>
   <script src="session-state.js?v=6"></script>
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=79"></script>
+  <script src="app.js?v=93"></script>
   <script src="audiobooks.js?v=6"></script>
   <script src="book-reader.js?v=13"></script>
   <script src="article-editor.js?v=2"></script>

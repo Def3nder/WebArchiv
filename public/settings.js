@@ -1,18 +1,25 @@
 /* WebArchiv — Anzeige-Einstellungen im Browser.
    Gäste bekommen immer die Vorgaben. Wird vor app.js geladen. */
 
-const DISPLAY_DEFAULTS = { font: 'system', theme: 'auto', textSize: 'normal', filterLabels: 'auto' };
+const DISPLAY_DEFAULTS = {
+  font: 'system', theme: 'light', textSize: 'normal', filterLabels: 'auto',
+  cardCategories: 'visible', resetFilters: 'visible',
+};
 const DISPLAY_OPTIONS = {
   font: ['editorial', 'classic', 'modern', 'system'],
   theme: ['light', 'dark', 'auto'],
   textSize: ['small', 'normal', 'large', 'xlarge'],
   filterLabels: ['auto', 'hidden'],
+  cardCategories: ['visible', 'hidden'],
+  resetFilters: ['visible', 'hidden'],
 };
 const DISPLAY_STORAGE_KEYS = {
   font: 'wa-font',
   theme: 'wa-theme',
   textSize: 'wa-text-size',
   filterLabels: 'wa-filter-labels',
+  cardCategories: 'wa-card-categories',
+  resetFilters: 'wa-reset-filters',
 };
 const darkSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -46,6 +53,8 @@ function applyDisplaySettings() {
     : settings.theme;
   document.body.dataset.textSize = settings.textSize;
   document.body.dataset.filterLabels = settings.filterLabels;
+  document.body.dataset.cardCategories = settings.cardCategories;
+  document.body.dataset.resetFilters = settings.resetFilters;
   if (typeof updateFilterLabelLayout === 'function') requestAnimationFrame(updateFilterLabelLayout);
 }
 
@@ -77,11 +86,14 @@ const $settingsForm = document.getElementById('settings-form');
 
 function openSettingsDialog() {
   for (const key of Object.keys(DISPLAY_OPTIONS)) {
-    const input = $settingsForm.querySelector(`input[name="${key}"][value="${displaySettings[key]}"]`);
-    if (input) input.checked = true;
+    const control = $settingsForm.elements?.namedItem(key)
+      || $settingsForm.querySelector(`[name="${key}"]`);
+    if (control) control.value = displaySettings[key];
   }
   $settingsDialog.showModal();
-  $settingsForm.querySelector('input:checked')?.focus();
+  // Den Dialog selbst fokussieren. Insbesondere mobile Browser öffnen sonst
+  // beim showModal()-Autofokus sofort das erste Auswahlfeld.
+  $settingsDialog.focus({ preventScroll: true });
 }
 
 function closeSettingsDialog() {
@@ -91,8 +103,8 @@ function closeSettingsDialog() {
 
 // Änderungen wirken sofort, ohne Speichern-Knopf.
 $settingsForm.addEventListener('change', event => {
-  const input = event.target;
-  if (input.type === 'radio') setDisplaySetting(input.name, input.value);
+  const control = event.target;
+  if (control.matches?.('select[name]')) setDisplaySetting(control.name, control.value);
 });
 $settingsForm.addEventListener('submit', event => {
   event.preventDefault();

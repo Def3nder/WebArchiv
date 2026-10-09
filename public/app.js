@@ -53,6 +53,7 @@ const $filterLayout   = document.getElementById('filter-layout');
 const $filterLimit    = document.getElementById('filter-limit');
 const $resetFilters   = document.getElementById('reset-filters');
 const $filterBarInner = document.querySelector('.filter-bar-inner');
+const $navigationChrome = document.getElementById('navigation-chrome');
 const $gridDensityStatus = document.getElementById('grid-density-status');
 const $reindexBtn    = document.getElementById('reindex-btn');
 const $adminMenu      = document.getElementById('admin-menu');
@@ -109,7 +110,73 @@ function updateFilterLabelLayout() {
 
 function listViewportTop() {
   const bar = document.getElementById('filter-bar');
-  return bar ? bar.getBoundingClientRect().bottom : 0;
+  return bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+}
+
+// ── Platzsparende Navigation beim Scrollen ────────────────────────────────
+const NAV_SCROLL_THRESHOLD = 24;
+let navigationLastScrollY = Math.max(0, window.scrollY);
+let navigationDirection = 0;
+let navigationTravel = 0;
+let navigationScrollFrame = 0;
+let navigationVisibleUntil = 0;
+let navigationOffset = 0;
+
+function navigationChromeMustStayVisible() {
+  if (!$navigationChrome) return false;
+  const active = document.activeElement;
+  return Date.now() < navigationVisibleUntil
+    || active === $searchInput
+    || !$adminMenu.hidden
+    || !!document.querySelector('dialog[open]');
+}
+
+function setNavigationChromeOffset(offset, returning = false) {
+  if (!$navigationChrome) return;
+  const height = Math.max(1, $navigationChrome.offsetHeight);
+  navigationOffset = Math.max(0, Math.min(height, offset));
+  $navigationChrome.classList.toggle('is-returning', returning);
+  $navigationChrome.classList.toggle('is-hidden', navigationOffset >= height - 1);
+  $navigationChrome.style.setProperty('--navigation-translate', `${-navigationOffset}px`);
+}
+
+function showNavigationChrome(returning = false) {
+  setNavigationChromeOffset(0, returning && navigationOffset > 0);
+  navigationDirection = 0;
+  navigationTravel = 0;
+}
+
+function updateNavigationChrome() {
+  navigationScrollFrame = 0;
+  if (!$navigationChrome) return;
+  const currentY = Math.max(0, window.scrollY);
+  const delta = currentY - navigationLastScrollY;
+  navigationLastScrollY = currentY;
+
+  if (currentY <= 8 || navigationChromeMustStayVisible()) {
+    showNavigationChrome(navigationOffset > 0);
+    return;
+  }
+  if (Math.abs(delta) < 1) return;
+
+  const direction = Math.sign(delta);
+  if (direction !== navigationDirection) {
+    navigationDirection = direction;
+    navigationTravel = 0;
+  }
+  if (direction > 0) {
+    // Ohne eigene Animation exakt mit dem Inhalt nach oben schieben.
+    navigationTravel = 0;
+    setNavigationChromeOffset(navigationOffset + delta);
+    return;
+  }
+
+  navigationTravel += Math.abs(delta);
+  if (navigationTravel >= NAV_SCROLL_THRESHOLD) showNavigationChrome(true);
+}
+
+function scheduleNavigationChromeUpdate() {
+  if (!navigationScrollFrame) navigationScrollFrame = requestAnimationFrame(updateNavigationChrome);
 }
 
 function activeAuthorScope() {
@@ -793,18 +860,18 @@ function renderPagination(page, pages) {
   if (pages <= 1) return '';
 
   const btns = [];
-  btns.push(`<button class="page-btn" data-page="${page - 1}" ${page === 1 ? 'disabled' : ''}>‹ Zurück</button>`);
+  btns.push(`<button class="page-btn page-btn-nav" data-page="${page - 1}" aria-label="Vorherige Seite" title="Vorherige Seite" ${page === 1 ? 'disabled' : ''}>‹<span class="page-btn-label"> Zurück</span></button>`);
 
   const range = new Set([1, pages, page - 1, page, page + 1].filter(p => p >= 1 && p <= pages));
   const sorted = [...range].sort((a,b) => a-b);
   let prev = 0;
   for (const p of sorted) {
-    if (prev && p - prev > 1) btns.push('<span class="page-btn" style="opacity:.3;cursor:default">…</span>');
+    if (prev && p - prev > 1) btns.push('<span class="page-btn page-ellipsis" aria-hidden="true">…</span>');
     btns.push(`<button class="page-btn${p === page ? ' active' : ''}" data-page="${p}">${p}</button>`);
     prev = p;
   }
 
-  btns.push(`<button class="page-btn" data-page="${page + 1}" ${page === pages ? 'disabled' : ''}>Weiter ›</button>`);
+  btns.push(`<button class="page-btn page-btn-nav" data-page="${page + 1}" aria-label="Nächste Seite" title="Nächste Seite" ${page === pages ? 'disabled' : ''}><span class="page-btn-label">Weiter </span>›</button>`);
   return `<div class="pagination">${btns.join('')}</div>`;
 }
 
@@ -812,8 +879,10 @@ function renderPagination(page, pages) {
 // Zum Anfang der Ergebnisliste scrollen: erste Kachel direkt unter der
 // (klebenden) Filterleiste, unabhängig von deren Höhe auf Desktop oder Handy.
 function scrollToResults(behavior = 'smooth') {
+  navigationVisibleUntil = Date.now() + (behavior === 'smooth' ? 700 : 100);
+  showNavigationChrome(true);
   const bar = document.querySelector('.filter-bar');
-  const covered = bar ? (parseFloat(getComputedStyle(bar).top) || 0) + bar.offsetHeight : 0;
+  const covered = $navigationChrome?.offsetHeight || bar?.offsetHeight || 0;
   const top = window.scrollY + $app.getBoundingClientRect().top - covered;
   window.scrollTo({ top: Math.max(0, top), behavior });
 }
@@ -1748,6 +1817,33 @@ const GRID_MIN_CARD_WIDTH = 110;
 const GRID_MAX_CARD_WIDTH = 1920;
 const GRID_PINCH_THRESHOLD = 0.12;
 const GRID_CLICK_SUPPRESS_MS = 500;
+// Deutlich getrennte Stufen: Auf einem typischen Handy passen bei normaler
+// Höhe etwa 7–8, danach ungefähr 5 beziehungsweise 3 Zeilen ins Hochformat.
+const LIST_ROW_SCALES = [0.7, 1, 1.55, 2.4];
+const LIST_ROW_SCALE_LABELS = ['Kompakt', 'Normal', 'Groß', 'Sehr groß'];
+// Einmal beim Laden festlegen, nicht bei resize/orientationchange neu bestimmen.
+// So bleibt dieselbe Größenstufe beim Drehen pixelgenau gleich hoch.
+const LIST_ROW_BASE_HEIGHT = window.matchMedia('(max-width: 600px)').matches ? 64 : 120;
+let listRowScale = (() => {
+  try {
+    const stored = Number(localStorage.getItem('wa-list-row-scale'));
+    if (Number.isFinite(stored)) {
+      return LIST_ROW_SCALES.reduce((nearest, scale) => (
+        Math.abs(scale - stored) < Math.abs(nearest - stored) ? scale : nearest
+      ), LIST_ROW_SCALES[0]);
+    }
+  } catch { /* Speicher gesperrt */ }
+  return 1;
+})();
+function applyListRowHeight() {
+  // Fertige Längen statt calc(px * Faktor): Diese Multiplikation wird von
+  // mehreren mobilen Browsern verworfen und ließ die Zeile praktisch unverändert.
+  document.body.style.setProperty(
+    '--list-row-height',
+    `${Math.round(LIST_ROW_BASE_HEIGHT * listRowScale)}px`,
+  );
+}
+applyListRowHeight();
 let gridClickSuppressedUntil = 0;
 let gridTouchGesture = null;
 let pageSwipeGesture = null;
@@ -1826,10 +1922,27 @@ function applyGridColumns() {
     return;
   }
   const grid = $app.querySelector('.article-grid');
-  const preferredWidth = state.gridCardWidths?.[layout];
-  if (!grid || !Number.isFinite(preferredWidth)) {
+  if (!grid) {
     document.body.style.removeProperty('--grid-columns');
     return;
+  }
+  let preferredWidth = state.gridCardWidths?.[layout];
+  if (!Number.isFinite(preferredWidth)) {
+    // Schon die vom responsiven CSS vorgegebene Ausgangsbreite merken. Sonst
+    // kann erst eine manuelle Pinch-/Mausradänderung die Breite beim ersten
+    // Wechsel zwischen Hoch- und Querformat stabilisieren.
+    const current = currentGridColumns(grid);
+    if (!current) {
+      document.body.style.removeProperty('--grid-columns');
+      return;
+    }
+    preferredWidth = Math.max(GRID_MIN_CARD_WIDTH, Math.min(
+      GRID_MAX_CARD_WIDTH,
+      cardWidthForColumns(grid, current),
+    ));
+    preferredWidth = Math.round(preferredWidth * 10) / 10;
+    state.gridCardWidths = { ...state.gridCardWidths, [layout]: preferredWidth };
+    scheduleCurrentViewSave();
   }
   const effective = columnsForCardWidth(grid, preferredWidth);
   document.body.style.setProperty('--grid-columns', String(effective));
@@ -1845,7 +1958,63 @@ function showGridDensityStatus(columns) {
   }, 900);
 }
 
-async function changeGridColumns(step) {
+function showListRowHeightStatus() {
+  if (!$gridDensityStatus) return;
+  const index = LIST_ROW_SCALES.indexOf(listRowScale);
+  $gridDensityStatus.textContent = `Zeilenhöhe: ${LIST_ROW_SCALE_LABELS[index]}`;
+  $gridDensityStatus.classList.add('is-visible');
+  clearTimeout(gridDensityStatusTimer);
+  gridDensityStatusTimer = setTimeout(() => {
+    $gridDensityStatus.classList.remove('is-visible');
+  }, 900);
+}
+
+function captureListScaleAnchor(clientX, clientY) {
+  const target = document.elementFromPoint?.(clientX, clientY);
+  const card = target?.closest?.('.card[data-id]');
+  if (!card) return null;
+  const rect = card.getBoundingClientRect();
+  if (rect.height <= 0) return null;
+  return {
+    id: card.dataset.id,
+    viewportY: clientY,
+    ratio: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+  };
+}
+
+function restoreListScaleAnchor(anchor) {
+  if (!anchor) return false;
+  const card = [...$app.querySelectorAll('.card[data-id]')]
+    .find(candidate => candidate.dataset.id === anchor.id);
+  if (!card) return false;
+  // Dieser Layout-Lesezugriff erzwingt die Neuberechnung direkt nach dem Setzen
+  // der Höhe. Das anschließende Scrollen geschieht noch im selben JS-Task und
+  // damit vor dem nächsten sichtbaren Browser-Paint.
+  const rect = card.getBoundingClientRect();
+  const anchoredY = rect.top + rect.height * anchor.ratio;
+  // `html` verwendet absichtlich smooth scrolling. Bei `behavior: auto` würde
+  // deshalb erst die Zeile wachsen und die Ankerkorrektur anschließend sichtbar
+  // animieren. `instant` hält beides im selben Paint zusammen.
+  window.scrollBy({ top: anchoredY - anchor.viewportY, behavior: 'instant' });
+  return true;
+}
+
+async function changeListRowHeight(step, scaleAnchor = null) {
+  if (currentLayout() !== 'list' || !step) return;
+  const currentIndex = LIST_ROW_SCALES.indexOf(listRowScale);
+  const nextIndex = Math.max(0, Math.min(LIST_ROW_SCALES.length - 1, currentIndex + Math.sign(step)));
+  const next = LIST_ROW_SCALES[nextIndex];
+  if (next === listRowScale) return;
+  const position = scaleAnchor ? null : captureListPosition();
+  listRowScale = next;
+  applyListRowHeight();
+  try { localStorage.setItem('wa-list-row-scale', String(listRowScale)); } catch { /* Speicher gesperrt */ }
+  showListRowHeightStatus();
+  if (!restoreListScaleAnchor(scaleAnchor)) await restoreListPosition(position);
+  lastListPosition = captureListPosition();
+}
+
+async function changeGridColumns(step, scaleAnchor = null) {
   const layout = currentLayout();
   const grid = $app.querySelector('.article-grid');
   if (!grid || layout === 'list' || !step) return;
@@ -1855,7 +2024,7 @@ async function changeGridColumns(step) {
   showGridDensityStatus(next);
   if (next === current) return;
 
-  const position = captureListPosition();
+  const position = scaleAnchor ? null : captureListPosition();
   const preferredWidth = Math.max(GRID_MIN_CARD_WIDTH, Math.min(
     GRID_MAX_CARD_WIDTH,
     cardWidthForColumns(grid, next)
@@ -1863,7 +2032,7 @@ async function changeGridColumns(step) {
   state.gridCardWidths = { ...state.gridCardWidths, [layout]: Math.round(preferredWidth * 10) / 10 };
   document.body.style.setProperty('--grid-columns', String(next));
   scheduleCurrentViewSave();
-  await restoreListPosition(position);
+  if (!restoreListScaleAnchor(scaleAnchor)) await restoreListPosition(position);
   lastListPosition = captureListPosition();
 }
 
@@ -2011,12 +2180,12 @@ $app.addEventListener('touchend', finishPageSwipe, { passive: true });
 // bereits klar horizontal war, wird sie wie ein normales Loslassen ausgewertet.
 $app.addEventListener('touchcancel', finishPageSwipe, { passive: true });
 
-// Zwei Finger dürfen auf unterschiedlichen Kacheln oder in den Zwischenräumen
-// liegen. Sobald beide innerhalb desselben Rasters starten, gehört die Geste der
-// Spaltensteuerung und darf weder eine Kachel öffnen noch die Seite vergrößern.
+// Zwei Finger dürfen auf unterschiedlichen Kacheln/Zeilen oder in den
+// Zwischenräumen liegen. Die Geste steuert die Spaltenzahl beziehungsweise in
+// der Listenansicht die Zeilenhöhe und darf keine Karte öffnen.
 $app.addEventListener('touchstart', event => {
   if (event.touches.length > 1) pageSwipeGesture = null;
-  if (currentLayout() === 'list' || event.touches.length !== 2) return;
+  if (event.touches.length !== 2) return;
   const first = event.touches[0];
   const second = event.touches[1];
   const grid = gridForTouch(first);
@@ -2025,7 +2194,7 @@ $app.addEventListener('touchstart', event => {
   const distance = touchDistance(first, second);
   if (distance <= 0) return;
   event.preventDefault();
-  gridTouchGesture = { grid, startDistance: distance, committed: false };
+  gridTouchGesture = { grid, startDistance: distance, committed: false, layout: currentLayout() };
   gridClickSuppressedUntil = Date.now() + 10000;
 }, { passive: false });
 
@@ -2037,8 +2206,19 @@ $app.addEventListener('touchmove', event => {
   const ratio = distance / gridTouchGesture.startDistance;
   if (Math.abs(ratio - 1) < GRID_PINCH_THRESHOLD) return;
   gridTouchGesture.committed = true;
-  // Zusammenziehen entspricht Herauszoomen: mehr, Spreizen: weniger Spalten.
-  changeGridColumns(ratio < 1 ? 1 : -1);
+  const midpointX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+  const midpointY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+  const scaleAnchor = captureListScaleAnchor(midpointX, midpointY);
+  if (gridTouchGesture.layout === 'list') {
+    // Zusammenziehen macht die Zeilen kompakter, Spreizen vergrößert sie.
+    changeListRowHeight(
+      ratio < 1 ? -1 : 1,
+      scaleAnchor,
+    );
+  } else {
+    // Zusammenziehen entspricht Herauszoomen: mehr, Spreizen: weniger Spalten.
+    changeGridColumns(ratio < 1 ? 1 : -1, scaleAnchor);
+  }
 }, { passive: false });
 
 function finishGridTouchGesture() {
@@ -2052,11 +2232,11 @@ $app.addEventListener('touchend', event => {
 }, { passive: true });
 $app.addEventListener('touchcancel', finishGridTouchGesture, { passive: true });
 
-// Strg+Mausrad wirkt nur über dem Kachelraster. Normales Scrollen und der
+// Strg+Mausrad wirkt nur über dem Ergebnisraster. In der Liste ändert es die
+// Zeilenhöhe, in Kachelansichten die Spaltenzahl. Normales Scrollen und der
 // bestehende Mausrad-Zoom in der Bildvollansicht bleiben unberührt.
 $app.addEventListener('wheel', event => {
-  if (!event.ctrlKey || !isDesktopPointer() || currentLayout() === 'list'
-      || !event.target.closest?.('.article-grid')) return;
+  if (!event.ctrlKey || !isDesktopPointer() || !event.target.closest?.('.article-grid')) return;
   event.preventDefault();
   gridWheelTotal += event.deltaY;
   clearTimeout(gridWheelResetTimer);
@@ -2065,13 +2245,19 @@ $app.addEventListener('wheel', event => {
   const step = gridWheelTotal > 0 ? 1 : -1;
   gridWheelTotal = 0;
   gridWheelLastStep = Date.now();
-  changeGridColumns(step);
+  if (currentLayout() === 'list') {
+    changeListRowHeight(step > 0 ? -1 : 1, captureListScaleAnchor(event.clientX, event.clientY));
+  }
+  else changeGridColumns(step, captureListScaleAnchor(event.clientX, event.clientY));
 }, { passive: false });
 
 let gridResizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(gridResizeTimer);
   gridResizeTimer = setTimeout(() => {
+    if ($navigationChrome?.classList.contains('is-hidden')) {
+      setNavigationChromeOffset($navigationChrome.offsetHeight);
+    }
     applyGridColumns();
     updateFilterLabelLayout();
   }, 120);
@@ -3085,11 +3271,15 @@ window.addEventListener('popstate', () => {
 // Mobile Browser dürfen die App im Hintergrund vollständig verwerfen. Deshalb
 // während der Bedienung speichern; pagehide/visibilitychange sind nur die letzte Sicherung.
 window.addEventListener('scroll', () => {
+  scheduleNavigationChromeUpdate();
   if ($overlay.hidden && (typeof bookReader === 'undefined' || !bookReader.el)) {
     lastListPosition = captureListPosition();
     scheduleCurrentViewSave();
   }
 }, { passive: true });
+document.addEventListener('focusin', event => {
+  if (event.target === $searchInput || event.target.closest?.('.header-menu')) showNavigationChrome(true);
+});
 $overlay.querySelector('.overlay-panel')?.addEventListener('scroll', () => {
   lastDetailPosition = captureDetailPosition();
   scheduleCurrentViewSave();

@@ -85,10 +85,23 @@ button { cursor: pointer; border: none; background: none; font: inherit; color: 
 select { font: inherit; color: inherit; }
 
 /* ── Header ──────────────────────────────────────────────────────────────── */
-.site-header {
+.navigation-chrome {
   position: sticky;
   top: 0;
   z-index: 100;
+  transform: translateY(var(--navigation-translate, 0px));
+  transition: none;
+  will-change: transform;
+}
+.navigation-chrome.is-returning {
+  transition: transform 180ms cubic-bezier(.4, 0, .2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .navigation-chrome.is-returning { transition-duration: 1ms; }
+}
+.site-header {
+  position: relative;
+  z-index: 2;
   background: var(--header-bg);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
@@ -189,9 +202,8 @@ select { font: inherit; color: inherit; }
 .filter-bar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 64px;
-  z-index: 90;
+  position: relative;
+  z-index: 1;
 }
 .filter-bar-inner {
   /* Mit dem Kachelbereich bündig: auf Tablets waren die Filterränder bislang
@@ -392,7 +404,6 @@ body.mode-audiobooks .bookmark-btn { opacity: .35; pointer-events: none; }
     width: 100%;
   }
 
-  .filter-bar { top: 100px; }
   .filter-bar-inner { padding: 4px 6px; gap: 4px 5px; }
   .filter-label { display: none; }
   .filter-select { max-width: 120px; font-size: 0.78rem; }
@@ -410,6 +421,9 @@ body.mode-audiobooks .bookmark-btn { opacity: .35; pointer-events: none; }
   display: grid;
   grid-template-columns: repeat(var(--grid-columns, var(--grid-default-columns)), minmax(0, 1fr));
   gap: 16px;
+  /* Pinch/Punch verankert die berührte Kachel selbst; eine zusätzliche
+     Browserkorrektur würde danach ein zweites, sichtbares Springen auslösen. */
+  overflow-anchor: none;
 }
 body:not(.layout-list) .article-grid {
   /* Vertikales Scrollen bleibt nativ; Zwei-Finger-Skalierung gehört überall
@@ -417,9 +431,9 @@ body:not(.layout-list) .article-grid {
   touch-action: pan-y;
 }
 body.layout-list .article-grid {
-  /* Einfinger-Wischen im Listeninhalt blättert Seiten; Pinch-Zoom bleibt hier
-     möglich, weil die Kacheldichte in der Listenansicht nicht verändert wird. */
-  touch-action: pan-y pinch-zoom;
+  /* Vertikales Scrollen bleibt nativ; Zwei-Finger-Skalierung ändert die
+     Zeilenhöhe, während horizontales Einfinger-Wischen Seiten blättert. */
+  touch-action: pan-y;
 }
 @media (min-width: 1451px) { .article-grid { --grid-default-columns: 5; } }
 @media (min-width: 1751px) { .article-grid { --grid-default-columns: 6; } }
@@ -683,6 +697,7 @@ body.has-mini-player .pwa-update-notice { bottom: calc(82px + env(safe-area-inse
   gap: 6px;
   flex: 1;
   overflow: hidden;
+  container: article-card-body / inline-size;
 }
 
 .card-meta {
@@ -720,6 +735,20 @@ body[data-theme="light"] .author-badge {
   .date-long { display: none; }
   .date-short { display: inline; white-space: nowrap; }
   .card-body { padding: 8px 8px 10px; gap: 5px; }
+  /* Nur komprimieren, wenn Badge und Datum dadurch wirklich nebeneinander
+     passen. In sehr schmalen Drei-Spalten-Kacheln bleibt der normale Umbruch. */
+  @container article-card-body (min-width: 132px) {
+    body:not(.layout-list) .card[data-author="Infografiken"] .card-meta {
+      flex-wrap: nowrap;
+      gap: 4px;
+    }
+    body:not(.layout-list) .card[data-author="Infografiken"] .author-badge {
+      padding-inline: 5px;
+      font-size: calc(0.65rem - 1px);
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+  }
   /* „Quadratisch“ auf dem Handy leicht hochkant, damit der Titel meist ganz passt. */
   body:not(.layout-tall):not(.layout-list) .card { aspect-ratio: 2 / 3; }
   body:not(.layout-tall):not(.layout-list) .card-image { flex-basis: 40%; }
@@ -773,6 +802,8 @@ body[data-theme="light"] .author-badge {
   transition: color var(--transition), border-color var(--transition);
 }
 .card:hover .cat-pill { border-color: var(--border-hi); }
+body[data-card-categories="hidden"]:not(.layout-list) .card-categories { display: none; }
+body[data-reset-filters="hidden"] #reset-filters { display: none; }
 
 /* ── Länglich-Modus ──────────────────────────────────────────────────────── */
 body.layout-tall .card         { aspect-ratio: unset; }
@@ -789,6 +820,8 @@ body.layout-list .card {
   aspect-ratio: unset;
   flex-direction: row;
   align-items: center;
+  height: var(--list-row-height, 120px);
+  min-height: 0;
   border-radius: var(--radius);
   position: relative;
 }
@@ -796,9 +829,9 @@ body.layout-list .card:hover { transform: none; }
 /* Desktop: quadratisches Bild; die Zeile ist so hoch wie das Bild. Das Bild wird
    am Kartenrand statt am Bildcontainer ausgerichtet, damit die Medien-Kennzeichen
    (ebenfalls an der Karte ausgerichtet) rechts oben neben dem Autor stehen können. */
-body.layout-list .card-image { flex: 0 0 120px; height: 120px; position: static; }
+body.layout-list .card-image { flex: 0 0 var(--list-row-height, 120px); height: var(--list-row-height, 120px); position: static; }
 body.layout-list .card-image img,
-body.layout-list .card-image-placeholder { position: absolute; top: 0; bottom: 0; left: 0; width: 120px; }
+body.layout-list .card-image-placeholder { position: absolute; top: 0; bottom: 0; left: 0; width: var(--list-row-height, 120px); }
 body.layout-list .card-image-placeholder svg { width: 22px; height: 22px; }
 body.layout-list .card-badges { top: 8px; right: 12px; bottom: auto; flex-direction: row; gap: 4px; color: var(--accent); }
 /* Neben dem Text statt auf dem Bild: helle Kennzeichen passend zum Kartenhintergrund. */
@@ -814,7 +847,6 @@ body.layout-list .card-pdf-badge {
 /* Platz für die Kennzeichen freihalten, damit Kategorien nicht darunter laufen. */
 body.layout-list .card:has(.card-badges) .card-body { padding-right: 100px; }
 body.layout-list .card:has(.card-badges > :nth-child(2)) .card-body { padding-right: 170px; }
-body.layout-list .card-date,
 body.layout-list .episode-num { display: none; }
 body.layout-list .card-body {
   display: grid;
@@ -832,13 +864,14 @@ body.layout-list .author-badge { white-space: nowrap; }
 body.layout-list .card-categories { grid-area: cats; flex-wrap: nowrap; overflow: hidden; margin: 0; align-items: center; }
 body.layout-list .card-title { grid-area: title; font-size: 0.95rem; -webkit-line-clamp: 1; }
 body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex: none; }
-@media (max-width: 600px) {
+@media (max-width: 600px), (hover: none) and (pointer: coarse) {
   body.layout-list .article-grid { gap: 6px; }
+  body.layout-list .card { height: var(--list-row-height, 64px); }
   /* Bild füllt die Zeilenhöhe; es wird am Kartenrand statt am Bildcontainer
      ausgerichtet, damit die Medien-Kennzeichen rechts neben dem Autor stehen können. */
-  body.layout-list .card-image { flex-basis: 64px; height: auto; min-height: 48px; align-self: stretch; }
+  body.layout-list .card-image { flex-basis: var(--list-row-height, 64px); height: var(--list-row-height, 64px); min-height: 0; align-self: stretch; }
   body.layout-list .card-image img,
-  body.layout-list .card-image-placeholder { width: 64px; }
+  body.layout-list .card-image-placeholder { width: var(--list-row-height, 64px); }
   body.layout-list .card-badges { top: 5px; right: 8px; }
   body.layout-list .card-audio-badge,
   body.layout-list .card-video-badge,
@@ -883,7 +916,29 @@ body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex
   font-weight: 600;
 }
 .page-btn:disabled { opacity: 0.3; cursor: default; }
-
+.page-ellipsis { opacity: .3; cursor: default; }
+@media (max-width: 600px) {
+  body:not(.layout-list) .pagination {
+    gap: 2px;
+    flex-wrap: nowrap;
+    margin-top: 32px;
+  }
+  body:not(.layout-list) .page-btn {
+    min-width: 28px;
+    height: 32px;
+    padding-inline: 4px;
+    font-size: .78rem;
+  }
+  body:not(.layout-list) .page-btn-nav {
+    min-width: 30px;
+  }
+  body:not(.layout-list) .page-ellipsis {
+    min-width: 16px;
+    padding-inline: 0;
+    border-color: transparent;
+    background: transparent;
+  }
+}
 /* ── Empty state ─────────────────────────────────────────────────────────── */
 .empty-state {
   text-align: center;
@@ -1987,39 +2042,22 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
   box-shadow: var(--shadow);
 }
 
-/* Einstellungen: Auswahl als Kacheln, jede Schrift in ihrer eigenen Schriftart. */
+/* Einstellungen */
 .settings-group { border: 0; padding: 0; margin: 0; min-width: 0; }
 .settings-group legend { margin-bottom: 8px; }
-.settings-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
-.settings-choices-short { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.settings-choice {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  padding: 8px 6px;
+.settings-select {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 36px 8px 12px;
+  color: var(--text);
+  background: var(--surface-2);
   border: 1px solid var(--border-hi);
   border-radius: var(--radius);
-  color: var(--text-muted);
   font-size: .88rem;
-  text-align: center;
-  white-space: nowrap;
   cursor: pointer;
-  transition: color var(--transition), border-color var(--transition), background var(--transition);
 }
-.settings-choice input { position: absolute; opacity: 0; pointer-events: none; }
-.settings-choice:hover { color: var(--text); border-color: var(--accent-dim); }
-.settings-choice:has(input:checked) { color: var(--accent); border-color: var(--accent); background: var(--accent-glow); }
-.settings-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
-.settings-font-editorial span { font-family: 'Lora', Georgia, serif; }
-.settings-font-classic span   { font-family: Georgia, 'Times New Roman', serif; }
-.settings-font-modern span    { font-family: 'Inter', system-ui, sans-serif; }
-.settings-font-system span    { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
-.settings-size-small span  { font-size: .78rem; }
-.settings-size-normal span { font-size: .86rem; }
-.settings-size-large span  { font-size: .95rem; }
-.settings-size-xlarge span { font-size: 1.04rem; }
+.settings-select:hover { border-color: var(--accent-dim); }
+.settings-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .account-dialog-wide { width: min(820px, calc(100vw - 32px)); height: min(960px, calc(100dvh - 32px)); }
 .account-dialog-wide[open] { display: flex; flex-direction: column; gap: 12px; }
