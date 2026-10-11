@@ -160,7 +160,7 @@ function renderBookDetail(book) {
       <h1 class="detail-title">${esc(book.title)}</h1>
       ${book.bookAuthor ? `<p class="detail-book-author">von ${esc(book.bookAuthor)}</p>` : ''}
       <div class="detail-date-row">
-        <span class="detail-date-block">${book.date ? esc(formatDate(book.date)) : ''}</span>
+        <span class="detail-date-block">${book.date ? esc(formatMonthYear(book.date)) : ''}</span>
         <div class="detail-action-row detail-action-row-book">${readButton}${extrasButton}${editMenu}</div>
       </div>
       <div class="detail-divider"></div>
@@ -273,7 +273,9 @@ function openBookExtras(book) {
   el.querySelectorAll('[data-extra]').forEach(button => button.addEventListener('click', () => {
     const extra = book.extras[Number(button.dataset.extra)];
     if (extra.type === 'image') {
-      openGalleryFullscreen(images.map(item => item.url), images.indexOf(extra), book.title);
+      // Extra-Bilder bleiben in ihrer eigenen Galerie; am Rand nicht zum nächsten
+      // Hörbuch beziehungsweise dessen Cover weiternavigieren.
+      openGalleryFullscreen(images.map(item => item.url), images.indexOf(extra), null, true);
     } else {
       openBookReader(book, extra);
     }
@@ -297,7 +299,19 @@ function closeBookExtras() {
 }
 
 document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || !document.getElementById('book-extras') || bookReader?.el) return;
+  if (!document.getElementById('book-extras') || bookReader?.el) return;
+  // Bild-Vollansicht und Markdown-Reader liegen über den Extras und behalten ihre
+  // eigene Tastatursteuerung. In der Übersicht darf die globale Artikelnavigation
+  // das Hörbuch im Hintergrund dagegen nicht wechseln.
+  const imageFullscreen = document.getElementById('img-fullscreen');
+  if (imageFullscreen && !imageFullscreen.hidden) return;
+  if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+      && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
+  if (event.key !== 'Escape') return;
   event.preventDefault();
   event.stopImmediatePropagation();
   closeBookExtras();

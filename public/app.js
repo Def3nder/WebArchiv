@@ -398,7 +398,7 @@ function zoomImageCentered(nextScale) {
 
 // Vollansicht: bei einer Gruppe alle Bilder (Wischen/Pfeiltasten), sonst eines.
 // articleId gesetzt → Hash trägt „?bild=N“, damit der Link genau dieses Bild zeigt.
-const fsGallery = { urls: [], index: 0, articleId: null };
+const fsGallery = { urls: [], index: 0, articleId: null, bounded: false };
 
 function showFullscreenImage(index) {
   const count = fsGallery.urls.length;
@@ -417,10 +417,11 @@ function showFullscreenImage(index) {
     history.replaceState(null, '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
   }
 }
-function openGalleryFullscreen(urls, index = 0, articleId = null) {
+function openGalleryFullscreen(urls, index = 0, articleId = null, bounded = false) {
   if (!urls.length) return;
   fsGallery.urls = urls;
   fsGallery.articleId = articleId;
+  fsGallery.bounded = bounded;
   showFullscreenImage(Math.max(0, Math.min(urls.length - 1, index)));
   document.getElementById('img-fullscreen').hidden = false;
 }
@@ -434,12 +435,13 @@ function closeImageFullscreen() {
     history.replaceState(null, '', `#/article/${sanitizeForId(fsGallery.articleId)}`);
   }
   fsGallery.articleId = null;
+  fsGallery.bounded = false;
 }
 // Nach dem letzten Bild weiter zum nächsten Artikel, vor dem ersten zum vorigen.
 function stepFullscreen(dir) {
   const next = fsGallery.index + dir;
   if (next >= 0 && next < fsGallery.urls.length) showFullscreenImage(next);
-  else navigateArticle(dir);
+  else if (!fsGallery.bounded) navigateArticle(dir);
 }
 function detailImageUrls(article) {
   if (article.images?.length) return article.images.map(image => image.url);
@@ -505,6 +507,13 @@ function formatDate(d) {
   const [y, m, day] = d.split('-');
   const months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
   return `${parseInt(day)}. ${months[parseInt(m) - 1]} ${y}`;
+}
+
+function formatMonthYear(d) {
+  if (!d) return '';
+  const [y, m] = d.split('-');
+  const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  return m && months[parseInt(m) - 1] ? `${months[parseInt(m) - 1]} ${y}` : d;
 }
 
 // Kurzform TT.MM.JJJJ für schmale Kacheln auf dem Handy.
