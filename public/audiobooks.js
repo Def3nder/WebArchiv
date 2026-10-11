@@ -396,12 +396,16 @@ function bookLoadTrack(index, seek, play) {
   const tracks = bookPlayer.book.tracks;
   bookPlayer.index = Math.min(Math.max(0, index), tracks.length - 1);
   bookPlayer.pendingSeek = seek || { fromStart: 0 };
-  bookPlayer.playAfterLoad = play;
+  // iOS kann Hintergrund-JavaScript nach dem Ende eines Titels aussetzen. Darum
+  // den Folgetitel direkt im ended-Aufruf starten und nicht erst bei loadedmetadata.
+  const playImmediately = play && bookPlayer.pendingSeek.fromStart === 0;
+  bookPlayer.playAfterLoad = play && !playImmediately;
   audio.src = tracks[bookPlayer.index].url;
   audio.defaultPlaybackRate = bookPlayer.speed;
   audio.playbackRate = bookPlayer.speed;
   audio.load();
   bookMediaSession();
+  if (playImmediately) bookPlay();
   bookUpdateUi();
 }
 

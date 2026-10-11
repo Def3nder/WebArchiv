@@ -17,3 +17,11 @@ test('Hörbuch-Detailansicht zeigt nur den ausgeschriebenen Monat und das Jahr',
   assert.equal(context.result, 'September 2025');
   assert.match(audiobooks, /detail-date-block[^\n]*formatMonthYear\(book\.date\)/);
 });
+
+test('Folgekapitel startet noch im ended-Aufruf statt erst nach geladenen Metadaten', () => {
+  const loadTrack = audiobooks.match(/function bookLoadTrack\(index, seek, play\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(loadTrack, 'bookLoadTrack fehlt');
+  assert.match(loadTrack, /const playImmediately = play && bookPlayer\.pendingSeek\.fromStart === 0;/);
+  assert.ok(loadTrack.indexOf('audio.load();') < loadTrack.indexOf('if (playImmediately) bookPlay();'));
+  assert.match(loadTrack, /bookPlayer\.playAfterLoad = play && !playImmediately;/);
+});
