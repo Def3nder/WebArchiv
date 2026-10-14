@@ -96,9 +96,9 @@ test('Beschädigte, unbekannte und übergroße Werte fallen sicher auf Standardw
   assert.equal(normalized.view.kind, 'list');
 });
 
-test('Hörbuch-Sortierung merkt sich zuletzt hinzugefügt', () => {
-  const result = sessionState.normalize({ version: 1, list: { bookSort: 'added' } });
-  assert.equal(result.list.bookSort, 'added');
+test('Hörbuch-Sortierung merkt sich zuletzt hinzugefügt und privat', () => {
+  assert.equal(sessionState.normalize({ version: 1, list: { bookSort: 'added' } }).list.bookSort, 'added');
+  assert.equal(sessionState.normalize({ version: 1, list: { bookSort: 'private' } }).list.bookSort, 'private');
 });
 
 test('Bevorzugte Kachelbreiten werden getrennt gespeichert und sicher begrenzt', () => {

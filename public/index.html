@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=102" />
+  <link rel="stylesheet" href="styles.css?v=110" />
 </head>
 <body>
 
@@ -112,6 +112,7 @@
           <option value="added">Zuletzt hinzugefügt</option>
           <option value="title">Nach Name</option>
           <option value="date">Nach Datum</option>
+          <option value="private">Privat</option>
         </select>
       </div>
       <div class="filter-group">
@@ -311,6 +312,56 @@
       <button type="button" id="article-editor-save" class="detail-cat-pill" disabled>Speichern</button>
     </div>
   </dialog>
+  <dialog id="book-extras-manager" class="account-dialog account-dialog-wide" aria-labelledby="book-extras-manager-title">
+    <div class="article-editor-heading">
+      <div>
+        <p class="article-editor-eyebrow">HÖRBUCH-MATERIAL</p>
+        <h2 id="book-extras-manager-title">Extras verwalten</h2>
+      </div>
+      <button type="button" class="detail-cat-pill" data-bem-close aria-label="Extras-Verwaltung schließen">✕</button>
+    </div>
+    <p id="book-extras-manager-book" class="bem-book"></p>
+    <div class="bem-tabs" role="tablist" aria-label="Bereich auswählen">
+      <button type="button" id="bem-tab-extras" role="tab" aria-selected="true" aria-controls="bem-panel-extras" data-bem-tab="extras"><span>Extras</span><span class="bem-tab-count" data-bem-extra-count>0 Dateien</span></button>
+      <button type="button" id="bem-tab-images" role="tab" aria-selected="false" aria-controls="bem-panel-images" data-bem-tab="images"><span>Textbilder</span><span class="bem-tab-count" data-bem-image-count>0 Bilder</span></button>
+    </div>
+    <div class="bem-toolbar">
+      <div class="bem-tab-actions is-active" data-bem-actions="extras">
+        <button type="button" class="detail-cat-pill" data-bem-new-text>Neuer Text</button>
+        <button type="button" class="detail-cat-pill" data-bem-add-extra>Dateien/Bilder</button>
+      </div>
+      <div class="bem-tab-actions" data-bem-actions="images">
+        <button type="button" class="detail-cat-pill" data-bem-add-image>Bilder hinzufügen</button>
+      </div>
+      <input type="file" data-bem-extra-files accept=".md,.png,.jpg,.jpeg,.gif,text/markdown,image/png,image/jpeg,image/gif" multiple hidden />
+      <input type="file" data-bem-image-files accept=".png,.jpg,.jpeg,.gif,image/png,image/jpeg,image/gif" multiple hidden />
+      <input type="file" data-bem-replace-file hidden />
+    </div>
+    <p id="book-extras-manager-status" class="bem-status" role="status" aria-live="polite"></p>
+    <div class="bem-content">
+      <section class="bem-library" aria-label="Dateien verwalten">
+        <div class="bem-library-panel is-active" id="bem-panel-extras" role="tabpanel" aria-labelledby="bem-tab-extras" data-bem-panel="extras">
+          <p class="bem-section-hint"><span class="bem-hint-desktop">Am Griff ziehen oder mit ↑ und ↓ verschieben.</span><span class="bem-hint-mobile">Unter ⋯ mit ↑ und ↓ verschieben.</span> Die Reihenfolge wird sofort gespeichert.</p>
+          <div class="bem-list" data-bem-extras></div>
+        </div>
+        <div class="bem-library-panel" id="bem-panel-images" role="tabpanel" aria-labelledby="bem-tab-images" data-bem-panel="images">
+          <p class="bem-section-hint">Diese Bilder liegen in <code>extras/images</code> und erscheinen nicht als eigene Kacheln.</p>
+          <div class="bem-list" data-bem-images></div>
+        </div>
+      </section>
+      <section class="bem-editor" data-bem-editor hidden aria-labelledby="bem-editor-heading">
+        <div class="bem-section-heading"><h3 id="bem-editor-heading" data-bem-editor-heading>Text-Extra</h3></div>
+        <label class="bem-field" data-bem-editor-title-field>Name<input type="text" data-bem-editor-title maxlength="140" autocomplete="off" /></label>
+        <label class="bem-field bem-markdown-field">Markdown<textarea data-bem-editor-text spellcheck="false"></textarea></label>
+        <div class="bem-editor-actions">
+          <button type="button" class="detail-cat-pill" data-bem-insert-image>Bild einfügen</button>
+          <span class="bem-editor-spacer"></span>
+          <button type="button" class="detail-cat-pill" data-bem-editor-cancel>Abbrechen</button>
+          <button type="button" class="detail-cat-pill bem-primary" data-bem-editor-save>Speichern</button>
+        </div>
+      </section>
+    </div>
+  </dialog>
   <!-- Neue eigenständige Infografik: Markdown-Vorlage + Grafik in einem Schritt -->
   <dialog id="infographic-new" aria-labelledby="infographic-new-title">
     <div class="article-editor-heading">
@@ -429,12 +480,13 @@
   </dialog>
   <script src="user-admin.js?v=11"></script>
   <script src="settings.js?v=4"></script>
-  <script src="session-state.js?v=7"></script>
+  <script src="session-state.js?v=8"></script>
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=98"></script>
-  <script src="audiobooks.js?v=17"></script>
+  <script src="app.js?v=99"></script>
+  <script src="audiobooks.js?v=19"></script>
+  <script src="audiobook-extras-manager.js?v=12"></script>
   <script src="book-reader.js?v=14"></script>
   <script src="article-editor.js?v=2"></script>
   <script src="infographic-new.js?v=2"></script>

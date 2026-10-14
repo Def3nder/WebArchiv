@@ -1,0 +1,115 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const ROOT = path.join(__dirname, '..');
+const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+const books = fs.readFileSync(path.join(ROOT, 'public', 'audiobooks.js'), 'utf8');
+const manager = fs.readFileSync(path.join(ROOT, 'public', 'audiobook-extras-manager.js'), 'utf8');
+const styles = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
+const server = fs.readFileSync(path.join(ROOT, 'audiobooks.cjs'), 'utf8');
+
+test('Admin-Aktionen öffnen die Extras-Verwaltung auch ohne vorhandene Extras', () => {
+  assert.match(books, /currentUser\?\.role === 'admin'[\s\S]*data-book-extras-manage>Extras verwalten/);
+  assert.match(books, /data-book-extras-manage[^\n]*openBookExtrasManager\(book\)/);
+  assert.match(html, /id="book-extras-manager"[\s\S]*class="bem-tabs"[\s\S]*data-bem-actions="extras"[\s\S]*data-bem-new-text>Neuer Text<\/button>[\s\S]*data-bem-add-extra>Dateien\/Bilder<\/button>[\s\S]*data-bem-actions="images"[\s\S]*data-bem-add-image>Bilder hinzufügen<\/button>/);
+  assert.match(manager, /data-bem-add-image[\s\S]*bemState\.insertImages = false[\s\S]*\$bemImageFiles\.click\(\)/);
+});
+
+test('Manager trennt sichtbare Extras und eingebettete Bilder ohne Manifest', () => {
+  assert.match(manager, /bemUploadFiles\(files, 'extras'\)/);
+  assert.match(manager, /bemUploadFiles\(files, 'images'/);
+  assert.match(manager, /\]\(images\/\$\{file\}\)/);
+  assert.doesNotMatch(manager + server, /manifest\.json/i);
+});
+
+test('Abbruch einer Dateiauswahl schließt den Extras-Dialog nicht', () => {
+  assert.match(manager, /addEventListener\('cancel',[\s\S]*?event\.target !== \$bem[\s\S]*?event\.preventDefault\(\)[\s\S]*?bemTryClose\(\)/);
+});
+
+test('Sichtbare Extras lassen sich per Drag-and-drop und Tastatur-Schaltern sortieren', () => {
+  assert.match(manager, /draggable="true" data-bem-drag/);
+  assert.match(manager, /addEventListener\('dragstart'/);
+  assert.match(manager, /addEventListener\('drop'/);
+  assert.match(manager, /data-bem-move="-1"/);
+  assert.match(manager, /bemRequest\('order', \{ method: 'POST'/);
+  assert.match(server, /app\.post\('\/api\/audiobook-extra-order\/\*'/);
+  assert.match(html, /audiobook-extras-manager\.js\?v=12/);
+});
+
+test('Markdown-Editor nutzt den gesamten Extras-Dialog', () => {
+  assert.match(styles, /\.bem-content:has\(\.bem-editor:not\(\[hidden\]\)\) \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.match(styles, /\.bem-content:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-library \{ display: none; \}/);
+  assert.match(styles, /\.bem-markdown-field \{ grid-template-rows: auto minmax\(0, 1fr\); flex: 1 1 auto; min-height: 0; \}/);
+  assert.match(styles, /\.bem-markdown-field textarea \{[^}]*min-height: 0; height: 100%; resize: none;/);
+  assert.match(styles, /#book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-toolbar, #book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-tabs \{ display: none; \}/);
+  assert.match(styles, /\.bem-status:empty \{ display: none; \}/);
+  assert.match(html, /styles\.css\?v=110/);
+});
+
+test('Bestehende Markdown-Extras zeigen den Namen im Editor nicht doppelt', () => {
+  assert.match(html, /data-bem-editor-title-field/);
+  assert.match(manager, /bemOpenNewText[\s\S]*?\$bemEditorTitleField\.hidden = false/);
+  assert.match(manager, /bemOpenMarkdown[\s\S]*?\$bemEditorHeading\.textContent = entry\.title[\s\S]*?\$bemEditorTitleField\.hidden = true/);
+  assert.match(styles, /\[data-bem-editor-title-field\]\[hidden\] \{ display: none !important; \}/);
+  assert.match(html, /audiobook-extras-manager\.js\?v=12/);
+});
+
+test('Entfernen verwendet dasselbe Mülleimer-Symbol wie die Benutzerverwaltung', () => {
+  assert.match(manager, /class="bem-mini is-danger bem-icon-btn" data-bem-delete[^>]*aria-label="\$\{esc\(entry\.title\)\} entfernen"[^>]*>\$\{bemTrashIcon\(\)\}<\/button>/);
+  assert.match(manager, /M3 6h18[\s\S]*M19 6l-1 14[\s\S]*M10 11v6M14 11v6/);
+  assert.doesNotMatch(manager, /data-bem-delete>Entfernen<\/button>/);
+});
+
+test('Extras-Verwaltung ist auf Touch-Geräten als kompakte Vollbildansicht bedienbar', () => {
+  assert.match(html, /data-bem-tab="extras"><span>Extras<\/span>[\s\S]*data-bem-tab="images"><span>Textbilder<\/span>/);
+  assert.match(manager, /function bemSelectTab\(name\)[\s\S]*?aria-selected[\s\S]*?\$bemActions[\s\S]*?is-active/);
+  assert.match(manager, /data-bem-more aria-expanded="false"/);
+  assert.doesNotMatch(manager, /prompt\('Neuer Name'/);
+  assert.match(manager, /function bemStartRename\(row\)[\s\S]*?classList\.add\('is-renaming'\)[\s\S]*?input\.focus\(\)[\s\S]*?input\.select\(\)/);
+  assert.match(styles, /#book-extras-manager \{[\s\S]*?width: 100vw;[\s\S]*?height: 100dvh;[\s\S]*?safe-area-inset-bottom/);
+  assert.match(styles, /\.bem-entry\.is-actions-open \.bem-entry-actions \{ display: flex; \}/);
+  assert.match(styles, /\.bem-toolbar \{ display: flex; flex-wrap: wrap;/);
+  assert.doesNotMatch(styles, /\.bem-toolbar \.detail-cat-pill:first-child/);
+  assert.match(styles, /\.bem-field input, \.bem-markdown-field textarea \{ font-size: 16px; \}/);
+});
+
+test('Umbenennen bleibt mit Speichern, Abbrechen, Enter und Escape vollständig im Dialog', () => {
+  assert.match(manager, /data-bem-rename-cancel>Abbrechen<\/button>[\s\S]*data-bem-rename-save>Speichern<\/button>/);
+  assert.match(manager, /data-bem-rename[^\n]*bemStartRename\(row\)/);
+  assert.match(manager, /event\.key === 'Enter'[\s\S]*?bemRename\(row\)[\s\S]*?event\.key === 'Escape'[\s\S]*?bemCancelRename\(row, true\)/);
+  assert.match(styles, /\.bem-entry\.is-renaming \.bem-entry-name input \{ display: block; \}/);
+});
+
+test('Drei-Punkte-Menü bleibt nach Verschieben und Umbenennen an derselben Datei geöffnet', () => {
+  assert.match(manager, /actionMenu: null/);
+  assert.match(manager, /function bemOpenActionMenu\(scope, file,[\s\S]*?classList\.add\('is-actions-open'\)[\s\S]*?aria-expanded', 'true'/);
+  assert.match(manager, /function bemCancelRename\(row,[\s\S]*?bemOpenActionMenu\(row\.dataset\.scope, row\.dataset\.file/);
+  assert.match(manager, /const result = await bemRequest\('entry'[\s\S]*?actionMenu = \{ scope: row\.dataset\.scope, file: result\.file \}[\s\S]*?bemRestoreActionMenu\(\{ focus: true \}\)/);
+  assert.match(manager, /const menuEntry = result\.files\?\.find\(item => item\.from === bemState\.actionMenu\?\.file\)[\s\S]*?bemState\.actionMenu\.file = menuEntry\.to/);
+  assert.match(manager, /if \(move\) \{[\s\S]*?bemState\.actionMenu = \{ scope: row\.dataset\.scope, file: row\.dataset\.file \}[\s\S]*?bemMove\(row/);
+});
+
+test('Reiter, Bereich und Scrollposition bleiben nach Änderungen erhalten', () => {
+  assert.match(manager, /activeTab: 'extras'/);
+  assert.match(manager, /bemState\.activeTab = name/);
+  assert.match(manager, /const scrollTop = \$bemLibrary\.scrollTop[\s\S]*?bemSelectTab\(bemState\.activeTab\)[\s\S]*?\$bemLibrary\.scrollTop = scrollTop/);
+});
+
+test('Escape und Herunterziehen schließen zuerst nur den Markdown-Editor', () => {
+  assert.match(manager, /\$bem\.addEventListener\('cancel',[\s\S]*?event\.preventDefault\(\)[\s\S]*?bemTryClose\(\)/);
+  assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(!\$bemEditor\.hidden\) \{[\s\S]*?bemCloseEditor\(\);[\s\S]*?return;[\s\S]*?\$bem\.close\(\)/);
+  assert.match(app, /\['#book-extras-manager', '#book-extras-manager \[data-bem-close\]'\]/);
+  assert.match(app, /onClose: \(\) => closeBtn\.click\(\)/);
+  assert.match(html, /app\.js\?v=99/);
+});
+
+test('Schreibende Extras-Routen sind admin- und same-site-geschützt', () => {
+  assert.match(server, /admin && req\.session\.user\?\.role !== 'admin'/);
+  assert.match(server, /req\.get\('sec-fetch-site'\) === 'cross-site'/);
+  for (const method of ['put', 'post', 'patch', 'delete']) {
+    assert.match(server, new RegExp(`app\\.${method}\\([\\s\\S]*?\\/api\\/audiobook-extra-`));
+  }
+});

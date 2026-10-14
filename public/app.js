@@ -3210,6 +3210,7 @@ const PULL_DIALOGS = [
   ['#login-overlay .login-panel', '#login-close', '#login-overlay .login-backdrop'],
   ['#tts-provider-dialog', '#tts-provider-dialog button[value="cancel"]'],
   ['#article-editor', '#article-editor-close'],
+  ['#book-extras-manager', '#book-extras-manager [data-bem-close]'],
   ['#infographic-new', '#infographic-new-cancel'],
   ['#password-dialog', '#password-cancel'],
   ['#settings-dialog', '#settings-form button[type="submit"]'],

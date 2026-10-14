@@ -25,7 +25,7 @@ let currentBookDetail = null;
 // ── Liste ──────────────────────────────────────────────────────────────────
 try {
   const saved = localStorage.getItem('wa-book-sort');
-  if (['recent', 'added', 'title', 'date'].includes(saved)) state.bookSort = saved;
+  if (['recent', 'added', 'title', 'date', 'private'].includes(saved)) state.bookSort = saved;
 } catch { /* Speicher nicht verfügbar */ }
 $bookSort.value = state.bookSort;
 $bookSort.addEventListener('change', () => {
@@ -119,7 +119,11 @@ function renderBookDetail(book) {
   const editAction = currentUser?.role === 'admin' && book.hasAbstract
     ? '<button type="button" class="header-menu-item" data-article-edit>Abstract editieren</button>'
     : '';
-  const actionsMenu = `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Aktionen zum Hörbuch">Aktionen</summary><div class="copy-prompt-menu">${editAction}<button type="button" class="header-menu-item" data-book-share>Teilen</button></div></details>`;
+  const manageExtrasAction = currentUser?.role === 'admin'
+    ? '<button type="button" class="header-menu-item" data-book-extras-manage>Extras verwalten …</button>'
+    : '';
+  const privateAction = `<button type="button" class="header-menu-item" data-book-private>${book.private ? 'Privat aufheben' : 'Als privat markieren'}</button>`;
+  const actionsMenu = `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Aktionen zum Hörbuch">Aktionen</summary><div class="copy-prompt-menu">${editAction}${manageExtrasAction}${privateAction}<button type="button" class="header-menu-item" data-book-share>Teilen</button></div></details>`;
   const tracks = book.tracks.map((track, i) =>
     `<li><button type="button" class="book-track" data-track="${i}"><span class="book-track-num">${i + 1}</span><span class="book-track-title">${esc(track.title)}</span></button></li>`
   ).join('');
@@ -197,6 +201,29 @@ function renderBookDetail(book) {
   });
   $detail.querySelector('[data-book-text]')?.addEventListener('click', () => openBookReader(book));
   $detail.querySelector('[data-book-extras]')?.addEventListener('click', () => openBookExtras(book));
+  $detail.querySelector('[data-book-extras-manage]')?.addEventListener('click', () => openBookExtrasManager(book));
+  $detail.querySelector('[data-book-private]')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const response = await apiFetch('/api/audiobook-private/' + book.id.split('/').map(encodeURIComponent).join('/'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ private: !book.private }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Die Privat-Markierung konnte nicht geändert werden.');
+      book.private = data.private;
+      button.textContent = book.private ? 'Privat aufheben' : 'Als privat markieren';
+      button.closest('details')?.removeAttribute('open');
+      state.page = 1;
+      await loadArticles();
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
   $detail.querySelector('[data-book-share]')?.addEventListener('click', async event => {
     const button = event.currentTarget;
     const url = `${location.origin}/a/${sanitizeForId(book.id)}`;

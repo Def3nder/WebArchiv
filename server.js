@@ -982,6 +982,8 @@ function attachUser(req, res, next) {
 // ─── API ───────────────────────────────────────────────────────────────────
 
 app.use('/api/article-markdown', express.json({ limit: '2mb' }));
+app.use('/api/audiobook-extra-source', express.json({ limit: '2mb' }));
+app.use('/api/audiobook-extra-create', express.json({ limit: '2mb' }));
 // Neue Infografik: Bild base64 in JSON (bis 10 MB Bild → ~14 MB JSON).
 app.use('/api/new-infographic', express.json({ limit: Math.ceil(INFOGRAPHIC_MAX_BYTES * 1.4) + 2 * 1024 * 1024 }));
 app.use(express.json());
@@ -1683,10 +1685,16 @@ installBookmarkRoutes(app, {
 });
 installAudiobookRoutes(app, {
   library: audiobooks, progress: audiobookProgress, config: audiobookConfig, requireAuth, canAccessAuthor,
+  busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || markdownEditor.running || ttsJobs.running,
 });
 
 app.use((err, _req, res, next) => {
-  if (_req.path.startsWith('/api/article-markdown/')) {
+  if (_req.path.startsWith('/api/audiobook-extra-upload/') && err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Die Datei ist größer als 20 MB.' });
+  }
+  if (_req.path.startsWith('/api/article-markdown/')
+      || _req.path.startsWith('/api/audiobook-extra-source/')
+      || _req.path.startsWith('/api/audiobook-extra-create/')) {
     if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Die Anfrage ist zu groß. Artikel dürfen höchstens 1 MB enthalten.' });
     if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Ungültige Speicheranfrage.' });
   }

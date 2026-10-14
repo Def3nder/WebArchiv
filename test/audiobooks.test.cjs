@@ -103,9 +103,66 @@ test('Extras: Markdown wird gerendert, Bilder nur aus extras/images aufgelöst u
   await assert.rejects(library.extraText(book, '02 - Übersicht.jpg'), { status: 404 });
 });
 
+test('Extras-Verwaltung: Ordner lazy anlegen, Texte/Bilder verwalten und Bildverweise nachführen', async t => {
+  const { root, library } = await fixture(t);
+  let book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  const extrasDir = path.join(root, 'Emily Nagoski - Kommt Zusammen!', 'extras');
+  await assert.rejects(fs.stat(extrasDir), { code: 'ENOENT' });
+  assert.deepEqual(await library.extrasManagement(book), { extras: [], images: [] });
+  await assert.rejects(fs.stat(extrasDir), { code: 'ENOENT' });
+
+  await library.createExtraMarkdown(book, { title: 'Übungen', markdown: '# Übungen\n\n![Plan](images/plan.png)\n' });
+  book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  assert.equal((await fs.stat(extrasDir)).isDirectory(), true);
+  assert.deepEqual((await library.extrasManagement(book)).extras.map(item => item.file), ['Übungen.md']);
+
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]);
+  await library.uploadExtraFile(book, { scope: 'images', name: 'plan.png' }, png);
+  book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  await library.uploadExtraFile(book, { scope: 'extras', name: 'Karte.png' }, png);
+  book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  let managed = await library.extrasManagement(book);
+  assert.deepEqual(managed.extras.map(item => item.file), ['Karte.png', 'Übungen.md']);
+  assert.deepEqual(managed.images.map(item => item.file), ['plan.png']);
+
+  await assert.rejects(
+    library.reorderExtras(book, { files: ['Übungen.md'] }),
+    { status: 409 },
+  );
+  const reordered = await library.reorderExtras(book, { files: ['Übungen.md', 'Karte.png'] });
+  assert.deepEqual(reordered.files, [
+    { from: 'Übungen.md', to: '01 - Übungen.md' },
+    { from: 'Karte.png', to: '02 - Karte.png' },
+  ]);
+  book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  managed = await library.extrasManagement(book);
+  assert.deepEqual(managed.extras.map(item => item.file), ['01 - Übungen.md', '02 - Karte.png']);
+  assert.deepEqual(book.extras.map(item => item.title), ['Übungen', 'Karte']);
+
+  await library.renameExtraEntry(book, { scope: 'images', file: 'plan.png', title: 'Tagesplan' });
+  book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  let source = await library.extraMarkdownSource(book, '01 - Übungen.md');
+  assert.match(source.markdown, /images\/Tagesplan\.png/);
+  await assert.rejects(
+    library.deleteExtraEntry(book, { scope: 'images', file: 'Tagesplan.png' }),
+    { status: 409 },
+  );
+
+  await library.saveExtraMarkdown(book, '01 - Übungen.md', { markdown: '# Neu\n', version: source.version });
+  book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  source = await library.extraMarkdownSource(book, '01 - Übungen.md');
+  assert.equal(source.markdown, '# Neu\n');
+  await library.deleteExtraEntry(book, { scope: 'images', file: 'Tagesplan.png' });
+  book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  await library.renameExtraEntry(book, { scope: 'extras', file: '01 - Übungen.md', title: 'Praxis' });
+  book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  managed = await library.extrasManagement(book);
+  assert.deepEqual(managed.extras.map(item => item.file), ['01 - Praxis.md', '02 - Karte.png']);
+});
+
 test('Hörfortschritt pro Nutzer: speichern, Sortierung „zuletzt gehört“, Nutzer löschen', async t => {
   const { dir, library, progress } = await fixture(t);
-  const nagoski = library.books[1];
+  const [kuschik, nagoski] = library.books;
   await assert.rejects(progress.set('a@b.de', nagoski, { trackIndex: 5, position: 0 }), { status: 400 });
   await assert.rejects(progress.set('a@b.de', nagoski, { trackIndex: 0, position: 1, speed: 9 }), { status: 400 });
   await progress.set('A@b.de', nagoski, { trackIndex: 1, position: 12.34, speed: 1.25 });
@@ -131,6 +188,30 @@ test('Hörfortschritt pro Nutzer: speichern, Sortierung „zuletzt gehört“, N
 
   await progress.removeUser('a@B.de');
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, 'progress.json'), 'utf8')), {});
+});
+
+test('Private Hörbücher sind nutzerbezogen und nur in der Sortierung „Privat“ sichtbar', async t => {
+  const { dir, library, progress } = await fixture(t);
+  const user = { email: 'a@b.de' };
+  const privateBook = library.books.find(book => book.title === '50 Fragen');
+
+  assert.equal(library.detail(user, privateBook.id).private, false);
+  await assert.rejects(progress.setPrivate(user.email, privateBook.id, 'ja'), { status: 400 });
+  assert.deepEqual(await progress.setPrivate(user.email, privateBook.id, true), { private: true });
+
+  assert.deepEqual(library.list(user, { sort: 'title' }).items.map(book => book.title), ['Kommt Zusammen!']);
+  assert.deepEqual(library.list(user, { sort: 'private' }).items.map(book => book.title), ['50 Fragen']);
+  assert.equal(library.list(user, { sort: 'private' }).items[0].private, true);
+  assert.deepEqual(library.list({ email: 'andere@b.de' }, { sort: 'private' }).items, []);
+  assert.equal(library.detail(user, privateBook.id).private, true);
+
+  const reloaded = createProgressStore({ file: path.join(dir, 'progress.json') });
+  reloaded.load();
+  assert.equal(reloaded.isPrivate(user.email, privateBook.id), true);
+
+  await progress.setPrivate(user.email, privateBook.id, false);
+  assert.deepEqual(library.list(user, { sort: 'private' }).items, []);
+  assert.deepEqual(library.list(user, { sort: 'title' }).items.map(book => book.title), ['50 Fragen', 'Kommt Zusammen!']);
 });
 
 test('config.json: Sprungweiten mit Standardwerten, optionales Verzeichnis', async t => {
