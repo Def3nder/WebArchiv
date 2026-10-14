@@ -67,6 +67,7 @@ test('Bibliothek: natürliche Sortierung, Cover, Fallbacks, leere Ordner übersp
   const [kuschik, nagoski] = library.books;
   assert.equal(kuschik.bookAuthor, 'Karin Kuschik');
   assert.equal(kuschik.date, '2025-09-25');
+  assert.match(kuschik.addedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.deepEqual(kuschik.tracks.map(tr => tr.file), ['01 - Intro.mp3', '2 - Kapitel zwei.mp3', '10 - Kapitel zehn.mp3']);
   assert.equal(library.directory, 'Hoerbuecher');
   assert.equal(kuschik.id, `${AUDIOBOOK_AUTHOR}/Karin Kuschik - 50 Fragen`);
@@ -114,6 +115,9 @@ test('Hörfortschritt pro Nutzer: speichern, Sortierung „zuletzt gehört“, N
   assert.deepEqual(list.items[0].progress.trackIndex, 1);
   assert.equal(library.list({ email: 'andere@b.de' }, { sort: 'recent' }).items[0].title, '50 Fragen');
   assert.equal(library.list({ email: 'a@b.de' }, { sort: 'title' }).items[0].title, '50 Fragen');
+  kuschik.addedAt = '2024-01-01T00:00:00.000Z';
+  nagoski.addedAt = '2025-01-01T00:00:00.000Z';
+  assert.deepEqual(library.list({ email: 'a@b.de' }, { sort: 'added' }).items.map(b => b.title), ['Kommt Zusammen!', '50 Fragen']);
 
   const saved = JSON.parse(await fs.readFile(path.join(dir, 'progress.json'), 'utf8'));
   assert.deepEqual(Object.keys(saved), ['a@b.de']);

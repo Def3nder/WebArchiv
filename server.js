@@ -1095,6 +1095,7 @@ app.get('/audio-files/*', attachUser, (req, res) => {
 // Crawler (WhatsApp, Signal, Telegram …) führen kein JS aus und ignorieren
 // den #-Teil der URL. Deshalb liefert /a/<id> serverseitig og:*-Meta-Tags und
 // leitet echte Besucher per JS/meta-refresh in den SPA (#/article/<id>) weiter.
+// Die ID kann zu einem Artikel oder Hörbuch gehören.
 
 function escapeHtml(str) {
   return String(str || '')
@@ -1102,13 +1103,20 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// imageUrl ("/files/<relPath>?v=…") → absoluter Dateipfad unter WWW_DIR.
-// Gibt null zurück, wenn kein Bild oder der Pfad WWW_DIR verlässt (Traversal).
-function resolveArticleImagePath(article) {
-  if (!article || !article.imageUrl) return null;
-  const rel = article.imageUrl.replace(/^\/files\//, '').split('?')[0];
-  const absPath = path.resolve(path.join(WWW_DIR, rel));
-  if (!absPath.startsWith(WWW_DIR + path.sep)) return null;
+// Artikelbilder liegen unter /files, Hörbuch-Cover unter /audio-files. Für die
+// öffentliche Vorschau wird der URL-Pfad sicher auf die jeweilige Wurzel begrenzt.
+function resolvePreviewImagePath(item) {
+  if (!item?.imageUrl) return null;
+  const pathname = item.imageUrl.split('?')[0];
+  const root = pathname.startsWith('/files/') ? WWW_DIR
+    : pathname.startsWith('/audio-files/') ? AUDIO_DIR
+    : null;
+  if (!root) return null;
+  let rel;
+  try { rel = decodeURIComponent(pathname.replace(/^\/(?:files|audio-files)\//, '')); }
+  catch { return null; }
+  const absPath = path.resolve(path.join(root, rel));
+  if (!absPath.startsWith(root + path.sep)) return null;
   return absPath;
 }
 
@@ -1119,7 +1127,7 @@ function ogDescription(article) {
 
 app.get('/a/*', (req, res) => {
   const id = req.params[0];
-  const article = articles.find(a => a.id === id);
+  const article = articles.find(a => a.id === id) || audiobooks.get(id);
   const base = `${req.protocol}://${req.get('host')}`;
   const canonical = base + '/a/' + encodeURIComponent(id);
 
@@ -1170,8 +1178,8 @@ app.get('/a/*', (req, res) => {
 });
 
 // Auth-freie, heruntergerechnete Bild-Auslieferung nur für die Link-Vorschau.
-// Bewusst ohne canAccessAuthor: die Vorschau-Metadaten aller Artikel sind
-// öffentlich (Nutzer-Entscheidung). Bild wird auf max. 1200px/JPEG skaliert,
+// Bewusst ohne canAccessAuthor: die Vorschau-Metadaten aller Artikel und
+// Hörbücher sind öffentlich (Nutzer-Entscheidung). Das Bild wird auf max. 1200px/JPEG skaliert,
 // damit nie die Originalauflösung geteilt wird. Ergebnis pro mtime gecacht.
 const ogImageCache = new Map(); // key: absPath+':'+mtime+':'+Kantenlänge → Buffer
 // ?sq=<Kantenlänge>: quadratischer Ausschnitt vom oberen Bildteil (Sperrbildschirm/Media Session).
@@ -1179,8 +1187,8 @@ const OG_SQUARE_SIZES = new Set([256, 512]);
 
 app.get('/og-image/*', async (req, res) => {
   const id = req.params[0];
-  const article = articles.find(a => a.id === id);
-  const absPath = resolveArticleImagePath(article);
+  const article = articles.find(a => a.id === id) || audiobooks.get(id);
+  const absPath = resolvePreviewImagePath(article);
   if (!absPath) return res.status(404).end();
 
   let mtime = 0;

@@ -11,6 +11,8 @@ const bookPlayer = {
   index: 0,
   speed: 1,
   audio: null,
+  preloadAudio: null, // lädt höchstens das unmittelbar folgende Kapitel vor
+  preloadedUrl: '',
   pendingSeek: null,   // { fromStart } oder { fromEnd } für Sprünge über Dateigrenzen
   playAfterLoad: false,
   lastSavedAt: 0,
@@ -23,7 +25,7 @@ let currentBookDetail = null;
 // ── Liste ──────────────────────────────────────────────────────────────────
 try {
   const saved = localStorage.getItem('wa-book-sort');
-  if (['recent', 'title', 'date'].includes(saved)) state.bookSort = saved;
+  if (['recent', 'added', 'title', 'date'].includes(saved)) state.bookSort = saved;
 } catch { /* Speicher nicht verfügbar */ }
 $bookSort.value = state.bookSort;
 $bookSort.addEventListener('change', () => {
@@ -114,9 +116,10 @@ function renderBookDetail(book) {
   const extrasButton = book.extras?.length
     ? `<button type="button" class="detail-cat-pill" data-book-extras title="Extra-Material anzeigen">Extras</button>`
     : '';
-  const editMenu = currentUser?.role === 'admin' && book.hasAbstract
-    ? `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Kurzbeschreibung bearbeiten">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Abstract editieren</button></div></details>`
+  const editAction = currentUser?.role === 'admin' && book.hasAbstract
+    ? '<button type="button" class="header-menu-item" data-article-edit>Abstract editieren</button>'
     : '';
+  const actionsMenu = `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Aktionen zum Hörbuch">Aktionen</summary><div class="copy-prompt-menu">${editAction}<button type="button" class="header-menu-item" data-book-share>Teilen</button></div></details>`;
   const tracks = book.tracks.map((track, i) =>
     `<li><button type="button" class="book-track" data-track="${i}"><span class="book-track-num">${i + 1}</span><span class="book-track-title">${esc(track.title)}</span></button></li>`
   ).join('');
@@ -161,7 +164,7 @@ function renderBookDetail(book) {
       ${book.bookAuthor ? `<p class="detail-book-author">von ${esc(book.bookAuthor)}</p>` : ''}
       <div class="detail-date-row">
         <span class="detail-date-block">${book.date ? esc(formatMonthYear(book.date)) : ''}</span>
-        <div class="detail-action-row detail-action-row-book">${readButton}${extrasButton}${editMenu}</div>
+        <div class="detail-action-row detail-action-row-book">${readButton}${extrasButton}${actionsMenu}</div>
       </div>
       <div class="detail-divider"></div>
       ${playerHtml}
@@ -194,6 +197,20 @@ function renderBookDetail(book) {
   });
   $detail.querySelector('[data-book-text]')?.addEventListener('click', () => openBookReader(book));
   $detail.querySelector('[data-book-extras]')?.addEventListener('click', () => openBookExtras(book));
+  $detail.querySelector('[data-book-share]')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    const url = `${location.origin}/a/${sanitizeForId(book.id)}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: book.title, url }); } catch { /* abgebrochen */ }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      const original = button.textContent;
+      button.textContent = 'Kopiert!';
+      setTimeout(() => { button.textContent = original; }, 1500);
+    } catch { /* Zwischenablage nicht verfügbar */ }
+  });
   $detail.querySelector('[data-book="speed"]')?.addEventListener('change', e => bookSetSpeed(Number(e.target.value)));
   $detail.querySelectorAll('.book-track').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -353,6 +370,7 @@ function bookEnsureLoaded(book) {
   if (!book.tracks?.length) return;   // reines eBook: nichts zu spielen
   if (bookPlayer.book?.id === book.id) return;
   bookSave();
+  bookClearPreload();
   if (bookPlayer.audio) { bookPlayer.audio.pause(); bookPlayer.audio.removeAttribute('src'); bookPlayer.audio.load(); }
   const progress = book.progress;
   bookPlayer.book = book;
@@ -360,6 +378,31 @@ function bookEnsureLoaded(book) {
   bookPlayer.lastSavedAt = Date.now();
   bookLoadTrack(progress ? progress.trackIndex : 0, { fromStart: progress?.position || 0 }, false);
   bookMediaSession();
+}
+
+function bookClearPreload() {
+  if (bookPlayer.preloadAudio) {
+    bookPlayer.preloadAudio.removeAttribute('src');
+    bookPlayer.preloadAudio.load();
+  }
+  bookPlayer.preloadAudio = null;
+  bookPlayer.preloadedUrl = '';
+}
+
+// Best-Effort: Safari entscheidet selbst, wie viel von preload="auto" tatsächlich
+// geladen wird. Ein zweiter Player bleibt dabei stumm und übernimmt keine Media Session.
+function bookPreloadNext() {
+  const next = bookPlayer.book?.tracks?.[bookPlayer.index + 1];
+  const url = next?.url || '';
+  if (url === bookPlayer.preloadedUrl) return;
+  bookClearPreload();
+  if (!url) return;
+  const preloadAudio = new Audio();
+  preloadAudio.preload = 'auto';
+  preloadAudio.src = url;
+  preloadAudio.load();
+  bookPlayer.preloadAudio = preloadAudio;
+  bookPlayer.preloadedUrl = url;
 }
 
 function bookAudio() {
@@ -378,6 +421,7 @@ function bookAudio() {
     bookMediaSession();
     bookUpdateUi();
   });
+  audio.addEventListener('playing', bookPreloadNext);
   audio.addEventListener('pause', () => { bookUpdateUi(); bookSave(); });
   audio.addEventListener('ended', () => {
     if (bookPlayer.index < bookPlayer.book.tracks.length - 1) {

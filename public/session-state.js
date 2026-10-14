@@ -9,7 +9,7 @@
   const VERSION = 1;
   const KEY_PREFIX = 'wa-session-view-v1:';
   const LAYOUTS = new Set(['square', 'tall', 'list']);
-  const BOOK_SORTS = new Set(['recent', 'title', 'date']);
+  const BOOK_SORTS = new Set(['recent', 'added', 'title', 'date']);
   const VIEW_KINDS = new Set(['list', 'detail', 'reader']);
 
   function shortString(value, max = 2048) {

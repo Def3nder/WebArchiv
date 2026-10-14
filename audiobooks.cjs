@@ -13,7 +13,7 @@ const TRACK_EXTS = new Set(['.mp3', '.m4b', '.m4a']);
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png'];
 const EXTRA_IMAGE_EXTS = new Set([...IMAGE_EXTS, '.gif']);
 const EXTRA_EXTS = new Set([...EXTRA_IMAGE_EXTS, '.md']);
-const SORTS = ['recent', 'title', 'date'];
+const SORTS = ['recent', 'added', 'title', 'date'];
 // eBook zum Hörbuch: Datei heißt wie der Ordner (Reihenfolge = Vorrang).
 const EBOOK_EXTS = ['.md', '.txt', '.pdf'];
 const EBOOK_MAX_BYTES = 5 * 1024 * 1024;
@@ -136,6 +136,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
 
   async function scanBook(bookDir) {
     const dirPath = path.join(root, bookDir);
+    const dirStat = await fs.stat(dirPath);
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const filesByLower = new Map(entries.filter(e => e.isFile()).map(e => [e.name.toLowerCase(), e.name]));
     const trackFiles = [...filesByLower.values()]
@@ -192,6 +193,8 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       title,
       date: abstract.date,
       year: abstract.date ? abstract.date.slice(0, 4) : '',
+      // Wann der Buchordner ins Archiv kam; nicht mit dem inhaltlichen Datum verwechseln.
+      addedAt: new Date(dirStat.birthtimeMs > 0 ? dirStat.birthtimeMs : dirStat.mtimeMs).toISOString(),
       excerpt: excerpt(abstract.description),
       imageUrl,
       trackCount: trackFiles.length,
@@ -264,6 +267,8 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     items = [...items];
     if (mode === 'date') {
       items.sort((a, b) => (b.date || '').localeCompare(a.date || '') || collator.compare(a.title, b.title));
+    } else if (mode === 'added') {
+      items.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || '') || collator.compare(a.title, b.title));
     } else if (mode === 'recent') {
       const heard = book => progress.lastActivity(user?.email, book.id);
       items.sort((a, b) => heard(b).localeCompare(heard(a)) || collator.compare(a.title, b.title));
