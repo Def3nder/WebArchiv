@@ -5,6 +5,9 @@ const $bemBook = document.getElementById('book-extras-manager-book');
 const $bemStatus = document.getElementById('book-extras-manager-status');
 const $bemExtras = $bem.querySelector('[data-bem-extras]');
 const $bemImages = $bem.querySelector('[data-bem-images]');
+const $bemPreview = $bem.querySelector('[data-bem-preview-pane]');
+const $bemPreviewTitle = $bem.querySelector('[data-bem-preview-title]');
+const $bemPreviewBody = $bem.querySelector('[data-bem-preview-body]');
 const $bemEditor = $bem.querySelector('[data-bem-editor]');
 const $bemEditorHeading = $bem.querySelector('[data-bem-editor-heading]');
 const $bemEditorTitleField = $bem.querySelector('[data-bem-editor-title-field]');
@@ -32,6 +35,8 @@ const bemState = {
   activeTab: 'extras',
   renaming: null,
   actionMenu: null,
+  preview: null,
+  previewToken: 0,
 };
 
 function bemPath(kind, query = {}) {
@@ -86,7 +91,7 @@ function bemEntry(entry, scope, index, total) {
     : bemDocumentIcon();
   return `<article class="bem-entry${sortable ? ' is-sortable' : ''}" data-bem-entry data-scope="${scope}" data-file="${esc(entry.file)}">
     ${sortable ? `<button type="button" class="bem-drag-handle" draggable="true" data-bem-drag aria-label="${esc(entry.title)} verschieben" title="Ziehen, um die Reihenfolge zu ändern">⠿</button>` : ''}
-    <span class="bem-entry-preview">${preview}</span>
+    <button type="button" class="bem-entry-preview" data-bem-preview aria-label="${esc(entry.title)} ansehen" title="Ansehen">${preview}</button>
     <div class="bem-entry-main">
       <div class="bem-entry-name">
         <span class="bem-entry-title">${esc(entry.title)}</span>
@@ -146,6 +151,52 @@ function bemOpenActionMenu(scope, file, { focus = false } = {}) {
 function bemRestoreActionMenu(options) {
   if (!bemState.actionMenu) return;
   bemOpenActionMenu(bemState.actionMenu.scope, bemState.actionMenu.file, options);
+}
+
+function bemPreviewPath(file) {
+  const id = bemState.book.id.split('/').map(encodeURIComponent).join('/');
+  return `/api/audiobook-extra/${id}?file=${encodeURIComponent(file)}`;
+}
+
+function bemClosePreview({ focus = true } = {}) {
+  if ($bemPreview.hidden) return false;
+  const previous = bemState.preview;
+  bemState.preview = null;
+  bemState.previewToken++;
+  $bemPreview.hidden = true;
+  $bemPreviewBody.replaceChildren();
+  if (focus && previous) {
+    const row = [...$bem.querySelectorAll('[data-bem-entry]')]
+      .find(item => item.dataset.scope === previous.scope && item.dataset.file === previous.file);
+    row?.querySelector('[data-bem-preview]')?.focus({ preventScroll: true });
+  }
+  return true;
+}
+
+async function bemOpenPreview(entry, scope) {
+  bemCloseActionMenus();
+  const token = ++bemState.previewToken;
+  bemState.preview = { scope, file: entry.file };
+  $bemPreviewTitle.textContent = entry.title;
+  $bemPreview.hidden = false;
+  $bemPreview.querySelector('[data-bem-preview-close]').focus();
+  if (entry.type === 'image') {
+    $bemPreviewBody.innerHTML = `<div class="bem-image-preview"><img src="${esc(entry.url)}" alt="${esc(entry.title)}"></div>`;
+    return;
+  }
+  $bemPreviewBody.innerHTML = '<p class="bem-preview-status">Text wird geladen …</p>';
+  try {
+    const response = await apiFetch(bemPreviewPath(entry.file), { cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    if (token !== bemState.previewToken) return;
+    if (!response.ok) throw new Error(data.error || 'Der Text konnte nicht geladen werden.');
+    $bemPreviewBody.innerHTML = '<div class="bem-text-preview-scroll" tabindex="0"><article class="bem-text-preview detail-body"></article></div>';
+    $bemPreviewBody.querySelector('.bem-text-preview').innerHTML = data.html;
+    $bemPreviewBody.querySelector('.bem-text-preview-scroll').focus({ preventScroll: true });
+  } catch (error) {
+    if (token !== bemState.previewToken || error.message === 'Session expired') return;
+    $bemPreviewBody.innerHTML = `<p class="bem-preview-status is-error">${esc(error.message)}</p>`;
+  }
 }
 
 function bemSelectTab(name) {
@@ -267,7 +318,9 @@ async function bemUploadFiles(files, scope, { insert = false, replace = '' } = {
     bemState.changed = true;
     await bemLoad();
     if (insert && uploaded.length && bemState.editing) {
-      const markdown = uploaded.map(file => `![${file.replace(/\.[^.]+$/, '')}](images/${file})`).join('\n');
+      const markdown = uploaded
+        .map(file => `![${file.replace(/\.[^.]+$/, '')}](images/${encodeURIComponent(file)})`)
+        .join('\n');
       const start = $bemEditorText.selectionStart;
       $bemEditorText.setRangeText(markdown, start, $bemEditorText.selectionEnd, 'end');
       $bemEditorText.focus();
@@ -396,11 +449,12 @@ async function openBookExtrasManager(book) {
   Object.assign(bemState, {
     book, data: { extras: [], images: [] }, editing: null, replace: null,
     insertImages: false, changed: false, busy: false, dragFile: null,
-    activeTab: 'extras', renaming: null, actionMenu: null,
+    activeTab: 'extras', renaming: null, actionMenu: null, preview: null,
   });
   $bemBook.textContent = book.title;
   $bemLibrary.scrollTop = 0;
   bemSelectTab('extras');
+  bemClosePreview({ focus: false });
   bemCloseEditor(true);
   bemRender();
   $bem.showModal();
@@ -410,6 +464,7 @@ async function openBookExtrasManager(book) {
 
 function bemTryClose() {
   if (bemState.busy) return;
+  if (bemClosePreview()) return;
   const renaming = $bem.querySelector('.bem-entry.is-renaming');
   if (renaming) {
     bemCancelRename(renaming, true);
@@ -432,6 +487,7 @@ $bem.addEventListener('cancel', event => {
   bemTryClose();
 });
 $bem.querySelector('[data-bem-new-text]').addEventListener('click', bemOpenNewText);
+$bem.querySelector('[data-bem-preview-close]').addEventListener('click', () => bemClosePreview());
 $bem.querySelector('[data-bem-add-extra]').addEventListener('click', () => {
   bemState.replace = null;
   $bemExtraFiles.click();
@@ -508,6 +564,10 @@ $bem.addEventListener('click', event => {
   const entry = (row.dataset.scope === 'images' ? bemState.data.images : bemState.data.extras)
     .find(item => item.file === row.dataset.file);
   if (!entry) return;
+  if (event.target.closest('[data-bem-preview]')) {
+    bemOpenPreview(entry, row.dataset.scope);
+    return;
+  }
   if (event.target.closest('[data-bem-rename-cancel]')) {
     bemCancelRename(row, true);
     return;

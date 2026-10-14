@@ -9,13 +9,20 @@ const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
 const audiobooks = fs.readFileSync(path.join(ROOT, 'public', 'audiobooks.js'), 'utf8');
 const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 
-test('Hörbuch-Detailansicht zeigt nur den ausgeschriebenen Monat und das Jahr', () => {
+test('Hörbuch-Detailansicht zeigt Monat und Jahr mit kurzen Namen für lange Monate', () => {
   const match = app.match(/function formatMonthYear\(d\) \{[\s\S]*?\n\}/);
   assert.ok(match, 'formatMonthYear fehlt');
 
-  const context = {};
-  vm.runInNewContext(`${match[0]}; result = formatMonthYear('2025-09-25');`, context);
-  assert.equal(context.result, 'September 2025');
+  const context = { result: null };
+  vm.runInNewContext(`${match[0]}; result = [
+    formatMonthYear('2025-02-25'),
+    formatMonthYear('2025-08-25'),
+    formatMonthYear('2025-09-25'),
+    formatMonthYear('2025-10-25'),
+    formatMonthYear('2025-11-25'),
+    formatMonthYear('2025-12-25'),
+  ];`, context);
+  assert.deepEqual(Array.from(context.result), ['Feb. 2025', 'Aug. 2025', 'Sept. 2025', 'Okt. 2025', 'Nov. 2025', 'Dez. 2025']);
   assert.match(audiobooks, /detail-date-block[^\n]*formatMonthYear\(book\.date\)/);
 });
 

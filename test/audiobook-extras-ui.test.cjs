@@ -21,8 +21,14 @@ test('Admin-Aktionen öffnen die Extras-Verwaltung auch ohne vorhandene Extras',
 test('Manager trennt sichtbare Extras und eingebettete Bilder ohne Manifest', () => {
   assert.match(manager, /bemUploadFiles\(files, 'extras'\)/);
   assert.match(manager, /bemUploadFiles\(files, 'images'/);
-  assert.match(manager, /\]\(images\/\$\{file\}\)/);
+  assert.match(manager, /\]\(images\/\$\{encodeURIComponent\(file\)\}\)/);
   assert.doesNotMatch(manager + server, /manifest\.json/i);
+});
+
+test('Eingefügte Textbilder verwenden URL-sichere Dateinamen', () => {
+  assert.match(manager, /images\/\$\{encodeURIComponent\(file\)\}/);
+  assert.match(server, /try \{ rel = decodeURIComponent\(src\); \}/);
+  assert.match(server, /images\/\$\{encodeURIComponent\(oldFile\)\}/);
 });
 
 test('Abbruch einer Dateiauswahl schließt den Extras-Dialog nicht', () => {
@@ -36,7 +42,7 @@ test('Sichtbare Extras lassen sich per Drag-and-drop und Tastatur-Schaltern sort
   assert.match(manager, /data-bem-move="-1"/);
   assert.match(manager, /bemRequest\('order', \{ method: 'POST'/);
   assert.match(server, /app\.post\('\/api\/audiobook-extra-order\/\*'/);
-  assert.match(html, /audiobook-extras-manager\.js\?v=12/);
+  assert.match(html, /audiobook-extras-manager\.js\?v=14/);
 });
 
 test('Markdown-Editor nutzt den gesamten Extras-Dialog', () => {
@@ -46,7 +52,16 @@ test('Markdown-Editor nutzt den gesamten Extras-Dialog', () => {
   assert.match(styles, /\.bem-markdown-field textarea \{[^}]*min-height: 0; height: 100%; resize: none;/);
   assert.match(styles, /#book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-toolbar, #book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-tabs \{ display: none; \}/);
   assert.match(styles, /\.bem-status:empty \{ display: none; \}/);
-  assert.match(html, /styles\.css\?v=110/);
+  assert.match(html, /styles\.css\?v=112/);
+});
+
+test('Datei-Icons öffnen Markdown-, Extra-Bild- und Textbild-Vorschauen im Verwaltungsdialog', () => {
+  assert.match(html, /class="bem-preview-pane" data-bem-preview-pane hidden[\s\S]*data-bem-preview-close>← Zurück<\/button>[\s\S]*data-bem-preview-body/);
+  assert.match(manager, /class="bem-entry-preview" data-bem-preview aria-label="\$\{esc\(entry\.title\)\} ansehen"/);
+  assert.match(manager, /function bemOpenPreview\(entry, scope\)[\s\S]*?entry\.type === 'image'[\s\S]*?bem-image-preview[\s\S]*?apiFetch\(bemPreviewPath\(entry\.file\)/);
+  assert.match(manager, /event\.target\.closest\('\[data-bem-preview\]'\)[\s\S]*?bemOpenPreview\(entry, row\.dataset\.scope\)/);
+  assert.match(styles, /\.bem-image-preview img \{[^}]*object-fit: contain/);
+  assert.match(styles, /\.bem-text-preview-scroll \{[^}]*overflow-y: auto/);
 });
 
 test('Bestehende Markdown-Extras zeigen den Namen im Editor nicht doppelt', () => {
@@ -54,7 +69,7 @@ test('Bestehende Markdown-Extras zeigen den Namen im Editor nicht doppelt', () =
   assert.match(manager, /bemOpenNewText[\s\S]*?\$bemEditorTitleField\.hidden = false/);
   assert.match(manager, /bemOpenMarkdown[\s\S]*?\$bemEditorHeading\.textContent = entry\.title[\s\S]*?\$bemEditorTitleField\.hidden = true/);
   assert.match(styles, /\[data-bem-editor-title-field\]\[hidden\] \{ display: none !important; \}/);
-  assert.match(html, /audiobook-extras-manager\.js\?v=12/);
+  assert.match(html, /audiobook-extras-manager\.js\?v=14/);
 });
 
 test('Entfernen verwendet dasselbe Mülleimer-Symbol wie die Benutzerverwaltung', () => {
@@ -103,7 +118,12 @@ test('Escape und Herunterziehen schließen zuerst nur den Markdown-Editor', () =
   assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(!\$bemEditor\.hidden\) \{[\s\S]*?bemCloseEditor\(\);[\s\S]*?return;[\s\S]*?\$bem\.close\(\)/);
   assert.match(app, /\['#book-extras-manager', '#book-extras-manager \[data-bem-close\]'\]/);
   assert.match(app, /onClose: \(\) => closeBtn\.click\(\)/);
-  assert.match(html, /app\.js\?v=99/);
+  assert.match(html, /app\.js\?v=103/);
+});
+
+test('Escape und Herunterziehen schließen zuerst nur die Dateivorschau', () => {
+  assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(bemClosePreview\(\)\) return;[\s\S]*?\$bem\.close\(\)/);
+  assert.match(manager, /function bemClosePreview\([\s\S]*?\$bemPreview\.hidden = true[\s\S]*?data-bem-preview[^\n]*focus/);
 });
 
 test('Schreibende Extras-Routen sind admin- und same-site-geschützt', () => {

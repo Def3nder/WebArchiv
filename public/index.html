@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=110" />
+  <link rel="stylesheet" href="styles.css?v=112" />
 </head>
 <body>
 
@@ -138,7 +138,7 @@
           <option value="96">96</option>
         </select>
       </div>
-      <button id="reset-filters" class="reset-btn" title="Filter zurücksetzen">Reset</button>
+      <button id="reset-filters" class="reset-btn" title="Filter zurücksetzen" hidden>Reset</button>
     </div>
   </div>
   </div>
@@ -349,6 +349,13 @@
           <div class="bem-list" data-bem-images></div>
         </div>
       </section>
+      <section class="bem-preview-pane" data-bem-preview-pane hidden aria-labelledby="bem-preview-title">
+        <div class="bem-preview-heading">
+          <button type="button" class="detail-cat-pill" data-bem-preview-close>← Zurück</button>
+          <h3 id="bem-preview-title" data-bem-preview-title>Dateivorschau</h3>
+        </div>
+        <div class="bem-preview-body" data-bem-preview-body></div>
+      </section>
       <section class="bem-editor" data-bem-editor hidden aria-labelledby="bem-editor-heading">
         <div class="bem-section-heading"><h3 id="bem-editor-heading" data-bem-editor-heading>Text-Extra</h3></div>
         <label class="bem-field" data-bem-editor-title-field>Name<input type="text" data-bem-editor-title maxlength="140" autocomplete="off" /></label>
@@ -484,9 +491,9 @@
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=99"></script>
+  <script src="app.js?v=103"></script>
   <script src="audiobooks.js?v=19"></script>
-  <script src="audiobook-extras-manager.js?v=12"></script>
+  <script src="audiobook-extras-manager.js?v=14"></script>
   <script src="book-reader.js?v=14"></script>
   <script src="article-editor.js?v=2"></script>
   <script src="infographic-new.js?v=2"></script>

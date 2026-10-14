@@ -40,6 +40,8 @@ let lastDetailPosition = null;
 let restoringSessionView = false;
 let sessionViewSaveTimer = null;
 let layoutChangeGeneration = 0;
+let cardPreviewObserver = null;
+let cardPreviewFrame = 0;
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
 const $app            = document.getElementById('app');
@@ -106,6 +108,25 @@ function updateFilterLabelLayout() {
 
   const categoryWrapped = categoryGroup.offsetTop > authorGroup.offsetTop + 1;
   $filterBarInner.classList.toggle('filter-labels-compact', categoryWrapped);
+}
+
+function hasActiveListFilter() {
+  return Boolean(
+    state.q
+    || state.author
+    || state.externalAudio
+    || state.year
+    || state.category
+    || state.telegram
+    || state.bookmarks
+  );
+}
+
+function updateResetFiltersVisibility() {
+  const hidden = !hasActiveListFilter();
+  if ($resetFilters.hidden === hidden) return;
+  $resetFilters.hidden = hidden;
+  requestAnimationFrame(updateFilterLabelLayout);
 }
 
 function listViewportTop() {
@@ -512,7 +533,7 @@ function formatDate(d) {
 function formatMonthYear(d) {
   if (!d) return '';
   const [y, m] = d.split('-');
-  const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const months = ['Januar','Feb.','März','April','Mai','Juni','Juli','Aug.','Sept.','Okt.','Nov.','Dez.'];
   return m && months[parseInt(m) - 1] ? `${months[parseInt(m) - 1]} ${y}` : d;
 }
 
@@ -783,6 +804,32 @@ function renderCard(article, idx) {
     </article>`;
 }
 
+// WebKit zeichnet das Auslassungszeichen von line-clamp nicht zuverlässig,
+// wenn die Vorschau zusätzlich durch die feste Kachelhöhe verkleinert wird.
+// Deshalb erkennen wir den tatsächlichen Überlauf und blenden einen eigenen,
+// immer sichtbaren Abschluss ein.
+function updateCardPreviewTruncation() {
+  if (cardPreviewFrame) cancelAnimationFrame(cardPreviewFrame);
+  cardPreviewFrame = requestAnimationFrame(() => {
+    cardPreviewFrame = 0;
+    $app.querySelectorAll('.card-preview').forEach(preview => {
+      preview.classList.remove('is-truncated');
+      if (!preview.getClientRects().length || !preview.clientHeight) return;
+      preview.classList.toggle('is-truncated', preview.scrollHeight > preview.clientHeight + 1);
+    });
+  });
+}
+
+function watchCardPreviews() {
+  cardPreviewObserver?.disconnect();
+  const previews = [...$app.querySelectorAll('.card-preview')];
+  if (typeof ResizeObserver !== 'undefined') {
+    if (!cardPreviewObserver) cardPreviewObserver = new ResizeObserver(updateCardPreviewTruncation);
+    previews.forEach(preview => cardPreviewObserver.observe(preview));
+  }
+  updateCardPreviewTruncation();
+}
+
 // Bildbereich einer Kachel mit mehreren Bildern (Artikel + Infografiken):
 // Desktop wählt das Bild über die Mausposition, Touch per Wischen; Striche zeigen
 // Anzahl und aktuelles Bild. Weitere Bilder werden erst bei Bedarf geladen.
@@ -911,6 +958,7 @@ async function changeResultsPage(page, behavior = 'smooth') {
 }
 
 async function loadArticles() {
+  updateResetFiltersVisibility();
   if (state.loading) return;
   state.loading = true;
 
@@ -936,6 +984,7 @@ async function loadArticles() {
     $count.textContent = `${data.total.toLocaleString('de-DE')} ${bookMode ? (data.total === 1 ? 'Hörbuch' : 'Hörbücher') : 'Artikel'}`;
     $app.innerHTML = (bookMode ? renderBookGrid(data.items) : renderGrid(data.items)) + renderPagination(state.page, state.pages);
     applyGridColumns();
+    watchCardPreviews();
 
     // Attach card click handlers
     $app.querySelectorAll('.card').forEach(card => {
@@ -1787,6 +1836,7 @@ $searchInput.addEventListener('input', () => {
   const val = $searchInput.value.trim();
   $searchClear.classList.toggle('visible', val.length > 0);
   state.q = val;
+  updateResetFiltersVisibility();
   state.page = 1;
   scheduleCurrentViewSave();
   clearTimeout(searchTimer);
