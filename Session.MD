@@ -940,3 +940,153 @@ G3 enthält nach der Analyse mehrere abgebrochene Runden; die Umsetzung ist in G
 - **D8:** [tts/INTEGRATION.md](tts/INTEGRATION.md) – ursprünglicher Liefervertrag des Node-Pakets; insbesondere Ausgabe neben der `.md` ist für WebArchiv überholt.
 
 Zusätzlich berücksichtigt: die geltenden [AGENTS.md](AGENTS.md)-Regeln, `session-context-commands.txt` als historischer Übergabehinweis, Paketdefinitionen und die im Text genannten gezielt geprüften Codebereiche. Die Dokumentation enthält keine echten API-Schlüssel, Tokens oder Cookie-Inhalte.
+
+## 16. Aktualisierung 16.10.2026 – Markdown-Editor, Hörbuch-Extras und gemeinsame ARIA-Menüs
+
+Dieser Abschnitt ergänzt den bis 07.10.2026 festgehaltenen Stand. Er dokumentiert die anschließend
+getroffenen UI- und Implementierungsentscheidungen, die bei künftigen Änderungen als geltender Stand
+zu behandeln sind.
+
+### Gemeinsame Leitentscheidungen
+
+1. Artikel, Hörbuch-Abstracts und Markdown-Texte in den Hörbuch-Extras verwenden denselben
+   CodeMirror-basierten Markdown-Live-Editor. Kontextabhängige Funktionen werden über Optionen
+   zugeschaltet und nicht durch getrennte Editoren nachgebaut.
+2. Für Dropdown- und Aktionsmenüs ist das bereits vorhandene ARIA-Aktionsmenü das gemeinsame
+   Muster. Header-, Artikel-, Hörbuch- und Desktop-Filtermenüs sollen dessen Darstellung und
+   Bedienverhalten wiederverwenden, statt parallele Menükomponenten zu entwickeln.
+3. Der eingebettete PDF.js-Viewer bleibt ein eigenständiger Drittanbieterbereich. Seine Oberfläche
+   und Menülogik werden nicht an die Anwendungsmenüs oder den Markdown-Editor gekoppelt.
+4. Geschlossene Menüschaltfläche und geöffnetes Menü haben unabhängige Breiten. Ein kompakter
+   Auslöser darf deshalb kein unnötig breites Popup erzwingen und umgekehrt. Popups werden am
+   Auslöser verankert und innerhalb des sichtbaren Browserbereichs gehalten.
+
+### Markdown-Live-Editor
+
+Der Editor bleibt intern ein Markdown-Editor, zeigt den Inhalt aber formatiert an. Markdown-Zeichen
+werden für **alle** unterstützten Inline- und Blockformate nur an der aktiven Stelle sichtbar und in
+einer zurückgenommenen Farbe dargestellt. Dazu zählen insbesondere Fett, Kursiv,
+Durchgestrichen, Überschriften, Aufzählungen, nummerierte Listen, Checkboxen, Zitate, Code,
+Links, Bilder, Tabellen und Trennlinien. Die Quelldatei bleibt damit unmittelbar editierbar, ohne
+dauerhaft als Plain Text angezeigt zu werden.
+
+Die Werkzeugleiste enthält Rückgängig/Wiederholen, Absatz- und Überschriftenebenen, Listen und
+Einzüge, Fett, Kursiv, Durchgestrichen, Blockzitat, Code, Link, Tabelle und Formatierung löschen.
+Das Listenmenü verwendet kleine, zum jeweiligen Befehl passende Piktogramme, etwa `•`, `1.`,
+Checkbox und Einzugspfeile. Das Überlaufmenü steht direkt neben den übrigen Werkzeugen und wird
+bei knapper Breite so positioniert, dass es nicht über den linken oder rechten Fensterrand hinausragt.
+
+Für Auswahl und Cursor gelten folgende Regeln:
+
+- Eine vorhandene Auswahl ist der Zielbereich eines Formatierungsbefehls.
+- Ohne Auswahl wird bei Inline-Formatierungen das Wort unter dem Cursor verwendet.
+- Aktive Inline-Formatierungen werden an den Schaltflächen mit `aria-pressed` gespiegelt.
+- Das Überschriftenmenü markiert mit `aria-current` die tatsächliche Ebene der Cursorzeile und
+  darf nicht pauschal H1 vorauswählen.
+- Befindet sich der Cursor auf einer Trennlinie, wird diese im Listenmenü als aktiv erkannt; ein
+  erneuter Klick entfernt die vorhandene Linie.
+- `Strg`/`Cmd`+`I` schaltet Kursiv für Auswahl oder Cursorwort und darf nicht die ganze Zeile
+  markieren. `Strg`/`Cmd`+Enter speichert den jeweiligen Editor.
+- Pos1 und Ende beziehen sich auf die sichtbare Markdown-Zeile. Mausauswahl und Cursorposition
+  dürfen nach dem Ein- oder Ausblenden von Syntaxzeichen nicht um eine Zeile versetzt sein.
+- Pfeil hoch bzw. herunter darf nach mehrzeiligem Einfügen oder am Rand einer Tabelle keine
+  Quellzeilen beziehungsweise die gesamte Tabelle überspringen.
+
+Bild-Upload und Bildeinfügen sind ausschließlich im Editor eines Hörbuch-Extras verfügbar. Beim
+Bearbeiten eines Artikeltexts oder eines Hörbuch-Abstracts wird diese Funktion weder angezeigt noch
+angeboten.
+
+Die maßgeblichen Frontendquellen sind `public/markdown-live-preview.js`,
+`public/markdown-commands.mjs`, `public/markdown-editors.js`, `public/article-editor.js` und
+`public/audiobook-extras-manager.js`. Änderungen daran müssen in das eingecheckte Browser-Bundle
+übernommen werden:
+
+```bash
+npm run build:editor
+```
+
+Anschließend ist die `?v=`-Version von `vendor/article-editor.bundle.js` in `public/index.html` zu
+erhöhen. Das verhindert, dass Browser oder eine installierte PWA nach dem Deployment noch das alte
+Editor-Bundle verwenden.
+
+### Hörbuch-Extras und Dialoghierarchie
+
+Sichtbare Extras liegen ohne separates Manifest direkt unter `<Hörbuch>/extras/`; eingebettete
+Textbilder liegen unter `<Hörbuch>/extras/images/`. Administratoren erreichen die Verwaltung sowohl
+über das Aktionen-Menü des Hörbuchs als auch über einen gleich gestalteten *Verwalten*-Button in der
+Extras-Anzeige.
+
+Die Verwaltung kann Extras und Textbilder anlegen, hochladen, ersetzen, umbenennen, löschen und
+vorab anzeigen. Sichtbare Extras werden per Ziehen oder Tastatur/Pfeiltasten sortiert; die Reihenfolge
+wird über numerische Dateinamenpräfixe wie `01 -` gespeichert. Für Textbilder gilt ausdrücklich eine
+andere Regel: Ein früher automatisch oder zufällig erzeugter Zahlenpräfix wird beim Umbenennen nicht
+beibehalten. Der eingegebene Zielname ist maßgeblich. Verweise aus Markdown-Dateien werden beim
+Umbenennen sowohl in normaler als auch in URL-kodierter Schreibweise aktualisiert.
+
+Die Dialoge bilden einen Stapel. Escape, die Zurück-Schaltfläche oder ein Klick neben den aktiven
+Dialog schließen immer nur die innerste Ebene: zuerst Vorschau beziehungsweise Texteditor, danach
+die Extras-Verwaltung und erst anschließend die Hörbuchansicht. Insbesondere darf Escape aus *Text
+bearbeiten* nicht zusätzlich den darunterliegenden Hörbuchdialog schließen. Die Extras-Verwaltung
+muss wie die anderen modalen Dialoge auch durch einen Klick auf ihren Hintergrund geschlossen
+werden können.
+
+Die drei Punkte der Extras-Dateiaktionen sind wie das Überlaufmenü des Markdown-Editors als
+schlichter Icon-Auslöser ohne zusätzlichen Kreis darzustellen. Menübezeichnungen enthalten nur
+tatsächlich ausführbare Aktionen; ein dekorativer Eintrag wie „Aktionen“ gehört nicht in die
+Aktionsliste.
+
+### ARIA-Menüs in Filtern und Aktionen
+
+Auf Desktopgeräten verwenden Autor, Jahr, Kategorie, Hörbuch-Sortierung und *Pro Seite* dasselbe
+ARIA-Menümuster wie die vorhandenen Aktionsschaltflächen. Dazu gehören `role="menu"`,
+`menuitem` beziehungsweise `menuitemradio`, ein nachvollziehbarer Fokus, Pfeiltastennavigation,
+Pos1/Ende, Escape, Außenklick sowie `aria-checked` für die Auswahl. Auf Touch-Geräten bleiben die
+nativen Auswahlfelder erhalten.
+
+Die geschlossenen Filter-Schaltflächen sind nur so breit wie Beschriftung und Pfeil. Das geöffnete
+Menü richtet seine Breite dagegen kompakt nach seinen Einträgen aus; bei *Pro Seite* bleibt auch das
+Popup so schmal wie der sichtbare Auslöser. Diese Regel verhindert sowohl Platzverschwendung in der
+Filterzeile als auch unnötig breite Popupflächen. Unabhängig von der Inhaltsbreite darf kein Menü aus
+dem Viewport herausragen.
+
+Das Muster ist zentral zu pflegen: Änderungen an Styling, Fokus, Tastatur- oder Schließverhalten
+sollen allen darauf aufbauenden Bereichen zugutekommen. Fachliche Inhalte und erlaubte Aktionen
+bleiben trotzdem beim jeweiligen Dialog oder Filter.
+
+### Kachelvorschau
+
+Der Vorschautext einer Kachel wird anhand der tatsächlich verfügbaren Höhe begrenzt. Ob Text
+überläuft, wird nach dem Layout gemessen und über einen eigenen Zustand markiert. Sichtbar ist genau
+eine Ellipse unten rechts. Eine zusätzliche browserseitige `line-clamp`-Ellipse ist nicht zu
+kombinieren, weil sonst mitten im Text und am Kachelende zwei Kürzungszeichen erscheinen.
+
+### Speicherung, Sitzungen und Deployment
+
+Artikel und Abstracts werden beim Speichern serverseitig versionsgeprüft und atomar ersetzt. Wurde
+die Quelldatei zwischen Laden und Speichern extern geändert, ist `409 Conflict` zurückzugeben, statt
+die fremde Änderung zu überschreiben. BOM, vorhandene CRLF-Zeilenenden und Dateirechte bleiben
+erhalten. Nach erfolgreichem Speichern wird neu indiziert; schlägt nur der Reindex fehl, bleibt die
+gespeicherte Datei erhalten und die Oberfläche weist auf den notwendigen Reindex hin.
+
+Die normale Web-Sitzung liegt weiterhin im Arbeitsspeicher des Node-Prozesses. Ein Serverneustart
+macht deshalb bestehende Browser- beziehungsweise PWA-Sitzungen ungültig. Gemeinsame API-Aufrufe
+müssen eine `401`-Antwort zentral behandeln: lokalen Benutzerzustand verwerfen, abhängige Aktionen
+und Extras ausblenden und die erneute Anmeldung anbieten. Das erklärt Fälle, in denen eine länger
+nicht verwendete PWA nur noch unvollständige Hörbuchaktionen zeigt und eine Ab- und Anmeldung den
+Zustand repariert.
+
+Für reine Änderungen unter `public/` ist auf Debian kein Neustart des Node-Dienstes erforderlich.
+Die passende Cacheversion in `public/index.html` wird erhöht, die Dateien werden übertragen und der
+Browser beziehungsweise die PWA wird neu geladen oder aktualisiert. Änderungen an `server.js`,
+Backend-`*.cjs`, Abhängigkeiten oder Dienstvariablen benötigen dagegen einen Neustart; nach
+Änderungen an `package.json` oder dem Lockfile ist zuvor `npm install` beziehungsweise bei sauberem
+Deployment `npm ci` auszuführen.
+
+### Regressionstests für diesen Stand
+
+Die UI-Verträge dieser Bereiche werden insbesondere durch
+`test/article-editor-ui.test.cjs`, `test/audiobook-extras-ui.test.cjs`,
+`test/filter-aria-menu.test.cjs` und `test/card-preview.test.cjs` abgedeckt. Bei Änderungen sind
+zusätzlich die reinen Markdown-Befehlstests und die vollständige Suite mit `npm test` relevant.
+Dokumentationsänderungen allein erfordern keinen Bundle- oder Anwendungsbuild; sie werden mindestens
+mit `git diff --check` geprüft.

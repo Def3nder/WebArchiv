@@ -823,9 +823,8 @@ body[data-theme="light"] .author-badge {
   color: var(--text-muted);
   line-height: 1.5;
   position: relative;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: block;
+  max-height: 3em;
   overflow: hidden;
   flex: 1;
   min-height: 0;
@@ -858,7 +857,7 @@ body[data-reset-filters="hidden"] #reset-filters { display: none; }
 body.layout-tall .card         { aspect-ratio: unset; }
 body.layout-tall .card-image   { flex: unset; aspect-ratio: 1 / 1; }
 body.layout-tall .card-title   { -webkit-line-clamp: 3; }
-body.layout-tall .card-preview { -webkit-line-clamp: 3; }
+body.layout-tall .card-preview { max-height: 4.5em; }
 
 /* ── Listen-Modus: eine Zeile pro Artikel ──────────────────────────────────
    Desktop: quadratisches Bild; daneben Autor + Kategorien, Titel, Anfang des
@@ -912,7 +911,7 @@ body.layout-list .card-meta { grid-area: meta; flex-wrap: nowrap; }
 body.layout-list .author-badge { white-space: nowrap; }
 body.layout-list .card-categories { grid-area: cats; flex-wrap: nowrap; overflow: hidden; margin: 0; align-items: center; }
 body.layout-list .card-title { grid-area: title; font-size: 0.95rem; -webkit-line-clamp: 1; }
-body.layout-list .card-preview { grid-area: preview; -webkit-line-clamp: 3; flex: none; }
+body.layout-list .card-preview { grid-area: preview; max-height: 4.5em; flex: none; }
 @media (max-width: 600px), (hover: none) and (pointer: coarse) {
   body.layout-list .article-grid { gap: 6px; }
   body.layout-list .card { height: var(--list-row-height, 64px); }

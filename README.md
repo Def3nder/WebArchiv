@@ -38,6 +38,13 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Audio/Video/PDF)
   installierte Web-App zeigt „Neue Version verfügbar“ und übernimmt sie über „Jetzt aktualisieren“
   ohne Löschen oder erneutes Anlegen des Home-Screen-Symbols. Der Update-Worker cached selbst keine
   App-Dateien; reguläres Cache-Busting per `?v=N` bleibt maßgeblich.
+- **Bedienmenüs**: Das vorhandene ARIA-Aktionsmenü ist das gemeinsame Muster für Dropdown-Menüs
+  in Header, Artikel-/Hörbuchaktionen und den Desktop-Filtern. Neue Menüs erweitern dieses Muster
+  (`role="menu"`, `menuitem`/`menuitemradio`, Tastatur, Escape und Außenklick), statt eine zweite
+  Menükomponente einzuführen. Touch-Geräte behalten bei den Filtern ihre nativen Auswahlfelder.
+- **Markdown-Editor**: Artikel, Hörbuch-Abstracts und Markdown-Extras verwenden denselben lokalen
+  CodeMirror-basierten Live-Editor. Formatierter Text wird direkt dargestellt; die Markdown-Zeichen
+  erscheinen an der aktiven Cursorposition in einer zurückgenommenen Farbe.
 - **Daten**: reine Dateien unter `www/` — keine Datenbank. Der Index wird beim Start und auf Anforderung neu aufgebaut.
 
 ---
@@ -161,6 +168,21 @@ Rücksprung:
 `node epub-tool/epub-to-md.js "Autor - Titel.epub" --out "audio/Hoerbuecher/Autor - Titel"`
 (Details: `epub-tool/README.md`; danach Reindex).
 
+**Extras anzeigen und verwalten:** Sichtbare Extras liegen ohne Manifest direkt unter
+`<Buch>/extras/`; eingebettete Textbilder unter `<Buch>/extras/images/`. Administratoren erreichen
+*Extras verwalten …* sowohl im Aktionen-Menü des Hörbuchs als auch über *Verwalten* in der
+Extras-Anzeige. Der Dialog kann Texte und Bilder anlegen, hochladen, ersetzen, umbenennen, löschen,
+vorab anzeigen und die sichtbaren Extras per Ziehen oder Pfeiltasten sortieren. Die Reihenfolge wird
+durch Präfixe wie `01 -` in den Dateinamen persistiert. Bei Textbildern wird ein früherer zufälliger
+Zahlenpräfix beim Umbenennen bewusst **nicht** beibehalten; Markdown-Bildverweise werden gleichzeitig
+in normaler und URL-kodierter Schreibweise aktualisiert.
+
+*Text bearbeiten* öffnet den gemeinsamen Markdown-Live-Editor. Nur dieser Extras-Editor bietet das
+Einfügen bzw. Hochladen von Bildern an; beim Bearbeiten eines Artikeltexts oder Hörbuch-Abstracts ist
+die Bildfunktion ausgeblendet. Escape, die Zurück-Schaltfläche und ein Klick neben den Dialog schließen
+immer zuerst die innerste Ebene (Vorschau oder Editor), anschließend die Extras-Verwaltung und erst
+danach die Hörbuchansicht.
+
 ---
 
 ## Suche, Filter, Facetten
@@ -170,6 +192,11 @@ Rücksprung:
   (`2026`, `2026-03`, `03.2026`, `25.01.2026`) — kombinierbar mit Textsuche
   (z. B. „Achtsamkeit 2025").
 - **Filter**: Autor, Jahr, Kategorie, Seitengröße, Ansicht (quadratisch/länglich/Liste).
+  Auf Desktopgeräten verwenden Autor, Jahr, Kategorie, Hörbuch-Sortierung und Seitengröße das
+  vorhandene ARIA-Aktionsmenü. Die geschlossenen Schaltflächen und die geöffneten Menüs bestimmen
+  ihre Breite getrennt nach Inhalt; das Menü ragt nicht über den Fensterrand. Pfeiltasten,
+  Pos1/Ende, Escape und Außenklick werden unterstützt. Auf Touch-Geräten bleiben die nativen
+  `<select>`-Elemente aktiv.
   Paginierung server-seitig. Auf Touch-Geräten wechselt eine horizontale Einfinger-Geste
   in allen drei Ansichten zur nächsten oder vorherigen Seite: Sie beginnt außerhalb
   der äußersten 30 px und wirft die aktuelle Seite bis in die 30-px-Zone links bzw.
@@ -186,6 +213,9 @@ Rücksprung:
   weniger Spalten, sodass die Kacheln ungefähr gleich groß bleiben. Das Raster nutzt auf
   normalen Desktopbildschirmen nahezu die volle Breite und bleibt auf Ultrawide bei 1920 px
   begrenzt. Reset stellt die responsive Vorgabe wieder her.
+- **Kachelvorschau**: Der Vorschautext wird anhand der tatsächlich verfügbaren Höhe gekürzt.
+  Überlauf wird nach dem Layout gemessen und mit genau einem eigenen `…` unten rechts markiert;
+  eine zusätzliche browserseitige `line-clamp`-Ellipse wird absichtlich nicht verwendet.
 - **Lesezeichen** (nur angemeldet): Button zwischen Kopieren und Teilen im Artikel setzt/löscht
   ein Lesezeichen (blau = gesetzt); Kacheln mit Lesezeichen tragen ein kleines blaues Symbol. Der
   Lesezeichen-Button im Header (blau = aktiv) zeigt nur Artikel mit Lesezeichen, kombinierbar mit
@@ -213,6 +243,42 @@ https://example.com/
 PROMPT:
 Anweisung, die vor den Artikeltext gesetzt wird.
 ```
+
+---
+
+## Markdown-Editor (Admin)
+
+Der Editor ist ein „What you see is what you mean“-Editor: Das Dokument bleibt Markdown, wird im
+Eingabefeld aber formatiert dargestellt. Für Inline- und Blockelemente – Fett, Kursiv,
+Durchgestrichen, Überschriften, Listen, Checkboxen, Zitate, Code, Links, Bilder, Tabellen und
+Trennlinien – werden die Syntaxzeichen nur an der aktiven Stelle eingeblendet. Die Zeichen sind
+heller bzw. zurückhaltender als der eigentliche Inhalt; dadurch bleibt die Quelldatei editierbar,
+ohne dauerhaft wie Plain Text auszusehen.
+
+Die Werkzeugleiste bietet Rückgängig/Wiederholen, Überschriften, Listen und Einzüge, Fett, Kursiv,
+Durchgestrichen, Zitat, Code, Link, Tabelle und Formatierung löschen. Ohne Auswahl wirkt eine
+Inline-Formatierung auf das Wort unter dem Cursor; mit Auswahl auf den markierten Bereich. Aktive
+Formatierungen sowie die aktuelle Überschriftenebene werden über `aria-pressed` bzw.
+`aria-current` gespiegelt. Das Überlaufmenü grenzt direkt an die übrigen Werkzeuge an und wird bei
+schmalen Fenstern innerhalb des Viewports verschoben.
+
+Tastaturregeln sind Teil des Editors, nicht Browser-Zufall: `Strg`/`Cmd`+`I` formatiert kursiv;
+Pos1/Ende arbeiten auf der sichtbaren Markdown-Zeile; Pfeil hoch überspringt nach mehrzeiligem
+Einfügen oder an Tabellen keine Quellzeile. Speichern ist mit `Strg`/`Cmd`+Enter möglich.
+
+Artikel und Abstracts werden serverseitig versionsgeprüft und atomar ersetzt; externe Änderungen
+führen zu `409`, statt überschrieben zu werden. BOM, CRLF und Dateirechte bleiben erhalten. Nach
+Änderungen an `public/markdown-live-preview.js`, `public/markdown-commands.mjs`,
+`public/markdown-editors.js`, `public/article-editor.js` oder
+`public/audiobook-extras-manager.js` muss das eingecheckte Browser-Bundle neu gebaut werden:
+
+```bash
+npm run build:editor
+```
+
+Danach die `?v=`-Version von `vendor/article-editor.bundle.js` in `public/index.html` erhöhen.
+Der eingebettete PDF.js-Viewer bleibt ein eigenständiger Drittanbieterbereich und wird nicht in
+Editor- oder Menülogik einbezogen.
 
 ---
 
@@ -291,6 +357,13 @@ Anweisung, die vor den Artikeltext gesetzt wird.
 | `GET /api/prompts` · `GET /api/prompts/:file` | Soft | Prompt-Textbausteine aus `prompts/` (Copy-Menü) |
 | `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/title/date),page,limit` |
 | `GET /api/audiobooks/*` | Auth + Autor | Hörbuch mit Tracks, Beschreibung, eigenem Fortschritt |
+| `GET`/`PUT /api/article-markdown/*` | Admin | Vollständige Markdown-Datei mit Versionsprüfung lesen bzw. atomar speichern |
+| `GET /api/audiobook-extra-manage/*` | Admin + Autor | Extras und Textbilder für den Verwaltungsdialog auflisten |
+| `GET`/`PUT /api/audiobook-extra-source/*` | Admin + Autor | Markdown-Extra mit Versionsprüfung lesen bzw. speichern |
+| `POST /api/audiobook-extra-create/*` | Admin + Autor | Neues Markdown-Extra anlegen |
+| `POST /api/audiobook-extra-upload/*` | Admin + Autor | Extra oder Textbild hochladen/ersetzen |
+| `PATCH`/`DELETE /api/audiobook-extra-entry/*` | Admin + Autor | Extra oder Textbild umbenennen bzw. löschen |
+| `POST /api/audiobook-extra-order/*` | Admin + Autor | Reihenfolge sichtbarer Extras speichern |
 | `PUT /api/audiobook-progress/*` | Auth + Autor | Hörposition speichern `{trackIndex,position,speed}` |
 | `GET /api/audiobook-text/*` | Auth + Autor | eBook-Text (`md`/`txt` als HTML, `pdf` als URL) mit Leseposition |
 | `PUT /api/audiobook-text-progress/*` | Auth + Autor | Leseposition speichern `{position}` (Anteil 0–1, bei PDF Seitenzahl) |
@@ -367,6 +440,7 @@ Facebook benötigt `scraper/cookies.txt` (Netscape-Format) und `scraper/Abonente
 server.js                     Express-App (Routen, Index, Auth-Anbindung)
 user-store.cjs                Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen
 audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
+article-editor.cjs            Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown
 bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
 config.json                   Einstellungen (Autoren-Priorität, Hörbuch-Sprungweiten)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp
@@ -374,6 +448,11 @@ test/                         Tests der Hauptanwendung
 public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
+├── article-editor.js         Dialoglogik für Artikel- und Abstract-Markdown
+├── markdown-live-preview.js  CodeMirror-Live-Darstellung, Toolbar und Cursor-Navigation
+├── markdown-commands.mjs     Reine Markdown-Transformationen der Toolbar
+├── markdown-editors.js       Einstiegspunkt des gebündelten Editors
+├── audiobook-extras-manager.js  Extras-/Textbildverwaltung und Extras-Markdown-Editor
 ├── user-admin.js             Kennwort ändern, Benutzer- und Autorenverwaltung
 ├── settings.js               Anzeige-Einstellungen (inkl. Filter-Beschriftungen pro Nutzer/Gerät)
 ├── session-state.js          Lokaler Sitzungsstand pro Benutzer (Ansicht, Navigation, Scrollposition)
@@ -428,6 +507,10 @@ Projektroot führt 16 Node-Testdateien und den Python-Vertragstest aus:
 npm test
 ```
 
+Gezielte UI-Vertragstests für die hier beschriebenen Bereiche liegen insbesondere in
+`test/article-editor-ui.test.cjs`, `test/audiobook-extras-ui.test.cjs`,
+`test/filter-aria-menu.test.cjs` und `test/card-preview.test.cjs`.
+
 Die eigenständigen Node-Pakete lassen sich weiterhin getrennt prüfen:
 
 ```bash
@@ -472,6 +555,12 @@ npx playwright install --with-deps chromium
   sudo systemctl status nodeapp           # Dienststatus prüfen
   journalctl -u nodeapp -n 100 --no-pager # letzte Logzeilen anzeigen
   ```
+- Reine Änderungen unter `public/` benötigen keinen Serverneustart. Die passende `?v=`-Query in
+  `public/index.html` erhöhen, Dateien übertragen und Browser/PWA neu laden bzw. das angebotene
+  PWA-Update anwenden. Änderungen an Editor-Quellen vorher mit `npm run build:editor` bündeln.
+- Änderungen an `server.js`, `*.cjs`, Abhängigkeiten oder Umgebungsvariablen benötigen einen
+  Neustart des Dienstes. Bei geänderter `package.json`/`package-lock.json` vorher in `/opt/nodeapp`
+  `npm install` ausführen.
 - **Reindex ohne Neustart**: der Server hat einen `SIGHUP`-Handler, der
   `buildIndex()` auslöst, ohne den Prozess zu beenden — offene Sessions bleiben
   erhalten. Auslösen (als `ralf`, ohne sudo):

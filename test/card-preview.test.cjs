@@ -14,10 +14,13 @@ test('abgeschnittene Kachelvorschauen erhalten zuverlässig ein Auslassungszeich
   assert.match(APP, /new ResizeObserver\(updateCardPreviewTruncation\)/);
   assert.match(APP, /applyGridColumns\(\);\s*watchCardPreviews\(\);/);
   assert.match(CSS, /\.card-preview\s*\{[^}]*position:\s*relative;[^}]*min-height:\s*0;/s);
+  assert.match(CSS, /\.card-preview\s*\{[^}]*display:\s*block;[^}]*max-height:\s*3em;/s);
+  assert.doesNotMatch(CSS, /\.card-preview\s*\{[^}]*-webkit-line-clamp:/s);
+  assert.match(CSS, /body\.layout-tall \.card-preview \{ max-height: 4\.5em; \}/);
   assert.match(CSS, /\.card-preview\.is-truncated::after\s*\{[^}]*content:\s*'…';[^}]*bottom:\s*0;/s);
 });
 
 test('geänderte Vorschau-Ressourcen werden ohne alten Browser-Cache geladen', () => {
-  assert.match(HTML, /styles\.css\?v=124/);
+  assert.match(HTML, /styles\.css\?v=125/);
   assert.match(HTML, /app\.js\?v=106/);
 });
