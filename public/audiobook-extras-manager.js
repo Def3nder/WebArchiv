@@ -45,6 +45,11 @@ const bemMarkdownInput = createMarkdownInput({
   parent: $bemEditorText,
   onChange: () => {},
   resolveImageUrl: bemResolveImageUrl,
+  onInsertImage: () => {
+    bemState.replace = null;
+    bemState.insertImages = true;
+    $bemImageFiles.click();
+  },
   labelledBy: 'bem-editor-text-label',
   describedBy: 'bem-editor-text-hint',
 });
@@ -536,11 +541,6 @@ $bem.querySelector('[data-bem-add-extra]').addEventListener('click', () => {
 $bem.querySelector('[data-bem-add-image]').addEventListener('click', () => {
   bemState.replace = null;
   bemState.insertImages = false;
-  $bemImageFiles.click();
-});
-$bem.querySelector('[data-bem-insert-image]').addEventListener('click', () => {
-  bemState.replace = null;
-  bemState.insertImages = true;
   $bemImageFiles.click();
 });
 $bem.querySelector('[data-bem-editor-save]').addEventListener('click', bemSaveEditor);

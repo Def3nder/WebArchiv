@@ -1,9 +1,15 @@
 import { Compartment, EditorState, StateField } from '@codemirror/state';
-import { syntaxTree } from '@codemirror/language';
+import { forceParsing, syntaxTree } from '@codemirror/language';
 import { markdown } from '@codemirror/lang-markdown';
 import { GFM } from '@lezer/markdown';
 import { Decoration, EditorView, WidgetType } from '@codemirror/view';
+import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands';
 import { minimalSetup } from 'codemirror';
+import {
+  clearMarkdownFormatting, indentMarkdown, insertRuleMarkdown, insertTableMarkdown,
+  markdownLinkTarget, setHeadingMarkdown, setLinkMarkdown, setListMarkdown,
+  toggleBlockquoteMarkdown, toggleCodeMarkdown, toggleInlineMarkdown,
+} from './markdown-commands.mjs';
 
 const INLINE_CLASS = {
   StrongEmphasis: 'cm-md-strong',
@@ -28,6 +34,13 @@ const REVEAL_NODES = new Set([
 const HEADING_RE = /^(?:ATXHeading|SetextHeading)([1-6])$/;
 const CODE_BLOCK_NODES = new Set(['CodeBlock', 'FencedCode']);
 
+const INLINE_MARKER_NODE = {
+  StrongEmphasis: 'EmphasisMark',
+  Emphasis: 'EmphasisMark',
+  Strikethrough: 'StrikethroughMark',
+  InlineCode: 'CodeMark',
+};
+
 function selectionTouches(state, from, to) {
   return state.selection.ranges.some(range => range.empty
     ? range.head >= from && range.head <= to
@@ -44,6 +57,19 @@ function revealContainer(node) {
 function nodeActive(state, node) {
   const container = revealContainer(node);
   return selectionTouches(state, container.from, container.to);
+}
+
+function inlineContentRange(node) {
+  if (node.name === 'Link') {
+    const markers = node.getChildren('LinkMark');
+    if (markers.length >= 2) return { from: markers[0].to, to: markers[1].from };
+  }
+  const markerName = INLINE_MARKER_NODE[node.name];
+  if (markerName) {
+    const markers = node.getChildren(markerName);
+    if (markers.length >= 2) return { from: markers[0].to, to: markers[markers.length - 1].from };
+  }
+  return { from: node.from, to: node.to };
 }
 
 function lineRanges(state, from, to) {
@@ -280,11 +306,11 @@ function imageDetails(state, node, resolveImageUrl) {
 function buildDecorations(state, resolveImageUrl) {
   const ranges = [];
   const atomic = [];
-  const replace = (from, to, widget = null, block = false) => {
+  const replace = (from, to, widget = null, block = false, isAtomic = true) => {
     const decoration = Decoration.replace({ widget, block });
     const range = decoration.range(from, to);
     ranges.push(range);
-    atomic.push(range);
+    if (isAtomic) atomic.push(range);
   };
 
   syntaxTree(state).iterate({
@@ -322,7 +348,10 @@ function buildDecorations(state, resolveImageUrl) {
       if (CODE_BLOCK_NODES.has(node.name)) addLineDecorations(ranges, state, node, 'cm-md-code-line');
 
       const inlineClass = INLINE_CLASS[node.name];
-      if (inlineClass) ranges.push(Decoration.mark({ class: inlineClass }).range(node.from, node.to));
+      if (inlineClass) {
+        const content = inlineContentRange(node);
+        if (content.from < content.to) ranges.push(Decoration.mark({ class: inlineClass }).range(content.from, content.to));
+      }
 
       if (node.name === 'ListMark') {
         const raw = state.doc.sliceString(node.from, node.to);
@@ -337,13 +366,13 @@ function buildDecorations(state, resolveImageUrl) {
         ranges.push(Decoration.mark({ class: 'cm-md-markup' }).range(node.from, node.to));
       } else if (node.name === 'CodeInfo') {
         if (active) ranges.push(Decoration.mark({ class: 'cm-md-markup' }).range(node.from, node.to));
-        else replace(node.from, node.to);
+        else replace(node.from, node.to, null, false, false);
       } else if (MARKER_NODES.has(node.name)) {
         if (active) ranges.push(Decoration.mark({ class: 'cm-md-markup' }).range(node.from, node.to));
-        else replace(node.from, node.to);
+        else replace(node.from, node.to, null, false, false);
       } else if (node.name === 'URL' && node.parent?.name === 'Link') {
         if (active) ranges.push(Decoration.mark({ class: 'cm-md-link-target cm-md-markup' }).range(node.from, node.to));
-        else replace(node.from, node.to);
+        else replace(node.from, node.to, null, false, false);
       }
       return undefined;
     },
@@ -383,16 +412,353 @@ function livePreview(resolveImageUrl) {
   ];
 }
 
+const TOOLBAR_ICONS = {
+  undo: '<svg viewBox="0 0 24 24"><path d="M9 7 4 12l5 5M5 12h8a6 6 0 0 1 6 6"/></svg>',
+  redo: '<svg viewBox="0 0 24 24"><path d="m15 7 5 5-5 5m4-5h-8a6 6 0 0 0-6 6"/></svg>',
+  list: '<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>',
+  quote: '<svg viewBox="0 0 24 24"><path d="M7 10h4v5H6v-4c0-3 1.5-5 4-6M16 10h4v5h-5v-4c0-3 1.5-5 4-6"/></svg>',
+  code: '<svg viewBox="0 0 24 24"><path d="m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18"/></svg>',
+  link: '<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg>',
+  table: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>',
+  image: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>',
+  clear: '<svg viewBox="0 0 24 24"><path d="m4 17 7-12h2l4 7M7 13h8M14 18l4-4 3 3-4 4h-3z"/></svg>',
+  more: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>',
+};
+
+function toolbarIcon(name) {
+  return TOOLBAR_ICONS[name] || '';
+}
+
+function toolbarButton(command, label, content, className = '') {
+  return `<button type="button" class="md-toolbar-button ${className}" data-md-command="${command}" aria-label="${label}" title="${label}">${content}</button>`;
+}
+
+function tableGrid(className = '') {
+  const cells = [];
+  for (let row = 1; row <= 5; row++) {
+    for (let column = 1; column <= 5; column++) {
+      cells.push(`<button type="button" data-md-table="${row},${column}" aria-label="Tabelle mit ${column} Spalten und ${row} Zeilen"></button>`);
+    }
+  }
+  return `<div class="md-table-picker ${className}" role="group" aria-label="Tabellengröße auswählen">${cells.join('')}</div>`;
+}
+
+function createLinkDialog(view, applyEdit) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'md-link-dialog';
+  dialog.setAttribute('aria-label', 'Link einfügen oder bearbeiten');
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h3>Link</h3>
+      <label>Text anzeigen<input type="text" data-md-link-text placeholder="Text für den Link (optional)" autocomplete="off"></label>
+      <label>Adresse<input type="text" data-md-link-url placeholder="Link zu einer vorhandenen Webseite" inputmode="url" autocomplete="off"></label>
+      <p class="md-link-error" data-md-link-error role="alert"></p>
+      <div class="md-link-actions">
+        <button type="submit" value="insert" class="md-link-primary" data-md-link-submit disabled>Einfügen</button>
+        <button type="button" data-md-link-cancel>Abbrechen</button>
+      </div>
+    </form>`;
+  document.body.appendChild(dialog);
+  const textInput = dialog.querySelector('[data-md-link-text]');
+  const urlInput = dialog.querySelector('[data-md-link-url]');
+  const submit = dialog.querySelector('[data-md-link-submit]');
+  const error = dialog.querySelector('[data-md-link-error]');
+  let target = null;
+
+  const validate = () => {
+    submit.disabled = !urlInput.value.trim();
+    error.textContent = '';
+  };
+  urlInput.addEventListener('input', validate);
+  dialog.querySelector('[data-md-link-cancel]').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', event => {
+    if (event.target !== dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    const inside = event.clientX >= rect.left && event.clientX <= rect.right
+      && event.clientY >= rect.top && event.clientY <= rect.bottom;
+    if (!inside) dialog.close();
+  });
+  dialog.addEventListener('close', () => view.focus());
+  dialog.querySelector('form').addEventListener('submit', event => {
+    event.preventDefault();
+    const address = urlInput.value.trim();
+    if (!address || /[\u0000-\u001f]/.test(address)) {
+      error.textContent = 'Bitte eine gültige Adresse eingeben.';
+      urlInput.focus();
+      return;
+    }
+    applyEdit(setLinkMarkdown(view.state.doc.toString(), target, textInput.value, address));
+    dialog.close();
+  });
+
+  return {
+    open() {
+      const { from, to } = view.state.selection.main;
+      target = markdownLinkTarget(view.state.doc.toString(), from, to);
+      textInput.value = target.text;
+      urlInput.value = target.url;
+      submit.textContent = target.url ? 'Übernehmen' : 'Einfügen';
+      validate();
+      dialog.showModal();
+      requestAnimationFrame(() => (target.text ? urlInput : textInput).focus());
+    },
+    destroy() { dialog.remove(); },
+  };
+}
+
+function createMarkdownToolbar(view, { onInsertImage } = {}) {
+  const imageDesktop = onInsertImage
+    ? toolbarButton('image', 'Bild einfügen', toolbarIcon('image'), 'md-toolbar-secondary') : '';
+  const imageMore = onInsertImage
+    ? toolbarButton('image', 'Bild einfügen', `${toolbarIcon('image')}<span>Bild einfügen</span>`) : '';
+  const headingItems = [
+    [1, 'Titel'], [2, 'Untertitel'], [3, 'Überschrift'], [4, 'Unterüberschrift'],
+    [5, 'Abschnitt'], [6, 'Unterabschnitt'], [0, 'Textkörper'],
+  ].map(([level, label]) => `<button type="button" class="md-heading-option md-heading-${level || 'body'}" data-md-heading="${level}" role="menuitem">${label}</button>`).join('');
+  const desktopTable = `<details class="md-toolbar-dropdown md-toolbar-secondary" data-md-details>
+    <summary class="md-toolbar-button" aria-label="Tabelle" title="Tabelle">${toolbarIcon('table')}<span class="md-chevron">⌄</span></summary>
+    <div class="md-toolbar-menu md-table-menu"><strong data-md-table-label>Tabelle einfügen</strong>${tableGrid()}</div>
+  </details>`;
+  const moreTable = `<div class="md-more-table"><strong data-md-table-label>Tabelle einfügen</strong>${tableGrid('is-compact')}</div>`;
+  const element = document.createElement('div');
+  element.className = 'md-editor-toolbar';
+  element.setAttribute('role', 'toolbar');
+  element.setAttribute('aria-label', 'Markdown formatieren');
+  element.innerHTML = `
+    <div class="md-toolbar-group md-toolbar-history">
+      ${toolbarButton('undo', 'Rückgängig', toolbarIcon('undo'))}
+      ${toolbarButton('redo', 'Wiederholen', toolbarIcon('redo'))}
+    </div>
+    <details class="md-toolbar-dropdown" data-md-details>
+      <summary class="md-toolbar-button md-heading-summary" aria-label="Absatzformat" title="Absatzformat"><span data-md-heading-label>Text</span><span class="md-chevron">⌄</span></summary>
+      <div class="md-toolbar-menu md-heading-menu" role="menu">${headingItems}</div>
+    </details>
+    <details class="md-toolbar-dropdown" data-md-details>
+      <summary class="md-toolbar-button" aria-label="Listen und Einzüge" title="Listen und Einzüge">${toolbarIcon('list')}<span class="md-chevron">⌄</span></summary>
+      <div class="md-toolbar-menu md-list-menu" role="menu">
+        <button type="button" data-md-list="bullet" role="menuitem"><span class="md-list-icon md-list-icon-bullet" aria-hidden="true">•</span><span>Aufzählung</span></button>
+        <button type="button" data-md-list="ordered" role="menuitem"><span class="md-list-icon md-list-icon-number" aria-hidden="true">1.</span><span>Nummerierte Liste</span></button>
+        <button type="button" data-md-list="task" role="menuitem"><span class="md-list-icon md-list-icon-task" aria-hidden="true">☑</span><span>Checkboxen</span></button>
+        <button type="button" data-md-command="indent" role="menuitem"><span class="md-list-icon" aria-hidden="true">→</span><span>Einzug vergrößern</span></button>
+        <button type="button" data-md-command="outdent" role="menuitem"><span class="md-list-icon" aria-hidden="true">←</span><span>Einzug verkleinern</span></button>
+        <button type="button" data-md-command="rule" role="menuitem"><span class="md-list-icon md-list-icon-rule" aria-hidden="true">―</span><span>Trennlinie</span></button>
+      </div>
+    </details>
+    <span class="md-toolbar-divider"></span>
+    <div class="md-toolbar-group">
+      ${toolbarButton('bold', 'Fett', '<strong>B</strong>')}
+      ${toolbarButton('italic', 'Kursiv', '<em>I</em>')}
+      ${toolbarButton('strike', 'Durchgestrichen', '<span class="md-strike">S</span>')}
+    </div>
+    <span class="md-toolbar-divider md-toolbar-secondary"></span>
+    <div class="md-toolbar-group md-toolbar-secondary">
+      ${toolbarButton('quote', 'Blockzitat', toolbarIcon('quote'))}
+      ${toolbarButton('code', 'Code', toolbarIcon('code'))}
+    </div>
+    <span class="md-toolbar-divider md-toolbar-secondary"></span>
+    <div class="md-toolbar-group">
+      ${toolbarButton('link', 'Link', toolbarIcon('link'))}
+      ${desktopTable}
+      ${imageDesktop}
+      ${toolbarButton('clear', 'Formatierung löschen', toolbarIcon('clear'), 'md-toolbar-secondary')}
+    </div>
+    <details class="md-toolbar-dropdown md-toolbar-more" data-md-details>
+      <summary class="md-toolbar-button" aria-label="Weitere Formatierungen" title="Weitere Formatierungen">${toolbarIcon('more')}</summary>
+      <div class="md-toolbar-menu md-more-menu">
+        <div class="md-more-actions">
+          ${toolbarButton('undo', 'Rückgängig', `${toolbarIcon('undo')}<span>Rückgängig</span>`)}
+          ${toolbarButton('redo', 'Wiederholen', `${toolbarIcon('redo')}<span>Wiederholen</span>`)}
+          ${toolbarButton('quote', 'Blockzitat', `${toolbarIcon('quote')}<span>Blockzitat</span>`)}
+          ${toolbarButton('code', 'Code', `${toolbarIcon('code')}<span>Code</span>`)}
+          ${imageMore}
+          ${toolbarButton('clear', 'Formatierung löschen', `${toolbarIcon('clear')}<span>Formatierung löschen</span>`)}
+        </div>
+        ${moreTable}
+      </div>
+    </details>`;
+  view.dom.parentNode.insertBefore(element, view.dom);
+
+  let disabled = false;
+  const applyEdit = change => {
+    if (!change || disabled) return;
+    view.dispatch({
+      changes: { from: change.from, to: change.to, insert: change.insert },
+      selection: change.selection,
+      scrollIntoView: true,
+    });
+    forceParsing(view, Math.min(view.state.doc.length, change.from + change.insert.length + 1), 50);
+    view.focus();
+  };
+  const run = fn => {
+    const { from, to } = view.state.selection.main;
+    applyEdit(fn(view.state.doc.toString(), from, to));
+  };
+  const linkDialog = createLinkDialog(view, applyEdit);
+  const closeMenus = except => element.querySelectorAll('[data-md-details][open]').forEach(details => {
+    if (details !== except) details.removeAttribute('open');
+  });
+  const onDocumentClick = event => { if (!element.contains(event.target)) closeMenus(); };
+  document.addEventListener('click', onDocumentClick);
+  element.querySelectorAll('[data-md-details]').forEach(details => details.addEventListener('toggle', () => {
+    if (details.open) closeMenus(details);
+  }));
+  element.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      closeMenus();
+      view.focus();
+    }
+  });
+  element.addEventListener('mouseover', event => {
+    const cell = event.target.closest('[data-md-table]');
+    if (!cell) return;
+    const [rows, columns] = cell.dataset.mdTable.split(',').map(Number);
+    const picker = cell.closest('.md-toolbar-menu');
+    picker.querySelector('[data-md-table-label]').textContent = `${columns} × ${rows}`;
+    picker.querySelectorAll('[data-md-table]').forEach(button => {
+      const [buttonRows, buttonColumns] = button.dataset.mdTable.split(',').map(Number);
+      button.classList.toggle('is-selected', buttonRows <= rows && buttonColumns <= columns);
+    });
+  });
+  element.addEventListener('focusin', event => {
+    const cell = event.target.closest('[data-md-table]');
+    if (cell) cell.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+  });
+  element.addEventListener('click', event => {
+    const heading = event.target.closest('[data-md-heading]');
+    if (heading) {
+      run((source, from, to) => setHeadingMarkdown(source, from, to, Number(heading.dataset.mdHeading)));
+      closeMenus();
+      return;
+    }
+    const list = event.target.closest('[data-md-list]');
+    if (list) {
+      run((source, from, to) => setListMarkdown(source, from, to, list.dataset.mdList));
+      closeMenus();
+      return;
+    }
+    const table = event.target.closest('[data-md-table]');
+    if (table) {
+      const [rows, columns] = table.dataset.mdTable.split(',').map(Number);
+      run((source, from, to) => insertTableMarkdown(source, from, to, rows, columns));
+      closeMenus();
+      return;
+    }
+    const button = event.target.closest('[data-md-command]');
+    if (!button || button.disabled || disabled) return;
+    const command = button.dataset.mdCommand;
+    if (command === 'undo' || command === 'redo') {
+      (command === 'undo' ? undo : redo)(view);
+      view.focus();
+    } else if (command === 'bold') run((source, from, to) => toggleInlineMarkdown(source, from, to, '**'));
+    else if (command === 'italic') run((source, from, to) => toggleInlineMarkdown(source, from, to, '*'));
+    else if (command === 'strike') run((source, from, to) => toggleInlineMarkdown(source, from, to, '~~'));
+    else if (command === 'quote') run(toggleBlockquoteMarkdown);
+    else if (command === 'code') run(toggleCodeMarkdown);
+    else if (command === 'indent') run((source, from, to) => indentMarkdown(source, from, to, 1));
+    else if (command === 'outdent') run((source, from, to) => indentMarkdown(source, from, to, -1));
+    else if (command === 'rule') run(insertRuleMarkdown);
+    else if (command === 'clear') run(clearMarkdownFormatting);
+    else if (command === 'link') linkDialog.open();
+    else if (command === 'image') onInsertImage?.();
+    if (!['link', 'image'].includes(command)) closeMenus();
+  });
+
+  function hasNode(names) {
+    const tree = syntaxTree(view.state);
+    const { from, to, head } = view.state.selection.main;
+    const matchesAt = (position, bias) => {
+      let node = tree.resolveInner(position, bias);
+      while (node) {
+        if (names.includes(node.name)) return true;
+        node = node.parent;
+      }
+      return false;
+    };
+    if (from === to) return matchesAt(head, -1) || matchesAt(head, 1);
+
+    let found = false;
+    tree.iterate({
+      from,
+      to,
+      enter(node) {
+        if (names.includes(node.name) && node.from < to && node.to > from) {
+          found = true;
+          return false;
+        }
+        return !found;
+      },
+    });
+    return found;
+  }
+
+  function update() {
+    const state = view.state;
+    const source = state.doc.toString();
+    const { head } = state.selection.main;
+    const line = state.doc.lineAt(head).text;
+    const heading = /^\s{0,3}(#{1,6})\s+/.exec(line)?.[1].length || 0;
+    element.querySelector('[data-md-heading-label]').textContent = heading ? `H${heading}` : 'Text';
+    element.querySelectorAll('[data-md-heading]').forEach(button => {
+      button.setAttribute('aria-current', String(Number(button.dataset.mdHeading) === heading));
+    });
+    const list = /^\s*[-+*]\s+\[[ xX]\]\s+/.test(line) ? 'task'
+      : /^\s*\d+[.)]\s+/.test(line) ? 'ordered'
+        : /^\s*[-+*]\s+/.test(line) ? 'bullet' : '';
+    element.querySelectorAll('[data-md-list]').forEach(button => {
+      button.setAttribute('aria-current', String(button.dataset.mdList === list));
+    });
+    const active = {
+      bold: hasNode(['StrongEmphasis']), italic: hasNode(['Emphasis']),
+      strike: hasNode(['Strikethrough']), quote: hasNode(['Blockquote']),
+      code: hasNode(['InlineCode', 'CodeBlock', 'FencedCode']), link: hasNode(['Link', 'Autolink']),
+    };
+    for (const [command, pressed] of Object.entries(active)) {
+      element.querySelectorAll(`[data-md-command="${command}"]`).forEach(button => button.setAttribute('aria-pressed', String(pressed)));
+    }
+    element.querySelectorAll('button').forEach(button => { button.disabled = disabled; });
+    if (!disabled) {
+      element.querySelectorAll('[data-md-command="undo"]').forEach(button => { button.disabled = undoDepth(state) === 0; });
+      element.querySelectorAll('[data-md-command="redo"]').forEach(button => { button.disabled = redoDepth(state) === 0; });
+      element.querySelectorAll('[data-md-command="indent"], [data-md-command="outdent"]').forEach(button => { button.disabled = !list; });
+    }
+    element.classList.toggle('is-disabled', disabled);
+    element.querySelectorAll('summary').forEach(summary => summary.setAttribute('aria-disabled', String(disabled)));
+    element.dataset.sourceLength = String(source.length);
+  }
+
+  return {
+    update,
+    setDisabled(value) { disabled = value; if (disabled) closeMenus(); update(); },
+    handleShortcut(event) {
+      if (disabled || !(event.ctrlKey || event.metaKey)) return false;
+      const key = event.key.toLowerCase();
+      if (!['b', 'i', 'k'].includes(key)) return false;
+      event.preventDefault();
+      if (key === 'b') run((source, from, to) => toggleInlineMarkdown(source, from, to, '**'));
+      else if (key === 'i') run((source, from, to) => toggleInlineMarkdown(source, from, to, '*'));
+      else linkDialog.open();
+      return true;
+    },
+    destroy() {
+      document.removeEventListener('click', onDocumentClick);
+      linkDialog.destroy();
+      element.remove();
+    },
+  };
+}
+
 export function createMarkdownInput({
   parent,
   onChange,
   getArticleId = () => '',
   resolveImageUrl = raw => safeImageUrl(raw, getArticleId()),
+  onInsertImage = null,
   labelledBy = '',
   describedBy = '',
 }) {
   const mode = new Compartment();
   let replacingDocument = false;
+  let toolbar = null;
 
   const modeExtensions = readOnly => [
     EditorState.readOnly.of(readOnly),
@@ -411,17 +777,24 @@ export function createMarkdownInput({
       spellcheck: 'false',
     }),
     livePreview(resolveImageUrl),
+    EditorView.domEventHandlers({
+      keydown(event) { return toolbar?.handleShortcut(event) || false; },
+    }),
     EditorView.updateListener.of(update => {
       if (update.docChanged && !replacingDocument) onChange();
+      if (update.docChanged || update.selectionSet) toolbar?.update();
     }),
     mode.of(modeExtensions(readOnly)),
   ];
 
   const state = (value, readOnly) => EditorState.create({ doc: value, extensions: extensions(readOnly) });
   const view = new EditorView({ state: state('', true), parent });
+  parent.classList.add('has-toolbar');
+  toolbar = createMarkdownToolbar(view, { onInsertImage });
   const reflectReadOnly = readOnly => {
     parent.classList.toggle('is-readonly', readOnly);
     parent.setAttribute('aria-disabled', String(readOnly));
+    toolbar.setDisabled(readOnly);
   };
   reflectReadOnly(true);
 
@@ -432,6 +805,7 @@ export function createMarkdownInput({
       view.setState(state(value, readOnly));
       replacingDocument = false;
       reflectReadOnly(readOnly);
+      toolbar.update();
     },
     setReadOnly(readOnly) {
       view.dispatch({ effects: mode.reconfigure(modeExtensions(readOnly)) });
@@ -451,6 +825,10 @@ export function createMarkdownInput({
       view.focus();
     },
     focus() { view.requestMeasure(); view.focus(); },
-    destroy() { view.destroy(); },
+    destroy() {
+      toolbar.destroy();
+      view.destroy();
+      parent.classList.remove('has-toolbar', 'is-readonly', 'is-busy');
+    },
   };
 }

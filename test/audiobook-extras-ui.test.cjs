@@ -56,7 +56,7 @@ test('Sichtbare Extras lassen sich per Drag-and-drop und Tastatur-Schaltern sort
   assert.match(manager, /bemRequest\('order', \{ method: 'POST'/);
   assert.match(server, /app\.post\('\/api\/audiobook-extra-order\/\*'/);
   assert.match(editorEntry, /import '\.\/audiobook-extras-manager\.js'/);
-  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=4/);
+  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=8/);
 });
 
 test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dialog', () => {
@@ -68,12 +68,14 @@ test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dial
   assert.match(manager, /bemMarkdownInput\.setValue\(source\.markdown\)/);
   assert.match(manager, /bemMarkdownInput\.getValue\(\)/);
   assert.match(manager, /bemMarkdownInput\.replaceSelection\(markdown\)/);
+  assert.match(manager, /onInsertImage: \(\) => \{[\s\S]*?bemState\.insertImages = true;[\s\S]*?\$bemImageFiles\.click\(\)/);
+  assert.doesNotMatch(html, /data-bem-insert-image/);
   assert.match(manager, /function bemResolveImageUrl\(raw\)[\s\S]*?bemState\.data\.images\.find/);
   assert.match(styles, /\.bem-markdown-field \{ grid-template-rows: auto minmax\(0, 1fr\) auto; flex: 1 1 auto; min-height: 0; \}/);
   assert.match(styles, /\.bem-markdown-field \.markdown-live-editor \{[^}]*min-height: 0; height: 100%;/);
   assert.match(styles, /#book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-toolbar, #book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-tabs \{ display: none; \}/);
   assert.match(styles, /\.bem-status:empty \{ display: none; \}/);
-  assert.match(html, /styles\.css\?v=114/);
+  assert.match(html, /styles\.css\?v=118/);
 });
 
 test('Datei-Icons öffnen Markdown-, Extra-Bild- und Textbild-Vorschauen im Verwaltungsdialog', () => {
