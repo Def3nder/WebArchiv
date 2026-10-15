@@ -111,21 +111,25 @@ async function saveEditorFile() {
     if ($articleEditor.open) markdownInput.focus();
   }
 }
-document.addEventListener('click', event => {
-  const button = event.target.closest('[data-article-edit]');
+function openArticleEditor(trigger) {
   // Artikel oder angezeigtes Hörbuch (dessen abstract.md).
   const entry = selectedTtsArticle || (typeof currentBookDetail !== 'undefined' ? currentBookDetail : null);
-  if (!button || !entry || currentUser?.role !== 'admin') return;
-  button.closest('details')?.removeAttribute('open');
+  if (!trigger || !entry || currentUser?.role !== 'admin') return;
   articleEditorState.id = entry.id;
   articleEditorState.url = location.href;
-  articleEditorState.focus = button.closest('details')?.querySelector('summary');
+  articleEditorState.focus = trigger;
   articleEditorState.version = null;
   articleEditorState.original = '';
   markdownInput.setValue('', { readOnly: true });
   document.getElementById('article-editor-name').textContent = entry.title;
   $articleEditor.showModal();
   loadEditorFile();
+}
+document.addEventListener('click', event => {
+  openArticleEditor(event.target.closest('[data-article-edit]'));
+});
+document.addEventListener('webarchiv:article-edit', event => {
+  openArticleEditor(event.detail?.trigger);
 });
 $editorSave.addEventListener('click', saveEditorFile);
 document.getElementById('article-editor-reload').addEventListener('click', loadEditorFile);

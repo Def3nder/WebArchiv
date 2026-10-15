@@ -51,3 +51,14 @@ test('Link und Tabelle erzeugen gültiges Markdown und behalten eine sinnvolle A
   assert.equal(rendered.split('\n').length, 5);
   assert.deepEqual(rendered.slice(table.selection.anchor, table.selection.head), 'Spalte 1');
 });
+
+test('Trennlinie lässt sich an der Cursorzeile einfügen und wieder entfernen', async () => {
+  const { applyMarkdownEdit, insertRuleMarkdown } = await commandsPromise;
+  const inserted = insertRuleMarkdown('Text', 4, 4);
+  assert.equal(applyMarkdownEdit('Text', inserted), 'Text\n\n---');
+
+  const source = 'Davor\n---\nDanach';
+  const cursor = source.indexOf('---') + 1;
+  const removed = insertRuleMarkdown(source, cursor, cursor);
+  assert.equal(applyMarkdownEdit(source, removed), 'Davor\nDanach');
+});

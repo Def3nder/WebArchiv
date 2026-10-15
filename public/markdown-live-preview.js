@@ -541,7 +541,7 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
         <button type="button" data-md-list="task" role="menuitem"><span class="md-list-icon md-list-icon-task" aria-hidden="true">☑</span><span>Checkboxen</span></button>
         <button type="button" data-md-command="indent" role="menuitem"><span class="md-list-icon" aria-hidden="true">→</span><span>Einzug vergrößern</span></button>
         <button type="button" data-md-command="outdent" role="menuitem"><span class="md-list-icon" aria-hidden="true">←</span><span>Einzug verkleinern</span></button>
-        <button type="button" data-md-command="rule" role="menuitem"><span class="md-list-icon md-list-icon-rule" aria-hidden="true">―</span><span>Trennlinie</span></button>
+        <button type="button" data-md-list="rule" role="menuitem"><span class="md-list-icon md-list-icon-rule" aria-hidden="true">―</span><span>Trennlinie</span></button>
       </div>
     </details>
     <span class="md-toolbar-divider"></span>
@@ -597,10 +597,28 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
   const closeMenus = except => element.querySelectorAll('[data-md-details][open]').forEach(details => {
     if (details !== except) details.removeAttribute('open');
   });
+  const fitMenuToViewport = details => {
+    const menu = details.querySelector('.md-toolbar-menu');
+    if (!menu) return;
+    menu.style.removeProperty('transform');
+    requestAnimationFrame(() => {
+      const margin = 8;
+      const rect = menu.getBoundingClientRect();
+      const shift = rect.left < margin
+        ? margin - rect.left
+        : rect.right > window.innerWidth - margin ? window.innerWidth - margin - rect.right : 0;
+      if (shift) menu.style.transform = `translateX(${shift}px)`;
+    });
+  };
   const onDocumentClick = event => { if (!element.contains(event.target)) closeMenus(); };
   document.addEventListener('click', onDocumentClick);
   element.querySelectorAll('[data-md-details]').forEach(details => details.addEventListener('toggle', () => {
-    if (details.open) closeMenus(details);
+    if (details.open) {
+      closeMenus(details);
+      fitMenuToViewport(details);
+    } else {
+      details.querySelector('.md-toolbar-menu')?.style.removeProperty('transform');
+    }
   }));
   element.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
@@ -632,7 +650,8 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
     }
     const list = event.target.closest('[data-md-list]');
     if (list) {
-      run((source, from, to) => setListMarkdown(source, from, to, list.dataset.mdList));
+      if (list.dataset.mdList === 'rule') run(insertRuleMarkdown);
+      else run((source, from, to) => setListMarkdown(source, from, to, list.dataset.mdList));
       closeMenus();
       return;
     }
@@ -701,7 +720,8 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
     element.querySelectorAll('[data-md-heading]').forEach(button => {
       button.setAttribute('aria-current', String(Number(button.dataset.mdHeading) === heading));
     });
-    const list = /^\s*[-+*]\s+\[[ xX]\]\s+/.test(line) ? 'task'
+    const list = /^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line) ? 'rule'
+      : /^\s*[-+*]\s+\[[ xX]\]\s+/.test(line) ? 'task'
       : /^\s*\d+[.)]\s+/.test(line) ? 'ordered'
         : /^\s*[-+*]\s+/.test(line) ? 'bullet' : '';
     element.querySelectorAll('[data-md-list]').forEach(button => {
@@ -719,7 +739,7 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
     if (!disabled) {
       element.querySelectorAll('[data-md-command="undo"]').forEach(button => { button.disabled = undoDepth(state) === 0; });
       element.querySelectorAll('[data-md-command="redo"]').forEach(button => { button.disabled = redoDepth(state) === 0; });
-      element.querySelectorAll('[data-md-command="indent"], [data-md-command="outdent"]').forEach(button => { button.disabled = !list; });
+      element.querySelectorAll('[data-md-command="indent"], [data-md-command="outdent"]').forEach(button => { button.disabled = !list || list === 'rule'; });
     }
     element.classList.toggle('is-disabled', disabled);
     element.querySelectorAll('summary').forEach(summary => summary.setAttribute('aria-disabled', String(disabled)));

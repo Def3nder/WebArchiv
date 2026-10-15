@@ -58,7 +58,8 @@ const $filterBarInner = document.querySelector('.filter-bar-inner');
 const $navigationChrome = document.getElementById('navigation-chrome');
 const $gridDensityStatus = document.getElementById('grid-density-status');
 const $reindexBtn    = document.getElementById('reindex-btn');
-const $adminMenu      = document.getElementById('admin-menu');
+const $headerActionTrigger = document.getElementById('header-action-trigger');
+const $headerActionFace = document.querySelector('[data-header-action-face]');
 const $scrapeOverlay  = document.getElementById('scrape-overlay');
 const $scrapeBackdrop = document.getElementById('scrape-backdrop');
 const $scrapeClose    = document.getElementById('scrape-close');
@@ -148,7 +149,7 @@ function navigationChromeMustStayVisible() {
   const active = document.activeElement;
   return Date.now() < navigationVisibleUntil
     || active === $searchInput
-    || !$adminMenu.hidden
+    || active === $reindexBtn
     || !!document.querySelector('dialog[open]');
 }
 
@@ -575,6 +576,11 @@ function hideLogin() {
 
 const SVG_ACCOUNT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
 
+function resetHeaderActionSelect(user = currentUser) {
+  $reindexBtn.selectedIndex = -1;
+  $headerActionFace.innerHTML = user?.role === 'admin' ? '↺' : SVG_ACCOUNT;
+}
+
 function applyUserUI(user) {
   if (user?.role !== 'admin') clearTtsUI();
   const isGuest = !user || user.role === 'guest';
@@ -582,20 +588,19 @@ function applyUserUI(user) {
   // Gäste bekommen immer die Vorgaben; die Filter-Beschriftungen sind für
   // angemeldete Nutzer lokal pro Nutzer und Gerät gespeichert (settings.js).
   setDisplayUser(user);
-  // Aktionen-Button: Admin mit ↺, normaler Nutzer mit Personen-Icon (nur Konto-Einträge).
-  $reindexBtn.hidden = isGuest;
+  // Native Aktionsauswahl: normale Nutzer sehen nur ihre Konto-Einträge.
+  $headerActionTrigger.hidden = isGuest;
   if (isGuest) closeAdminMenu();
-  if (isAdmin) {
-    if (!$reindexBtn.disabled) $reindexBtn.textContent = '↺';
-  } else {
-    $reindexBtn.innerHTML = SVG_ACCOUNT;
-  }
-  $reindexBtn.classList.toggle('is-account', !isGuest && !isAdmin);
+  if (!$reindexBtn.disabled) resetHeaderActionSelect(user);
+  $headerActionTrigger.classList.toggle('is-account', !isGuest && !isAdmin);
   // Lesezeichen gibt es nur für angemeldete Nutzer.
   $bookmarkBtn.hidden = isGuest;
   if (isGuest && state.bookmarks) setBookmarkFilter(false);
-  $adminMenu.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !isAdmin; });
-  document.getElementById('header-menu-account').textContent = isGuest ? '' : `Angemeldet als ${user.email}`;
+  $reindexBtn.querySelectorAll('[data-admin-only]').forEach(option => {
+    option.hidden = !isAdmin;
+    option.disabled = !isAdmin;
+  });
+  $headerActionTrigger.title = isGuest ? '' : `Aktionen – angemeldet als ${user.email}`;
   $logoutBtn.hidden  = isGuest;
   $loginBtn.hidden   = !isGuest;
 }
@@ -1219,13 +1224,10 @@ function renderDetail(article) {
   const hasBody = !!(article.bodyHtml && article.bodyHtml.trim());
   const copyBtnHtml = hasBody
     ? `<div class="detail-copy-wrap">
-        <button type="button" class="detail-cat-pill detail-copy-btn" id="detail-copy-btn" aria-label="Kopieroptionen" title="Kopieroptionen" aria-haspopup="menu" aria-controls="copy-prompt-menu" aria-expanded="false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="9" y="9" width="11" height="11" rx="2"/>
-              <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
-            </svg>
-        </button>
-        <div class="copy-prompt-menu" id="copy-prompt-menu" role="menu" hidden></div>
+        <label class="detail-cat-pill detail-copy-btn native-menu-trigger" id="detail-copy-trigger" title="Kopieroptionen">
+          <span class="native-menu-face" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></span>
+          <select class="native-menu-control" id="detail-copy-select" aria-label="Kopieroptionen"><option value="0">Artikel</option></select>
+        </label>
       </div>`
     : '';
   const bookmarkBtnHtml = currentUser && currentUser.role !== 'guest'
@@ -1242,7 +1244,7 @@ function renderDetail(article) {
   const dateHtml = `<div class="detail-date-row">
         <span class="detail-date-block">${article.date ? esc(formatDate(article.date)) : ''}</span>
         <div class="detail-action-row">
-          ${currentUser?.role === 'admin' ? `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Artikel bearbeiten und Audio erzeugen">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Artikel editieren</button><button type="button" class="header-menu-item" data-tts-action="start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</button><button type="button" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></details>` : ''}
+          ${currentUser?.role === 'admin' ? `<label class="detail-cat-pill native-menu-trigger" title="Artikel bearbeiten und Audio erzeugen"><span class="native-menu-face" aria-hidden="true">Aktionen</span><select class="native-menu-control" data-article-actions aria-label="Artikelaktionen"><option value="edit">Artikel editieren</option><option value="tts-start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</option><option value="tts-show">Audio-Auftrag anzeigen</option></select></label>` : ''}
           ${infographicBtnHtml}
           ${copyBtnHtml}
           ${shareBtnHtml}
@@ -1301,24 +1303,16 @@ function renderDetail(article) {
     });
   });
 
-  // Das TTS-Dropdown bleibt auch bei schmalen Viewports vollständig sichtbar.
-  $detail.querySelectorAll('.detail-tts-menu').forEach(details => {
-    details.addEventListener('toggle', () => {
-      if (!details.open) return;
-      const menu = details.querySelector('.copy-prompt-menu');
-      if (!menu) return;
-      requestAnimationFrame(() => {
-        const box = menu.getBoundingClientRect();
-        const margin = 8;
-        let left = 0;
-        if (box.left < margin) left += margin - box.left;
-        if (box.right > window.innerWidth - margin) left -= box.right - (window.innerWidth - margin);
-        if (left) {
-          menu.style.left = `${left}px`;
-          menu.style.right = 'auto';
-        }
-      });
-    });
+  const $articleActions = $detail.querySelector('[data-article-actions]');
+  if ($articleActions) $articleActions.selectedIndex = -1;
+  $articleActions?.addEventListener('change', event => {
+    const select = event.currentTarget;
+    const action = select.value;
+    select.selectedIndex = -1;
+    if (action === 'edit') {
+      document.dispatchEvent(new CustomEvent('webarchiv:article-edit', { detail: { trigger: select } }));
+    } else if (action === 'tts-start') runTts();
+    else if (action === 'tts-show') showTtsJob();
   });
 
   const $bookmarkDetailBtn = document.getElementById('detail-bookmark-btn');
@@ -1385,10 +1379,11 @@ function renderDetail(article) {
     });
   }
 
-  const $copyBtn  = document.getElementById('detail-copy-btn');
-  const $copyMenu = document.getElementById('copy-prompt-menu');
+  const $copyBtn = document.getElementById('detail-copy-select');
+  const $copyTrigger = document.getElementById('detail-copy-trigger');
 
   if ($copyBtn) {
+    $copyBtn.selectedIndex = -1;
     // Kopiert Artikel, optional mit vorangestelltem Prompt-Text
     // Eigene Text-Extraktion, weil innerText bei <ol> die Nummerierung verschluckt.
     const extractBodyText = (root) => {
@@ -1433,8 +1428,8 @@ function renderDetail(article) {
       const prefix = promptText.trim() ? promptText.trim() + '\n\n' : '';
       try {
         await navigator.clipboard.writeText(prefix + articleText);
-        $copyBtn.classList.add('copied');
-        setTimeout(() => $copyBtn.classList.remove('copied'), 1000);
+        $copyTrigger?.classList.add('copied');
+        setTimeout(() => $copyTrigger?.classList.remove('copied'), 1000);
       } catch (err) {
         console.warn('Clipboard write failed', err);
       }
@@ -1453,57 +1448,28 @@ function renderDetail(article) {
       return url;
     };
 
-    let promptsLoaded = false;
-    const closeMenu = () => {
-      $copyMenu.hidden = true;
-      $copyBtn.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('click', onOutside, true);
-      document.removeEventListener('keydown', onEsc, true);
-    };
-    const onOutside = ev => { if (!$copyMenu.contains(ev.target) && !$copyBtn.contains(ev.target)) closeMenu(); };
-    const onEsc = ev => { if (ev.key === 'Escape') { ev.stopPropagation(); closeMenu(); $copyBtn.focus(); } };
-
-    const buildMenu = async () => {
-      if (promptsLoaded) return;
-      promptsLoaded = true;
-      // Erster Eintrag: nur Artikel
-      const items = [{ file: null, label: 'Artikel' }];
+    const items = [{ file: null, label: 'Artikel' }];
+    const loadPromptOptions = async () => {
       try {
         const r = await fetch('/api/prompts');
         if (r.ok) items.push(...await r.json());
       } catch { /* nur "Artikel" anbieten */ }
-      $copyMenu.innerHTML = items.map((it, i) =>
-        `<button type="button" role="menuitem" class="copy-prompt-item${i === 0 ? ' is-article' : ''}" data-prompt-index="${i}">${esc(it.label)}</button>`
-      ).join('');
-      $copyMenu.querySelectorAll('.copy-prompt-item').forEach(item => {
-        item.addEventListener('click', async ev => {
-          ev.stopPropagation();
-          const selected = items[Number(item.dataset.promptIndex)] || items[0];
-          closeMenu();
-          const opensExternalPrompt = !!(selected.file && selected.url);
-          if (opensExternalPrompt && isIosPromptNavigation()) {
-            // iOS hinterlässt bei window.open aus einer installierten Web-App
-            // gelegentlich einen leeren weißen Browserkontext. Eine Navigation
-            // im aktuellen Kontext übergibt externe URLs direkt an Safari.
-            await copyArticle(selected.prompt || '');
-            window.location.assign(iosPromptTarget(selected.url));
-            return;
-          }
-          void copyArticle(selected.prompt || '');
-          if (opensExternalPrompt) window.open(selected.url, '_blank', 'noopener,noreferrer');
-        });
-      });
+      for (let i = 1; i < items.length; i++) $copyBtn.add(new Option(items[i].label, String(i)));
+      $copyBtn.selectedIndex = -1;
     };
+    void loadPromptOptions();
 
-    $copyBtn.addEventListener('click', async e => {
-      e.stopPropagation();
-      if (!$copyMenu.hidden) { closeMenu(); return; }
-      $copyMenu.hidden = false;
-      $copyBtn.setAttribute('aria-expanded', 'true');
-      document.addEventListener('click', onOutside, true);
-      document.addEventListener('keydown', onEsc, true);
-      await buildMenu();
-      if (e.detail === 0 && !$copyMenu.hidden) $copyMenu.querySelector('button')?.focus();
+    $copyBtn.addEventListener('change', async () => {
+      const selected = items[Number($copyBtn.value)] || items[0];
+      $copyBtn.selectedIndex = -1;
+      const opensExternalPrompt = !!(selected.file && selected.url);
+      if (opensExternalPrompt && isIosPromptNavigation()) {
+        await copyArticle(selected.prompt || '');
+        window.location.assign(iosPromptTarget(selected.url));
+        return;
+      }
+      void copyArticle(selected.prompt || '');
+      if (opensExternalPrompt) window.open(selected.url, '_blank', 'noopener,noreferrer');
     });
   }
 
@@ -2464,7 +2430,7 @@ function updateTtsActions() {
   const disabled = !selectedTtsArticle || $overlay.hidden || ttsStarting || ttsActive;
   const startMenu = document.getElementById('tts-start-menu');
   if (startMenu) startMenu.disabled = disabled;
-  document.querySelectorAll('[data-tts-action="start"]').forEach(button => { button.disabled = disabled; });
+  document.querySelectorAll('[data-article-actions] option[value="tts-start"]').forEach(option => { option.disabled = disabled; });
 }
 function rememberTtsJob(id) {
   ttsJobId = id;
@@ -2717,18 +2683,6 @@ $ttsCancel.addEventListener('click', async () => {
     $ttsCancel.disabled = false;
   }
 });
-document.addEventListener('click', event => {
-  const button = event.target.closest('[data-tts-action]');
-  if (!button || button.disabled) return;
-  if (button.dataset.ttsAction === 'start') runTts();
-  else showTtsJob();
-});
-// Geöffnete Artikel-Aktionsmenüs schließen bei einem Klick außerhalb.
-document.addEventListener('click', event => {
-  document.querySelectorAll('.detail-tts-menu[open]').forEach(menu => {
-    if (!menu.contains(event.target)) menu.removeAttribute('open');
-  });
-});
 document.addEventListener('keydown', event => {
   if ($ttsOverlay.hidden) return;
   // Keine Navigation oder Schließen des darunterliegenden Artikels.
@@ -2746,7 +2700,7 @@ document.addEventListener('keydown', event => {
 async function runReindex() {
   if (!confirm('Archiv neu indizieren?')) return;
   $reindexBtn.disabled = true;
-  $reindexBtn.textContent = '…';
+  $headerActionFace.textContent = '…';
   try {
     const r = await apiFetch('/api/reindex', { method: 'POST' });
     const data = await r.json();
@@ -2771,7 +2725,7 @@ async function runReindex() {
     await loadArticles();
   } finally {
     $reindexBtn.disabled = false;
-    $reindexBtn.textContent = '↺';
+    resetHeaderActionSelect();
   }
 }
 
@@ -2795,7 +2749,7 @@ document.addEventListener('keydown', e => {
 async function runScrape() {
   if (!confirm('Neue Beiträge scrapen (Blog, Facebook, Telegram)? Das kann einige Minuten dauern.')) return;
   $reindexBtn.disabled = true;
-  $reindexBtn.textContent = '…';
+  $headerActionFace.textContent = '…';
   openScrapeModal('Scrapen');
   $scrapeStatus.textContent = 'Scrape läuft …';
   try {
@@ -2847,7 +2801,7 @@ async function runScrape() {
     $scrapeStatus.textContent = 'Abgebrochen: ' + ((e && e.message) || e);
   } finally {
     $reindexBtn.disabled = false;
-    $reindexBtn.textContent = '↺';
+    resetHeaderActionSelect();
   }
 }
 
@@ -2877,35 +2831,14 @@ async function showScrapeLog() {
   requestAnimationFrame(() => { $scrapeOutput.scrollTop = $scrapeOutput.scrollHeight; });
 }
 
-// ── Aktions-Menü hinter dem ↺-Button ───────────────────────────────────────
+// ── Native Aktionsauswahl im Kopf ──────────────────────────────────────────
 function closeAdminMenu() {
-  $adminMenu.hidden = true;
-  $reindexBtn.setAttribute('aria-expanded', 'false');
-  document.removeEventListener('click', onAdminOutside, true);
-  document.removeEventListener('keydown', onAdminEsc, true);
+  resetHeaderActionSelect();
 }
-function onAdminOutside(ev) {
-  if (!$adminMenu.contains(ev.target) && ev.target !== $reindexBtn && !$reindexBtn.contains(ev.target)) {
-    closeAdminMenu();
-  }
-}
-function onAdminEsc(ev) {
-  if (ev.key === 'Escape') { ev.stopPropagation(); closeAdminMenu(); }
-}
-$reindexBtn.addEventListener('click', e => {
-  e.stopPropagation();
-  if (!$adminMenu.hidden) { closeAdminMenu(); return; }
-  updateTtsActions();
-  $adminMenu.hidden = false;
-  $reindexBtn.setAttribute('aria-expanded', 'true');
-  document.addEventListener('click', onAdminOutside, true);
-  document.addEventListener('keydown', onAdminEsc, true);
-});
-$adminMenu.addEventListener('click', ev => {
-  const item = ev.target.closest('[data-action]');
-  if (!item) return;
+$reindexBtn.addEventListener('change', () => {
+  const action = $reindexBtn.value;
   closeAdminMenu();
-  const action = item.dataset.action;
+  updateTtsActions();
   if (action === 'reindex') runReindex();
   else if (action === 'scrape') runScrape();
   else if (action === 'log') showScrapeLog();

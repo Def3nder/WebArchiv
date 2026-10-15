@@ -24,7 +24,7 @@ test('Herunterscrollen verschiebt direkt, nur die Rückkehr hat eine Animation',
 
 test('Aktive Navigation und Dialoge bleiben sichtbar', () => {
   assert.match(APP, /active === \$searchInput/);
-  assert.match(APP, /!\$adminMenu\.hidden/);
+  assert.match(APP, /active === \$reindexBtn/);
   assert.match(APP, /dialog\[open\]/);
   assert.match(APP, /navigationVisibleUntil = Date\.now\(\)/);
   assert.match(APP, /function scrollToResults[\s\S]*showNavigationChrome\(true\)/);

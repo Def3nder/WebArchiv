@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=118" />
+  <link rel="stylesheet" href="styles.css?v=119" />
 </head>
 <body>
 
@@ -52,20 +52,19 @@
         </svg>
       </button>
       <div class="header-menu">
-        <button id="reindex-btn" class="reindex-btn" title="Aktionen"
-                aria-haspopup="true" aria-expanded="false" hidden>↺</button>
-        <div id="admin-menu" class="header-menu-dropdown" role="menu" hidden>
-          <p id="header-menu-account" class="header-menu-account"></p>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="reindex" data-admin-only>Archiv neu einlesen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="scrape" data-admin-only>Neue Beiträge scrapen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="log" data-admin-only>Scrape-Log anzeigen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job" data-admin-only>Audio-Auftrag anzeigen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="new-infographic" data-admin-only>Neue Infografik</button>
-          <hr class="header-menu-sep" data-admin-only>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="settings">Einstellungen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="users" data-admin-only>Benutzerverwaltung</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="password">Kennwort ändern</button>
-        </div>
+        <label class="reindex-btn native-menu-trigger" id="header-action-trigger" title="Aktionen" hidden>
+          <span class="native-menu-face" data-header-action-face aria-hidden="true">↺</span>
+          <select id="reindex-btn" class="native-menu-control" aria-label="Aktionen">
+          <option value="reindex" data-admin-only>Archiv neu einlesen</option>
+          <option value="scrape" data-admin-only>Neue Beiträge scrapen</option>
+          <option value="log" data-admin-only>Scrape-Log anzeigen</option>
+          <option value="tts-job" data-admin-only>Audio-Auftrag anzeigen</option>
+          <option value="new-infographic" data-admin-only>Neue Infografik</option>
+          <option value="settings">Einstellungen</option>
+          <option value="users" data-admin-only>Benutzerverwaltung</option>
+          <option value="password">Kennwort ändern</option>
+          </select>
+        </label>
       </div>
       <button id="login-btn" class="logout-btn" title="Anmelden" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -494,10 +493,10 @@
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=104"></script>
-  <script src="audiobooks.js?v=20"></script>
+  <script src="app.js?v=105"></script>
+  <script src="audiobooks.js?v=21"></script>
   <script src="book-reader.js?v=14"></script>
-  <script src="vendor/article-editor.bundle.js?v=8"></script>
+  <script src="vendor/article-editor.bundle.js?v=9"></script>
   <script src="infographic-new.js?v=2"></script>
 </body>
 </html>

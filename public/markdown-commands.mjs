@@ -122,6 +122,12 @@ export function toggleCodeMarkdown(source, from, to) {
 }
 
 export function insertRuleMarkdown(source, from, to) {
+  const { from: start, to: end } = lineBounds(source, from, to);
+  if (/^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(source.slice(start, end))) {
+    const removeTo = end < source.length ? end + 1 : end;
+    const removeFrom = start === source.length ? Math.max(0, start - 1) : start;
+    return edit(removeFrom, removeTo, '', removeFrom);
+  }
   const before = from > 0 && source[from - 1] !== '\n' ? '\n\n' : '';
   const after = to < source.length && source[to] !== '\n' ? '\n\n' : '';
   const insert = `${before}---${after}`;

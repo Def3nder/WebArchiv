@@ -117,15 +117,15 @@ function renderBookDetail(book) {
     ? `<button type="button" class="detail-cat-pill" data-book-extras title="Extra-Material anzeigen">Extras</button>`
     : '';
   const editAction = currentUser?.role === 'admin' && book.hasAbstract
-    ? '<button type="button" class="header-menu-item" data-article-edit>Abstract editieren</button>'
+    ? '<option value="edit">Abstract editieren</option>'
     : '';
   const manageExtrasAction = currentUser?.role === 'admin'
-    ? '<button type="button" class="header-menu-item" data-book-extras-manage>Extras verwalten …</button>'
+    ? '<option value="manage-extras">Extras verwalten …</option>'
     : '';
-  const privateAction = `<button type="button" class="header-menu-item" data-book-private>${book.private ? 'Privat aufheben' : 'Als privat markieren'}</button>`;
-  const actionsMenu = `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Aktionen zum Hörbuch">Aktionen</summary><div class="copy-prompt-menu">${editAction}${manageExtrasAction}${privateAction}<button type="button" class="header-menu-item" data-book-share>Teilen</button></div></details>`;
+  const privateAction = `<option value="private">${book.private ? 'Privat aufheben' : 'Als privat markieren'}</option>`;
+  const actionsMenu = `<label class="detail-cat-pill native-menu-trigger" title="Aktionen zum Hörbuch"><span class="native-menu-face" data-book-actions-face aria-hidden="true">Aktionen</span><select class="native-menu-control" data-book-actions aria-label="Aktionen zum Hörbuch">${editAction}${manageExtrasAction}${privateAction}<option value="share">Teilen</option></select></label>`;
   const tracks = book.tracks.map((track, i) =>
-    `<li><button type="button" class="book-track" data-track="${i}"><span class="book-track-num">${i + 1}</span><span class="book-track-title">${esc(track.title)}</span></button></li>`
+    `<option value="${i}">${i + 1}. ${esc(track.title)}</option>`
   ).join('');
   const playerHtml = book.tracks.length ? `
       <div class="book-player" id="book-player">
@@ -151,10 +151,9 @@ function renderBookDetail(book) {
               ${BOOK_SPEEDS.map(s => `<option value="${s}">${String(s).replace('.', ',')}×</option>`).join('')}
             </select>
           </label>
-          <details class="book-tracks">
-            <summary>Alle Teile (${book.tracks.length})</summary>
-            <ol class="book-track-list">${tracks}</ol>
-          </details>
+          <label class="book-tracks">Teil
+            <select class="filter-select book-track-select" data-book="track" aria-label="Teil auswählen">${tracks}</select>
+          </label>
         </div>
       </div>` : '';
 
@@ -180,70 +179,57 @@ function renderBookDetail(book) {
     document.getElementById('detail-hero-expand')?.addEventListener('click', e => { e.stopPropagation(); openFs(); });
     document.getElementById('detail-hero-img')?.addEventListener('click', openFs);
   }
-  $detail.querySelectorAll('.detail-tts-menu').forEach(details => {
-    details.addEventListener('toggle', () => {
-      if (!details.open) return;
-      const menu = details.querySelector('.copy-prompt-menu');
-      requestAnimationFrame(() => {
-        // Beidseitig im Fenster halten (CSS richtet das Menü am Button aus).
-        const box = menu.getBoundingClientRect();
-        const margin = 8;
-        let shift = 0;
-        if (box.left < margin) shift = margin - box.left;
-        else if (box.right > window.innerWidth - margin) shift = window.innerWidth - margin - box.right;
-        if (shift) {
-          const left = menu.offsetLeft + shift;
-          menu.style.left = `${left}px`;
-          menu.style.right = 'auto';
-        }
-      });
-    });
-  });
   $detail.querySelector('[data-book-text]')?.addEventListener('click', () => openBookReader(book));
   $detail.querySelector('[data-book-extras]')?.addEventListener('click', () => openBookExtras(book));
-  $detail.querySelector('[data-book-extras-manage]')?.addEventListener('click', () => openBookExtrasManager(book));
-  $detail.querySelector('[data-book-private]')?.addEventListener('click', async event => {
-    const button = event.currentTarget;
-    button.disabled = true;
-    try {
-      const response = await apiFetch('/api/audiobook-private/' + book.id.split('/').map(encodeURIComponent).join('/'), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ private: !book.private }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Die Privat-Markierung konnte nicht geändert werden.');
-      book.private = data.private;
-      button.textContent = book.private ? 'Privat aufheben' : 'Als privat markieren';
-      button.closest('details')?.removeAttribute('open');
-      state.page = 1;
-      await loadArticles();
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      button.disabled = false;
+  const actionsSelect = $detail.querySelector('[data-book-actions]');
+  if (actionsSelect) actionsSelect.selectedIndex = -1;
+  actionsSelect?.addEventListener('change', async event => {
+    const select = event.currentTarget;
+    const action = select.value;
+    select.selectedIndex = -1;
+    if (action === 'edit') {
+      document.dispatchEvent(new CustomEvent('webarchiv:article-edit', { detail: { trigger: select } }));
+    } else if (action === 'manage-extras') {
+      openBookExtrasManager(book);
+    } else if (action === 'private') {
+      select.disabled = true;
+      try {
+        const response = await apiFetch('/api/audiobook-private/' + book.id.split('/').map(encodeURIComponent).join('/'), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ private: !book.private }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Die Privat-Markierung konnte nicht geändert werden.');
+        book.private = data.private;
+        select.querySelector('option[value="private"]').textContent = book.private ? 'Privat aufheben' : 'Als privat markieren';
+        state.page = 1;
+        await loadArticles();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        select.disabled = false;
+      }
+    } else if (action === 'share') {
+      const url = `${location.origin}/a/${sanitizeForId(book.id)}`;
+      if (navigator.share) {
+        try { await navigator.share({ title: book.title, url }); } catch { /* abgebrochen */ }
+      } else {
+        try {
+          await navigator.clipboard.writeText(url);
+          const face = select.closest('.native-menu-trigger')?.querySelector('[data-book-actions-face]');
+          if (face) {
+            face.textContent = 'Kopiert!';
+            setTimeout(() => { face.textContent = 'Aktionen'; }, 1500);
+          }
+        } catch { /* Zwischenablage nicht verfügbar */ }
+      }
     }
-  });
-  $detail.querySelector('[data-book-share]')?.addEventListener('click', async event => {
-    const button = event.currentTarget;
-    const url = `${location.origin}/a/${sanitizeForId(book.id)}`;
-    if (navigator.share) {
-      try { await navigator.share({ title: book.title, url }); } catch { /* abgebrochen */ }
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      const original = button.textContent;
-      button.textContent = 'Kopiert!';
-      setTimeout(() => { button.textContent = original; }, 1500);
-    } catch { /* Zwischenablage nicht verfügbar */ }
   });
   $detail.querySelector('[data-book="speed"]')?.addEventListener('change', e => bookSetSpeed(Number(e.target.value)));
-  $detail.querySelectorAll('.book-track').forEach(btn => {
-    btn.addEventListener('click', () => {
-      bookEnsureLoaded(book);
-      bookGoTo(Number(btn.dataset.track), { fromStart: 0 }, true);
-    });
+  $detail.querySelector('[data-book="track"]')?.addEventListener('change', event => {
+    bookEnsureLoaded(book);
+    bookGoTo(Number(event.currentTarget.value), { fromStart: 0 }, true);
   });
   const bar = $detail.querySelector('[data-book-ui="bar"]');   // fehlt bei reinen eBooks
   // Tippen springt im Teil, Halten/Ziehen verschiebt relativ; gesprungen wird beim Loslassen.
@@ -678,15 +664,11 @@ function bookUpdateUi() {
       root.querySelector('[data-book-ui="fill"]').style.width = isFinite(duration) && duration ? `${(current / duration) * 100}%` : '0%';
     }
     root.querySelector('[data-book="speed"]').value = String(active ? bookPlayer.speed : (progress?.speed || 1));
+    root.querySelector('[data-book="track"]').value = String(index);
     const play = root.querySelector('[data-book="toggle"]');
     play.classList.toggle('playing', playing);
     play.innerHTML = playing ? svgBookPause() : svgBookPlay();
     play.setAttribute('aria-label', playing ? 'Pause' : 'Abspielen');
-    root.querySelectorAll('.book-track').forEach(btn => {
-      const isCurrent = Number(btn.dataset.track) === index;
-      btn.classList.toggle('is-current', isCurrent);
-      if (isCurrent) btn.setAttribute('aria-current', 'true'); else btn.removeAttribute('aria-current');
-    });
   }
 
   // Miniplayer, sobald ein Buch geladen ist und nicht bereits im Detail sichtbar ist.

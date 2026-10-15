@@ -8,11 +8,12 @@ const HTML = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
 const CSS = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
 const EDITOR = fs.readFileSync(path.join(ROOT, 'public', 'article-editor.js'), 'utf8');
 const PREVIEW = fs.readFileSync(path.join(ROOT, 'public', 'markdown-live-preview.js'), 'utf8');
+const APP = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
 
 test('Artikeleditor verwendet die lokale Markdown-Live-Vorschau', () => {
   assert.doesNotMatch(HTML, /<textarea id="article-editor-text"/);
   assert.match(HTML, /<div id="article-editor-text"/);
-  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=8/);
+  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=9/);
   assert.match(EDITOR, /createMarkdownInput/);
   assert.match(EDITOR, /markdownInput\.getValue\(\)/);
   assert.match(EDITOR, /markdownInput\.setValue\(result\.markdown\)/);
@@ -36,7 +37,7 @@ test('aktive Markdown-Zeichen und gerenderte Strukturen besitzen eigene Stile', 
   assert.match(CSS, /\.cm-md-table-widget/);
   assert.match(CSS, /\.cm-md-image-widget/);
   assert.match(CSS, /\.cm-md-task-widget/);
-  assert.match(HTML, /styles\.css\?v=118/);
+  assert.match(HTML, /styles\.css\?v=119/);
   assert.match(CSS, /\.markdown-live-editor \.cm-md-markup/);
   assert.match(PREVIEW, /replaceSelection\(value\)/);
   assert.match(PREVIEW, /reflectReadOnly\(readOnly\)/);
@@ -79,6 +80,33 @@ test('Editorleiste bietet Formatbefehle, aber keine Bildfunktion im Artikeledito
   assert.match(CSS, /\.md-table-picker\s*\{/);
   assert.match(CSS, /\.md-toolbar-menu\.md-list-menu button:not\(\.md-toolbar-button\)/);
   assert.doesNotMatch(EDITOR, /onInsertImage/);
+});
+
+test('Editorleiste behält ihre eigenen Menüs und hält sie im sichtbaren Bereich', () => {
+  assert.match(PREVIEW, /<details class="md-toolbar-dropdown" data-md-details>/);
+  assert.match(PREVIEW, /class="md-toolbar-menu md-heading-menu"/);
+  assert.match(PREVIEW, /class="md-toolbar-menu md-list-menu"/);
+  assert.match(PREVIEW, /function tableGrid/);
+  assert.doesNotMatch(PREVIEW, /data-md-heading-select|data-md-list-select|data-md-table-select/);
+  assert.match(PREVIEW, /const fitMenuToViewport = details =>/);
+  assert.match(PREVIEW, /rect\.left < margin[\s\S]*rect\.right > window\.innerWidth - margin/);
+  assert.match(CSS, /\.md-toolbar-more \{ display: none; margin-left: 0; \}/);
+});
+
+test('Trennlinie wird im Listenmenü erkannt und beim erneuten Anklicken entfernt', () => {
+  assert.match(PREVIEW, /data-md-list="rule"/);
+  assert.match(PREVIEW, /\? 'rule'/);
+  assert.match(PREVIEW, /list\.dataset\.mdList === 'rule'\) run\(insertRuleMarkdown\)/);
+});
+
+test('Native Aktionsmenüs zeigen schmale Auslöser und enthalten nur echte Aktionen', () => {
+  assert.match(HTML, /data-header-action-face[^>]*>↺<\/span>/);
+  assert.doesNotMatch(HTML, /<option value="">Aktionen<\/option>/);
+  assert.match(APP, /data-article-actions[\s\S]*?<option value="edit">Artikel editieren<\/option>/);
+  assert.doesNotMatch(APP, /data-article-actions[^>]*>[\s\S]*?<option value="">Aktionen<\/option>/);
+  assert.match(APP, /\$articleActions\.selectedIndex = -1/);
+  assert.match(APP, /id="detail-copy-trigger"[\s\S]*?<span class="native-menu-face"[\s\S]*?<select class="native-menu-control" id="detail-copy-select"/);
+  assert.match(CSS, /\.native-menu-control\s*\{[\s\S]*position: absolute;[\s\S]*opacity: 0;/);
 });
 
 test('Tabellenzeilen werden mit maskierten Pipes korrekt zerlegt', async () => {

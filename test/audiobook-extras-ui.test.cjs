@@ -13,18 +13,20 @@ const styles = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
 const server = fs.readFileSync(path.join(ROOT, 'audiobooks.cjs'), 'utf8');
 
 test('Admin-Aktionen öffnen die Extras-Verwaltung auch ohne vorhandene Extras', () => {
-  assert.match(books, /currentUser\?\.role === 'admin'[\s\S]*data-book-extras-manage>Extras verwalten/);
-  assert.match(books, /data-book-extras-manage[^\n]*openBookExtrasManager\(book\)/);
+  assert.match(books, /currentUser\?\.role === 'admin'[\s\S]*<option value="manage-extras">Extras verwalten/);
+  assert.match(books, /action === 'manage-extras'[\s\S]*openBookExtrasManager\(book\)/);
   assert.match(manager, /window\.openBookExtrasManager = openBookExtrasManager/);
   assert.match(html, /id="book-extras-manager"[\s\S]*class="bem-tabs"[\s\S]*data-bem-actions="extras"[\s\S]*data-bem-new-text>Neuer Text<\/button>[\s\S]*data-bem-add-extra>Dateien\/Bilder<\/button>[\s\S]*data-bem-actions="images"[\s\S]*data-bem-add-image>Bilder hinzufügen<\/button>/);
   assert.match(manager, /data-bem-add-image[\s\S]*bemState\.insertImages = false[\s\S]*\$bemImageFiles\.click\(\)/);
+  assert.doesNotMatch(books, /data-book-actions[^>]*>[\s\S]*?<option value="">Aktionen<\/option>/);
+  assert.match(books, /actionsSelect\.selectedIndex = -1/);
 });
 
 test('Admin kann aus der Extras-Anzeige direkt in die Verwaltung wechseln', () => {
   assert.match(books, /currentUser\?\.role === 'admin'[\s\S]*data-extras-manage[\s\S]*>Verwalten<\/span>/);
   assert.match(books, /data-extras-manage[^\n]*addEventListener\('click',[\s\S]*?closeBookExtras\(false\)[\s\S]*?openBookExtrasManager\(book\)/);
   assert.match(books, /function closeBookExtras\(restoreFocus = true\)[\s\S]*?restoreFocus !== false/);
-  assert.match(html, /audiobooks\.js\?v=20/);
+  assert.match(html, /audiobooks\.js\?v=21/);
 });
 
 test('Manager trennt sichtbare Extras und eingebettete Bilder ohne Manifest', () => {
@@ -56,7 +58,7 @@ test('Sichtbare Extras lassen sich per Drag-and-drop und Tastatur-Schaltern sort
   assert.match(manager, /bemRequest\('order', \{ method: 'POST'/);
   assert.match(server, /app\.post\('\/api\/audiobook-extra-order\/\*'/);
   assert.match(editorEntry, /import '\.\/audiobook-extras-manager\.js'/);
-  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=8/);
+  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=9/);
 });
 
 test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dialog', () => {
@@ -75,7 +77,7 @@ test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dial
   assert.match(styles, /\.bem-markdown-field \.markdown-live-editor \{[^}]*min-height: 0; height: 100%;/);
   assert.match(styles, /#book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-toolbar, #book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-tabs \{ display: none; \}/);
   assert.match(styles, /\.bem-status:empty \{ display: none; \}/);
-  assert.match(html, /styles\.css\?v=118/);
+  assert.match(html, /styles\.css\?v=119/);
 });
 
 test('Datei-Icons öffnen Markdown-, Extra-Bild- und Textbild-Vorschauen im Verwaltungsdialog', () => {
@@ -142,7 +144,7 @@ test('Escape und Herunterziehen schließen zuerst nur den Markdown-Editor', () =
   assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(!\$bemEditor\.hidden\) \{[\s\S]*?bemCloseEditor\(\);[\s\S]*?return;[\s\S]*?\$bem\.close\(\)/);
   assert.match(app, /\['#book-extras-manager', '#book-extras-manager \[data-bem-close\]'\]/);
   assert.match(app, /onClose: \(\) => closeBtn\.click\(\)/);
-  assert.match(html, /app\.js\?v=104/);
+  assert.match(html, /app\.js\?v=105/);
 });
 
 test('Escape und Herunterziehen schließen zuerst nur die Dateivorschau', () => {

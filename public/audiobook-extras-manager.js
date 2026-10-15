@@ -100,6 +100,10 @@ function bemTrashIcon() {
   return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
 }
 
+function bemMoreIcon() {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>';
+}
+
 function bemEntry(entry, scope, index, total) {
   const isMarkdown = entry.type === 'markdown';
   const sortable = scope === 'extras';
@@ -120,7 +124,7 @@ function bemEntry(entry, scope, index, total) {
         <button type="button" class="bem-mini bem-inline-primary" data-bem-rename-save>Speichern</button>
       </div>
     </div>
-    <button type="button" class="bem-entry-more" data-bem-more aria-expanded="false" aria-label="Aktionen für ${esc(entry.title)}">•••</button>
+    <button type="button" class="bem-entry-more" data-bem-more aria-expanded="false" aria-label="Aktionen für ${esc(entry.title)}">${bemMoreIcon()}</button>
     <div class="bem-entry-actions">
       ${sortable ? `<button type="button" class="bem-mini bem-move" data-bem-move="-1" aria-label="${esc(entry.title)} nach oben" aria-disabled="${index === 0}">↑</button>
       <button type="button" class="bem-mini bem-move" data-bem-move="1" aria-label="${esc(entry.title)} nach unten" aria-disabled="${index === total - 1}">↓</button>` : ''}
