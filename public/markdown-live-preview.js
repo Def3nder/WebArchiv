@@ -1,8 +1,8 @@
-import { Compartment, EditorState, StateField } from '@codemirror/state';
+import { Compartment, EditorSelection, EditorState, Prec, StateField } from '@codemirror/state';
 import { forceParsing, syntaxTree } from '@codemirror/language';
 import { markdown } from '@codemirror/lang-markdown';
 import { GFM } from '@lezer/markdown';
-import { Decoration, EditorView, WidgetType } from '@codemirror/view';
+import { Decoration, EditorView, keymap, WidgetType } from '@codemirror/view';
 import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands';
 import { minimalSetup } from 'codemirror';
 import {
@@ -83,6 +83,139 @@ function lineRanges(state, from, to) {
   }
   return ranges;
 }
+
+function positionOnLine(line, position, head = line.to) {
+  return Number.isInteger(position) && position >= line.from && position <= Math.min(line.to, head)
+    ? position : line.from;
+}
+
+function positionOnLineEnd(line, position, head = line.from) {
+  return Number.isInteger(position) && position >= Math.max(line.from, head) && position <= line.to
+    ? position : line.to;
+}
+
+function visualHomeTarget(view, range) {
+  const line = view.state.doc.lineAt(range.head);
+  const moved = view.moveToLineBoundary(range, false).head;
+  if (moved >= line.from && moved <= line.to && moved <= range.head) return moved;
+
+  // Bei Replacement-Widgets kann CodeMirror die linke Bildschirmkante einer
+  // umbrochenen Zeile gelegentlich der nächsten Dokumentzeile zuordnen. Mit
+  // der tatsächlichen Textkante der aktuellen .cm-line lässt sich das Ziel
+  // noch einmal bestimmen, ohne den aktuellen Markdown-Absatz zu verlassen.
+  const coords = view.coordsAtPos(range.head, range.assoc || -1);
+  const dom = view.domAtPos(range.head, range.assoc < 0 ? -1 : 1);
+  const element = dom.node.nodeType === 1 ? dom.node : dom.node.parentElement;
+  const lineElement = element?.closest?.('.cm-line');
+  if (!coords || !lineElement) return line.from;
+  const style = (view.dom.ownerDocument.defaultView || window).getComputedStyle(lineElement);
+  const x = lineElement.getBoundingClientRect().left + (parseFloat(style.paddingLeft) || 0) + 1;
+  const y = (coords.top + coords.bottom) / 2;
+  return positionOnLine(line, view.posAtCoords({ x, y }, false), range.head);
+}
+
+function moveHome(view, extend) {
+  const { selection } = view.state;
+  const ranges = selection.ranges.map(range => {
+    const target = visualHomeTarget(view, range);
+    return extend
+      ? EditorSelection.range(range.anchor, target)
+      : EditorSelection.cursor(target);
+  });
+  view.dispatch({
+    selection: EditorSelection.create(ranges, selection.mainIndex),
+    scrollIntoView: true,
+  });
+  return true;
+}
+
+function visualEndTarget(view, range) {
+  const line = view.state.doc.lineAt(range.head);
+  const moved = view.moveToLineBoundary(range, true).head;
+  if (moved >= line.from && moved <= line.to && moved >= range.head) return moved;
+
+  // Das Gegenstück zu visualHomeTarget: Am rechten Rand einer dekorierten
+  // Tabellenzeile darf die Geometrie nicht auf die folgende Markdown-Zeile
+  // zeigen. Bestimme das Ziel erneut an der Textkante der aktuellen .cm-line.
+  const coords = view.coordsAtPos(range.head, range.assoc || 1);
+  const dom = view.domAtPos(range.head, range.assoc < 0 ? -1 : 1);
+  const element = dom.node.nodeType === 1 ? dom.node : dom.node.parentElement;
+  const lineElement = element?.closest?.('.cm-line');
+  if (!coords || !lineElement) return line.to;
+  const style = (view.dom.ownerDocument.defaultView || window).getComputedStyle(lineElement);
+  const x = lineElement.getBoundingClientRect().right - (parseFloat(style.paddingRight) || 0) - 1;
+  const y = (coords.top + coords.bottom) / 2;
+  return positionOnLineEnd(line, view.posAtCoords({ x, y }, false), range.head);
+}
+
+function moveEnd(view, extend) {
+  const { selection } = view.state;
+  const ranges = selection.ranges.map(range => {
+    const target = visualEndTarget(view, range);
+    return extend
+      ? EditorSelection.range(range.anchor, target)
+      : EditorSelection.cursor(target);
+  });
+  view.dispatch({
+    selection: EditorSelection.create(ranges, selection.mainIndex),
+    scrollIntoView: true,
+  });
+  return true;
+}
+
+const lineBoundaryKeymap = Prec.high(keymap.of([
+  {
+    key: 'Home',
+    run: view => moveHome(view, false),
+    shift: view => moveHome(view, true),
+    preventDefault: true,
+  },
+  {
+    key: 'End',
+    run: view => moveEnd(view, false),
+    shift: view => moveEnd(view, true),
+    preventDefault: true,
+  },
+]));
+
+function previousSourceLineTarget(state, range, moved) {
+  if (!range.empty) return null;
+  const line = state.doc.lineAt(range.head);
+  if (line.number === 1) return null;
+  const movedLine = state.doc.lineAt(moved.head);
+  if (movedLine.number >= line.number - 1) return null;
+  const previous = state.doc.line(line.number - 1);
+  return previous.from + Math.min(range.head - line.from, previous.length);
+}
+
+function moveUpWithoutSkippingSourceLines(view, extend) {
+  const { selection } = view.state;
+  const moved = selection.ranges.map(range => range.empty
+    ? view.moveVertically(range, false) : null);
+  const targets = selection.ranges.map((range, index) => moved[index]
+    ? previousSourceLineTarget(view.state, range, moved[index]) : null);
+  if (targets.every(target => target === null)) return false;
+  const ranges = selection.ranges.map((range, index) => {
+    const vertical = moved[index];
+    if (!vertical) return range;
+    const target = targets[index] ?? vertical.head;
+    return extend
+      ? EditorSelection.range(range.anchor, target, vertical.goalColumn)
+      : EditorSelection.cursor(target, vertical.assoc, undefined, vertical.goalColumn);
+  });
+  view.dispatch({
+    selection: EditorSelection.create(ranges, selection.mainIndex),
+    scrollIntoView: true,
+  });
+  return true;
+}
+
+const sourceLineNavigationKeymap = Prec.high(keymap.of([{
+  key: 'ArrowUp',
+  run: view => moveUpWithoutSkippingSourceLines(view, false),
+  shift: view => moveUpWithoutSkippingSourceLines(view, true),
+  preventDefault: true,
+}]));
 
 function articleFileBase(articleId) {
   const parts = String(articleId || '').split('/').filter(Boolean);
@@ -597,10 +730,31 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
   const closeMenus = except => element.querySelectorAll('[data-md-details][open]').forEach(details => {
     if (details !== except) details.removeAttribute('open');
   });
+  const keepMoreMenuVisible = details => {
+    const menu = details.querySelector('.md-more-menu');
+    if (!menu) return;
+    menu.style.removeProperty('--md-menu-shift');
+    const rect = menu.getBoundingClientRect();
+    const toolbarRect = element.getBoundingClientRect();
+    const minLeft = Math.max(8, toolbarRect.left + 4);
+    const maxRight = Math.min(window.innerWidth - 8, toolbarRect.right - 4);
+    let shift = rect.left < minLeft ? minLeft - rect.left : 0;
+    if (rect.right + shift > maxRight) shift += maxRight - rect.right - shift;
+    menu.style.setProperty('--md-menu-shift', `${Math.round(shift)}px`);
+  };
   const onDocumentClick = event => { if (!element.contains(event.target)) closeMenus(); };
+  const onViewportResize = () => element.querySelectorAll('.md-toolbar-more[open]').forEach(keepMoreMenuVisible);
   document.addEventListener('click', onDocumentClick);
+  window.addEventListener('resize', onViewportResize);
   element.querySelectorAll('[data-md-details]').forEach(details => details.addEventListener('toggle', () => {
-    if (details.open) closeMenus(details);
+    if (details.open) {
+      // Der Klick auf die Toolbar nimmt dem Editor den DOM-Fokus. Die
+      // CodeMirror-Auswahl bleibt jedoch erhalten und wird hier unmittelbar
+      // vor dem Anzeigen des Menüs erneut in die Bedienelemente gespiegelt.
+      update();
+      closeMenus(details);
+      keepMoreMenuVisible(details);
+    }
   }));
   element.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
@@ -741,6 +895,7 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
     },
     destroy() {
       document.removeEventListener('click', onDocumentClick);
+      window.removeEventListener('resize', onViewportResize);
       linkDialog.destroy();
       element.remove();
     },
@@ -767,6 +922,8 @@ export function createMarkdownInput({
 
   const extensions = readOnly => [
     minimalSetup,
+    lineBoundaryKeymap,
+    sourceLineNavigationKeymap,
     markdown({ extensions: GFM }),
     EditorView.lineWrapping,
     EditorState.tabSize.of(2),

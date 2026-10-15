@@ -56,7 +56,7 @@ test('Sichtbare Extras lassen sich per Drag-and-drop und Tastatur-Schaltern sort
   assert.match(manager, /bemRequest\('order', \{ method: 'POST'/);
   assert.match(server, /app\.post\('\/api\/audiobook-extra-order\/\*'/);
   assert.match(editorEntry, /import '\.\/audiobook-extras-manager\.js'/);
-  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=8/);
+  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=15/);
 });
 
 test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dialog', () => {
@@ -75,7 +75,7 @@ test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dial
   assert.match(styles, /\.bem-markdown-field \.markdown-live-editor \{[^}]*min-height: 0; height: 100%;/);
   assert.match(styles, /#book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-toolbar, #book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-tabs \{ display: none; \}/);
   assert.match(styles, /\.bem-status:empty \{ display: none; \}/);
-  assert.match(html, /styles\.css\?v=118/);
+  assert.match(html, /styles\.css\?v=119/);
 });
 
 test('Datei-Icons öffnen Markdown-, Extra-Bild- und Textbild-Vorschauen im Verwaltungsdialog', () => {
@@ -105,10 +105,13 @@ test('Extras-Verwaltung ist auf Touch-Geräten als kompakte Vollbildansicht bedi
   assert.match(html, /data-bem-tab="extras"><span>Extras<\/span>[\s\S]*data-bem-tab="images"><span>Textbilder<\/span>/);
   assert.match(manager, /function bemSelectTab\(name\)[\s\S]*?aria-selected[\s\S]*?\$bemActions[\s\S]*?is-active/);
   assert.match(manager, /data-bem-more aria-expanded="false"/);
+  assert.match(manager, /function bemMoreIcon\(\)[\s\S]*?<circle cx="5" cy="12"[\s\S]*?<circle cx="19" cy="12"/);
+  assert.match(manager, /class="bem-entry-more"[\s\S]*?title="Weitere Aktionen">\$\{bemMoreIcon\(\)\}/);
   assert.doesNotMatch(manager, /prompt\('Neuer Name'/);
   assert.match(manager, /function bemStartRename\(row\)[\s\S]*?classList\.add\('is-renaming'\)[\s\S]*?input\.focus\(\)[\s\S]*?input\.select\(\)/);
   assert.match(styles, /#book-extras-manager \{[\s\S]*?width: 100vw;[\s\S]*?height: 100dvh;[\s\S]*?safe-area-inset-bottom/);
   assert.match(styles, /\.bem-entry\.is-actions-open \.bem-entry-actions \{ display: flex; \}/);
+  assert.match(styles, /\.bem-entry-more \{[\s\S]*?border: 0;[\s\S]*?border-radius: 5px;[\s\S]*?color: var\(--text-muted\)/);
   assert.match(styles, /\.bem-toolbar \{ display: flex; flex-wrap: wrap;/);
   assert.doesNotMatch(styles, /\.bem-toolbar \.detail-cat-pill:first-child/);
   assert.match(styles, /\.bem-field input \{ font-size: 16px; \}/);
@@ -139,6 +142,7 @@ test('Reiter, Bereich und Scrollposition bleiben nach Änderungen erhalten', () 
 
 test('Escape und Herunterziehen schließen zuerst nur den Markdown-Editor', () => {
   assert.match(manager, /\$bem\.addEventListener\('cancel',[\s\S]*?event\.preventDefault\(\)[\s\S]*?bemTryClose\(\)/);
+  assert.match(manager, /document\.addEventListener\('keydown', event => \{[\s\S]*?!\$bem\.open \|\| event\.key !== 'Escape'[\s\S]*?event\.stopImmediatePropagation\(\);[\s\S]*?\}, true\)/);
   assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(!\$bemEditor\.hidden\) \{[\s\S]*?bemCloseEditor\(\);[\s\S]*?return;[\s\S]*?\$bem\.close\(\)/);
   assert.match(app, /\['#book-extras-manager', '#book-extras-manager \[data-bem-close\]'\]/);
   assert.match(app, /onClose: \(\) => closeBtn\.click\(\)/);
