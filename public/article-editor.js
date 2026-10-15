@@ -1,11 +1,20 @@
+import { createMarkdownInput } from './markdown-live-preview.js';
+
 const $articleEditor = document.getElementById('article-editor');
 const $editorText = document.getElementById('article-editor-text');
 const $editorStatus = document.getElementById('article-editor-status');
 const $editorSave = document.getElementById('article-editor-save');
 const articleEditorState = { id: null, original: '', version: null, saving: false, generation: 0, url: '', focus: null };
+const markdownInput = createMarkdownInput({
+  parent: $editorText,
+  onChange: updateEditorSave,
+  getArticleId: () => articleEditorState.id,
+  labelledBy: 'article-editor-text-label',
+  describedBy: 'article-editor-hint',
+});
 
 function editorDirty() {
-  return articleEditorState.version !== null && $editorText.value !== articleEditorState.original;
+  return articleEditorState.version !== null && markdownInput.getValue() !== articleEditorState.original;
 }
 function updateEditorSave() {
   $editorSave.disabled = articleEditorState.saving || !editorDirty();
@@ -29,36 +38,38 @@ async function loadEditorFile() {
   if (articleEditorState.saving) return;
   if (editorDirty() && !confirm('Entwurf verwerfen und die aktuelle Datei neu laden?')) return;
   const generation = ++articleEditorState.generation;
-  $editorText.disabled = true;
+  markdownInput.setReadOnly(true);
+  markdownInput.setBusy(true);
   $editorSave.disabled = true;
   $editorStatus.textContent = 'Datei wird geladen …';
   try {
     const result = await editorRequest();
     if (generation !== articleEditorState.generation || !$articleEditor.open) return;
-    $editorText.value = result.markdown;
-    articleEditorState.original = $editorText.value;
+    markdownInput.setValue(result.markdown);
+    articleEditorState.original = markdownInput.getValue();
     articleEditorState.version = result.version;
     $editorStatus.textContent = '';
-    $editorText.disabled = false;
-    $editorText.focus();
+    markdownInput.setReadOnly(false);
+    markdownInput.focus();
   } catch (error) {
     if (generation !== articleEditorState.generation) return;
     $editorStatus.textContent = error.message + ' Ihr vorhandener Entwurf bleibt erhalten.';
-    $editorText.disabled = articleEditorState.version === null;
+    markdownInput.setReadOnly(articleEditorState.version === null);
   } finally {
+    if (generation === articleEditorState.generation) markdownInput.setBusy(false);
     if (generation === articleEditorState.generation) updateEditorSave();
   }
 }
 async function saveEditorFile() {
   if ($editorSave.disabled) return;
   articleEditorState.saving = true;
-  $editorText.readOnly = true;
+  markdownInput.setReadOnly(true);
   $articleEditor.querySelectorAll('button').forEach(button => { button.disabled = true; });
   $editorStatus.textContent = 'Datei wird gespeichert und das Archiv aktualisiert …';
   try {
     const result = await editorRequest({ method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ markdown: $editorText.value, version: articleEditorState.version }) });
-    articleEditorState.original = $editorText.value;
+      body: JSON.stringify({ markdown: markdownInput.getValue(), version: articleEditorState.version }) });
+    articleEditorState.original = markdownInput.getValue();
     articleEditorState.version = result.version;
     if (result.warning) {
       $editorStatus.textContent = result.warning;
@@ -94,10 +105,10 @@ async function saveEditorFile() {
       ? error.message : error.message + ' Ihr Entwurf bleibt im Editor erhalten.';
   } finally {
     articleEditorState.saving = false;
-    $editorText.readOnly = false;
+    markdownInput.setReadOnly(false);
     $articleEditor.querySelectorAll('button').forEach(button => { button.disabled = false; });
     updateEditorSave();
-    if ($articleEditor.open) $editorText.focus();
+    if ($articleEditor.open) markdownInput.focus();
   }
 }
 document.addEventListener('click', event => {
@@ -111,12 +122,11 @@ document.addEventListener('click', event => {
   articleEditorState.focus = button.closest('details')?.querySelector('summary');
   articleEditorState.version = null;
   articleEditorState.original = '';
-  $editorText.value = '';
+  markdownInput.setValue('', { readOnly: true });
   document.getElementById('article-editor-name').textContent = entry.title;
   $articleEditor.showModal();
   loadEditorFile();
 });
-$editorText.addEventListener('input', updateEditorSave);
 $editorSave.addEventListener('click', saveEditorFile);
 document.getElementById('article-editor-reload').addEventListener('click', loadEditorFile);
 for (const id of ['article-editor-close', 'article-editor-cancel']) document.getElementById(id).addEventListener('click', leaveArticleEditor);
@@ -126,10 +136,17 @@ $articleEditor.addEventListener('close', () => {
 });
 document.addEventListener('keydown', event => {
   if (!$articleEditor.open) return;
+  const insideEditor = event.target instanceof Element && event.target.closest('#article-editor-text');
+  const saveShortcut = (event.ctrlKey || event.metaKey) && event.key === 'Enter';
+  if (insideEditor && event.key !== 'Escape' && !saveShortcut) return;
   event.stopImmediatePropagation();
   if (event.key === 'Escape') { event.preventDefault(); leaveArticleEditor(); }
-  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); saveEditorFile(); }
+  if (saveShortcut) { event.preventDefault(); saveEditorFile(); }
 }, true);
+$editorText.addEventListener('keydown', event => {
+  const saveShortcut = (event.ctrlKey || event.metaKey) && event.key === 'Enter';
+  if (event.key !== 'Escape' && !saveShortcut) event.stopPropagation();
+});
 window.addEventListener('beforeunload', event => {
   if ($articleEditor.open && (editorDirty() || articleEditorState.saving)) { event.preventDefault(); event.returnValue = ''; }
 });

@@ -8,14 +8,23 @@ const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
 const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
 const books = fs.readFileSync(path.join(ROOT, 'public', 'audiobooks.js'), 'utf8');
 const manager = fs.readFileSync(path.join(ROOT, 'public', 'audiobook-extras-manager.js'), 'utf8');
+const editorEntry = fs.readFileSync(path.join(ROOT, 'public', 'markdown-editors.js'), 'utf8');
 const styles = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
 const server = fs.readFileSync(path.join(ROOT, 'audiobooks.cjs'), 'utf8');
 
 test('Admin-Aktionen öffnen die Extras-Verwaltung auch ohne vorhandene Extras', () => {
   assert.match(books, /currentUser\?\.role === 'admin'[\s\S]*data-book-extras-manage>Extras verwalten/);
   assert.match(books, /data-book-extras-manage[^\n]*openBookExtrasManager\(book\)/);
+  assert.match(manager, /window\.openBookExtrasManager = openBookExtrasManager/);
   assert.match(html, /id="book-extras-manager"[\s\S]*class="bem-tabs"[\s\S]*data-bem-actions="extras"[\s\S]*data-bem-new-text>Neuer Text<\/button>[\s\S]*data-bem-add-extra>Dateien\/Bilder<\/button>[\s\S]*data-bem-actions="images"[\s\S]*data-bem-add-image>Bilder hinzufügen<\/button>/);
   assert.match(manager, /data-bem-add-image[\s\S]*bemState\.insertImages = false[\s\S]*\$bemImageFiles\.click\(\)/);
+});
+
+test('Admin kann aus der Extras-Anzeige direkt in die Verwaltung wechseln', () => {
+  assert.match(books, /currentUser\?\.role === 'admin'[\s\S]*data-extras-manage[\s\S]*>Verwalten<\/span>/);
+  assert.match(books, /data-extras-manage[^\n]*addEventListener\('click',[\s\S]*?closeBookExtras\(false\)[\s\S]*?openBookExtrasManager\(book\)/);
+  assert.match(books, /function closeBookExtras\(restoreFocus = true\)[\s\S]*?restoreFocus !== false/);
+  assert.match(html, /audiobooks\.js\?v=20/);
 });
 
 test('Manager trennt sichtbare Extras und eingebettete Bilder ohne Manifest', () => {
@@ -42,17 +51,25 @@ test('Sichtbare Extras lassen sich per Drag-and-drop und Tastatur-Schaltern sort
   assert.match(manager, /data-bem-move="-1"/);
   assert.match(manager, /bemRequest\('order', \{ method: 'POST'/);
   assert.match(server, /app\.post\('\/api\/audiobook-extra-order\/\*'/);
-  assert.match(html, /audiobook-extras-manager\.js\?v=14/);
+  assert.match(editorEntry, /import '\.\/audiobook-extras-manager\.js'/);
+  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=3/);
 });
 
-test('Markdown-Editor nutzt den gesamten Extras-Dialog', () => {
+test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dialog', () => {
   assert.match(styles, /\.bem-content:has\(\.bem-editor:not\(\[hidden\]\)\) \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   assert.match(styles, /\.bem-content:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-library \{ display: none; \}/);
-  assert.match(styles, /\.bem-markdown-field \{ grid-template-rows: auto minmax\(0, 1fr\); flex: 1 1 auto; min-height: 0; \}/);
-  assert.match(styles, /\.bem-markdown-field textarea \{[^}]*min-height: 0; height: 100%; resize: none;/);
+  assert.match(html, /class="markdown-live-editor" data-bem-editor-text/);
+  assert.doesNotMatch(html, /<textarea data-bem-editor-text/);
+  assert.match(manager, /createMarkdownInput\(\{[\s\S]*?resolveImageUrl: bemResolveImageUrl/);
+  assert.match(manager, /bemMarkdownInput\.setValue\(source\.markdown\)/);
+  assert.match(manager, /bemMarkdownInput\.getValue\(\)/);
+  assert.match(manager, /bemMarkdownInput\.replaceSelection\(markdown\)/);
+  assert.match(manager, /function bemResolveImageUrl\(raw\)[\s\S]*?bemState\.data\.images\.find/);
+  assert.match(styles, /\.bem-markdown-field \{ grid-template-rows: auto minmax\(0, 1fr\) auto; flex: 1 1 auto; min-height: 0; \}/);
+  assert.match(styles, /\.bem-markdown-field \.markdown-live-editor \{[^}]*min-height: 0; height: 100%;/);
   assert.match(styles, /#book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-toolbar, #book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-tabs \{ display: none; \}/);
   assert.match(styles, /\.bem-status:empty \{ display: none; \}/);
-  assert.match(html, /styles\.css\?v=112/);
+  assert.match(html, /styles\.css\?v=114/);
 });
 
 test('Datei-Icons öffnen Markdown-, Extra-Bild- und Textbild-Vorschauen im Verwaltungsdialog', () => {
@@ -69,7 +86,7 @@ test('Bestehende Markdown-Extras zeigen den Namen im Editor nicht doppelt', () =
   assert.match(manager, /bemOpenNewText[\s\S]*?\$bemEditorTitleField\.hidden = false/);
   assert.match(manager, /bemOpenMarkdown[\s\S]*?\$bemEditorHeading\.textContent = entry\.title[\s\S]*?\$bemEditorTitleField\.hidden = true/);
   assert.match(styles, /\[data-bem-editor-title-field\]\[hidden\] \{ display: none !important; \}/);
-  assert.match(html, /audiobook-extras-manager\.js\?v=14/);
+  assert.match(editorEntry, /import '\.\/audiobook-extras-manager\.js'/);
 });
 
 test('Entfernen verwendet dasselbe Mülleimer-Symbol wie die Benutzerverwaltung', () => {
@@ -88,7 +105,8 @@ test('Extras-Verwaltung ist auf Touch-Geräten als kompakte Vollbildansicht bedi
   assert.match(styles, /\.bem-entry\.is-actions-open \.bem-entry-actions \{ display: flex; \}/);
   assert.match(styles, /\.bem-toolbar \{ display: flex; flex-wrap: wrap;/);
   assert.doesNotMatch(styles, /\.bem-toolbar \.detail-cat-pill:first-child/);
-  assert.match(styles, /\.bem-field input, \.bem-markdown-field textarea \{ font-size: 16px; \}/);
+  assert.match(styles, /\.bem-field input \{ font-size: 16px; \}/);
+  assert.match(styles, /\.bem-markdown-field \.cm-content \{ padding: 14px 12px 24px; \}/);
 });
 
 test('Umbenennen bleibt mit Speichern, Abbrechen, Enter und Escape vollständig im Dialog', () => {

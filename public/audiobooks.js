@@ -280,6 +280,10 @@ function svgBookExtraDocument() {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M6 2.5h8l4 4V21.5H6z"/><path d="M14 2.5v4h4M9 11h6M9 15h6"/></svg>';
 }
 
+function svgBookExtrasManage() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></svg>';
+}
+
 function openBookExtras(book) {
   if (!book.extras?.length || document.getElementById('book-extras')) return;
   const images = book.extras.filter(extra => extra.type === 'image');
@@ -293,6 +297,7 @@ function openBookExtras(book) {
     <header class="book-reader-head">
       <button type="button" class="book-btn book-reader-close" data-extras-close aria-label="Zurück zum Hörbuch" title="Zurück zum Hörbuch">${svgBookClose()}</button>
       <span class="book-reader-heading"><span class="book-reader-title">Extras</span><span class="book-reader-where">${esc(book.title)}</span></span>
+      ${currentUser?.role === 'admin' ? `<button type="button" class="book-btn" data-extras-manage aria-label="Extras verwalten" title="Extras verwalten">${svgBookExtrasManage()}<span>Verwalten</span></button>` : ''}
     </header>
     <div class="book-extras-scroll"><div class="book-extras-grid">
       ${book.extras.map((extra, index) => `<button type="button" class="book-extra-card${extra.type === 'markdown' ? ' is-document' : ''}" data-extra="${index}" aria-label="${esc(extra.title)}">
@@ -304,6 +309,10 @@ function openBookExtras(book) {
   document.body.appendChild(el);
   document.body.classList.add('book-reader-open');
   el.querySelector('[data-extras-close]').addEventListener('click', closeBookExtras);
+  el.querySelector('[data-extras-manage]')?.addEventListener('click', () => {
+    closeBookExtras(false);
+    openBookExtrasManager(book);
+  });
   const scroller = el.querySelector('.book-extras-scroll');
   if (scroller && typeof enablePullToClose === 'function') {
     enablePullToClose({
@@ -327,7 +336,7 @@ function openBookExtras(book) {
   el.querySelector('[data-extras-close]').focus();
 }
 
-function closeBookExtras() {
+function closeBookExtras(restoreFocus = true) {
   const el = document.getElementById('book-extras');
   if (!el) return;
   // Safari behält nach Rotation gelegentlich die Trefferfläche einer entfernten,
@@ -339,7 +348,7 @@ function closeBookExtras() {
   el.remove();
   if (!bookReader?.el) document.body.classList.remove('book-reader-open');
   void $detail.offsetHeight;
-  requestAnimationFrame(() => $detail.querySelector('[data-book-extras]')?.focus({ preventScroll: true }));
+  if (restoreFocus !== false) requestAnimationFrame(() => $detail.querySelector('[data-book-extras]')?.focus({ preventScroll: true }));
 }
 
 document.addEventListener('keydown', event => {

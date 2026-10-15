@@ -1,3 +1,5 @@
+import { createMarkdownInput } from './markdown-live-preview.js';
+
 /* WebArchiv — administrative Verwaltung der dateibasierten Hörbuch-Extras */
 
 const $bem = document.getElementById('book-extras-manager');
@@ -39,6 +41,14 @@ const bemState = {
   previewToken: 0,
 };
 
+const bemMarkdownInput = createMarkdownInput({
+  parent: $bemEditorText,
+  onChange: () => {},
+  resolveImageUrl: bemResolveImageUrl,
+  labelledBy: 'bem-editor-text-label',
+  describedBy: 'bem-editor-text-hint',
+});
+
 function bemPath(kind, query = {}) {
   const id = bemState.book.id.split('/').map(encodeURIComponent).join('/');
   const qs = new URLSearchParams(query);
@@ -64,14 +74,16 @@ function bemSetStatus(message = '', kind = '') {
 
 function bemDirty() {
   return !!bemState.editing
-    && ($bemEditorTitle.value !== bemState.originalTitle || $bemEditorText.value !== bemState.originalText);
+    && ($bemEditorTitle.value !== bemState.originalTitle || bemMarkdownInput.getValue() !== bemState.originalText);
 }
 
 function bemSetBusy(busy) {
   bemState.busy = busy;
-  $bem.querySelectorAll('button, input, textarea').forEach(control => {
+  $bem.querySelectorAll('button, input').forEach(control => {
     if (!control.matches('[data-bem-close]')) control.disabled = busy;
   });
+  bemMarkdownInput.setBusy(busy);
+  bemMarkdownInput.setReadOnly(busy || !bemState.editing);
   if (!busy && bemState.editing && !bemState.editing.isNew) $bemEditorTitle.disabled = true;
 }
 
@@ -158,6 +170,23 @@ function bemPreviewPath(file) {
   return `/api/audiobook-extra/${id}?file=${encodeURIComponent(file)}`;
 }
 
+function bemResolveImageUrl(raw) {
+  const value = String(raw || '').trim().replace(/^<|>$/g, '');
+  if (!value) return '';
+  if (/^(?:https?:)?\/\//i.test(value) || value.startsWith('/')) {
+    try {
+      const url = new URL(value, location.origin);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+    } catch { return ''; }
+  }
+  let relative = value.split(/[?#]/)[0].replace(/\\/g, '/');
+  try { relative = decodeURIComponent(relative); } catch { /* unverändert */ }
+  const parts = relative.split('/').filter(part => part && part !== '.');
+  if (parts.length !== 2 || parts[0].toLowerCase() !== 'images' || parts.includes('..')) return '';
+  const image = bemState.data.images.find(entry => entry.file.toLowerCase() === parts[1].toLowerCase());
+  return image?.url || '';
+}
+
 function bemClosePreview({ focus = true } = {}) {
   if ($bemPreview.hidden) return false;
   const previous = bemState.preview;
@@ -227,6 +256,7 @@ function bemCloseEditor(force = false) {
   bemState.editing = null;
   bemState.originalTitle = '';
   bemState.originalText = '';
+  bemMarkdownInput.setValue('', { readOnly: true });
   $bemEditor.hidden = true;
   return true;
 }
@@ -240,7 +270,7 @@ function bemOpenNewText() {
   $bemEditorTitleField.hidden = false;
   $bemEditorTitle.disabled = false;
   $bemEditorTitle.value = '';
-  $bemEditorText.value = '';
+  bemMarkdownInput.setValue('');
   $bemEditor.hidden = false;
   $bemEditorTitle.focus();
 }
@@ -258,9 +288,9 @@ async function bemOpenMarkdown(entry) {
     $bemEditorTitleField.hidden = true;
     $bemEditorTitle.value = entry.title;
     $bemEditorTitle.disabled = true;
-    $bemEditorText.value = source.markdown;
+    bemMarkdownInput.setValue(source.markdown);
     $bemEditor.hidden = false;
-    $bemEditorText.focus();
+    bemMarkdownInput.focus();
     bemSetStatus('');
   } catch (error) {
     bemSetStatus(error.message, 'error');
@@ -270,7 +300,7 @@ async function bemOpenMarkdown(entry) {
 async function bemSaveEditor() {
   if (!bemState.editing || bemState.busy) return;
   const title = $bemEditorTitle.value.trim();
-  const markdown = $bemEditorText.value || (title ? `# ${title}\n` : '');
+  const markdown = bemMarkdownInput.getValue() || (title ? `# ${title}\n` : '');
   if (bemState.editing.isNew && !title) {
     bemSetStatus('Bitte einen Namen für das Text-Extra eingeben.', 'error');
     $bemEditorTitle.focus();
@@ -321,9 +351,7 @@ async function bemUploadFiles(files, scope, { insert = false, replace = '' } = {
       const markdown = uploaded
         .map(file => `![${file.replace(/\.[^.]+$/, '')}](images/${encodeURIComponent(file)})`)
         .join('\n');
-      const start = $bemEditorText.selectionStart;
-      $bemEditorText.setRangeText(markdown, start, $bemEditorText.selectionEnd, 'end');
-      $bemEditorText.focus();
+      bemMarkdownInput.replaceSelection(markdown);
     }
     bemSetStatus(replace ? 'Datei ersetzt.' : `${uploaded.length} ${uploaded.length === 1 ? 'Datei' : 'Dateien'} hinzugefügt.`, 'success');
   } catch (error) {
@@ -461,6 +489,10 @@ async function openBookExtrasManager(book) {
   try { await bemLoad(); }
   catch (error) { bemSetStatus(error.message, 'error'); }
 }
+
+// audiobooks.js läuft weiterhin als klassisches Skript und öffnet den Manager
+// über diesen globalen Einstiegspunkt. Das Editor-Bundle kapselt Module sonst ab.
+window.openBookExtrasManager = openBookExtrasManager;
 
 function bemTryClose() {
   if (bemState.busy) return;

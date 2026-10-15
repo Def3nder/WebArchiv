@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=112" />
+  <link rel="stylesheet" href="styles.css?v=114" />
 </head>
 <body>
 
@@ -302,9 +302,9 @@
       <button type="button" id="article-editor-close" class="detail-cat-pill" aria-label="Editor schließen">✕</button>
     </div>
     <p id="article-editor-name"></p>
-    <label for="article-editor-text">Vollständiger Artikel einschließlich Titel und Metadaten</label>
-    <textarea id="article-editor-text" spellcheck="false" aria-describedby="article-editor-hint" disabled></textarea>
-    <p id="article-editor-hint">Markdown und Metadaten können direkt bearbeitet werden. Speichern: Strg+Enter.</p>
+    <p id="article-editor-text-label" class="article-editor-label">Vollständiger Artikel einschließlich Titel und Metadaten</p>
+    <div id="article-editor-text" class="markdown-live-editor" aria-disabled="true" aria-busy="false"></div>
+    <p id="article-editor-hint">Markdown wird formatiert dargestellt; an der aktiven Stelle erscheinen die Formatierungszeichen. Speichern: Strg+Enter.</p>
     <p id="article-editor-status" role="status" aria-live="polite"></p>
     <div class="article-editor-buttons">
       <button type="button" id="article-editor-reload" class="detail-cat-pill">Datei neu laden</button>
@@ -359,7 +359,11 @@
       <section class="bem-editor" data-bem-editor hidden aria-labelledby="bem-editor-heading">
         <div class="bem-section-heading"><h3 id="bem-editor-heading" data-bem-editor-heading>Text-Extra</h3></div>
         <label class="bem-field" data-bem-editor-title-field>Name<input type="text" data-bem-editor-title maxlength="140" autocomplete="off" /></label>
-        <label class="bem-field bem-markdown-field">Markdown<textarea data-bem-editor-text spellcheck="false"></textarea></label>
+        <div class="bem-field bem-markdown-field">
+          <span id="bem-editor-text-label">Markdown</span>
+          <div class="markdown-live-editor" data-bem-editor-text aria-disabled="true" aria-busy="false"></div>
+          <span id="bem-editor-text-hint">Formatiert dargestellt; an der aktiven Stelle erscheinen die Markdown-Zeichen.</span>
+        </div>
         <div class="bem-editor-actions">
           <button type="button" class="detail-cat-pill" data-bem-insert-image>Bild einfügen</button>
           <span class="bem-editor-spacer"></span>
@@ -492,10 +496,9 @@
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
   <script src="app.js?v=104"></script>
-  <script src="audiobooks.js?v=19"></script>
-  <script src="audiobook-extras-manager.js?v=14"></script>
+  <script src="audiobooks.js?v=20"></script>
   <script src="book-reader.js?v=14"></script>
-  <script src="article-editor.js?v=2"></script>
+  <script src="vendor/article-editor.bundle.js?v=3"></script>
   <script src="infographic-new.js?v=2"></script>
 </body>
 </html>
