@@ -44,3 +44,17 @@ test('Filtermenüs unterstützen Auswahl, Tastatur, Escape und Klick außerhalb'
   assert.match(APP, /function keepFilterAriaMenuVisible\(menu\)[\s\S]*?window\.innerWidth - margin/);
   assert.match(APP, /\[\$filterAuthor, \$filterYear, \$filterCategory\]\.forEach\(syncFilterAriaMenu\)/);
 });
+
+test('Metadaten-Refresh übernimmt den aktuellen Filterzustand in Select und ARIA-Menü', () => {
+  const loadMeta = APP.slice(
+    APP.indexOf('async function loadMeta()'),
+    APP.indexOf('function applySavedListState('),
+  );
+  assert.match(loadMeta, /applySavedFilterControls\(\);[\s\S]*?requestAnimationFrame\(updateFilterLabelLayout\)/);
+
+  const reindex = APP.slice(
+    APP.indexOf('async function runReindex()'),
+    APP.indexOf('function openScrapeModal('),
+  );
+  assert.match(reindex, /await loadMeta\(\);[\s\S]*?state\.page = 1;[\s\S]*?await loadArticles\(\)/);
+});

@@ -1899,7 +1899,10 @@ async function loadMeta() {
     opt.textContent = c;
     $filterCategory.appendChild(opt);
   });
-  [$filterAuthor, $filterYear, $filterCategory].forEach(syncFilterAriaMenu);
+  // Beim Neuaufbau der Metadaten (z. B. nach einem Reindex) setzt der Browser
+  // die Selects zunächst auf den ersten Eintrag zurück. Den weiterhin gültigen
+  // Anwendungszustand erneut anwenden, bevor daraus die ARIA-Menüs entstehen.
+  applySavedFilterControls();
   requestAnimationFrame(updateFilterLabelLayout);
 }
 
