@@ -883,11 +883,9 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
   return {
     update,
     setDisabled(value) { disabled = value; if (disabled) closeMenus(); update(); },
-    handleShortcut(event) {
-      if (disabled || !(event.ctrlKey || event.metaKey)) return false;
-      const key = event.key.toLowerCase();
+    runShortcut(key) {
+      if (disabled) return false;
       if (!['b', 'i', 'k'].includes(key)) return false;
-      event.preventDefault();
       if (key === 'b') run((source, from, to) => toggleInlineMarkdown(source, from, to, '**'));
       else if (key === 'i') run((source, from, to) => toggleInlineMarkdown(source, from, to, '*'));
       else linkDialog.open();
@@ -914,6 +912,15 @@ export function createMarkdownInput({
   const mode = new Compartment();
   let replacingDocument = false;
   let toolbar = null;
+  const runFormattingShortcut = key => {
+    toolbar?.runShortcut(key);
+    return true;
+  };
+  const formattingShortcutKeymap = Prec.high(keymap.of([
+    { key: 'Mod-b', run: () => runFormattingShortcut('b'), preventDefault: true },
+    { key: 'Mod-i', run: () => runFormattingShortcut('i'), preventDefault: true },
+    { key: 'Mod-k', run: () => runFormattingShortcut('k'), preventDefault: true },
+  ]));
 
   const modeExtensions = readOnly => [
     EditorState.readOnly.of(readOnly),
@@ -921,6 +928,7 @@ export function createMarkdownInput({
   ];
 
   const extensions = readOnly => [
+    formattingShortcutKeymap,
     minimalSetup,
     lineBoundaryKeymap,
     sourceLineNavigationKeymap,
@@ -934,9 +942,6 @@ export function createMarkdownInput({
       spellcheck: 'false',
     }),
     livePreview(resolveImageUrl),
-    EditorView.domEventHandlers({
-      keydown(event) { return toolbar?.handleShortcut(event) || false; },
-    }),
     EditorView.updateListener.of(update => {
       if (update.docChanged && !replacingDocument) onChange();
       if (update.docChanged || update.selectionSet) toolbar?.update();

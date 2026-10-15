@@ -93,6 +93,151 @@ function nextPaint() {
   return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
+function filterAriaRoot(select) {
+  return document.querySelector(`[data-filter-aria-menu="${select.id}"]`);
+}
+
+function syncFilterAriaMenu(select) {
+  const root = filterAriaRoot(select);
+  if (!root) return;
+  const trigger = root.querySelector('.filter-menu-trigger');
+  const value = root.querySelector('[data-filter-menu-value]');
+  const menu = root.querySelector('[role="menu"]');
+  const selected = [...select.options].find(option => option.value === select.value)
+    || select.options[0];
+  value.textContent = selected?.textContent || '';
+  menu.replaceChildren();
+  [...select.options].forEach(option => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'header-menu-item';
+    item.dataset.filterValue = option.value;
+    item.setAttribute('role', 'menuitemradio');
+    item.setAttribute('aria-checked', String(option.value === select.value));
+    item.disabled = option.disabled;
+    item.textContent = option.textContent;
+    menu.appendChild(item);
+  });
+  trigger.title = selected?.textContent || '';
+}
+
+function closeFilterAriaMenu(root, restoreFocus = false) {
+  if (!root) return;
+  const trigger = root.querySelector('.filter-menu-trigger');
+  root.querySelector('[role="menu"]').hidden = true;
+  trigger.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) trigger.focus();
+}
+
+function closeFilterAriaMenus(except = null) {
+  document.querySelectorAll('[data-filter-aria-menu]').forEach(root => {
+    if (root !== except) closeFilterAriaMenu(root);
+  });
+}
+
+function keepFilterAriaMenuVisible(menu) {
+  menu.style.transform = '';
+  const rect = menu.getBoundingClientRect();
+  const margin = 8;
+  let shift = rect.left < margin ? margin - rect.left : 0;
+  if (rect.right + shift > window.innerWidth - margin) {
+    shift += window.innerWidth - margin - rect.right - shift;
+  }
+  if (shift) menu.style.transform = `translateX(${Math.round(shift)}px)`;
+}
+
+function openFilterAriaMenu(root, focusSelection = false) {
+  const select = document.getElementById(root.dataset.filterAriaMenu);
+  const trigger = root.querySelector('.filter-menu-trigger');
+  const menu = root.querySelector('[role="menu"]');
+  closeFilterAriaMenus(root);
+  syncFilterAriaMenu(select);
+  menu.hidden = false;
+  trigger.setAttribute('aria-expanded', 'true');
+  requestAnimationFrame(() => {
+    keepFilterAriaMenuVisible(menu);
+    if (focusSelection) {
+      (menu.querySelector('[aria-checked="true"]:not(:disabled)')
+        || menu.querySelector('.header-menu-item:not(:disabled)'))?.focus();
+    }
+  });
+}
+
+function moveFilterAriaMenuFocus(menu, direction) {
+  const items = [...menu.querySelectorAll('.header-menu-item:not(:disabled)')];
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement);
+  const next = direction === 'first' ? 0
+    : direction === 'last' ? items.length - 1
+      : (current + direction + items.length) % items.length;
+  items[next].focus();
+}
+
+function wireFilterAriaMenus() {
+  document.querySelectorAll('[data-filter-aria-menu]').forEach(root => {
+    const select = document.getElementById(root.dataset.filterAriaMenu);
+    const trigger = root.querySelector('.filter-menu-trigger');
+    const menu = root.querySelector('[role="menu"]');
+    if (!select || !trigger || !menu) return;
+    syncFilterAriaMenu(select);
+    trigger.addEventListener('click', event => {
+      event.stopPropagation();
+      if (!menu.hidden) closeFilterAriaMenu(root);
+      else openFilterAriaMenu(root);
+    });
+    trigger.addEventListener('keydown', event => {
+      if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+      event.preventDefault();
+      openFilterAriaMenu(root, true);
+    });
+    menu.addEventListener('click', event => {
+      const item = event.target.closest('[data-filter-value]');
+      if (!item || item.disabled) return;
+      select.value = item.dataset.filterValue;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      closeFilterAriaMenu(root, true);
+    });
+    menu.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeFilterAriaMenu(root, true);
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        moveFilterAriaMenuFocus(menu, 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveFilterAriaMenuFocus(menu, -1);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        moveFilterAriaMenuFocus(menu, 'first');
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        moveFilterAriaMenuFocus(menu, 'last');
+      } else if (event.key === 'Tab') {
+        closeFilterAriaMenu(root);
+      }
+    });
+    select.addEventListener('change', () => queueMicrotask(() => syncFilterAriaMenu(select)));
+  });
+  document.body.classList.add('filter-aria-menus-ready');
+}
+
+document.addEventListener('click', event => {
+  document.querySelectorAll('[data-filter-aria-menu]').forEach(root => {
+    if (!root.contains(event.target)) closeFilterAriaMenu(root);
+  });
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  const root = [...document.querySelectorAll('[data-filter-aria-menu]')]
+    .find(candidate => candidate.querySelector('.filter-menu-trigger')?.getAttribute('aria-expanded') === 'true');
+  if (!root) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeFilterAriaMenu(root, true);
+}, true);
+
 function updateFilterLabelLayout() {
   if (!$filterBarInner) return;
 
@@ -676,6 +821,8 @@ async function logout() {
   $filterAuthor.value = '';
   $filterYear.value = '';
   $filterCategory.value = '';
+  [$filterAuthor, $filterYear, $filterCategory, $filterLimit, bookSort]
+    .forEach(select => select && syncFilterAriaMenu(select));
   if (currentUser) {
     await loadMeta();
     await loadArticles();
@@ -1752,6 +1899,7 @@ async function loadMeta() {
     opt.textContent = c;
     $filterCategory.appendChild(opt);
   });
+  [$filterAuthor, $filterYear, $filterCategory].forEach(syncFilterAriaMenu);
   requestAnimationFrame(updateFilterLabelLayout);
 }
 
@@ -1771,6 +1919,7 @@ function applySavedListState(saved) {
   }
   const bookSort = document.getElementById('filter-book-sort');
   if (bookSort) bookSort.value = state.bookSort;
+  [$filterLimit, bookSort].forEach(select => select && syncFilterAriaMenu(select));
 }
 
 function applySavedFilterControls() {
@@ -1786,6 +1935,7 @@ function applySavedFilterControls() {
     if ([...select.options].some(option => option.value === state[key])) select.value = state[key];
     else { state[key] = ''; select.value = ''; }
   }
+  [$filterAuthor, $filterYear, $filterCategory].forEach(syncFilterAriaMenu);
   applyBookMode();
 }
 
@@ -2428,6 +2578,13 @@ $resetFilters.addEventListener('click', () => {
   setTelegram(false);
   setBookmarkFilter(false);
   Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false, bookmarks:false, page:1, limit:24 });
+  [
+    $filterAuthor,
+    $filterYear,
+    $filterCategory,
+    $filterLimit,
+    document.getElementById('filter-book-sort'),
+  ].forEach(select => select && syncFilterAriaMenu(select));
   applyBookMode();
   loadArticles();
 });
@@ -3422,6 +3579,7 @@ function svgShare() {
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 async function init() {
+  wireFilterAriaMenus();
   $loading.hidden = false;
   setLayout('tall');
 

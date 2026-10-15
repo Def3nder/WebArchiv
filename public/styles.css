@@ -251,6 +251,42 @@ body[data-filter-labels="hidden"] .filter-label { display: none; }
   max-width: 200px;
 }
 .filter-select:focus { border-color: var(--accent-dim); outline: none; }
+.header-menu.filter-header-menu { display: none; }
+.filter-menu-trigger {
+  width: fit-content;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-menu-trigger [data-filter-menu-value] {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-header-menu .header-menu-dropdown {
+  width: max-content;
+  min-width: 0;
+  max-width: min(320px, calc(100vw - 16px));
+}
+.filter-header-menu .header-menu-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-filter-aria-menu="filter-limit"] .header-menu-dropdown {
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+}
+.filter-header-menu .header-menu-item[aria-checked="true"] {
+  color: var(--accent);
+  background: var(--surface);
+}
+@media (min-width: 601px) and (hover: hover) and (pointer: fine) {
+  body.filter-aria-menus-ready .filter-select.filter-menu-native { display: none; }
+  body.filter-aria-menus-ready .header-menu.filter-header-menu { display: inline-flex; }
+}
 .layout-toggle {
   display: inline-flex;
   padding: 2px;
@@ -335,7 +371,8 @@ body[data-filter-labels="hidden"] .filter-label { display: none; }
   cursor: pointer;
   transition: color var(--transition), background var(--transition);
 }
-.header-menu-item:hover { color: var(--accent); background: var(--surface); }
+.header-menu-item:hover,
+.header-menu-item:focus-visible { color: var(--accent); background: var(--surface); outline: none; }
 
 /* Lesezeichen-Filter: aktiv blau wie Telegram, Symbol gefüllt. */
 .bookmark-btn {

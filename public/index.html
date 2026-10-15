@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=119" />
+  <link rel="stylesheet" href="styles.css?v=124" />
 </head>
 <body>
 
@@ -88,32 +88,56 @@
   <div class="filter-bar" id="filter-bar">
     <div class="filter-bar-inner">
       <div class="filter-group">
-        <label class="filter-label">Autor</label>
-        <select id="filter-author" class="filter-select">
+        <label class="filter-label" id="filter-author-label" for="filter-author">Autor</label>
+        <select id="filter-author" class="filter-select filter-menu-native">
           <option value="">Alle Autoren</option>
         </select>
+        <div class="header-menu filter-header-menu" data-filter-aria-menu="filter-author">
+          <button type="button" class="filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="filter-author-menu" aria-labelledby="filter-author-label filter-author-value">
+            <span id="filter-author-value" data-filter-menu-value>Alle Autoren</span>
+          </button>
+          <div id="filter-author-menu" class="header-menu-dropdown" role="menu" hidden></div>
+        </div>
       </div>
       <div class="filter-group filter-group-articles">
-        <label class="filter-label">Jahr</label>
-        <select id="filter-year" class="filter-select">
+        <label class="filter-label" id="filter-year-label" for="filter-year">Jahr</label>
+        <select id="filter-year" class="filter-select filter-menu-native">
           <option value="">Alle Jahre</option>
         </select>
+        <div class="header-menu filter-header-menu" data-filter-aria-menu="filter-year">
+          <button type="button" class="filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="filter-year-menu" aria-labelledby="filter-year-label filter-year-value">
+            <span id="filter-year-value" data-filter-menu-value>Alle Jahre</span>
+          </button>
+          <div id="filter-year-menu" class="header-menu-dropdown" role="menu" hidden></div>
+        </div>
       </div>
       <div class="filter-group filter-group-articles">
-        <label class="filter-label">Kategorie</label>
-        <select id="filter-category" class="filter-select">
+        <label class="filter-label" id="filter-category-label" for="filter-category">Kategorie</label>
+        <select id="filter-category" class="filter-select filter-menu-native">
           <option value="">Alle Kategorien</option>
         </select>
+        <div class="header-menu filter-header-menu" data-filter-aria-menu="filter-category">
+          <button type="button" class="filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="filter-category-menu" aria-labelledby="filter-category-label filter-category-value">
+            <span id="filter-category-value" data-filter-menu-value>Alle Kategorien</span>
+          </button>
+          <div id="filter-category-menu" class="header-menu-dropdown" role="menu" hidden></div>
+        </div>
       </div>
       <div class="filter-group filter-group-books">
-        <label class="filter-label" for="filter-book-sort">Sortierung</label>
-        <select id="filter-book-sort" class="filter-select">
+        <label class="filter-label" id="filter-book-sort-label" for="filter-book-sort">Sortierung</label>
+        <select id="filter-book-sort" class="filter-select filter-menu-native">
           <option value="recent">Zuletzt gehört/gelesen</option>
           <option value="added">Zuletzt hinzugefügt</option>
           <option value="title">Nach Name</option>
           <option value="date">Nach Datum</option>
           <option value="private">Privat</option>
         </select>
+        <div class="header-menu filter-header-menu" data-filter-aria-menu="filter-book-sort">
+          <button type="button" class="filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="filter-book-sort-menu" aria-labelledby="filter-book-sort-label filter-book-sort-value">
+            <span id="filter-book-sort-value" data-filter-menu-value>Zuletzt gehört/gelesen</span>
+          </button>
+          <div id="filter-book-sort-menu" class="header-menu-dropdown" role="menu" hidden></div>
+        </div>
       </div>
       <div class="filter-group">
         <span class="filter-label" id="filter-layout-label">Ansicht</span>
@@ -130,13 +154,19 @@
         </div>
       </div>
       <div class="filter-group">
-        <label class="filter-label">Pro Seite</label>
-        <select id="filter-limit" class="filter-select">
+        <label class="filter-label" id="filter-limit-label" for="filter-limit">Pro Seite</label>
+        <select id="filter-limit" class="filter-select filter-menu-native">
           <option value="12">12</option>
           <option value="24" selected>24</option>
           <option value="48">48</option>
           <option value="96">96</option>
         </select>
+        <div class="header-menu filter-header-menu" data-filter-aria-menu="filter-limit">
+          <button type="button" class="filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="filter-limit-menu" aria-labelledby="filter-limit-label filter-limit-value">
+            <span id="filter-limit-value" data-filter-menu-value>24</span>
+          </button>
+          <div id="filter-limit-menu" class="header-menu-dropdown" role="menu" hidden></div>
+        </div>
       </div>
       <button id="reset-filters" class="reset-btn" title="Filter zurücksetzen" hidden>Reset</button>
     </div>
@@ -494,10 +524,10 @@
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=104"></script>
-  <script src="audiobooks.js?v=20"></script>
+  <script src="app.js?v=106"></script>
+  <script src="audiobooks.js?v=21"></script>
   <script src="book-reader.js?v=14"></script>
-  <script src="vendor/article-editor.bundle.js?v=15"></script>
+  <script src="vendor/article-editor.bundle.js?v=16"></script>
   <script src="infographic-new.js?v=2"></script>
 </body>
 </html>

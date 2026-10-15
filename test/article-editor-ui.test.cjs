@@ -12,7 +12,7 @@ const PREVIEW = fs.readFileSync(path.join(ROOT, 'public', 'markdown-live-preview
 test('Artikeleditor verwendet die lokale Markdown-Live-Vorschau', () => {
   assert.doesNotMatch(HTML, /<textarea id="article-editor-text"/);
   assert.match(HTML, /<div id="article-editor-text"/);
-  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=15/);
+  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=16/);
   assert.match(EDITOR, /createMarkdownInput/);
   assert.match(EDITOR, /markdownInput\.getValue\(\)/);
   assert.match(EDITOR, /markdownInput\.setValue\(result\.markdown\)/);
@@ -36,7 +36,7 @@ test('aktive Markdown-Zeichen und gerenderte Strukturen besitzen eigene Stile', 
   assert.match(CSS, /\.cm-md-table-widget/);
   assert.match(CSS, /\.cm-md-image-widget/);
   assert.match(CSS, /\.cm-md-task-widget/);
-  assert.match(HTML, /styles\.css\?v=119/);
+  assert.match(HTML, /styles\.css\?v=124/);
   assert.match(CSS, /\.markdown-live-editor \.cm-md-markup/);
   assert.match(PREVIEW, /replaceSelection\(value\)/);
   assert.match(PREVIEW, /reflectReadOnly\(readOnly\)/);
@@ -50,6 +50,13 @@ test('Toolbar-Formatierungen werden sofort geparst und Markierungen bleiben mit 
   assert.match(PREVIEW, /else replace\(node\.from, node\.to, null, false, false\)/);
   const headingRule = CSS.match(/\.cm-md-heading-1,[\s\S]*?\.cm-md-heading-6\s*\{([^}]+)\}/)?.[1] || '';
   assert.doesNotMatch(headingRule, /padding-top/);
+});
+
+test('Strg beziehungsweise Cmd plus I formatiert kursiv vor CodeMirrors Syntaxauswahl', () => {
+  assert.match(PREVIEW, /const formattingShortcutKeymap = Prec\.high\(keymap\.of\(\[[\s\S]*?key: 'Mod-i'[\s\S]*?runFormattingShortcut\('i'\)/);
+  assert.match(PREVIEW, /formattingShortcutKeymap,[\s\S]*?minimalSetup,/);
+  assert.match(PREVIEW, /runShortcut\(key\)[\s\S]*?key === 'i'[\s\S]*?toggleInlineMarkdown\(source, from, to, '\*'\)/);
+  assert.doesNotMatch(PREVIEW, /keydown\(event\) \{ return toolbar\?\.handleShortcut/);
 });
 
 test('Pos1 bleibt auch bei umbrochenen und gerenderten Zeilen im aktuellen Markdown-Absatz', () => {

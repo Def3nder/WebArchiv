@@ -28,6 +28,7 @@ try {
   if (['recent', 'added', 'title', 'date', 'private'].includes(saved)) state.bookSort = saved;
 } catch { /* Speicher nicht verfügbar */ }
 $bookSort.value = state.bookSort;
+syncFilterAriaMenu($bookSort);
 $bookSort.addEventListener('change', () => {
   state.bookSort = $bookSort.value;
   try { localStorage.setItem('wa-book-sort', state.bookSort); } catch { /* ignorieren */ }
