@@ -69,6 +69,8 @@
     const bookSort = BOOK_SORTS.has(list.bookSort) ? list.bookSort : 'recent';
     const kind = VIEW_KINDS.has(view.kind) ? view.kind : 'list';
     const itemId = shortString(view.itemId);
+    const readerExtraFile = shortString(view.readerExtraFile, 500);
+    const normalizedKind = (kind === 'list' || itemId) ? kind : 'list';
     const author = shortString(list.author, 500);
     const externalAudio = list.externalAudio === true;
     const authorScope = externalAudio ? '__external_audio__' : author;
@@ -97,8 +99,9 @@
         bookSort,
       },
       view: {
-        kind: (kind === 'list' || itemId) ? kind : 'list',
+        kind: normalizedKind,
         itemId,
+        readerExtraFile: normalizedKind === 'reader' ? readerExtraFile : '',
         listPosition: position(view.listPosition, authorScope),
         detailPosition: position(view.detailPosition),
       },

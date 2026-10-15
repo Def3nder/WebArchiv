@@ -291,6 +291,9 @@ function snapshotSessionView() {
   const kind = activeViewKind();
   if (kind === 'list') lastListPosition = captureListPosition();
   const readerId = typeof bookReader !== 'undefined' && bookReader.book?.id ? bookReader.book.id : '';
+  const readerExtraFile = typeof bookReader !== 'undefined' && bookReader.extra?.file
+    ? bookReader.extra.file
+    : '';
   return {
     list: {
       q: state.q,
@@ -309,6 +312,7 @@ function snapshotSessionView() {
     view: {
       kind,
       itemId: kind === 'reader' ? readerId : (kind === 'detail' ? currentViewItemId : ''),
+      readerExtraFile: kind === 'reader' ? readerExtraFile : '',
       listPosition: lastListPosition || captureListPosition(),
       detailPosition: kind === 'detail' || kind === 'reader'
         ? (lastDetailPosition || captureDetailPosition())
@@ -1817,9 +1821,20 @@ async function restoreSessionView() {
         restoring: true,
       });
       if (restored && restoresSavedView && saved?.view.kind === 'reader'
-          && typeof currentBookDetail !== 'undefined' && currentBookDetail?.ebook
+          && typeof currentBookDetail !== 'undefined' && currentBookDetail
           && typeof openBookReader === 'function') {
-        await openBookReader(currentBookDetail);
+        const extraFile = saved.view.readerExtraFile || '';
+        const readerExtra = extraFile
+          ? currentBookDetail.extras?.find(extra => extra.type === 'markdown' && extra.file === extraFile)
+          : null;
+        if (readerExtra) {
+          // Beim Schließen des Texts soll wieder die Extras-Auswahl sichtbar sein,
+          // genau wie vor dem Neuladen.
+          if (typeof openBookExtras === 'function') openBookExtras(currentBookDetail);
+          await openBookReader(currentBookDetail, readerExtra);
+        } else if (!extraFile && currentBookDetail.ebook) {
+          await openBookReader(currentBookDetail);
+        }
       }
     } else if (!explicitDeepLink) {
       history.replaceState(null, '', '#/');

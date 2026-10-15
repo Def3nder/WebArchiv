@@ -94,11 +94,32 @@ test('Beschädigte, unbekannte und übergroße Werte fallen sicher auf Standardw
   assert.equal(normalized.list.layout, 'tall');
   assert.deepEqual(normalized.list.gridCardWidths, { square: null, tall: null });
   assert.equal(normalized.view.kind, 'list');
+  assert.equal(normalized.view.readerExtraFile, '');
 });
 
 test('Hörbuch-Sortierung merkt sich zuletzt hinzugefügt und privat', () => {
   assert.equal(sessionState.normalize({ version: 1, list: { bookSort: 'added' } }).list.bookSort, 'added');
   assert.equal(sessionState.normalize({ version: 1, list: { bookSort: 'private' } }).list.bookSort, 'private');
+});
+
+test('ein geöffneter Markdown-Extra-Text wird beim Neuladen eindeutig gespeichert', () => {
+  const normalized = sessionState.normalize({
+    version: 1,
+    list: { author: 'Hörbücher' },
+    view: {
+      kind: 'reader',
+      itemId: 'Hörbücher/Autor - Titel',
+      readerExtraFile: 'Praxisübungen.md',
+    },
+  });
+  assert.equal(normalized.view.kind, 'reader');
+  assert.equal(normalized.view.readerExtraFile, 'Praxisübungen.md');
+
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(app, /readerExtraFile: kind === 'reader' \? readerExtraFile : ''/);
+  assert.match(app, /extra\.type === 'markdown' && extra\.file === extraFile/);
+  assert.match(app, /openBookExtras\(currentBookDetail\)[\s\S]*?openBookReader\(currentBookDetail, readerExtra\)/);
+  assert.match(app, /else if \(!extraFile && currentBookDetail\.ebook\)/);
 });
 
 test('Bevorzugte Kachelbreiten werden getrennt gespeichert und sicher begrenzt', () => {
