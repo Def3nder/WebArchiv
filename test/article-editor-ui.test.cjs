@@ -12,7 +12,7 @@ const PREVIEW = fs.readFileSync(path.join(ROOT, 'public', 'markdown-live-preview
 test('Artikeleditor verwendet die lokale Markdown-Live-Vorschau', () => {
   assert.doesNotMatch(HTML, /<textarea id="article-editor-text"/);
   assert.match(HTML, /<div id="article-editor-text"/);
-  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=3/);
+  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=4/);
   assert.match(EDITOR, /createMarkdownInput/);
   assert.match(EDITOR, /markdownInput\.getValue\(\)/);
   assert.match(EDITOR, /markdownInput\.setValue\(result\.markdown\)/);

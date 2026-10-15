@@ -44,6 +44,10 @@ test('Abbruch einer Dateiauswahl schließt den Extras-Dialog nicht', () => {
   assert.match(manager, /addEventListener\('cancel',[\s\S]*?event\.target !== \$bem[\s\S]*?event\.preventDefault\(\)[\s\S]*?bemTryClose\(\)/);
 });
 
+test('Klick neben die Extras-Verwaltung schließt wie bei den übrigen Dialogen', () => {
+  assert.match(manager, /\$bem\.addEventListener\('click', event => \{[\s\S]*?event\.target !== \$bem[\s\S]*?\$bem\.getBoundingClientRect\(\)[\s\S]*?if \(!inside\) bemTryClose\(\)/);
+});
+
 test('Sichtbare Extras lassen sich per Drag-and-drop und Tastatur-Schaltern sortieren', () => {
   assert.match(manager, /draggable="true" data-bem-drag/);
   assert.match(manager, /addEventListener\('dragstart'/);
@@ -52,7 +56,7 @@ test('Sichtbare Extras lassen sich per Drag-and-drop und Tastatur-Schaltern sort
   assert.match(manager, /bemRequest\('order', \{ method: 'POST'/);
   assert.match(server, /app\.post\('\/api\/audiobook-extra-order\/\*'/);
   assert.match(editorEntry, /import '\.\/audiobook-extras-manager\.js'/);
-  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=3/);
+  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=4/);
 });
 
 test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dialog', () => {

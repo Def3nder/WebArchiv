@@ -48,9 +48,11 @@ function safeUploadName(value) {
   return stem + ext;
 }
 
-function renamedExtraFile(file, title) {
+function renamedExtraFile(file, title, preserveOrder = true) {
   const ext = path.extname(file).toLowerCase();
-  const prefix = path.parse(file).name.match(/^(\s*\d+\s*[-–._)]*\s*)/)?.[1] || '';
+  const prefix = preserveOrder
+    ? path.parse(file).name.match(/^(\s*\d+\s*[-–._)]*\s*)/)?.[1] || ''
+    : '';
   return prefix + safeExtraTitle(title) + ext;
 }
 
@@ -660,7 +662,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       const file = await actualEntry(dir, String(input.file || ''));
       const ext = path.extname(file).toLowerCase();
       if (scope === 'images' ? !EXTRA_IMAGE_EXTS.has(ext) : !EXTRA_EXTS.has(ext)) throw fail(415, 'Dieser Dateityp kann nicht verwaltet werden.');
-      const next = renamedExtraFile(file, input.title);
+      const next = renamedExtraFile(file, input.title, scope === 'extras');
       const conflict = (await fs.readdir(dir)).find(name => name.toLowerCase() === next.toLowerCase() && name !== file);
       if (conflict) throw fail(409, 'Eine Datei mit diesem Namen existiert bereits.');
       if (next === file) return { renamed: false, file };

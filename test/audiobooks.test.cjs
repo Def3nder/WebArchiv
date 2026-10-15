@@ -111,19 +111,19 @@ test('Extras-Verwaltung: Ordner lazy anlegen, Texte/Bilder verwalten und Bildver
   assert.deepEqual(await library.extrasManagement(book), { extras: [], images: [] });
   await assert.rejects(fs.stat(extrasDir), { code: 'ENOENT' });
 
-  await library.createExtraMarkdown(book, { title: 'Übungen', markdown: '# Übungen\n\n![Plan](images/plan.png)\n' });
+  await library.createExtraMarkdown(book, { title: 'Übungen', markdown: '# Übungen\n\n![Plan](images/1742389145678.png)\n' });
   book = library.books.find(item => item.title === 'Kommt Zusammen!');
   assert.equal((await fs.stat(extrasDir)).isDirectory(), true);
   assert.deepEqual((await library.extrasManagement(book)).extras.map(item => item.file), ['Übungen.md']);
 
   const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]);
-  await library.uploadExtraFile(book, { scope: 'images', name: 'plan.png' }, png);
+  await library.uploadExtraFile(book, { scope: 'images', name: '1742389145678.png' }, png);
   book = library.books.find(item => item.title === 'Kommt Zusammen!');
   await library.uploadExtraFile(book, { scope: 'extras', name: 'Karte.png' }, png);
   book = library.books.find(item => item.title === 'Kommt Zusammen!');
   let managed = await library.extrasManagement(book);
   assert.deepEqual(managed.extras.map(item => item.file), ['Karte.png', 'Übungen.md']);
-  assert.deepEqual(managed.images.map(item => item.file), ['plan.png']);
+  assert.deepEqual(managed.images.map(item => item.file), ['1742389145678.png']);
 
   await assert.rejects(
     library.reorderExtras(book, { files: ['Übungen.md'] }),
@@ -139,7 +139,7 @@ test('Extras-Verwaltung: Ordner lazy anlegen, Texte/Bilder verwalten und Bildver
   assert.deepEqual(managed.extras.map(item => item.file), ['01 - Übungen.md', '02 - Karte.png']);
   assert.deepEqual(book.extras.map(item => item.title), ['Übungen', 'Karte']);
 
-  await library.renameExtraEntry(book, { scope: 'images', file: 'plan.png', title: 'Tagesplan' });
+  await library.renameExtraEntry(book, { scope: 'images', file: '1742389145678.png', title: 'Tagesplan' });
   book = library.books.find(item => item.title === 'Kommt Zusammen!');
   let source = await library.extraMarkdownSource(book, '01 - Übungen.md');
   assert.match(source.markdown, /images\/Tagesplan\.png/);

@@ -518,6 +518,15 @@ $bem.addEventListener('cancel', event => {
   event.preventDefault();
   bemTryClose();
 });
+// Wie bei den übrigen modalen Dialogen schließt ein Klick neben die sichtbare
+// Dialogfläche. Klicks auf Inhalt oder freie Fläche innerhalb des Dialogs bleiben erhalten.
+$bem.addEventListener('click', event => {
+  if (event.target !== $bem) return;
+  const rect = $bem.getBoundingClientRect();
+  const inside = event.clientX >= rect.left && event.clientX <= rect.right
+    && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  if (!inside) bemTryClose();
+});
 $bem.querySelector('[data-bem-new-text]').addEventListener('click', bemOpenNewText);
 $bem.querySelector('[data-bem-preview-close]').addEventListener('click', () => bemClosePreview());
 $bem.querySelector('[data-bem-add-extra]').addEventListener('click', () => {
