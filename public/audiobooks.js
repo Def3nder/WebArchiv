@@ -476,12 +476,19 @@ function bookAudio() {
   if (bookPlayer.audio) return bookPlayer.audio;
   const audio = new Audio();
   audio.preload = 'metadata';
-  audio.addEventListener('loadedmetadata', bookApplyPendingSeek);
+  audio.addEventListener('loadedmetadata', () => {
+    bookApplyPendingSeek();
+    bookSyncMediaSessionState();
+  });
   audio.addEventListener('timeupdate', () => {
     bookUpdateUi();
+    bookSyncMediaSessionState();
     if (!audio.paused && Date.now() - bookPlayer.lastSavedAt > BOOK_SAVE_INTERVAL_MS) bookSave();
   });
-  audio.addEventListener('durationchange', bookUpdateUi);
+  audio.addEventListener('durationchange', () => {
+    bookUpdateUi();
+    bookSyncMediaSessionState();
+  });
   audio.addEventListener('play', () => {
     // Zwischendurch lief Artikel-Audio und hatte den Sperrbildschirm: wieder übernehmen.
     if (typeof articleSessionActive !== 'undefined' && articleSessionActive) articleSessionActive = false;
@@ -489,12 +496,20 @@ function bookAudio() {
     bookUpdateUi();
   });
   audio.addEventListener('playing', bookPreloadNext);
-  audio.addEventListener('pause', () => { bookUpdateUi(); bookSave(); });
+  audio.addEventListener('playing', bookSyncMediaSessionState);
+  audio.addEventListener('pause', () => {
+    bookUpdateUi();
+    bookSyncMediaSessionState();
+    bookSave();
+  });
+  audio.addEventListener('seeked', bookSyncMediaSessionState);
+  audio.addEventListener('ratechange', bookSyncMediaSessionState);
   audio.addEventListener('ended', () => {
     if (bookPlayer.index < bookPlayer.book.tracks.length - 1) {
       bookLoadTrack(bookPlayer.index + 1, { fromStart: 0 }, true);
     } else {
       bookUpdateUi();
+      bookSyncMediaSessionState();
       bookSave();
     }
   });
@@ -578,6 +593,7 @@ function bookPlay() {
     audioEl.pause();
     currentAudioBtn?.classList.remove('playing');
   }
+  if (typeof prepareAudioPlaybackSession === 'function') prepareAudioPlaybackSession();
   bookPlayer.audio?.play().catch(() => bookUpdateUi());
 }
 
@@ -746,6 +762,28 @@ new MutationObserver(() => {
 }).observe($detail, { childList: true });
 
 // Sperrbildschirm / Kopfhörertasten (iOS, Android, Desktop).
+function bookSyncMediaSessionState() {
+  if (!('mediaSession' in navigator) || !bookPlayer.book || !bookPlayer.audio) return;
+  const audio = bookPlayer.audio;
+
+  // WebKit leitet diesen Zustand nicht immer zuverlässig aus dem Audio-Element ab.
+  // Ohne die explizite Angabe zeigt der iOS-Sperrbildschirm oft "pausiert" und 0:00.
+  try {
+    navigator.mediaSession.playbackState = audio.paused || audio.ended ? 'paused' : 'playing';
+  } catch { /* nicht unterstützt */ }
+
+  if (!isFinite(audio.duration) || audio.duration <= 0) return;
+  const playbackRate = isFinite(audio.playbackRate) && audio.playbackRate > 0 ? audio.playbackRate : 1;
+  const position = Math.min(Math.max(isFinite(audio.currentTime) ? audio.currentTime : 0, 0), audio.duration);
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: audio.duration,
+      playbackRate,
+      position,
+    });
+  } catch { /* nicht unterstützt */ }
+}
+
 function bookMediaSession() {
   if (!('mediaSession' in navigator) || !bookPlayer.book) return;
   const book = bookPlayer.book;
@@ -765,11 +803,17 @@ function bookMediaSession() {
     seekforward: d => bookSeekBy(d.seekOffset || skipShortSeconds),
     previoustrack: () => bookGoTo(bookPlayer.index - 1, { fromStart: 0 }),
     nexttrack: () => bookGoTo(bookPlayer.index + 1, { fromStart: 0 }),
-    seekto: d => { if (bookPlayer.audio && isFinite(d.seekTime)) bookPlayer.audio.currentTime = d.seekTime; },
+    seekto: d => {
+      if (bookPlayer.audio && isFinite(d.seekTime)) {
+        bookPlayer.audio.currentTime = d.seekTime;
+        bookSyncMediaSessionState();
+      }
+    },
   };
   for (const [action, handler] of Object.entries(handlers)) {
     try { navigator.mediaSession.setActionHandler(action, handler); } catch { /* nicht unterstützt */ }
   }
+  bookSyncMediaSessionState();
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────

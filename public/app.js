@@ -1730,7 +1730,27 @@ async function articleArtworkDataUrl(src) {
   return dataUrl;
 }
 
-function setArticleMediaSession(article, audio) {
+// iOS verwendet ohne ausdrücklichen Typ für Webseiten teils eine kurzlebige Audio-Session.
+// Nach einer Pause am Sperrbildschirm kann play() dann erfolgreich wirken, während die Ausgabe
+// stumm/suspendiert bleibt. "playback" hält die Session für längere Medien aktiv.
+function prepareAudioPlaybackSession() {
+  if (!('audioSession' in navigator)) return;
+  try { navigator.audioSession.type = 'playback'; } catch { /* API ist experimentell */ }
+}
+
+function playArticleAudio(audio) {
+  prepareAudioPlaybackSession();
+  const started = audio.play();
+  if (started && typeof started.catch === 'function') {
+    started.catch(() => {
+      // Ein play-Ereignis bedeutet nur, dass Wiedergabe angefordert wurde. Erst "playing"
+      // schaltet den Knopf um; bei einem Fehler bleibt er daher korrekt auf Abspielen.
+      if (audio === audioEl) currentAudioBtn?.classList.remove('playing');
+    });
+  }
+}
+
+function setArticleMediaSession(article) {
   if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
   // Wird beim Klick und beim Play-Ereignis aufgerufen; ein Mal pro Artikel genügt.
   if (articleSessionActive && articleSessionId === article.id) return;
@@ -1760,18 +1780,11 @@ function setArticleMediaSession(article, audio) {
     }).catch(() => { /* URL-Bild bleibt gemeldet */ });
   }
 
-  const skip = 15;
-  const handlers = {
-    play: () => { if (typeof bookPlayerPause === 'function') bookPlayerPause(); audio.play().catch(() => {}); },
-    pause: () => audio.pause(),
-    seekbackward: d => { audio.currentTime = Math.max(0, audio.currentTime - (d.seekOffset || skip)); },
-    seekforward: d => { audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + (d.seekOffset || skip)); },
-    seekto: d => { if (isFinite(d.seekTime)) audio.currentTime = d.seekTime; },
-    previoustrack: null,
-    nexttrack: null,
-  };
-  for (const [action, handler] of Object.entries(handlers)) {
-    try { navigator.mediaSession.setActionHandler(action, handler); } catch { /* nicht unterstützt */ }
+  // Play/Pause absichtlich nicht selbst behandeln: WebKit kann das aktive HTMLMediaElement
+  // direkt und zuverlässiger aus dem Sperrbildschirm fortsetzen. Ein eigener play()-Aufruf im
+  // Hintergrund kann auf iOS erfolgreich erscheinen, obwohl die Audioausgabe stumm bleibt.
+  for (const action of ['play', 'pause', 'seekbackward', 'seekforward', 'seekto', 'previoustrack', 'nexttrack']) {
+    try { navigator.mediaSession.setActionHandler(action, null); } catch { /* nicht unterstützt */ }
   }
 }
 
@@ -1830,20 +1843,22 @@ function wireAudioPlayer(audioUrl, article) {
   // Abspielen/Pause vom Sperrbildschirm aus: Knopf mitführen, Media Session übernehmen.
   const audio = audioEl;
   audio.addEventListener('play', () => {
-    btn.classList.add('playing');
-    if (article) setArticleMediaSession(article, audio);
+    if (article) setArticleMediaSession(article);
   });
-  audio.addEventListener('pause', () => btn.classList.remove('playing'));
+  audio.addEventListener('playing', () => {
+    btn.classList.add('playing');
+  });
+  audio.addEventListener('pause', () => {
+    btn.classList.remove('playing');
+  });
 
   btn.addEventListener('click', () => {
-    if (audioEl.paused) {
+    if (audioEl.paused || !btn.classList.contains('playing')) {
       if (typeof bookPlayerPause === 'function') bookPlayerPause();
-      if (article) setArticleMediaSession(article, audioEl);   // vor play(), damit iOS das Bild sofort übernimmt
-      audioEl.play();
-      btn.classList.add('playing');
+      if (article) setArticleMediaSession(article);   // vor play(), damit iOS das Bild sofort übernimmt
+      playArticleAudio(audioEl);
     } else {
       audioEl.pause();
-      btn.classList.remove('playing');
     }
   });
 

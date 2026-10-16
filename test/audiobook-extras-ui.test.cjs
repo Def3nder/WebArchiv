@@ -24,7 +24,7 @@ test('Admin kann aus der Extras-Anzeige direkt in die Verwaltung wechseln', () =
   assert.match(books, /currentUser\?\.role === 'admin'[\s\S]*data-extras-manage[\s\S]*>Verwalten<\/span>/);
   assert.match(books, /data-extras-manage[^\n]*addEventListener\('click',[\s\S]*?closeBookExtras\(false\)[\s\S]*?openBookExtrasManager\(book\)/);
   assert.match(books, /function closeBookExtras\(restoreFocus = true\)[\s\S]*?restoreFocus !== false/);
-  assert.match(html, /audiobooks\.js\?v=22/);
+  assert.match(html, /audiobooks\.js\?v=23/);
 });
 
 test('Sichtbare Extras werden erst beim Öffnen vom Server geladen', () => {
@@ -156,7 +156,7 @@ test('Escape und Herunterziehen schließen zuerst nur den Markdown-Editor', () =
   assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(!\$bemEditor\.hidden\) \{[\s\S]*?bemCloseEditor\(\);[\s\S]*?return;[\s\S]*?\$bem\.close\(\)/);
   assert.match(app, /\['#book-extras-manager', '#book-extras-manager \[data-bem-close\]'\]/);
   assert.match(app, /onClose: \(\) => closeBtn\.click\(\)/);
-  assert.match(html, /app\.js\?v=108/);
+  assert.match(html, /app\.js\?v=110/);
 });
 
 test('Escape und Herunterziehen schließen zuerst nur die Dateivorschau', () => {

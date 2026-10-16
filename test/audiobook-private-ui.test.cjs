@@ -20,5 +20,5 @@ test('Aktionen-Menü kann die persönliche Privat-Markierung umschalten', () => 
   assert.match(books, /data-book-private>\$\{book\.private \? 'Privat aufheben' : 'Als privat markieren'\}/);
   assert.match(books, /apiFetch\('\/api\/audiobook-private\/'[\s\S]*?method: 'PUT'[\s\S]*?private: !book\.private/);
   assert.match(server, /app\.put\('\/api\/audiobook-private\/\*'[\s\S]*?progress\.setPrivate\(user\.email, book\.id, req\.body\?\.private\)/);
-  assert.match(html, /audiobooks\.js\?v=22/);
+  assert.match(html, /audiobooks\.js\?v=23/);
 });
