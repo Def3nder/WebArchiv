@@ -77,19 +77,38 @@ test('Bibliothek: natürliche Sortierung, Cover, Fallbacks, leere Ordner übersp
   assert.equal(nagoski.bookAuthor, 'Emily Nagoski');
   assert.equal(nagoski.filePath, null);
   assert.match(nagoski.imageUrl, /\/audio-files\/Hoerbuecher\/standard\.png/);
-  const detail = library.detail({ email: 'a@b.de' }, kuschik.id);
+  const detail = await library.detail({ email: 'a@b.de' }, kuschik.id);
   assert.equal(detail.descriptionHtml, '<p>**Fett** und Text.</p>');
   assert.equal(detail.hasAbstract, true);
   assert.equal(detail.filePath, undefined);
-  assert.equal(detail.extrasDirName, undefined);
-  assert.deepEqual(detail.extras.map(extra => [extra.file, extra.title, extra.type]), [
+  assert.equal(detail.hasExtras, true);
+  assert.equal(detail.extras, undefined);
+  const extras = await library.extras(kuschik);
+  assert.deepEqual(extras.extras.map(extra => [extra.file, extra.title, extra.type]), [
     ['01 - Praxisübungen.md', 'Praxisübungen', 'markdown'],
     ['02 - Übersicht.jpg', 'Übersicht', 'image'],
     ['10 - Animation.GIF', 'Animation', 'image'],
   ]);
-  assert.match(detail.extras[1].url, /\/extras\/02%20-%20%C3%9Cbersicht\.jpg\?v=\d+$/);
+  assert.match(extras.extras[1].url, /\/extras\/02%20-%20%C3%9Cbersicht\.jpg\?v=\d+$/);
   assert.equal(library.list({ email: 'a@b.de' }).items[0].tracks, undefined);
-  assert.equal(library.list({ email: 'a@b.de' }).items[0].hasExtras, true);
+  assert.equal(library.list({ email: 'a@b.de' }).items[0].hasExtras, undefined);
+});
+
+test('Extras werden nach dem Indexaufbau dynamisch gefunden und gelesen', async t => {
+  const { root, library } = await fixture(t);
+  const book = library.books.find(item => item.title === 'Kommt Zusammen!');
+  assert.equal((await library.detail({ email: 'a@b.de' }, book.id)).hasExtras, false);
+  assert.deepEqual(await library.extras(book), { extras: [] });
+
+  const extrasDir = path.join(root, 'Emily Nagoski - Kommt Zusammen!', 'Extras');
+  await fs.mkdir(extrasDir);
+  await fs.writeFile(path.join(extrasDir, 'Neu.md'), '# Dynamisch');
+  await fs.writeFile(path.join(extrasDir, 'Ignorieren.pdf'), 'x');
+
+  assert.equal((await library.detail({ email: 'a@b.de' }, book.id)).hasExtras, true);
+  assert.deepEqual((await library.extras(book)).extras.map(extra => extra.file), ['Neu.md']);
+  assert.equal((await library.extraText(book, 'Neu.md')).html, '<p># Dynamisch</p>');
+  assert.equal(book.extras, undefined);
 });
 
 test('Extras: Markdown wird gerendert, Bilder nur aus extras/images aufgelöst und Dateiname geprüft', async t => {
@@ -137,7 +156,7 @@ test('Extras-Verwaltung: Ordner lazy anlegen, Texte/Bilder verwalten und Bildver
   book = library.books.find(item => item.title === 'Kommt Zusammen!');
   managed = await library.extrasManagement(book);
   assert.deepEqual(managed.extras.map(item => item.file), ['01 - Übungen.md', '02 - Karte.png']);
-  assert.deepEqual(book.extras.map(item => item.title), ['Übungen', 'Karte']);
+  assert.equal(book.extras, undefined);
 
   await library.renameExtraEntry(book, { scope: 'images', file: '1742389145678.png', title: 'Tagesplan' });
   book = library.books.find(item => item.title === 'Kommt Zusammen!');
@@ -195,7 +214,7 @@ test('Private Hörbücher sind nutzerbezogen und nur in der Sortierung „Privat
   const user = { email: 'a@b.de' };
   const privateBook = library.books.find(book => book.title === '50 Fragen');
 
-  assert.equal(library.detail(user, privateBook.id).private, false);
+  assert.equal((await library.detail(user, privateBook.id)).private, false);
   await assert.rejects(progress.setPrivate(user.email, privateBook.id, 'ja'), { status: 400 });
   assert.deepEqual(await progress.setPrivate(user.email, privateBook.id, true), { private: true });
 
@@ -203,7 +222,7 @@ test('Private Hörbücher sind nutzerbezogen und nur in der Sortierung „Privat
   assert.deepEqual(library.list(user, { sort: 'private' }).items.map(book => book.title), ['50 Fragen']);
   assert.equal(library.list(user, { sort: 'private' }).items[0].private, true);
   assert.deepEqual(library.list({ email: 'andere@b.de' }, { sort: 'private' }).items, []);
-  assert.equal(library.detail(user, privateBook.id).private, true);
+  assert.equal((await library.detail(user, privateBook.id)).private, true);
 
   const reloaded = createProgressStore({ file: path.join(dir, 'progress.json') });
   reloaded.load();
@@ -268,7 +287,7 @@ test('eBook: Dateiname = Ordnername, Endung md/txt/pdf, abstract.md und fremde D
   assert.equal(byTitle('Mit PDF').ebook.format, 'pdf');
   assert.equal(byTitle('Ohne').ebook, null);
   assert.equal(byTitle('Beides').ebook.format, 'txt');   // md vor txt vor pdf
-  const detail = library.detail({ email: 'a@b.de' }, byTitle('Mit PDF').id);
+  const detail = await library.detail({ email: 'a@b.de' }, byTitle('Mit PDF').id);
   assert.equal(detail.ebook.format, 'pdf');
   assert.equal(detail.bookDir, undefined);
   assert.equal(library.list({ email: 'a@b.de' }).items.every(b => b.bookDir === undefined), true);
@@ -301,8 +320,8 @@ test('Leseposition: pro Nutzer und Buch, getrennt vom Hörstand, Format und Wert
   assert.equal(progress.getText('a@b.de', pdf.id, 'md'), null);       // Format gewechselt → ignoriert
   assert.equal(progress.getText('andere@b.de', text.id, 'txt'), null);
   assert.equal(progress.get('a@b.de', text.id).position, 5);          // Hörstand bleibt erhalten
-  assert.equal(library.detail({ email: 'a@b.de' }, pdf.id).ebookPosition, 42);
-  assert.equal(library.detail({ email: 'a@b.de' }, byTitle('Ohne').id).ebookPosition, null);
+  assert.equal((await library.detail({ email: 'a@b.de' }, pdf.id)).ebookPosition, 42);
+  assert.equal((await library.detail({ email: 'a@b.de' }, byTitle('Ohne').id)).ebookPosition, null);
 
   // Hören nach Lesen überschreibt die Leseposition nicht.
   await progress.set('a@b.de', text, { trackIndex: 0, position: 9 });
@@ -370,7 +389,7 @@ test('reines eBook (ohne Audio): erscheint, ohne Tracks; Ordner ohne Audio und o
   assert.equal(mitAudio.ebookOnly, false);
   assert.deepEqual(library.list(user).items.map(b => [b.title, b.trackCount, b.ebookOnly]),
     [['Mit Audio', 1, false], ['Nur PDF', 0, true], ['Nur Text', 0, true]]);
-  const detail = library.detail(user, nurText.id);
+  const detail = await library.detail(user, nurText.id);
   assert.deepEqual(detail.tracks, []);
   assert.equal(detail.ebook.format, 'md');
   assert.equal(detail.progress, null);

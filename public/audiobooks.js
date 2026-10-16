@@ -114,7 +114,7 @@ function renderBookDetail(book) {
   const readButton = book.ebook
     ? `<button type="button" class="detail-cat-pill" data-book-text title="Text zum Hörbuch lesen">Text lesen</button>`
     : '';
-  const extrasButton = book.extras?.length
+  const extrasButton = book.hasExtras
     ? `<button type="button" class="detail-cat-pill" data-book-extras title="Extra-Material anzeigen">Extras</button>`
     : '';
   const editAction = currentUser?.role === 'admin' && book.hasAbstract
@@ -285,9 +285,20 @@ function svgBookExtrasManage() {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></svg>';
 }
 
-function openBookExtras(book) {
-  if (!book.extras?.length || document.getElementById('book-extras')) return;
-  const images = book.extras.filter(extra => extra.type === 'image');
+function bookExtrasApiPath(book) {
+  return '/api/audiobook-extras/' + book.id.split('/').map(encodeURIComponent).join('/');
+}
+
+async function fetchBookExtras(book) {
+  const response = await apiFetch(bookExtrasApiPath(book), { cache: 'no-store' });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Die Extras konnten nicht geladen werden.');
+  return Array.isArray(data.extras) ? data.extras : [];
+}
+
+async function openBookExtras(book, prefetchedExtras = null) {
+  const existing = document.getElementById('book-extras');
+  if (existing) return existing.extrasPromise || [];
   const el = document.createElement('div');
   el.id = 'book-extras';
   el.className = 'book-reader book-extras';
@@ -300,13 +311,7 @@ function openBookExtras(book) {
       <span class="book-reader-heading"><span class="book-reader-title">Extras</span><span class="book-reader-where">${esc(book.title)}</span></span>
       ${currentUser?.role === 'admin' ? `<button type="button" class="book-btn" data-extras-manage aria-label="Extras verwalten" title="Extras verwalten">${svgBookExtrasManage()}<span>Verwalten</span></button>` : ''}
     </header>
-    <div class="book-extras-scroll"><div class="book-extras-grid">
-      ${book.extras.map((extra, index) => `<button type="button" class="book-extra-card${extra.type === 'markdown' ? ' is-document' : ''}" data-extra="${index}" aria-label="${esc(extra.title)}">
-        <span class="book-extra-preview ${extra.type === 'markdown' ? 'is-document' : ''}">
-          ${extra.type === 'image' ? `<img src="${esc(extra.url)}" alt="" loading="lazy">` : svgBookExtraDocument()}
-        </span><span class="book-extra-title">${esc(extra.title)}</span>
-      </button>`).join('')}
-    </div></div>`;
+    <div class="book-extras-scroll"><p class="book-reader-status" data-extras-status>Extras werden geladen …</p></div>`;
   document.body.appendChild(el);
   document.body.classList.add('book-reader-open');
   el.querySelector('[data-extras-close]').addEventListener('click', closeBookExtras);
@@ -324,17 +329,42 @@ function openBookExtras(book) {
       onClose: closeBookExtras,
     });
   }
-  el.querySelectorAll('[data-extra]').forEach(button => button.addEventListener('click', () => {
-    const extra = book.extras[Number(button.dataset.extra)];
-    if (extra.type === 'image') {
-      // Extra-Bilder bleiben in ihrer eigenen Galerie; am Rand nicht zum nächsten
-      // Hörbuch beziehungsweise dessen Cover weiternavigieren.
-      openGalleryFullscreen(images.map(item => item.url), images.indexOf(extra), null, true);
-    } else {
-      openBookReader(book, extra);
-    }
-  }));
   el.querySelector('[data-extras-close]').focus();
+
+  const extrasPromise = (async () => {
+    try {
+      const extras = prefetchedExtras ?? await fetchBookExtras(book);
+      if (!el.isConnected) return extras;
+      if (!extras.length) {
+        scroller.innerHTML = '<p class="book-reader-status">Keine Extras vorhanden.</p>';
+        return extras;
+      }
+      const images = extras.filter(extra => extra.type === 'image');
+      scroller.innerHTML = `<div class="book-extras-grid">
+        ${extras.map((extra, index) => `<button type="button" class="book-extra-card${extra.type === 'markdown' ? ' is-document' : ''}" data-extra="${index}" aria-label="${esc(extra.title)}">
+          <span class="book-extra-preview ${extra.type === 'markdown' ? 'is-document' : ''}">
+            ${extra.type === 'image' ? `<img src="${esc(extra.url)}" alt="" loading="lazy">` : svgBookExtraDocument()}
+          </span><span class="book-extra-title">${esc(extra.title)}</span>
+        </button>`).join('')}
+      </div>`;
+      el.querySelectorAll('[data-extra]').forEach(button => button.addEventListener('click', () => {
+        const extra = extras[Number(button.dataset.extra)];
+        if (extra.type === 'image') {
+          // Extra-Bilder bleiben in ihrer eigenen Galerie; am Rand nicht zum nächsten
+          // Hörbuch beziehungsweise dessen Cover weiternavigieren.
+          openGalleryFullscreen(images.map(item => item.url), images.indexOf(extra), null, true);
+        } else {
+          openBookReader(book, extra);
+        }
+      }));
+      return extras;
+    } catch (error) {
+      if (el.isConnected) scroller.innerHTML = `<p class="book-reader-status">${esc(error.message)}</p>`;
+      return [];
+    }
+  })();
+  el.extrasPromise = extrasPromise;
+  return extrasPromise;
 }
 
 function closeBookExtras(restoreFocus = true) {

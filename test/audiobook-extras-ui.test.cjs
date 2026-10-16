@@ -24,7 +24,17 @@ test('Admin kann aus der Extras-Anzeige direkt in die Verwaltung wechseln', () =
   assert.match(books, /currentUser\?\.role === 'admin'[\s\S]*data-extras-manage[\s\S]*>Verwalten<\/span>/);
   assert.match(books, /data-extras-manage[^\n]*addEventListener\('click',[\s\S]*?closeBookExtras\(false\)[\s\S]*?openBookExtrasManager\(book\)/);
   assert.match(books, /function closeBookExtras\(restoreFocus = true\)[\s\S]*?restoreFocus !== false/);
-  assert.match(html, /audiobooks\.js\?v=21/);
+  assert.match(html, /audiobooks\.js\?v=22/);
+});
+
+test('Sichtbare Extras werden erst beim Öffnen vom Server geladen', () => {
+  assert.match(books, /book\.hasExtras[\s\S]*data-book-extras/);
+  assert.match(books, /function bookExtrasApiPath[\s\S]*\/api\/audiobook-extras\//);
+  assert.match(books, /async function fetchBookExtras[\s\S]*apiFetch\(bookExtrasApiPath\(book\)/);
+  assert.match(books, /async function openBookExtras[\s\S]*await fetchBookExtras\(book\)/);
+  assert.doesNotMatch(books, /book\.extras/);
+  assert.match(app, /await fetchBookExtras\(currentBookDetail\)[\s\S]*await openBookExtras\(currentBookDetail, extras\)/);
+  assert.match(server, /app\.get\('\/api\/audiobook-extras\/\*'[\s\S]*return library\.extras\(book\)/);
 });
 
 test('Manager trennt sichtbare Extras und eingebettete Bilder ohne Manifest', () => {
@@ -146,7 +156,7 @@ test('Escape und Herunterziehen schließen zuerst nur den Markdown-Editor', () =
   assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(!\$bemEditor\.hidden\) \{[\s\S]*?bemCloseEditor\(\);[\s\S]*?return;[\s\S]*?\$bem\.close\(\)/);
   assert.match(app, /\['#book-extras-manager', '#book-extras-manager \[data-bem-close\]'\]/);
   assert.match(app, /onClose: \(\) => closeBtn\.click\(\)/);
-  assert.match(html, /app\.js\?v=107/);
+  assert.match(html, /app\.js\?v=108/);
 });
 
 test('Escape und Herunterziehen schließen zuerst nur die Dateivorschau', () => {

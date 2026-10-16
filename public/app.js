@@ -1977,13 +1977,14 @@ async function restoreSessionView() {
           && typeof currentBookDetail !== 'undefined' && currentBookDetail
           && typeof openBookReader === 'function') {
         const extraFile = saved.view.readerExtraFile || '';
-        const readerExtra = extraFile
-          ? currentBookDetail.extras?.find(extra => extra.type === 'markdown' && extra.file === extraFile)
-          : null;
+        const extras = extraFile && typeof fetchBookExtras === 'function'
+          ? await fetchBookExtras(currentBookDetail).catch(() => [])
+          : [];
+        const readerExtra = extras.find(extra => extra.type === 'markdown' && extra.file === extraFile);
         if (readerExtra) {
           // Beim Schließen des Texts soll wieder die Extras-Auswahl sichtbar sein,
           // genau wie vor dem Neuladen.
-          if (typeof openBookExtras === 'function') openBookExtras(currentBookDetail);
+          if (typeof openBookExtras === 'function') await openBookExtras(currentBookDetail, extras);
           await openBookReader(currentBookDetail, readerExtra);
         } else if (!extraFile && currentBookDetail.ebook) {
           await openBookReader(currentBookDetail);

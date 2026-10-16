@@ -118,7 +118,7 @@ test('ein geöffneter Markdown-Extra-Text wird beim Neuladen eindeutig gespeiche
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(app, /readerExtraFile: kind === 'reader' \? readerExtraFile : ''/);
   assert.match(app, /extra\.type === 'markdown' && extra\.file === extraFile/);
-  assert.match(app, /openBookExtras\(currentBookDetail\)[\s\S]*?openBookReader\(currentBookDetail, readerExtra\)/);
+  assert.match(app, /await fetchBookExtras\(currentBookDetail\)[\s\S]*?await openBookExtras\(currentBookDetail, extras\)[\s\S]*?openBookReader\(currentBookDetail, readerExtra\)/);
   assert.match(app, /else if \(!extraFile && currentBookDetail\.ebook\)/);
 });
 

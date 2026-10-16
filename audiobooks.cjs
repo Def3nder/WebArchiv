@@ -213,25 +213,6 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     }
 
     const ebook = ebookFile ? { format: path.extname(ebookFile).slice(1).toLowerCase(), file: ebookFile } : null;
-    const extrasDir = entries.find(entry => entry.isDirectory() && entry.name.toLowerCase() === 'extras');
-    let extras = [];
-    if (extrasDir) {
-      const extraPath = path.join(dirPath, extrasDir.name);
-      const extraEntries = await fs.readdir(extraPath, { withFileTypes: true });
-      extras = extraEntries
-        .filter(entry => entry.isFile() && EXTRA_EXTS.has(path.extname(entry.name).toLowerCase()))
-        .map(entry => {
-          const ext = path.extname(entry.name).toLowerCase();
-          return {
-            file: entry.name,
-            title: extraTitle(entry.name, title),
-            type: ext === '.md' ? 'markdown' : 'image',
-            ...(ext === '.md' ? {} : { url: withVersion(mediaUrl(dirName, bookDir, extrasDir.name, entry.name), path.join(extraPath, entry.name)) }),
-          };
-        })
-        .sort((a, b) => collator.compare(a.file, b.file));
-    }
-
     const titles = trackTitles(trackFiles);
     return {
       // ID unabhängig vom Ordnernamen auf der Platte → Hörfortschritt bleibt gültig.
@@ -252,8 +233,6 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       description: abstract.description,
       filePath: abstractPath,
       ebook,
-      extras,
-      extrasDirName: extrasDir?.name || null,
       bookDir,
     };
   }
@@ -301,11 +280,10 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
   }
 
   function listView(book, user) {
-    const { tracks, description, filePath, bookDir, extras, extrasDirName, ...rest } = book;
+    const { tracks, description, filePath, bookDir, ...rest } = book;
     return {
       ...rest,
       private: progress.isPrivate(user?.email, book.id),
-      hasExtras: extras.length > 0,
       progress: progressSummary(user, book),
     };
   }
@@ -337,14 +315,15 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     };
   }
 
-  function detail(user, id) {
+  async function detail(user, id) {
     const book = books.find(b => b.id === id);
     if (!book) return null;
-    const { description, filePath, bookDir, extrasDirName, ...rest } = book;
+    const { description, filePath, bookDir, ...rest } = book;
     const entry = progress.get(user?.email, book.id);
     return {
       ...rest,
       private: progress.isPrivate(user?.email, book.id),
+      hasExtras: !!(await existingExtrasPath(book)),
       tracks: book.tracks.map(({ title, url }) => ({ title, url })),
       descriptionHtml: description ? renderMarkdown(description) : '',
       hasAbstract: !!filePath,
@@ -417,10 +396,16 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
   }
 
   async function extraText(book, file) {
-    const extra = book?.extras?.find(item => item.type === 'markdown' && item.file === file);
-    if (!extra) throw fail(404, 'Das Extra wurde nicht gefunden.');
-    const extrasDir = path.join(root, book.bookDir, book.extrasDirName);
-    const abs = path.join(extrasDir, extra.file);
+    const extrasDir = await existingExtrasPath(book);
+    if (!extrasDir) throw fail(404, 'Das Extra wurde nicht gefunden.');
+    const requested = String(file || '');
+    if (!requested || path.basename(requested) !== requested || requested.startsWith('.')) {
+      throw fail(404, 'Das Extra wurde nicht gefunden.');
+    }
+    const actualFile = await actualEntry(extrasDir, requested);
+    if (path.extname(actualFile).toLowerCase() !== '.md') throw fail(404, 'Das Extra wurde nicht gefunden.');
+    const extra = { file: actualFile, title: extraTitle(actualFile, book.title) };
+    const abs = path.join(extrasDir, actualFile);
     const stat = await fs.stat(abs);
     if (stat.size > EBOOK_MAX_BYTES) throw fail(413, 'Der Text ist zu groß.');
     const cacheKey = `${book.id}\0extra\0${extra.file}`;
@@ -437,7 +422,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       const parts = path.posix.normalize(rel.split('\\').join('/').split(/[?#]/)[0]).split('/').filter(part => part && part !== '.');
       let url = null;
       if (parts.length > 1 && parts[0].toLowerCase() === 'images' && !parts.includes('..')) {
-        const resolved = await resolveEbookImage(book.bookDir, [book.extrasDirName, ...parts].join('/'));
+        const resolved = await resolveEbookImage(book.bookDir, [path.basename(extrasDir), ...parts].join('/'));
         url = resolved.url || null;
       }
       html = html.split(tag).join(url ? tag.replace(match[0], 'src="' + url + '"') : '');
@@ -458,11 +443,12 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
   }
 
   async function existingExtrasPath(book) {
-    const { extrasPath } = extrasPaths(book);
-    const stat = await fs.lstat(extrasPath).catch(error => error.code === 'ENOENT' ? null : Promise.reject(error));
-    if (!stat) return null;
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw fail(403, 'Der Extras-Pfad ist kein erlaubter Ordner.');
-    return extrasPath;
+    const { bookPath } = extrasPaths(book);
+    const entries = await fs.readdir(bookPath, { withFileTypes: true });
+    const entry = entries.find(item => item.name.toLowerCase() === 'extras');
+    if (!entry) return null;
+    if (!entry.isDirectory() || entry.isSymbolicLink()) throw fail(403, 'Der Extras-Pfad ist kein erlaubter Ordner.');
+    return path.join(bookPath, entry.name);
   }
 
   async function actualEntry(dir, requested) {
@@ -474,11 +460,8 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     return entry.name;
   }
 
-  async function extrasManagement(book) {
-    const extrasPath = await existingExtrasPath(book);
-    if (!extrasPath) return { extras: [], images: [] };
-    const entries = await fs.readdir(extrasPath, { withFileTypes: true });
-    const extras = entries
+  function visibleExtras(book, extrasPath, entries) {
+    return entries
       .filter(entry => entry.isFile() && !entry.isSymbolicLink() && EXTRA_EXTS.has(path.extname(entry.name).toLowerCase()))
       .map(entry => {
         const ext = path.extname(entry.name).toLowerCase();
@@ -491,6 +474,20 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
         };
       })
       .sort((a, b) => collator.compare(a.file, b.file));
+  }
+
+  async function extras(book) {
+    const extrasPath = await existingExtrasPath(book);
+    if (!extrasPath) return { extras: [] };
+    const entries = await fs.readdir(extrasPath, { withFileTypes: true });
+    return { extras: visibleExtras(book, extrasPath, entries) };
+  }
+
+  async function extrasManagement(book) {
+    const extrasPath = await existingExtrasPath(book);
+    if (!extrasPath) return { extras: [], images: [] };
+    const entries = await fs.readdir(extrasPath, { withFileTypes: true });
+    const extras = visibleExtras(book, extrasPath, entries);
 
     let images = [];
     const imageEntry = entries.find(entry => entry.name.toLowerCase() === 'images');
@@ -605,9 +602,11 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       const { extrasPath } = extrasPaths(book);
       let extrasCreated = false;
       let imagesCreated = false;
+      let activeExtrasPath = extrasPath;
       try {
         let dir = await existingExtrasPath(book);
         if (!dir) { await fs.mkdir(extrasPath); dir = extrasPath; extrasCreated = true; }
+        activeExtrasPath = dir;
         if (scope === 'images') {
           const imagesPath = path.join(dir, 'images');
           const imageStat = await fs.lstat(imagesPath).catch(error => error.code === 'ENOENT' ? null : Promise.reject(error));
@@ -624,7 +623,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
         await atomicWrite(target, content, mode);
         return { uploaded: true, file: replace ? existing : file };
       } catch (error) {
-        if (imagesCreated) await fs.rmdir(path.join(extrasPath, 'images')).catch(() => {});
+        if (imagesCreated) await fs.rmdir(path.join(activeExtrasPath, 'images')).catch(() => {});
         if (extrasCreated) await fs.rmdir(extrasPath).catch(() => {});
         throw error;
       }
@@ -783,6 +782,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     detail,
     ebookText,
     extraText,
+    extras,
     extrasManagement,
     extraMarkdownSource,
     saveExtraMarkdown,
@@ -940,8 +940,8 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
   };
 
   app.get('/api/audiobooks', requireAuth, route((req, user) => library.list(user, req.query)));
-  app.get('/api/audiobooks/*', requireAuth, route((req, user) => {
-    const book = library.detail(user, req.params[0]);
+  app.get('/api/audiobooks/*', requireAuth, route(async (req, user) => {
+    const book = await library.detail(user, req.params[0]);
     if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
     return { ...book, config: { skipLongSeconds: config.skipLongSeconds, skipShortSeconds: config.skipShortSeconds } };
   }));
@@ -960,6 +960,11 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
     const book = library.get(req.params[0]);
     if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
     return library.extraText(book, String(req.query.file || ''));
+  }));
+  app.get('/api/audiobook-extras/*', requireAuth, route(async req => {
+    const book = library.get(req.params[0]);
+    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    return library.extras(book);
   }));
   app.get('/api/audiobook-extra-manage/*', requireAuth, route(async req => {
     const book = library.get(req.params[0]);
