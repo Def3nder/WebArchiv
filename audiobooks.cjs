@@ -22,7 +22,8 @@ const EBOOK_MAX_BYTES = 5 * 1024 * 1024;
 const EXTRA_MARKDOWN_MAX_BYTES = 1024 * 1024;
 const EXTRA_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const TEXT_PROGRESS_KEY = '__text';   // je Nutzer: { <Buch-ID>: { format, position, updatedAt } }
-const PRIVATE_BOOKS_KEY = '__private'; // je Nutzer: { <Buch-ID>: true }
+const GLOBAL_STATE_KEY = '__global';
+const PRIVATE_BOOKS_KEY = '__private'; // global: { <Buch-ID>: true }
 const DEFAULT_CONFIG = { skipLongSeconds: 600, skipShortSeconds: 30 };
 const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -283,15 +284,19 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     const { tracks, description, filePath, bookDir, ...rest } = book;
     return {
       ...rest,
-      private: progress.isPrivate(user?.email, book.id),
+      private: progress.isPrivate(book.id),
       progress: progressSummary(user, book),
     };
   }
 
   function list(user, { q, sort, page = 1, limit = 24 } = {}) {
-    const mode = SORTS.includes(sort) ? sort : 'recent';
-    const isPrivate = book => progress.isPrivate(user?.email, book.id);
-    let items = books.filter(book => mode === 'private' ? isPrivate(book) : !isPrivate(book));
+    const requestedMode = SORTS.includes(sort) ? sort : 'recent';
+    const isAdmin = user?.role === 'admin';
+    // Alte PWAs dürfen weiterhin sort=private senden. Für Nicht-Administratoren
+    // wird das serverseitig wie „zuletzt“ behandelt und private Bücher bleiben unsichtbar.
+    const mode = requestedMode === 'private' && !isAdmin ? 'recent' : requestedMode;
+    const isPrivate = book => progress.isPrivate(book.id);
+    let items = books.filter(book => isAdmin && mode === 'private' ? isPrivate(book) : !isPrivate(book));
     const text = String(q || '').trim();
     if (text && fuse) {
       const ids = new Set(fuse.search(text).map(r => r.item.id));
@@ -317,12 +322,12 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
 
   async function detail(user, id) {
     const book = books.find(b => b.id === id);
-    if (!book) return null;
+    if (!book || !canAccess(user, book)) return null;
     const { description, filePath, bookDir, ...rest } = book;
     const entry = progress.get(user?.email, book.id);
     return {
       ...rest,
-      private: progress.isPrivate(user?.email, book.id),
+      private: progress.isPrivate(book.id),
       hasExtras: !!(await existingExtrasPath(book)),
       tracks: book.tracks.map(({ title, url }) => ({ title, url })),
       descriptionHtml: description ? renderMarkdown(description) : '',
@@ -330,6 +335,33 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       ebookPosition: book.ebook ? progress.getText(user?.email, book.id, book.ebook.format) : null,
       progress: entry ? { ...entry, trackIndex: resolveTrackIndex(book, entry) } : null,
     };
+  }
+
+  function canAccess(user, book) {
+    return !!book && (user?.role === 'admin' || !progress.isPrivate(book.id));
+  }
+
+  function getForUser(user, id) {
+    const book = books.find(b => b.id === id);
+    return canAccess(user, book) ? book : null;
+  }
+
+  function bookForMediaPath(relPath) {
+    let decoded = String(relPath || '').replace(/\\/g, '/');
+    try { decoded = decodeURIComponent(decoded); } catch { /* ungültig bleibt unverändert */ }
+    const parts = path.posix.normalize(decoded).split('/').filter(Boolean);
+    if (parts.length < 3 || parts[0] !== dirName) return null;
+    return books.find(book => book.bookDir === parts[1]) || null;
+  }
+
+  function canAccessMedia(user, relPath) {
+    let decoded = String(relPath || '').replace(/\\/g, '/');
+    try { decoded = decodeURIComponent(decoded); } catch { /* ungültig bleibt unverändert */ }
+    const parts = path.posix.normalize(decoded).split('/').filter(Boolean);
+    if (parts[0] !== dirName) return false;
+    // Standard-Cover liegen direkt im Hörbuch-Wurzelverzeichnis und gehören zu keinem Buch.
+    if (parts.length === 2) return true;
+    return canAccess(user, bookForMediaPath(decoded));
   }
 
   // Bildpfad relativ zur eBook-Datei → Datei im Buchordner (Unterordner erlaubt, Groß-/Kleinschreibung
@@ -792,6 +824,10 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     reorderExtras,
     deleteExtraEntry,
     get: id => books.find(b => b.id === id),
+    getForUser,
+    canAccess,
+    bookForMediaPath,
+    canAccessMedia,
     get books() { return books; },
     get directory() { return dirName; },
   };
@@ -810,6 +846,26 @@ function createProgressStore({ file, io = fs }) {
   let data = {};
   let queue = Promise.resolve();
 
+  function migratePrivateBooks() {
+    const privateBooks = { ...(data[GLOBAL_STATE_KEY]?.[PRIVATE_BOOKS_KEY] || {}) };
+    let changed = false;
+    for (const [key, entry] of Object.entries(data)) {
+      if (key === GLOBAL_STATE_KEY || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      const legacy = entry[PRIVATE_BOOKS_KEY];
+      if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy)) continue;
+      for (const [bookId, value] of Object.entries(legacy)) {
+        if (value) privateBooks[bookId] = true;
+      }
+      delete entry[PRIVATE_BOOKS_KEY];
+      if (!Object.keys(entry).length) delete data[key];
+      changed = true;
+    }
+    if (Object.keys(privateBooks).length) {
+      data[GLOBAL_STATE_KEY] = { ...(data[GLOBAL_STATE_KEY] || {}), [PRIVATE_BOOKS_KEY]: privateBooks };
+    }
+    return changed;
+  }
+
   function load() {
     try {
       const parsed = JSON.parse(fsSync.readFileSync(file, 'utf8').replace(/^﻿/, ''));
@@ -818,6 +874,9 @@ function createProgressStore({ file, io = fs }) {
       if (err.code !== 'ENOENT') console.warn('audiobook-progress.json nicht geladen —', err.message);
       data = {};
     }
+    // Frühere Versionen speicherten „privat“ pro Nutzer. Die Vereinigung aller
+    // Markierungen wird global übernommen, damit beim Update nichts offengelegt wird.
+    if (migratePrivateBooks()) persist();
   }
 
   function persist() {
@@ -862,21 +921,19 @@ function createProgressStore({ file, io = fs }) {
       const entry = email ? data[emailKey(email)]?.[TEXT_PROGRESS_KEY]?.[bookId] : null;
       return entry && entry.format === format ? entry.position : null;
     },
-    isPrivate(email, bookId) {
-      return !!(email && data[emailKey(email)]?.[PRIVATE_BOOKS_KEY]?.[bookId]);
+    isPrivate(bookId) {
+      return !!data[GLOBAL_STATE_KEY]?.[PRIVATE_BOOKS_KEY]?.[bookId];
     },
-    async setPrivate(email, bookId, value) {
-      if (!email) throw fail(401, 'Nicht angemeldet.');
+    async setPrivate(bookId, value) {
       if (typeof value !== 'boolean') throw fail(400, 'Ungültige Privat-Markierung.');
-      const key = emailKey(email);
-      const user = { ...(data[key] || {}) };
-      const privateBooks = { ...(user[PRIVATE_BOOKS_KEY] || {}) };
+      const globalState = { ...(data[GLOBAL_STATE_KEY] || {}) };
+      const privateBooks = { ...(globalState[PRIVATE_BOOKS_KEY] || {}) };
       if (value) privateBooks[bookId] = true;
       else delete privateBooks[bookId];
-      if (Object.keys(privateBooks).length) user[PRIVATE_BOOKS_KEY] = privateBooks;
-      else delete user[PRIVATE_BOOKS_KEY];
-      if (Object.keys(user).length) data[key] = user;
-      else delete data[key];
+      if (Object.keys(privateBooks).length) globalState[PRIVATE_BOOKS_KEY] = privateBooks;
+      else delete globalState[PRIVATE_BOOKS_KEY];
+      if (Object.keys(globalState).length) data[GLOBAL_STATE_KEY] = globalState;
+      else delete data[GLOBAL_STATE_KEY];
       await persist();
       return { private: value };
     },
@@ -929,7 +986,7 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
     res.set('Cache-Control', 'no-store');
     try {
       if (!canAccessAuthor(req.session.user, AUDIOBOOK_AUTHOR)) throw fail(403, 'Kein Zugriff auf Hörbücher.');
-      if (admin && req.session.user?.role !== 'admin') throw fail(403, 'Nur Administratoren dürfen Extras verwalten.');
+      if (admin && req.session.user?.role !== 'admin') throw fail(403, 'Nur Administratoren dürfen diese Funktion verwenden.');
       if (admin && req.method !== 'GET' && busy()) throw fail(409, 'Es läuft bereits ein Speicher- oder Indexauftrag. Bitte später erneut versuchen.');
       if (req.method !== 'GET' && req.get('sec-fetch-site') === 'cross-site') throw fail(403, 'Änderungen sind nur aus dem Archiv erlaubt.');
       res.json(await handler(req, req.session.user));
@@ -939,6 +996,12 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
     }
   };
 
+  const accessibleBook = (user, id) => {
+    const book = library.getForUser(user, id);
+    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    return book;
+  };
+
   app.get('/api/audiobooks', requireAuth, route((req, user) => library.list(user, req.query)));
   app.get('/api/audiobooks/*', requireAuth, route(async (req, user) => {
     const book = await library.detail(user, req.params[0]);
@@ -946,53 +1009,44 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
     return { ...book, config: { skipLongSeconds: config.skipLongSeconds, skipShortSeconds: config.skipShortSeconds } };
   }));
   app.get('/api/audiobook-text/*', requireAuth, route(async (req, user) => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    const book = accessibleBook(user, req.params[0]);
     const text = await library.ebookText(book);
     return { ...text, position: progress.getText(user.email, book.id, text.format) };
   }));
   app.put('/api/audiobook-private/*', requireAuth, route(async (req, user) => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
-    return progress.setPrivate(user.email, book.id, req.body?.private);
-  }));
-  app.get('/api/audiobook-extra/*', requireAuth, route(async req => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    const book = accessibleBook(user, req.params[0]);
+    return progress.setPrivate(book.id, req.body?.private);
+  }, true));
+  app.get('/api/audiobook-extra/*', requireAuth, route(async (req, user) => {
+    const book = accessibleBook(user, req.params[0]);
     return library.extraText(book, String(req.query.file || ''));
   }));
-  app.get('/api/audiobook-extras/*', requireAuth, route(async req => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+  app.get('/api/audiobook-extras/*', requireAuth, route(async (req, user) => {
+    const book = accessibleBook(user, req.params[0]);
     return library.extras(book);
   }));
-  app.get('/api/audiobook-extra-manage/*', requireAuth, route(async req => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+  app.get('/api/audiobook-extra-manage/*', requireAuth, route(async (req, user) => {
+    const book = accessibleBook(user, req.params[0]);
     return library.extrasManagement(book);
   }, true));
-  app.get('/api/audiobook-extra-source/*', requireAuth, route(async req => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+  app.get('/api/audiobook-extra-source/*', requireAuth, route(async (req, user) => {
+    const book = accessibleBook(user, req.params[0]);
     return library.extraMarkdownSource(book, String(req.query.file || ''));
   }, true));
-  app.put('/api/audiobook-extra-source/*', requireAuth, route(async req => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+  app.put('/api/audiobook-extra-source/*', requireAuth, route(async (req, user) => {
+    const book = accessibleBook(user, req.params[0]);
     return library.saveExtraMarkdown(book, String(req.query.file || ''), req.body);
   }, true));
-  app.post('/api/audiobook-extra-create/*', requireAuth, route(async req => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+  app.post('/api/audiobook-extra-create/*', requireAuth, route(async (req, user) => {
+    const book = accessibleBook(user, req.params[0]);
     return library.createExtraMarkdown(book, req.body);
   }, true));
   app.post(
     '/api/audiobook-extra-upload/*',
     requireAuth,
     express.raw({ type: 'application/octet-stream', limit: EXTRA_IMAGE_MAX_BYTES }),
-    route(async req => {
-      const book = library.get(req.params[0]);
-      if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    route(async (req, user) => {
+      const book = accessibleBook(user, req.params[0]);
       return library.uploadExtraFile(book, {
         scope: String(req.query.scope || ''),
         name: String(req.query.name || ''),
@@ -1000,29 +1054,24 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
       }, req.body);
     }, true),
   );
-  app.patch('/api/audiobook-extra-entry/*', requireAuth, route(async req => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+  app.patch('/api/audiobook-extra-entry/*', requireAuth, route(async (req, user) => {
+    const book = accessibleBook(user, req.params[0]);
     return library.renameExtraEntry(book, req.body);
   }, true));
-  app.post('/api/audiobook-extra-order/*', requireAuth, route(async req => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+  app.post('/api/audiobook-extra-order/*', requireAuth, route(async (req, user) => {
+    const book = accessibleBook(user, req.params[0]);
     return library.reorderExtras(book, req.body);
   }, true));
-  app.delete('/api/audiobook-extra-entry/*', requireAuth, route(async req => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+  app.delete('/api/audiobook-extra-entry/*', requireAuth, route(async (req, user) => {
+    const book = accessibleBook(user, req.params[0]);
     return library.deleteExtraEntry(book, req.body);
   }, true));
   app.put('/api/audiobook-text-progress/*', requireAuth, route(async (req, user) => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    const book = accessibleBook(user, req.params[0]);
     return progress.setText(user.email, book, req.body);
   }));
   app.put('/api/audiobook-progress/*', requireAuth, route(async (req, user) => {
-    const book = library.get(req.params[0]);
-    if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
+    const book = accessibleBook(user, req.params[0]);
     return progress.set(user.email, book, req.body);
   }));
 }

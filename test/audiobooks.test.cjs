@@ -3,8 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const express = require('express');
 const {
-  AUDIOBOOK_AUTHOR, resolveAudiobookDirectory, parseAbstract, trackTitles, createAudiobookLibrary, createProgressStore, loadAudiobookConfig,
+  AUDIOBOOK_AUTHOR, resolveAudiobookDirectory, parseAbstract, trackTitles, createAudiobookLibrary, createProgressStore,
+  loadAudiobookConfig, installAudiobookRoutes,
 } = require('../audiobooks.cjs');
 
 async function tempDir(t) {
@@ -209,28 +211,112 @@ test('Hörfortschritt pro Nutzer: speichern, Sortierung „zuletzt gehört“, N
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, 'progress.json'), 'utf8')), {});
 });
 
-test('Private Hörbücher sind nutzerbezogen und nur in der Sortierung „Privat“ sichtbar', async t => {
+test('Private Hörbücher sind global, nur für Administratoren sichtbar und bleiben aus regulären Sortierungen', async t => {
   const { dir, library, progress } = await fixture(t);
-  const user = { email: 'a@b.de' };
+  const admin = { email: 'admin@b.de', role: 'admin' };
+  const user = { email: 'a@b.de', role: 'user' };
   const privateBook = library.books.find(book => book.title === '50 Fragen');
 
-  assert.equal((await library.detail(user, privateBook.id)).private, false);
-  await assert.rejects(progress.setPrivate(user.email, privateBook.id, 'ja'), { status: 400 });
-  assert.deepEqual(await progress.setPrivate(user.email, privateBook.id, true), { private: true });
+  assert.equal((await library.detail(admin, privateBook.id)).private, false);
+  await assert.rejects(progress.setPrivate(privateBook.id, 'ja'), { status: 400 });
+  assert.deepEqual(await progress.setPrivate(privateBook.id, true), { private: true });
 
-  assert.deepEqual(library.list(user, { sort: 'title' }).items.map(book => book.title), ['Kommt Zusammen!']);
-  assert.deepEqual(library.list(user, { sort: 'private' }).items.map(book => book.title), ['50 Fragen']);
-  assert.equal(library.list(user, { sort: 'private' }).items[0].private, true);
-  assert.deepEqual(library.list({ email: 'andere@b.de' }, { sort: 'private' }).items, []);
-  assert.equal((await library.detail(user, privateBook.id)).private, true);
+  assert.deepEqual(library.list(admin, { sort: 'title' }).items.map(book => book.title), ['Kommt Zusammen!']);
+  assert.deepEqual(library.list(admin, { sort: 'private' }).items.map(book => book.title), ['50 Fragen']);
+  assert.equal(library.list(admin, { sort: 'private' }).items[0].private, true);
+  assert.deepEqual(library.list(user, { sort: 'added' }).items.map(book => book.title), ['Kommt Zusammen!']);
+  assert.deepEqual(library.list(user, { sort: 'private' }).items.map(book => book.title), ['Kommt Zusammen!']);
+  assert.equal(library.list(user, { sort: 'private' }).sort, 'recent');
+  assert.equal(await library.detail(user, privateBook.id), null);
+  assert.equal(library.getForUser(user, privateBook.id), null);
+  assert.equal((await library.detail(admin, privateBook.id)).private, true);
+  const mediaBook = library.bookForMediaPath('Hoerbuecher/Karin%20Kuschik%20-%2050%20Fragen/01%20-%20Intro.mp3');
+  assert.equal(mediaBook.id, privateBook.id);
+  assert.equal(library.canAccess(user, mediaBook), false);
+  assert.equal(library.canAccess(admin, mediaBook), true);
+  assert.equal(library.canAccessMedia(user, 'Hoerbuecher/Karin%20Kuschik%20-%2050%20Fragen/cover.jpg'), false);
+  assert.equal(library.canAccessMedia(admin, 'Hoerbuecher/Karin%20Kuschik%20-%2050%20Fragen/cover.jpg'), true);
+  assert.equal(library.canAccessMedia(user, 'Hoerbuecher/standard.png'), true);
+  assert.equal(library.canAccessMedia(user, 'Hoerbuecher/Unbekannt/geheim.mp3'), false);
 
   const reloaded = createProgressStore({ file: path.join(dir, 'progress.json') });
   reloaded.load();
-  assert.equal(reloaded.isPrivate(user.email, privateBook.id), true);
+  assert.equal(reloaded.isPrivate(privateBook.id), true);
+  const saved = JSON.parse(await fs.readFile(path.join(dir, 'progress.json'), 'utf8'));
+  assert.equal(saved.__global.__private[privateBook.id], true);
 
-  await progress.setPrivate(user.email, privateBook.id, false);
-  assert.deepEqual(library.list(user, { sort: 'private' }).items, []);
+  await progress.setPrivate(privateBook.id, false);
+  assert.deepEqual(library.list(admin, { sort: 'private' }).items, []);
   assert.deepEqual(library.list(user, { sort: 'title' }).items.map(book => book.title), ['50 Fragen', 'Kommt Zusammen!']);
+});
+
+test('Alte nutzerbezogene Privat-Markierungen werden sicher global übernommen', async t => {
+  const dir = await tempDir(t);
+  const file = path.join(dir, 'progress.json');
+  const bookId = 'Hörbücher/Altbestand';
+  await fs.writeFile(file, JSON.stringify({ 'alt@b.de': { __private: { [bookId]: true } } }));
+  const progress = createProgressStore({ file });
+  progress.load();
+
+  assert.equal(progress.isPrivate(bookId), true);
+  await progress.setPrivate(bookId, true);
+  const saved = JSON.parse(await fs.readFile(file, 'utf8'));
+  assert.equal(saved.__global.__private[bookId], true);
+  assert.equal(saved['alt@b.de'], undefined);
+});
+
+test('Hörbuch-API erzwingt Privatsichtbarkeit unabhängig von der PWA-Version', async t => {
+  const { library, progress } = await fixture(t);
+  const privateBook = library.books.find(book => book.title === '50 Fragen');
+  await progress.setPrivate(privateBook.id, true);
+
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    const role = req.get('x-test-role') === 'admin' ? 'admin' : 'user';
+    req.session = { user: { email: `${role}@b.de`, role } };
+    next();
+  });
+  installAudiobookRoutes(app, {
+    library,
+    progress,
+    config: { skipLongSeconds: 600, skipShortSeconds: 30 },
+    requireAuth: (_req, _res, next) => next(),
+    canAccessAuthor: () => true,
+  });
+  const server = await new Promise(resolve => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+  });
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const bookPath = privateBook.id.split('/').map(encodeURIComponent).join('/');
+
+  const added = await fetch(`${base}/api/audiobooks?sort=added`);
+  assert.equal(added.status, 200);
+  assert.deepEqual((await added.json()).items.map(book => book.title), ['Kommt Zusammen!']);
+
+  const forgedPrivateSort = await fetch(`${base}/api/audiobooks?sort=private`);
+  assert.equal(forgedPrivateSort.status, 200);
+  const forgedResult = await forgedPrivateSort.json();
+  assert.equal(forgedResult.sort, 'recent');
+  assert.deepEqual(forgedResult.items.map(book => book.title), ['Kommt Zusammen!']);
+
+  assert.equal((await fetch(`${base}/api/audiobooks/${bookPath}`)).status, 404);
+  assert.equal((await fetch(`${base}/api/audiobook-extras/${bookPath}`)).status, 404);
+  assert.equal((await fetch(`${base}/api/audiobook-progress/${bookPath}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trackIndex: 0, position: 1, speed: 1 }),
+  })).status, 404);
+  assert.equal((await fetch(`${base}/api/audiobook-private/${bookPath}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ private: false }),
+  })).status, 403);
+
+  const adminPrivate = await fetch(`${base}/api/audiobooks?sort=private`, { headers: { 'x-test-role': 'admin' } });
+  assert.equal(adminPrivate.status, 200);
+  assert.deepEqual((await adminPrivate.json()).items.map(book => book.title), ['50 Fragen']);
 });
 
 test('config.json: Sprungweiten mit Standardwerten, optionales Verzeichnis', async t => {

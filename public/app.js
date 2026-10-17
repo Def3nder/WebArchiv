@@ -103,11 +103,12 @@ function syncFilterAriaMenu(select) {
   const trigger = root.querySelector('.filter-menu-trigger');
   const value = root.querySelector('[data-filter-menu-value]');
   const menu = root.querySelector('[role="menu"]');
-  const selected = [...select.options].find(option => option.value === select.value)
-    || select.options[0];
+  const visibleOptions = [...select.options].filter(option => !option.hidden);
+  const selected = visibleOptions.find(option => option.value === select.value)
+    || visibleOptions[0];
   value.textContent = selected?.textContent || '';
   menu.replaceChildren();
-  [...select.options].forEach(option => {
+  visibleOptions.forEach(option => {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'header-menu-item';
@@ -724,6 +725,7 @@ function applyUserUI(user) {
   if (user?.role !== 'admin') clearTtsUI();
   const isGuest = !user || user.role === 'guest';
   const isAdmin = user?.role === 'admin';
+  if (typeof syncBookPrivateAccess === 'function') syncBookPrivateAccess(isAdmin);
   // Gäste bekommen immer die Vorgaben; die Filter-Beschriftungen sind für
   // angemeldete Nutzer lokal pro Nutzer und Gerät gespeichert (settings.js).
   setDisplayUser(user);

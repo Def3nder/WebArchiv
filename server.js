@@ -1084,6 +1084,9 @@ app.get('/audio-files/*', attachUser, (req, res) => {
   if (!canAccessAuthor(req.user, author)) {
     return res.status(403).json({ error: 'Access denied' });
   }
+  if (topDir === audiobooks.directory && !audiobooks.canAccessMedia(req.user, relPath)) {
+    return res.status(404).end();
+  }
   const absPath = path.resolve(path.join(AUDIO_DIR, relPath));
   if (!absPath.startsWith(AUDIO_DIR + path.sep)) {
     return res.status(403).end();
@@ -1127,9 +1130,13 @@ function ogDescription(article) {
   return raw.length > 200 ? raw.slice(0, 197).trimEnd() + '…' : raw;
 }
 
+function publicShareItem(id) {
+  return articles.find(article => article.id === id) || audiobooks.getForUser(null, id);
+}
+
 app.get('/a/*', (req, res) => {
   const id = req.params[0];
-  const article = articles.find(a => a.id === id) || audiobooks.get(id);
+  const article = publicShareItem(id);
   const base = `${req.protocol}://${req.get('host')}`;
   const canonical = base + '/a/' + encodeURIComponent(id);
 
@@ -1189,7 +1196,7 @@ const OG_SQUARE_SIZES = new Set([256, 512]);
 
 app.get('/og-image/*', async (req, res) => {
   const id = req.params[0];
-  const article = articles.find(a => a.id === id) || audiobooks.get(id);
+  const article = publicShareItem(id);
   const absPath = resolvePreviewImagePath(article);
   if (!absPath) return res.status(404).end();
 

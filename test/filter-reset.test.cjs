@@ -18,5 +18,5 @@ test('Reset erscheint nur bei einer aktiven Suche oder einem aktiven Filter', ()
 
 test('die persönliche Einstellung zum Ausblenden bleibt wirksam', () => {
   assert.match(CSS, /body\[data-reset-filters="hidden"\] #reset-filters \{ display: none; \}/);
-  assert.match(HTML, /app\.js\?v=110/);
+  assert.match(HTML, /app\.js\?v=111/);
 });

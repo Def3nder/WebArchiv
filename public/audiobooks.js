@@ -4,6 +4,7 @@ const BOOK_SPEEDS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const BOOK_SAVE_INTERVAL_MS = 15000;
 const $miniPlayer = document.getElementById('mini-player');
 const $bookSort = document.getElementById('filter-book-sort');
+const BOOK_SORTS = ['recent', 'added', 'title', 'date', 'private'];
 
 // Ein Player für das ganze Buch; läuft unabhängig von der Detailansicht weiter.
 const bookPlayer = {
@@ -25,10 +26,27 @@ let currentBookDetail = null;
 // ── Liste ──────────────────────────────────────────────────────────────────
 try {
   const saved = localStorage.getItem('wa-book-sort');
-  if (['recent', 'added', 'title', 'date', 'private'].includes(saved)) state.bookSort = saved;
+  if (BOOK_SORTS.includes(saved)) state.bookSort = saved;
 } catch { /* Speicher nicht verfügbar */ }
 $bookSort.value = state.bookSort;
 syncFilterAriaMenu($bookSort);
+
+function syncBookPrivateAccess(isAdmin = currentUser?.role === 'admin') {
+  const option = $bookSort.querySelector('option[value="private"]');
+  if (option) {
+    option.hidden = !isAdmin;
+    option.disabled = !isAdmin;
+  }
+  if (!isAdmin && (state.bookSort === 'private' || $bookSort.value === 'private')) {
+    state.bookSort = 'recent';
+    $bookSort.value = 'recent';
+    try { localStorage.setItem('wa-book-sort', state.bookSort); } catch { /* ignorieren */ }
+  }
+  syncFilterAriaMenu($bookSort);
+}
+
+if (currentUser) syncBookPrivateAccess();
+
 $bookSort.addEventListener('change', () => {
   state.bookSort = $bookSort.value;
   try { localStorage.setItem('wa-book-sort', state.bookSort); } catch { /* ignorieren */ }
@@ -37,6 +55,7 @@ $bookSort.addEventListener('change', () => {
 });
 
 async function fetchAudiobooks() {
+  syncBookPrivateAccess();
   const qs = new URLSearchParams();
   if (state.q) qs.set('q', state.q);
   qs.set('sort', state.bookSort);
@@ -123,7 +142,9 @@ function renderBookDetail(book) {
   const manageExtrasAction = currentUser?.role === 'admin'
     ? '<button type="button" class="header-menu-item" data-book-extras-manage>Extras verwalten …</button>'
     : '';
-  const privateAction = `<button type="button" class="header-menu-item" data-book-private>${book.private ? 'Privat aufheben' : 'Als privat markieren'}</button>`;
+  const privateAction = currentUser?.role === 'admin'
+    ? `<button type="button" class="header-menu-item" data-book-private>${book.private ? 'Privat aufheben' : 'Als privat markieren'}</button>`
+    : '';
   const actionsMenu = `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Aktionen zum Hörbuch">Aktionen</summary><div class="copy-prompt-menu">${editAction}${manageExtrasAction}${privateAction}<button type="button" class="header-menu-item" data-book-share>Teilen</button></div></details>`;
   const tracks = book.tracks.map((track, i) =>
     `<li><button type="button" class="book-track" data-track="${i}"><span class="book-track-num">${i + 1}</span><span class="book-track-title">${esc(track.title)}</span></button></li>`
