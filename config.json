@@ -4,6 +4,14 @@
     "Facebook",
     "Telegram"
   ],
+  "duplicates": {
+    "blogAuthor": "Joe Turan",
+    "facebookAuthors": [
+      "Facebook"
+    ],
+    "maxDateDistanceDays": 730,
+    "minimumTokens": 35
+  },
   "audiobooks": {
     "skipLongSeconds": 600,
     "skipShortSeconds": 30

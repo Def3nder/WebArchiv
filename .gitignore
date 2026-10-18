@@ -33,6 +33,7 @@ migrate-audio.log
 users.json
 audiobook-progress.json
 bookmarks.json
+duplicate-decisions.json
 /scraper/cookies.txt
 /scraper/Abonenten-URL.txt
 

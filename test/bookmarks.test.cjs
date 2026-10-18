@@ -43,6 +43,29 @@ test('Gäste haben keine Lesezeichen; Nutzer löschen entfernt seine Einträge',
   assert.equal(store.idsFor('c@d.de').size, 0);
 });
 
+test('Lesezeichen werden beim Verknüpfen auf den kanonischen Artikel übertragen', async t => {
+  const store = createBookmarkStore({ file: await tempFile(t) });
+  store.load();
+  await store.add('a@b.de', 'Facebook/2026/alt');
+  await store.add('a@b.de', 'Joe Turan/2026/blog');
+  await store.add('c@d.de', 'Facebook/2026/alt');
+  await store.replaceArticleId('Facebook/2026/alt', 'Joe Turan/2026/blog');
+  assert.deepEqual([...store.idsFor('a@b.de')], ['Joe Turan/2026/blog']);
+  assert.deepEqual([...store.idsFor('c@d.de')], ['Joe Turan/2026/blog']);
+});
+
+test('mehrere Dubletten-Lesezeichen werden in einem Sammelschritt übertragen', async t => {
+  const store = createBookmarkStore({ file: await tempFile(t) });
+  store.load();
+  await store.add('a@b.de', 'Facebook/2026/eins');
+  await store.add('a@b.de', 'Facebook/2026/zwei');
+  await store.replaceArticleIds([
+    { oldId: 'Facebook/2026/eins', newId: 'Joe Turan/2026/eins' },
+    { oldId: 'Facebook/2026/zwei', newId: 'Joe Turan/2026/zwei' },
+  ]);
+  assert.deepEqual([...store.idsFor('a@b.de')].sort(), ['Joe Turan/2026/eins', 'Joe Turan/2026/zwei']);
+});
+
 async function server(t, store, sessionUser) {
   const articles = new Map([
     ['Joe Turan/2026/a b', { id: 'Joe Turan/2026/a b', author: 'Joe Turan' }],

@@ -742,6 +742,7 @@ function applyUserUI(user) {
   $bookmarkBtn.hidden = isGuest;
   if (isGuest && state.bookmarks) setBookmarkFilter(false);
   $adminMenu.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !isAdmin; });
+  if (isAdmin && typeof refreshDuplicateMenuCount === 'function') refreshDuplicateMenuCount();
   document.getElementById('header-menu-account').textContent = isGuest ? '' : `Angemeldet als ${user.email}`;
   $logoutBtn.hidden  = isGuest;
   $loginBtn.hidden   = !isGuest;
@@ -3090,6 +3091,7 @@ $adminMenu.addEventListener('click', ev => {
   else if (action === 'tts') runTts();
   else if (action === 'tts-job') showTtsJob();
   else if (action === 'new-infographic') openNewInfographic();
+  else if (action === 'duplicates' && typeof openDuplicateReview === 'function') openDuplicateReview();
   else if (action === 'settings') openSettingsDialog();
   else if (action === 'users') openUserAdmin();
   else if (action === 'password') openPasswordDialog({ forced: false });

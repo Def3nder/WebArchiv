@@ -10,7 +10,7 @@ dass ich den Bereich ganz oben klicke und halte und nach unten ziehe - geht das 
 * \[ ] **Qualitäts-Dashboard:** Fehlende Bilder oder Metadaten, ungültige Daten, defekte Links, verwaiste Medien und andere Auffälligkeiten im Archiv anzeigen.
 * \[ ] **Einschlaf-Timer für Hörbücher:** Wiedergabe nach einer gewählten Zeit oder am Ende des aktuellen Teils automatisch beenden, möglichst mit sanftem Ausblenden.
 * \[ ] **Gesamtdauer und verbleibende Hörzeit eines Buches:** Laufzeiten aller Teile erfassen und im Hörbuch-Player die Gesamtdauer sowie die verbleibende Zeit anzeigen.
-* \[ ] **Dublettenerkennung für Blog und Facebook:** Gleiche oder sehr ähnliche Artikel aus Blog und Facebook erkennen und gemeinsam anzeigen. Telegram bleibt dabei unberücksichtigt. Für gefundene Dubletten Aktionen wie Prüfen, Verknüpfen oder Ignorieren anbieten.
+* \[x] **Dublettenerkennung für Blog und Facebook:** Gleiche oder sehr ähnliche Artikel aus Blog und Facebook erkennen und gemeinsam anzeigen. Telegram bleibt dabei unberücksichtigt. Für gefundene Dubletten Aktionen wie Prüfen, Verknüpfen oder Ignorieren anbieten.
 * \[ ] **Mehrfachauswahl bei Kategorien und Autoren:** Mehrere Autoren und Kategorien gleichzeitig als Filter auswählen und sinnvoll miteinander kombinieren können.
 * \[ ] **Eigene Tags/Labels:** Nutzer können Artikeln eigene Tags oder Labels geben und anschließend danach suchen und filtern.
 * \[ ] **Markierungen und Notizen pro Benutzer:** Textstellen in Artikeln markieren und persönliche Notizen speichern; die Daten bleiben je Benutzer getrennt.

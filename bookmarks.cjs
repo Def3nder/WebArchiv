@@ -61,6 +61,31 @@ function createBookmarkStore({ file, io = fs }) {
       delete data[key];
       await persist();
     },
+    // Beim Verknüpfen einer Dublette bleiben vorhandene Lesezeichen erhalten,
+    // zeigen aber künftig auf den kanonischen Blogartikel.
+    async replaceArticleId(oldId, newId) {
+      await this.replaceArticleIds([{ oldId, newId }]);
+    },
+    // Sammelverknüpfungen schreiben bookmarks.json nur einmal, unabhängig davon,
+    // wie viele Facebook-Artikel auf ihre Blogfassungen umgebogen werden.
+    async replaceArticleIds(replacements) {
+      const valid = (Array.isArray(replacements) ? replacements : [])
+        .filter(item => item?.oldId && item?.newId && item.oldId !== item.newId);
+      if (!valid.length) return;
+      let changed = false;
+      for (const [key, entries] of Object.entries(data)) {
+        let next = entries;
+        for (const { oldId, newId } of valid) {
+          if (!next?.[oldId]) continue;
+          const timestamp = next[newId] || next[oldId];
+          const { [oldId]: _removed, ...rest } = next;
+          next = { ...rest, [newId]: timestamp };
+          changed = true;
+        }
+        if (next !== entries) data[key] = next;
+      }
+      if (changed) await persist();
+    },
   };
 }
 

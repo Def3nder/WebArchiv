@@ -221,6 +221,19 @@ danach die Hörbuchansicht.
   Lesezeichen-Button im Header (blau = aktiv) zeigt nur Artikel mit Lesezeichen, kombinierbar mit
   Autor/Jahr/Kategorie/Suche, sortiert nach Artikeldatum; Telegram-Lesezeichen erscheinen auch ohne
   Telegram-Schalter. Gespeichert pro Nutzer in `bookmarks.json`. Hörbücher haben keine Lesezeichen.
+- **Blog–Facebook-Dubletten** (Admin, Aktionen → *Dubletten prüfen*): Inhaltlich gleiche oder
+  stark überlappende Beiträge aus „Joe Turan“ und der geschlossenen Quelle „Facebook“ prüfen,
+  vormerken, gesammelt verknüpfen oder ignorieren. Übereinstimmungsgrad und vorhandene
+  Facebook-Infografiken lassen sich kombinieren; „Alle sichtbaren auswählen“ übernimmt die
+  gefilterte Teilmenge. Die Auswahl bleibt lokal im Browser gespeichert. Reine Verknüpfungen
+  aktualisieren den In-Memory-Index sofort, eine Sammelmigration liest das Archiv nur einmal neu ein.
+  Im Artikelvergleich stehen die zugeordneten Blog- und Facebook-Infografiken nebeneinander;
+  jede Vorschau lässt sich bildschirmfüllend öffnen und über beide Seiten hinweg durchblättern.
+  Verknüpfte Facebook-Beiträge bleiben als Dateien erhalten, werden
+  in normalen Ansichten aber durch den Blogartikel ersetzt. Zugeordnete Dateien aus
+  `www/Infografiken/` können bestätigt für den Blogartikel umbenannt werden; das eigentliche
+  Facebook-Artikelbild bleibt unverändert. Entscheidungen
+  liegen in `duplicate-decisions.json`; Telegram und „Joe Turan Facebook“ werden nicht verglichen.
 - **Einstellungen** (Aktionen → *Einstellungen*, angemeldet): Schriftart (Editorial/Klassisch/
   Modern/System), Darstellung (Hell/Dunkel/Automatisch = folgt dem Gerät), Textgröße des
   Artikeltexts (Klein/Normal/Groß/Sehr groß) und Filter-Beschriftungen (Automatisch/Ausblenden).
@@ -350,6 +363,10 @@ Editor- oder Menülogik einbezogen.
 | `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen; `bookmarks=1` nur Artikel mit Lesezeichen; jeder Eintrag trägt `bookmarked` |
 | `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml`, `images` und `bookmarked`; eine gruppierte Infografik liefert ihre Gruppe (`requestedId`) |
 | `PUT /api/bookmarks/*` · `DELETE /api/bookmarks/*` | Auth | Lesezeichen setzen (Artikel muss existieren, Autorenrecht) bzw. löschen |
+| `GET /api/duplicates` | Admin | Offene, verknüpfte und ignorierte Blog–Facebook-Paare |
+| `GET /api/duplicates/compare` | Admin | Volltextvergleich und Vorschau möglicher Infografikmigrationen |
+| `POST /api/duplicates` | Admin | Paar verknüpfen/ignorieren/lösen oder Infografiken migrieren |
+| `POST /api/duplicates/batch` | Admin | 1–500 ausgewählte Paare gesammelt verknüpfen, optional mit einer gemeinsamen Infografikmigration |
 | `GET /files/*` | Soft | Geschützte Datei (Bild/Audio/…), ACL pro Autor |
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht); `?sq=256|512` liefert einen quadratischen Ausschnitt vom oberen Bildteil (Sperrbildschirm) |
@@ -442,12 +459,14 @@ user-store.cjs                Nutzer, öffentliche Autoren & Autoren-Priorität:
 audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
 article-editor.cjs            Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown
 bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
-config.json                   Einstellungen (Autoren-Priorität, Hörbuch-Sprungweiten)
+duplicates.cjs                Dublettenerkennung und persistente Entscheidungen
+config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp
 test/                         Tests der Hauptanwendung
 public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
+├── duplicates.js             Admin-Prüfung und Verknüpfung von Blog-/Facebook-Dubletten
 ├── article-editor.js         Dialoglogik für Artikel- und Abstract-Markdown
 ├── markdown-live-preview.js  CodeMirror-Live-Darstellung, Toolbar und Cursor-Navigation
 ├── markdown-commands.mjs     Reine Markdown-Transformationen der Toolbar
@@ -480,7 +499,7 @@ LXC-container node.js Setup.txt   Server-/Deployment-Doku
 ```
 
 Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
-`www/<Autor>/2*` (Jahresinhalte), `download/`, `users.json`, `audiobook-progress.json`, `bookmarks.json`,
+`www/<Autor>/2*` (Jahresinhalte), `download/`, `users.json`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`,
 `scraper/cookies.txt`, `scraper/Abonenten-URL.txt`, Logs.
 
 ---
@@ -529,6 +548,7 @@ npm test --prefix tts
 | `PUBLIC_DIRS_FILE` | `./public-directories.txt` | Abweichender Pfad der Liste öffentlicher Autoren |
 | `AUDIOBOOK_PROGRESS_FILE` | `./audiobook-progress.json` | Abweichender Pfad des Hörfortschritts |
 | `BOOKMARKS_FILE` | `./bookmarks.json` | Abweichender Pfad der Lesezeichen |
+| `DUPLICATES_FILE` | `./duplicate-decisions.json` | Abweichender Pfad der Dubletten-Entscheidungen |
 | `PLAYWRIGHT_BROWSERS_PATH` | – | Chromium-Ablage für den Scraper (siehe Setup-Doku) |
 
 Scraper zusätzlich einrichten:

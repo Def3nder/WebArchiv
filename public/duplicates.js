@@ -1,0 +1,562 @@
+// Admin-Arbeitsbereich zum Sichten und gebündelten Verknüpfen von Blog-/Facebook-Dubletten.
+'use strict';
+
+const DUPLICATE_SELECTION_KEY = 'webarchiv-duplicate-selection-v1';
+const DUPLICATE_PAIR_SEPARATOR = '\u001f';
+
+const duplicateUi = {
+  data: { pending: [], linked: [], ignored: [] },
+  tab: 'pending',
+  detail: null,
+  busy: false,
+  filters: { score: 'all', infographics: 'all' },
+  selection: new Set(),
+  listScrollTop: 0,
+  mobileSide: 'blog',
+  viewerIndex: 0,
+};
+
+const duplicateDialog = document.getElementById('duplicate-review');
+const duplicateContent = document.getElementById('duplicate-content');
+const duplicateStatus = document.getElementById('duplicate-status');
+const duplicateMenuCount = document.getElementById('duplicate-menu-count');
+const duplicateTools = document.getElementById('duplicate-tools');
+const duplicateScoreFilter = document.getElementById('duplicate-score-filter');
+const duplicateInfographicFilter = document.getElementById('duplicate-infographic-filter');
+const duplicateSelectionCount = document.getElementById('duplicate-selection-count');
+const duplicateSelectAll = document.getElementById('duplicate-select-all');
+const duplicateSelectNone = document.getElementById('duplicate-select-none');
+const duplicateBatchLink = document.getElementById('duplicate-batch-link');
+const duplicateBatchMigrate = document.getElementById('duplicate-batch-migrate');
+const duplicateImageViewer = document.getElementById('duplicate-image-viewer');
+const duplicateImageViewerImage = document.getElementById('duplicate-image-viewer-image');
+const duplicateImageViewerSide = document.getElementById('duplicate-image-viewer-side');
+const duplicateImageViewerTitle = document.getElementById('duplicate-image-viewer-title');
+const duplicateImageViewerCounter = document.getElementById('duplicate-image-viewer-counter');
+const duplicateImageViewerPrev = document.getElementById('duplicate-image-viewer-prev');
+const duplicateImageViewerNext = document.getElementById('duplicate-image-viewer-next');
+
+function duplicateEsc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]);
+}
+
+function duplicateDate(value) {
+  if (!value) return 'ohne Datum';
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('de-DE');
+}
+
+function duplicateRequest(url, options = {}) {
+  return apiFetch(url, {
+    ...options,
+    headers: options.body ? { 'Content-Type': 'application/json', ...(options.headers || {}) } : options.headers,
+  }).then(async response => {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    return data;
+  });
+}
+
+function duplicatePairIds(item) {
+  return {
+    blogId: String(item.blog?.id || item.blogId || ''),
+    facebookId: String(item.facebook?.id || item.facebookId || ''),
+  };
+}
+
+function duplicatePairKey(item) {
+  const { blogId, facebookId } = duplicatePairIds(item);
+  return `${blogId}${DUPLICATE_PAIR_SEPARATOR}${facebookId}`;
+}
+
+function duplicatePairAttrs(item) {
+  const { blogId, facebookId } = duplicatePairIds(item);
+  return `data-blog-id="${duplicateEsc(blogId)}" data-facebook-id="${duplicateEsc(facebookId)}"`;
+}
+
+function loadDuplicateSelection() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DUPLICATE_SELECTION_KEY) || '[]');
+    duplicateUi.selection = new Set(Array.isArray(saved) ? saved.filter(value => typeof value === 'string') : []);
+  } catch {
+    duplicateUi.selection = new Set();
+  }
+}
+
+function saveDuplicateSelection() {
+  try { localStorage.setItem(DUPLICATE_SELECTION_KEY, JSON.stringify([...duplicateUi.selection])); }
+  catch { /* Auswahl funktioniert für diese Sitzung weiter. */ }
+}
+
+function duplicateInfographicLabel(article) {
+  const count = Number(article?.infographicCount) || 0;
+  return `${count} Infografik${count === 1 ? '' : 'en'}`;
+}
+
+function duplicateInfographics(article) {
+  return Array.isArray(article?.infographics) ? article.infographics : [];
+}
+
+function duplicateInfographicGallery(article, side) {
+  const items = duplicateInfographics(article);
+  const sideLabel = side === 'blog' ? 'Blog' : 'Facebook';
+  return `<section class="duplicate-infographic-gallery" data-duplicate-infographic-side="${side}" aria-label="${sideLabel}-Infografiken">
+    <div class="duplicate-infographic-heading">
+      <strong>Infografiken</strong>
+      <span>${duplicateInfographicLabel(article)}</span>
+    </div>
+    ${items.length ? `<div class="duplicate-infographic-thumbs">
+      ${items.map((item, index) => `<button type="button" class="duplicate-infographic-thumb" data-duplicate-action="open-infographic" data-side="${side}" data-index="${index}" aria-label="${sideLabel}-Infografik ${index + 1} in Vollansicht öffnen">
+        <img src="${duplicateEsc(item.imageUrl)}" alt="${sideLabel}-Infografik ${index + 1}" loading="lazy" decoding="async">
+        <span>${index + 1}</span>
+      </button>`).join('')}
+    </div>` : '<p class="duplicate-infographic-empty">Keine Infografik vorhanden</p>'}
+  </section>`;
+}
+
+function duplicateViewerItems() {
+  if (!duplicateUi.detail) return [];
+  return ['blog', 'facebook'].flatMap(side => duplicateInfographics(duplicateUi.detail[side]).map((item, index) => ({
+    ...item,
+    side,
+    sideIndex: index,
+    sideCount: duplicateInfographics(duplicateUi.detail[side]).length,
+  })));
+}
+
+function renderDuplicateImageViewer() {
+  const items = duplicateViewerItems();
+  if (!items.length) return duplicateImageViewer.close();
+  duplicateUi.viewerIndex = Math.max(0, Math.min(duplicateUi.viewerIndex, items.length - 1));
+  const item = items[duplicateUi.viewerIndex];
+  const sideLabel = item.side === 'blog' ? 'Blog' : 'Facebook';
+  duplicateImageViewerImage.src = item.imageUrl;
+  duplicateImageViewerImage.alt = `${sideLabel}-Infografik ${item.sideIndex + 1} von ${item.sideCount}`;
+  duplicateImageViewerSide.textContent = `${sideLabel.toUpperCase()} · INFOGRAFIK ${item.sideIndex + 1} VON ${item.sideCount}`;
+  duplicateImageViewerTitle.textContent = item.title || `${sideLabel}-Infografik`;
+  duplicateImageViewerCounter.textContent = `${duplicateUi.viewerIndex + 1} von ${items.length} insgesamt`;
+  duplicateImageViewerPrev.disabled = items.length < 2;
+  duplicateImageViewerNext.disabled = items.length < 2;
+}
+
+function openDuplicateImageViewer(side, sideIndex) {
+  const items = duplicateViewerItems();
+  const index = items.findIndex(item => item.side === side && item.sideIndex === sideIndex);
+  if (index < 0) return;
+  duplicateUi.viewerIndex = index;
+  renderDuplicateImageViewer();
+  if (!duplicateImageViewer.open) duplicateImageViewer.showModal();
+}
+
+function stepDuplicateImageViewer(offset) {
+  const items = duplicateViewerItems();
+  if (items.length < 2) return;
+  duplicateUi.viewerIndex = (duplicateUi.viewerIndex + offset + items.length) % items.length;
+  renderDuplicateImageViewer();
+}
+
+function duplicateArticleMini(article, side) {
+  if (!article) return `<article class="duplicate-side is-missing"><p>Artikel fehlt</p></article>`;
+  return `<article class="duplicate-side duplicate-side-${side}">
+    <div class="duplicate-side-copy">
+      <div class="duplicate-side-kicker"><span class="duplicate-source">${side === 'blog' ? 'BLOG · ORIGINAL' : 'FACEBOOK · QUELLE'}</span><span class="duplicate-infographic-count">${duplicateInfographicLabel(article)}</span></div>
+      <h3>${duplicateEsc(article.title)}</h3>
+      <p class="duplicate-meta">${duplicateDate(article.date)}${article.hasOwnImage ? ' · mit Artikelbild' : ''}</p>
+      <p class="duplicate-excerpt">${duplicateEsc(article.excerpt || '')}</p>
+    </div>
+  </article>`;
+}
+
+function duplicatePendingByKey(key) {
+  return duplicateUi.data.pending.find(item => duplicatePairKey(item) === key) || null;
+}
+
+function selectedDuplicateItems() {
+  return [...duplicateUi.selection].map(duplicatePendingByKey).filter(Boolean);
+}
+
+function setDuplicateSelected(item, selected) {
+  const key = duplicatePairKey(item);
+  const { facebookId } = duplicatePairIds(item);
+  if (selected) {
+    for (const selectedKey of [...duplicateUi.selection]) {
+      const other = duplicatePendingByKey(selectedKey);
+      if (other && duplicatePairIds(other).facebookId === facebookId) duplicateUi.selection.delete(selectedKey);
+    }
+    duplicateUi.selection.add(key);
+  } else {
+    duplicateUi.selection.delete(key);
+  }
+  saveDuplicateSelection();
+  updateDuplicateTools();
+}
+
+function duplicateActions(item, status, { detail = false } = {}) {
+  const attrs = duplicatePairAttrs(item);
+  if (status === 'pending') {
+    const selected = duplicateUi.selection.has(duplicatePairKey(item));
+    return `<div class="duplicate-actions" ${attrs}>
+      ${detail ? `<button type="button" class="duplicate-btn${selected ? ' is-selected' : ''}" data-duplicate-action="toggle-selection">${selected ? 'Ausgewählt ✓' : 'Auswählen'}</button>` : ''}
+      <button type="button" class="duplicate-btn" data-duplicate-action="inspect">Prüfen</button>
+      <button type="button" class="duplicate-btn is-quiet" data-duplicate-action="ignore">Ignorieren</button>
+    </div>`;
+  }
+  if (status === 'linked') {
+    const hasInfographic = (Number(item.facebook?.infographicCount) || 0) > 0;
+    return `<div class="duplicate-actions" ${attrs}>
+      <button type="button" class="duplicate-btn" data-duplicate-action="inspect">Prüfen</button>
+      <button type="button" class="duplicate-btn" data-duplicate-action="migrate"${hasInfographic ? '' : ' disabled title="Keine Facebook-Infografik vorhanden"'}>Infografik migrieren</button>
+      <button type="button" class="duplicate-btn is-danger" data-duplicate-action="reset">Verknüpfung lösen</button>
+    </div>`;
+  }
+  return `<div class="duplicate-actions" ${attrs}>
+    <button type="button" class="duplicate-btn" data-duplicate-action="inspect">Prüfen</button>
+    <button type="button" class="duplicate-btn" data-duplicate-action="reset">Erneut prüfen</button>
+  </div>`;
+}
+
+function duplicateCard(item, status) {
+  const key = duplicatePairKey(item);
+  const selected = duplicateUi.selection.has(key);
+  const score = item.score == null ? '' : `${Math.round(item.score * 100)} %`;
+  const notes = status === 'pending' ? item.reasons || [] : [
+    item.changed ? 'Seit der Entscheidung geändert' : (status === 'linked' ? 'Bestätigt verknüpft' : 'Bewusst ignoriert'),
+    item.updatedAt ? `am ${new Date(item.updatedAt).toLocaleDateString('de-DE')}` : '',
+  ].filter(Boolean);
+  return `<article class="duplicate-card${item.changed ? ' is-changed' : ''}${selected ? ' is-selected' : ''}" ${duplicatePairAttrs(item)}>
+    <header class="duplicate-card-head">
+      ${status === 'pending' ? `<label class="duplicate-select"><input type="checkbox" data-duplicate-select ${selected ? 'checked' : ''}><span>Auswählen</span></label>` : ''}
+      <div class="duplicate-score"><strong>${duplicateEsc(score || (status === 'linked' ? '✓' : '–'))}</strong><span>${score ? 'Übereinstimmung' : status === 'linked' ? 'verknüpft' : 'Entscheidung'}</span></div>
+      <div class="duplicate-reasons">${notes.map(note => `<span>${duplicateEsc(note)}</span>`).join('')}</div>
+      ${status === 'pending' ? duplicateActions(item, status) : ''}
+    </header>
+    <div class="duplicate-pair">
+      ${duplicateArticleMini(item.blog, 'blog')}
+      <div class="duplicate-link-mark" aria-hidden="true">↔</div>
+      ${duplicateArticleMini(item.facebook, 'facebook')}
+    </div>
+    ${status === 'pending' ? '' : duplicateActions(item, status)}
+  </article>`;
+}
+
+function duplicateVisiblePending() {
+  const minimum = duplicateUi.filters.score === 'all' ? 0 : Number(duplicateUi.filters.score) / 100;
+  return duplicateUi.data.pending.filter(item => {
+    const scoreMatch = duplicateUi.filters.score === '100'
+      ? !!item.exact || Number(item.score) >= 0.9995
+      : Number(item.score) >= minimum;
+    const count = Number(item.facebook?.infographicCount) || 0;
+    const infographicMatch = duplicateUi.filters.infographics === 'all'
+      || (duplicateUi.filters.infographics === 'with' && count > 0)
+      || (duplicateUi.filters.infographics === 'without' && count === 0);
+    return scoreMatch && infographicMatch;
+  });
+}
+
+function duplicateEmpty(tab, filtered = false) {
+  const copy = filtered
+    ? ['Keine Treffer für diese Filter', 'Passe Übereinstimmung oder Infografikfilter an.']
+    : {
+      pending: ['Keine offenen Treffer', 'Nach dem nächsten Einlesen erscheinen hier neue, ausreichend ähnliche Artikelpaare.'],
+      linked: ['Noch nichts verknüpft', 'Bestätigte Blog–Facebook-Paare werden hier dauerhaft dokumentiert.'],
+      ignored: ['Keine ignorierten Treffer', 'Bewusst getrennte Artikel können hier wieder zur Prüfung freigegeben werden.'],
+    }[tab];
+  return `<div class="duplicate-empty"><span>◎</span><h3>${copy[0]}</h3><p>${copy[1]}</p></div>`;
+}
+
+function updateDuplicateStatus() {
+  if (duplicateUi.tab === 'pending') {
+    const visible = duplicateVisiblePending().length;
+    const total = duplicateUi.data.pending.length;
+    duplicateStatus.textContent = `${visible} von ${total} offenen Treffern sichtbar · Auswahl bleibt im Browser gespeichert`;
+  } else {
+    const count = duplicateUi.data[duplicateUi.tab]?.length || 0;
+    duplicateStatus.textContent = `${count} ${duplicateUi.tab === 'linked' ? 'verknüpfte' : 'ignorierte'} Treffer`;
+  }
+}
+
+function updateDuplicateTools() {
+  const pending = duplicateUi.tab === 'pending' && !duplicateUi.detail;
+  duplicateTools.hidden = !pending;
+  if (!pending) return;
+  const selected = selectedDuplicateItems();
+  const withInfographics = selected.filter(item => Number(item.facebook?.infographicCount) > 0).length;
+  duplicateSelectionCount.textContent = `${selected.length} ausgewählt${withInfographics ? ` · ${withInfographics} mit Infografik` : ''}`;
+  duplicateSelectNone.disabled = duplicateUi.busy || selected.length === 0;
+  duplicateBatchLink.disabled = duplicateUi.busy || selected.length === 0;
+  duplicateBatchMigrate.disabled = duplicateUi.busy || withInfographics === 0;
+  duplicateSelectAll.disabled = duplicateUi.busy || duplicateVisiblePending().length === 0;
+}
+
+function renderDuplicateList({ restoreScroll = false } = {}) {
+  duplicateUi.detail = null;
+  duplicateContent.classList.remove('is-detail');
+  const allItems = duplicateUi.data[duplicateUi.tab] || [];
+  const items = duplicateUi.tab === 'pending' ? duplicateVisiblePending() : allItems;
+  duplicateContent.innerHTML = items.length
+    ? `<div class="duplicate-stack">${items.map(item => duplicateCard(item, duplicateUi.tab)).join('')}</div>`
+    : duplicateEmpty(duplicateUi.tab, duplicateUi.tab === 'pending' && allItems.length > 0);
+  updateDuplicateStatus();
+  updateDuplicateTools();
+  if (restoreScroll) requestAnimationFrame(() => { duplicateContent.scrollTop = duplicateUi.listScrollTop; });
+}
+
+function duplicateDiff(text, otherText) {
+  const other = new Set(String(otherText || '').toLocaleLowerCase('de-DE').match(/[\p{L}\p{N}]+/gu) || []);
+  return String(text || '').split(/([\p{L}\p{N}]+)/gu).map(part => {
+    const escaped = duplicateEsc(part);
+    if (!/[\p{L}\p{N}]/u.test(part)) return escaped;
+    return other.has(part.toLocaleLowerCase('de-DE')) ? escaped : `<mark>${escaped}</mark>`;
+  }).join('').replace(/\n/g, '<br>');
+}
+
+function renderDuplicateDetail(pair) {
+  duplicateUi.detail = pair;
+  duplicateContent.classList.add('is-detail');
+  duplicateTools.hidden = true;
+  const migration = pair.migration || [];
+  duplicateContent.innerHTML = `<div class="duplicate-detail" data-mobile-side="${duplicateUi.mobileSide}">
+    <div class="duplicate-detail-nav">
+      <button type="button" class="duplicate-back" data-duplicate-action="back">← Zur Trefferliste</button>
+      <div class="duplicate-detail-switch" role="tablist" aria-label="Vergleichsseite">
+        <button type="button" role="tab" data-duplicate-action="mobile-side" data-side="blog" aria-selected="${duplicateUi.mobileSide === 'blog'}">Blog</button>
+        <button type="button" role="tab" data-duplicate-action="mobile-side" data-side="facebook" aria-selected="${duplicateUi.mobileSide === 'facebook'}">Facebook</button>
+      </div>
+    </div>
+    <div class="duplicate-detail-grid">
+      <article data-duplicate-side="blog"><span class="duplicate-source">BLOG · ORIGINAL</span><h3>${duplicateEsc(pair.blog.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.blog.date)}</p>${duplicateInfographicGallery(pair.blog, 'blog')}<div class="duplicate-fulltext">${duplicateDiff(pair.blog.body, pair.facebook.body)}</div></article>
+      <article data-duplicate-side="facebook"><span class="duplicate-source">FACEBOOK · QUELLE</span><h3>${duplicateEsc(pair.facebook.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.facebook.date)}</p>${duplicateInfographicGallery(pair.facebook, 'facebook')}<div class="duplicate-fulltext">${duplicateDiff(pair.facebook.body, pair.blog.body)}</div></article>
+    </div>
+    <aside class="duplicate-migration-note">
+      <strong>${migration.length ? `${migration.length} Infografik${migration.length === 1 ? ' kann' : 'en können'} migriert werden` : 'Keine migrierbare Infografik erkannt'}</strong>
+      ${migration.length ? `<ul>${migration.map(item => `<li>${duplicateEsc(item.target)} · ${item.files.map(duplicateEsc).join(', ')}</li>`).join('')}</ul>` : ''}
+      ${pair.migrationUnavailable ? `<p>${duplicateEsc(pair.migrationUnavailable)}</p>` : ''}
+    </aside>
+    ${duplicateActions(pair, duplicateUi.tab, { detail: true })}
+  </div>`;
+  updateDuplicateTools();
+}
+
+function updateDuplicateCounts() {
+  for (const key of ['pending', 'linked', 'ignored']) {
+    document.querySelector(`[data-duplicate-count="${key}"]`).textContent = duplicateUi.data[key]?.length || 0;
+  }
+  const open = duplicateUi.data.pending?.length || 0;
+  duplicateMenuCount.textContent = open;
+  duplicateMenuCount.hidden = !open;
+}
+
+function pruneDuplicateSelection() {
+  const valid = new Set(duplicateUi.data.pending.map(duplicatePairKey));
+  let changed = false;
+  for (const key of [...duplicateUi.selection]) {
+    if (!valid.has(key)) {
+      duplicateUi.selection.delete(key);
+      changed = true;
+    }
+  }
+  if (changed) saveDuplicateSelection();
+}
+
+async function loadDuplicates({ quiet = false, restoreScroll = false } = {}) {
+  if (!quiet) duplicateStatus.textContent = 'Treffer werden geladen …';
+  const data = await duplicateRequest('/api/duplicates');
+  duplicateUi.data = data;
+  pruneDuplicateSelection();
+  updateDuplicateCounts();
+  renderDuplicateList({ restoreScroll });
+}
+
+async function inspectDuplicate(blogId, facebookId) {
+  duplicateUi.listScrollTop = duplicateContent.scrollTop;
+  duplicateStatus.textContent = 'Artikelvergleich wird geladen …';
+  const pair = await duplicateRequest(`/api/duplicates/compare?blogId=${encodeURIComponent(blogId)}&facebookId=${encodeURIComponent(facebookId)}`);
+  duplicateStatus.textContent = 'Abweichende Wörter sind markiert. Auf dem Smartphone wechselst du zwischen Blog und Facebook.';
+  duplicateUi.mobileSide = 'blog';
+  renderDuplicateDetail(pair);
+}
+
+async function mutateDuplicate(action, blogId, facebookId) {
+  if (duplicateUi.busy) return;
+  if (action === 'migrate') {
+    const okay = window.confirm('Die Infografikdateien im Ordner „Infografiken“ werden für den Blogartikel umbenannt. Das Artikelbild bleibt unverändert. Fortfahren?');
+    if (!okay) return;
+  }
+  duplicateUi.busy = true;
+  updateDuplicateTools();
+  duplicateStatus.textContent = action === 'migrate' ? 'Infografiken werden migriert und das Archiv neu eingelesen …' : 'Änderung wird gespeichert …';
+  try {
+    await duplicateRequest('/api/duplicates', {
+      method: 'POST',
+      body: JSON.stringify({ action, blogId, facebookId }),
+    });
+    await loadDuplicates({ quiet: true, restoreScroll: true });
+    if (['reset', 'migrate'].includes(action) && typeof loadArticles === 'function') await loadArticles();
+  } finally {
+    duplicateUi.busy = false;
+    updateDuplicateTools();
+  }
+}
+
+async function linkSelectedDuplicates(migrateImages = false) {
+  if (duplicateUi.busy) return;
+  const items = selectedDuplicateItems().map(duplicatePairIds);
+  if (!items.length) return;
+  const infographicPairs = selectedDuplicateItems().filter(item => Number(item.facebook?.infographicCount) > 0).length;
+  const message = migrateImages
+    ? `${items.length} ausgewählte Paare verknüpfen und die Infografiken von ${infographicPairs} Facebook-Beiträgen umbenennen?`
+    : `${items.length} ausgewählte Paare jetzt verknüpfen?`;
+  if (!window.confirm(message)) return;
+
+  duplicateUi.busy = true;
+  updateDuplicateTools();
+  duplicateStatus.textContent = migrateImages
+    ? `${items.length} Paare werden verknüpft; anschließend wird das Archiv einmal neu eingelesen …`
+    : `${items.length} Paare werden gemeinsam verknüpft …`;
+  try {
+    const result = await duplicateRequest('/api/duplicates/batch', {
+      method: 'POST',
+      body: JSON.stringify({ items, migrateImages }),
+    });
+    const failed = new Set((result.failed || []).map(duplicatePairKey));
+    duplicateUi.selection = new Set([...duplicateUi.selection].filter(key => failed.has(key)));
+    saveDuplicateSelection();
+    duplicateUi.listScrollTop = 0;
+    await loadDuplicates({ quiet: true });
+    if (typeof loadArticles === 'function') await loadArticles();
+    duplicateStatus.textContent = result.failed?.length
+      ? `${result.linked} verknüpft, ${result.failed.length} fehlgeschlagen und weiter ausgewählt.`
+      : `${result.linked} Paare wurden verknüpft.`;
+  } finally {
+    duplicateUi.busy = false;
+    updateDuplicateTools();
+  }
+}
+
+async function openDuplicateReview() {
+  duplicateUi.tab = 'pending';
+  duplicateUi.detail = null;
+  duplicateDialog.showModal();
+  duplicateContent.innerHTML = '<div class="duplicate-loading"><span class="spinner"></span></div>';
+  try { await loadDuplicates(); }
+  catch (error) {
+    duplicateStatus.textContent = 'Fehler';
+    duplicateContent.innerHTML = `<div class="duplicate-empty"><h3>Dubletten konnten nicht geladen werden</h3><p>${duplicateEsc(error.message)}</p></div>`;
+  }
+}
+
+function refreshDuplicateMenuCount() {
+  loadDuplicates({ quiet: true }).catch(() => {});
+}
+
+loadDuplicateSelection();
+
+document.getElementById('duplicate-review-close').addEventListener('click', () => duplicateDialog.close());
+duplicateDialog.addEventListener('click', event => {
+  if (event.target === duplicateDialog) duplicateDialog.close();
+});
+duplicateImageViewer.addEventListener('click', event => {
+  if (event.target === duplicateImageViewer) duplicateImageViewer.close();
+});
+duplicateImageViewer.addEventListener('close', () => duplicateImageViewerImage.removeAttribute('src'));
+duplicateImageViewer.addEventListener('keydown', event => {
+  if (event.key === 'ArrowLeft') stepDuplicateImageViewer(-1);
+  if (event.key === 'ArrowRight') stepDuplicateImageViewer(1);
+});
+document.getElementById('duplicate-image-viewer-close').addEventListener('click', () => duplicateImageViewer.close());
+duplicateImageViewerPrev.addEventListener('click', () => stepDuplicateImageViewer(-1));
+duplicateImageViewerNext.addEventListener('click', () => stepDuplicateImageViewer(1));
+document.getElementById('duplicate-tabs').addEventListener('click', event => {
+  const button = event.target.closest('[data-duplicate-tab]');
+  if (!button) return;
+  duplicateUi.tab = button.dataset.duplicateTab;
+  duplicateUi.listScrollTop = 0;
+  document.querySelectorAll('[data-duplicate-tab]').forEach(tab => tab.setAttribute('aria-selected', String(tab === button)));
+  renderDuplicateList();
+});
+
+duplicateScoreFilter.addEventListener('change', () => {
+  duplicateUi.filters.score = duplicateScoreFilter.value;
+  duplicateUi.listScrollTop = 0;
+  renderDuplicateList();
+});
+duplicateInfographicFilter.addEventListener('change', () => {
+  duplicateUi.filters.infographics = duplicateInfographicFilter.value;
+  duplicateUi.listScrollTop = 0;
+  renderDuplicateList();
+});
+duplicateSelectAll.addEventListener('click', () => {
+  duplicateUi.listScrollTop = duplicateContent.scrollTop;
+  const seenFacebook = new Set();
+  for (const item of duplicateVisiblePending()) {
+    const { facebookId } = duplicatePairIds(item);
+    if (seenFacebook.has(facebookId)) continue;
+    seenFacebook.add(facebookId);
+    for (const selectedKey of [...duplicateUi.selection]) {
+      const other = duplicatePendingByKey(selectedKey);
+      if (other && duplicatePairIds(other).facebookId === facebookId) duplicateUi.selection.delete(selectedKey);
+    }
+    duplicateUi.selection.add(duplicatePairKey(item));
+  }
+  saveDuplicateSelection();
+  renderDuplicateList({ restoreScroll: true });
+});
+duplicateSelectNone.addEventListener('click', () => {
+  duplicateUi.listScrollTop = duplicateContent.scrollTop;
+  duplicateUi.selection.clear();
+  saveDuplicateSelection();
+  renderDuplicateList({ restoreScroll: true });
+});
+duplicateBatchLink.addEventListener('click', () => linkSelectedDuplicates(false).catch(error => { duplicateStatus.textContent = error.message; }));
+duplicateBatchMigrate.addEventListener('click', () => linkSelectedDuplicates(true).catch(error => { duplicateStatus.textContent = error.message; }));
+
+duplicateContent.addEventListener('change', event => {
+  const checkbox = event.target.closest('[data-duplicate-select]');
+  if (!checkbox) return;
+  const root = checkbox.closest('[data-blog-id]');
+  const item = duplicatePendingByKey(`${root?.dataset.blogId || ''}${DUPLICATE_PAIR_SEPARATOR}${root?.dataset.facebookId || ''}`);
+  if (!item) return;
+  duplicateUi.listScrollTop = duplicateContent.scrollTop;
+  setDuplicateSelected(item, checkbox.checked);
+  renderDuplicateList({ restoreScroll: true });
+});
+
+duplicateContent.addEventListener('click', async event => {
+  const button = event.target.closest('[data-duplicate-action]');
+  if (!button || button.disabled) return;
+  const action = button.dataset.duplicateAction;
+  if (action === 'back') return renderDuplicateList({ restoreScroll: true });
+  if (action === 'mobile-side') {
+    duplicateUi.mobileSide = button.dataset.side === 'facebook' ? 'facebook' : 'blog';
+    return renderDuplicateDetail(duplicateUi.detail);
+  }
+  if (action === 'open-infographic') {
+    return openDuplicateImageViewer(button.dataset.side, Number(button.dataset.index));
+  }
+  const root = button.closest('[data-blog-id]');
+  const blogId = root?.dataset.blogId;
+  const facebookId = root?.dataset.facebookId;
+  if (!blogId || !facebookId) return;
+  try {
+    if (action === 'inspect') await inspectDuplicate(blogId, facebookId);
+    else if (action === 'toggle-selection') {
+      const item = duplicatePendingByKey(`${blogId}${DUPLICATE_PAIR_SEPARATOR}${facebookId}`);
+      if (item) {
+        setDuplicateSelected(item, !duplicateUi.selection.has(duplicatePairKey(item)));
+        renderDuplicateDetail(duplicateUi.detail);
+      }
+    } else if (['ignore', 'reset', 'migrate'].includes(action)) await mutateDuplicate(action, blogId, facebookId);
+  } catch (error) {
+    duplicateStatus.textContent = error.message;
+  }
+});
+
+// Nach Anmeldung im Hintergrund nur den Zähler laden; Fehler (älterer Server,
+// fehlende Adminrechte) bleiben im normalen Betrieb unsichtbar.
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    if (!document.querySelector('[data-action="duplicates"]')?.hidden) loadDuplicates({ quiet: true }).catch(() => {});
+  }, 500);
+});

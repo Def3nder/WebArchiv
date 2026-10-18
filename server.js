@@ -14,6 +14,10 @@ const {
   AUDIOBOOK_AUTHOR, createAudiobookLibrary, createProgressStore, loadAudiobookConfig, installAudiobookRoutes,
 } = require('./audiobooks.cjs');
 const { createBookmarkStore, installBookmarkRoutes } = require('./bookmarks.cjs');
+const {
+  loadDuplicateConfig, buildDuplicateProfile, detectDuplicateCandidates,
+  createDuplicateStore, decisionStillApplies,
+} = require('./duplicates.cjs');
 
 const app = express();
 // Hinter dem Reverse-Proxy (Caddy/HTTPS) X-Forwarded-Proto/Host respektieren,
@@ -81,6 +85,8 @@ let articleById = new Map();
 // Infografik-Gruppen (siehe linkInfographics): Anker-ID → Mitglieder, Mitglied → Anker-ID.
 let infographicGroups = new Map();
 let groupAnchorOf = new Map();
+let duplicateCanonicalOf = new Map();
+let duplicateCandidates = [];
 let meta = { authors: [], years: [], categories: [] };
 let fuseIndex = null;
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
@@ -98,6 +104,11 @@ const bookmarks = createBookmarkStore({
   file: process.env.BOOKMARKS_FILE || path.join(__dirname, 'bookmarks.json'),
 });
 bookmarks.load();
+const duplicateConfig = loadDuplicateConfig(CONFIG_FILE);
+const duplicateStore = createDuplicateStore({
+  file: process.env.DUPLICATES_FILE || path.join(__dirname, 'duplicate-decisions.json'),
+});
+duplicateStore.load();
 const audiobooks = createAudiobookLibrary({
   audioRoot: AUDIO_DIR,
   directory: audiobookConfig.directory,
@@ -520,6 +531,9 @@ async function scanDir(dirPath, author, year, collector) {
         // Intern (nicht in der API): eigenes Bild statt standard.jpg, eigener Text.
         ownImage: !!ownImgPath,
         hasBody: !!parsed.body.trim(),
+        duplicateProfile: (author === duplicateConfig.blogAuthor || duplicateConfig.facebookAuthors.includes(author))
+          ? buildDuplicateProfile(parsed.title, parsed.body)
+          : null,
       });
       reindexState.processed++;
     } catch (err) {
@@ -646,12 +660,37 @@ function buildArticleSearchIndex(articleList) {
 function exposeArticleForUser(article, user) {
   const {
     filePath, inheritedAudioAuthor, inheritedAudioArticleId,
-    ownImage, hasBody, infographicBase, infographicOrdinal, ...rest
+    ownImage, hasBody, infographicBase, infographicOrdinal, duplicateProfile, ...rest
   } = article;
   if (inheritedAudioAuthor && !canAccessAuthor(user, inheritedAudioAuthor)) {
     return { ...rest, audioUrl: null, hasExternalAudio: false, episodeNum: null };
   }
   return rest;
+}
+
+function refreshDuplicateState() {
+  const nextCanonical = new Map();
+  for (const decision of duplicateStore.all()) {
+    if (decision.status !== 'linked') continue;
+    const blog = articleById.get(decision.blogId);
+    const facebook = articleById.get(decision.facebookId);
+    if (!blog || !facebook) continue;
+    if (blog.author !== duplicateConfig.blogAuthor || !duplicateConfig.facebookAuthors.includes(facebook.author)) continue;
+    nextCanonical.set(facebook.id, blog.id);
+  }
+  duplicateCanonicalOf = nextCanonical;
+  duplicateCandidates = detectDuplicateCandidates(articles, duplicateConfig).filter(candidate => {
+    if (duplicateCanonicalOf.has(candidate.facebook.id)) return false;
+    const decision = duplicateStore.find(candidate.blog.id, candidate.facebook.id);
+    return !decisionStillApplies(decision, candidate.blog, candidate.facebook);
+  });
+}
+
+function duplicateCanonicalFor(article, user = null) {
+  const canonical = articleById.get(duplicateCanonicalOf.get(article?.id));
+  if (!canonical) return null;
+  if (user && !canAccessAuthor(user, canonical.author)) return null;
+  return canonical;
 }
 
 // Anker der Gruppe, zu der eine Infografik gehört – nur wenn der Nutzer ihn sehen
@@ -719,6 +758,7 @@ async function rebuildIndex() {
 
   ({ groups: infographicGroups, anchorOf: groupAnchorOf } = linkInfographics(articles, userStore.authorPriority));
   articleById = new Map(articles.map(article => [article.id, article]));
+  refreshDuplicateState();
   await audiobooks.rebuild();
 
   const isInfografik = a => (a.author === 'Infografiken' ? 1 : 0);
@@ -954,6 +994,177 @@ function buildInfographicMarkdown(content, ordinal) {
   return keptLines.join(eol) + eol;
 }
 
+const DUPLICATE_MEDIA_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.mp3', '.mp4', '.pdf']);
+
+function duplicateFail(status, message) {
+  return Object.assign(new Error(message), { status });
+}
+
+function duplicateInfographicViews(article) {
+  return (infographicGroups.get(article.id) || [])
+    .filter(item => item.ownImage)
+    .map(item => ({
+      id: item.id,
+      title: item.title,
+      imageUrl: item.imageUrl,
+    }));
+}
+
+function duplicateArticleView(article) {
+  if (!article) return null;
+  const infographics = duplicateInfographicViews(article);
+  return {
+    id: article.id,
+    author: article.author,
+    title: article.title,
+    date: article.date,
+    excerpt: article.excerpt,
+    sourceUrl: article.sourceUrl,
+    imageUrl: article.ownImage ? article.imageUrl : null,
+    hasOwnImage: !!article.ownImage,
+    hash: article.duplicateProfile?.hash || '',
+    infographicCount: infographics.length,
+    infographics,
+  };
+}
+
+function duplicatePair(blogId, facebookId) {
+  const blog = articleById.get(blogId);
+  const facebook = articleById.get(facebookId);
+  if (!blog || !facebook) throw duplicateFail(404, 'Einer der Artikel wurde nicht gefunden.');
+  if (blog.author !== duplicateConfig.blogAuthor || !duplicateConfig.facebookAuthors.includes(facebook.author)) {
+    throw duplicateFail(400, 'Diese Autoren können nicht als Blog-/Facebook-Dublette verknüpft werden.');
+  }
+  return { blog, facebook };
+}
+
+function filesForInfographic(article) {
+  const dir = path.dirname(article.filePath);
+  const stem = path.basename(article.filePath, '.md').toLowerCase();
+  return fs.readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isFile())
+    .filter(entry => {
+      const ext = path.extname(entry.name).toLowerCase();
+      return path.basename(entry.name, ext).toLowerCase() === stem
+        && (ext === '.md' || DUPLICATE_MEDIA_EXTENSIONS.has(ext));
+    })
+    .map(entry => path.join(dir, entry.name));
+}
+
+function nextDuplicateInfographicTarget(blog, reserved) {
+  const year = blog.year || blog.date?.slice(0, 4) || '';
+  if (!/^\d{4}$/.test(year)) throw duplicateFail(400, 'Der Blogartikel hat kein gültiges Jahr.');
+  const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
+  if (!dir) throw duplicateFail(400, 'Kein gültiges Infografik-Ziel gefunden.');
+  const baseStem = path.basename(blog.filePath, '.md');
+  for (let ordinal = 1; ordinal < 1000; ordinal++) {
+    const stem = ordinal === 1 ? baseStem : `${baseStem}_${ordinal}`;
+    if (!reserved.has(stem.toLowerCase()) && !infographicStemExists(dir, stem)) {
+      reserved.add(stem.toLowerCase());
+      return { dir, stem, ordinal };
+    }
+  }
+  throw duplicateFail(409, 'Es konnte kein freier Infografik-Dateiname gefunden werden.');
+}
+
+function planDuplicateMigration(blog, facebook) {
+  const bundles = [];
+  for (const info of infographicGroups.get(facebook.id) || []) {
+    if (!info.ownImage) continue;
+    if (info.hasBody) throw duplicateFail(409, `„${info.title}“ enthält eigenen Text und wird nicht automatisch migriert.`);
+    bundles.push({ kind: 'infographic', sourceArticle: info, files: filesForInfographic(info) });
+  }
+  const reserved = new Set();
+  return bundles.map(bundle => {
+    const target = nextDuplicateInfographicTarget(blog, reserved);
+    const mappings = bundle.files.map(source => ({
+      source,
+      target: path.join(target.dir, target.stem + path.extname(source).toLowerCase()),
+    }));
+    return { ...bundle, ...target, mappings };
+  });
+}
+
+function publicMigrationPlan(plan) {
+  return plan.map(bundle => ({
+    kind: bundle.kind,
+    target: path.relative(WWW_DIR, path.join(bundle.dir, bundle.stem)).replace(/\\/g, '/'),
+    files: bundle.mappings.map(item => path.basename(item.target)),
+  }));
+}
+
+async function migrateDuplicateInfographics(blog, facebook) {
+  const plan = planDuplicateMigration(blog, facebook);
+  if (!plan.length) return { migrations: [], rollback: async () => {} };
+  const blogContent = await fs.promises.readFile(blog.filePath, 'utf8');
+  const header = validateInfographicHeader(blogContent);
+  if (!header.hasTitle || !header.date) throw duplicateFail(400, 'Der Blogartikel hat keinen gültigen Titel- und Datumskopf.');
+
+  const moved = [];
+  const created = [];
+  const overwrittenMarkdown = [];
+  const archiveRoot = await fs.promises.realpath(WWW_DIR);
+  const isInsideArchive = file => {
+    const root = process.platform === 'win32' ? archiveRoot.toLowerCase() : archiveRoot;
+    const candidate = process.platform === 'win32' ? file.toLowerCase() : file;
+    return candidate.startsWith(root + path.sep);
+  };
+  const rollback = async () => {
+    for (const file of [...created].reverse()) await fs.promises.unlink(file).catch(() => {});
+    for (const item of [...overwrittenMarkdown].reverse()) await fs.promises.writeFile(item.path, item.content).catch(() => {});
+    for (const mapping of [...moved].reverse()) await fs.promises.rename(mapping.target, mapping.source).catch(() => {});
+  };
+  try {
+    for (const bundle of plan) {
+      await fs.promises.mkdir(bundle.dir, { recursive: true });
+      const realTargetDir = await fs.promises.realpath(bundle.dir);
+      if (!isInsideArchive(realTargetDir)) throw duplicateFail(403, 'Das Infografik-Ziel liegt außerhalb des Archivs.');
+      for (const mapping of bundle.mappings) {
+        const source = path.resolve(mapping.source);
+        const target = path.resolve(mapping.target);
+        if (!source.startsWith(WWW_DIR + path.sep) || !target.startsWith(WWW_DIR + path.sep)) {
+          throw duplicateFail(403, 'Ein Medienpfad liegt außerhalb des Archivs.');
+        }
+        const stat = await fs.promises.lstat(source);
+        if (stat.isSymbolicLink() || !stat.isFile()) throw duplicateFail(409, 'Symbolische Links können nicht migriert werden.');
+        const realSource = await fs.promises.realpath(source);
+        if (!isInsideArchive(realSource)) throw duplicateFail(403, 'Eine Quelldatei liegt außerhalb des Archivs.');
+        try { await fs.promises.access(target); throw duplicateFail(409, `Zieldatei existiert bereits: ${path.basename(target)}`); }
+        catch (error) { if (error.status) throw error; if (error.code !== 'ENOENT') throw error; }
+      }
+
+      const mdMapping = bundle.mappings.find(item => path.extname(item.source).toLowerCase() === '.md');
+      for (const mapping of bundle.mappings) {
+        await fs.promises.rename(mapping.source, mapping.target);
+        moved.push(mapping);
+      }
+      const mdTarget = path.join(bundle.dir, bundle.stem + '.md');
+      if (mdMapping) {
+        overwrittenMarkdown.push({ path: mdTarget, content: await fs.promises.readFile(mdTarget) });
+        await fs.promises.writeFile(mdTarget, buildInfographicMarkdown(blogContent, bundle.ordinal));
+      } else {
+        await fs.promises.writeFile(mdTarget, buildInfographicMarkdown(blogContent, bundle.ordinal), { flag: 'wx' });
+        created.push(mdTarget);
+      }
+    }
+  } catch (error) {
+    await rollback();
+    throw error;
+  }
+
+  const migrations = plan.flatMap(bundle => [
+    ...bundle.mappings.map(item => ({
+      from: path.relative(WWW_DIR, item.source).replace(/\\/g, '/'),
+      to: path.relative(WWW_DIR, item.target).replace(/\\/g, '/'),
+    })),
+    ...(!bundle.mappings.some(item => path.extname(item.source).toLowerCase() === '.md') ? [{
+      from: null,
+      to: path.relative(WWW_DIR, path.join(bundle.dir, bundle.stem + '.md')).replace(/\\/g, '/'),
+    }] : []),
+  ]);
+  return { migrations, rollback };
+}
+
 function requireAuth(req, res, next) {
   if (req.session?.user) return next();
   res.status(401).json({ error: 'Not authenticated' });
@@ -1131,20 +1342,22 @@ function ogDescription(article) {
 }
 
 function publicShareItem(id) {
-  return articles.find(article => article.id === id) || audiobooks.getForUser(null, id);
+  const article = articleById.get(id);
+  return (article ? (duplicateCanonicalFor(article) || article) : null) || audiobooks.getForUser(null, id);
 }
 
 app.get('/a/*', (req, res) => {
   const id = req.params[0];
   const article = publicShareItem(id);
+  const canonicalId = article?.id || id;
   const base = `${req.protocol}://${req.get('host')}`;
-  const canonical = base + '/a/' + encodeURIComponent(id);
+  const canonical = base + '/a/' + encodeURIComponent(canonicalId);
 
   let tags;
   if (article) {
     const title = escapeHtml(article.title || 'WebArchiv');
     const desc  = escapeHtml(ogDescription(article));
-    const img   = article.imageUrl ? base + '/og-image/' + encodeURIComponent(id) : '';
+    const img   = article.imageUrl ? base + '/og-image/' + encodeURIComponent(canonicalId) : '';
     tags = `
     <title>${title}</title>
     <meta name="description" content="${desc}" />
@@ -1168,7 +1381,7 @@ app.get('/a/*', (req, res) => {
   }
 
   // JS-Weiterleitung für Menschen; Crawler lesen nur die Meta-Tags oben.
-  const target = '/#/article/' + encodeURIComponent(id);
+  const target = '/#/article/' + encodeURIComponent(canonicalId);
   res.type('html').send(`<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -1322,8 +1535,9 @@ app.post(
   async (req, res) => {
     if (ttsJobs.running || markdownEditor.running) return res.status(409).json({ error: 'Es läuft bereits ein Audio- oder Speicherauftrag.' });
     const id = req.params[0];
-    const article = articles.find(a => a.id === id);
-    if (!article) return res.status(404).json({ error: 'Artikel nicht gefunden.' });
+    const requested = articleById.get(id);
+    if (!requested) return res.status(404).json({ error: 'Artikel nicht gefunden.' });
+    const article = duplicateCanonicalFor(requested, req.session.user) || requested;
 
     if (!canUploadInfographic(req.session.user, article)) {
       return res.status(403).json({ error: 'Für diesen Artikel ist kein Infografik-Upload erlaubt.' });
@@ -1565,6 +1779,195 @@ app.get('/api/scrape/log', requireAdmin, (_req, res) => {
   }
 });
 
+function duplicateDecisionView(decision) {
+  const blog = articleById.get(decision.blogId);
+  const facebook = articleById.get(decision.facebookId);
+  return {
+    ...decision,
+    blog: duplicateArticleView(blog),
+    facebook: duplicateArticleView(facebook),
+    missing: !blog || !facebook,
+    changed: !!(blog && facebook && (
+      decision.blogHash !== blog.duplicateProfile?.hash
+      || decision.facebookHash !== facebook.duplicateProfile?.hash
+    )),
+  };
+}
+
+async function linkDuplicatePair({ blogId, facebookId, userEmail, migrateImages = false, deferDecision = false }) {
+  const { blog, facebook } = duplicatePair(blogId, facebookId);
+  const existing = duplicateStore.find(blogId, facebookId);
+  const migrationResult = migrateImages
+    ? await migrateDuplicateInfographics(blog, facebook)
+    : { migrations: [], rollback: async () => {} };
+  const decision = {
+    blogId, facebookId, status: 'linked',
+    blogHash: blog.duplicateProfile.hash,
+    facebookHash: facebook.duplicateProfile.hash,
+    user: userEmail,
+    migrations: [...(existing?.migrations || []), ...migrationResult.migrations],
+  };
+  if (!deferDecision) {
+    try { await duplicateStore.set(decision); }
+    catch (error) { await migrationResult.rollback(); throw error; }
+  }
+  return { blogId, facebookId, migrations: migrationResult.migrations, decision, rollback: migrationResult.rollback };
+}
+
+app.get('/api/duplicates', requireAdmin, (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const decisions = duplicateStore.all();
+  const pending = duplicateCandidates.map(candidate => ({
+    blog: duplicateArticleView(candidate.blog),
+    facebook: duplicateArticleView(candidate.facebook),
+    score: candidate.score,
+    exact: candidate.exact,
+    containment: candidate.containment,
+    titleSimilarity: candidate.titleSimilarity,
+    days: candidate.days,
+    reasons: candidate.reasons,
+  }));
+  const linked = decisions.filter(item => item.status === 'linked').map(duplicateDecisionView);
+  const ignored = decisions.filter(item => item.status === 'ignored').map(duplicateDecisionView);
+  res.json({ pending, linked, ignored, config: duplicateConfig });
+});
+
+app.get('/api/duplicates/compare', requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const { blog, facebook } = duplicatePair(String(req.query.blogId || ''), String(req.query.facebookId || ''));
+    const read = article => {
+      const parsed = parseArticle(fs.readFileSync(article.filePath, 'utf8'), article.filePath);
+      return { ...duplicateArticleView(article), body: parsed.body, summary: parsed.summary || '' };
+    };
+    let migration = [];
+    let migrationUnavailable = '';
+    try { migration = publicMigrationPlan(planDuplicateMigration(blog, facebook)); }
+    catch (error) { migrationUnavailable = error.message; }
+    res.json({ blog: read(blog), facebook: read(facebook), migration, migrationUnavailable });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Der Vergleich konnte nicht geladen werden.' });
+  }
+});
+
+app.post('/api/duplicates/batch', requireAdmin, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (req.get('sec-fetch-site') === 'cross-site') {
+    return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
+  }
+  if (reindexState.running || scrapeState.running || infographicWrites || markdownEditor.running || ttsJobs.running) {
+    return res.status(409).json({ error: 'Es läuft bereits ein anderer Archiv- oder Speicherauftrag.' });
+  }
+  const rawItems = req.body?.items;
+  if (!Array.isArray(rawItems) || !rawItems.length || rawItems.length > 500) {
+    return res.status(400).json({ error: 'Bitte 1 bis 500 Dublettenpaare auswählen.' });
+  }
+  const items = rawItems.map(item => ({
+    blogId: String(item?.blogId || ''),
+    facebookId: String(item?.facebookId || ''),
+  }));
+  const facebookIds = new Set();
+  try {
+    for (const item of items) {
+      duplicatePair(item.blogId, item.facebookId);
+      if (facebookIds.has(item.facebookId)) {
+        throw duplicateFail(400, 'Ein Facebook-Artikel darf nur einmal in einer Sammelaktion vorkommen.');
+      }
+      facebookIds.add(item.facebookId);
+    }
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
+
+  infographicWrites++;
+  const prepared = [];
+  const failed = [];
+  try {
+    for (const item of items) {
+      try {
+        prepared.push(await linkDuplicatePair({
+          ...item,
+          userEmail: req.session.user.email,
+          migrateImages: !!req.body?.migrateImages,
+          deferDecision: true,
+        }));
+      } catch (error) {
+        failed.push({ ...item, error: error.status ? error.message : 'Verknüpfung fehlgeschlagen.' });
+        if (!error.status) console.error('Dubletten-Sammelaktion:', error);
+      }
+    }
+    try {
+      if (prepared.length) await duplicateStore.setMany(prepared.map(item => item.decision));
+    } catch (error) {
+      for (const item of [...prepared].reverse()) await item.rollback();
+      throw error;
+    }
+    if (prepared.length) {
+      await bookmarks.replaceArticleIds(prepared.map(item => ({ oldId: item.facebookId, newId: item.blogId })));
+    }
+    const migrations = prepared.flatMap(item => item.migrations);
+    if (migrations.length) await buildIndex();
+    else refreshDuplicateState();
+    return res.json({ ok: failed.length === 0, linked: prepared.length, failed, migrations });
+  } catch (error) {
+    if (!error.status) console.error('Dubletten-Sammelaktion:', error);
+    return res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Sammelaktion ist fehlgeschlagen.' });
+  } finally {
+    infographicWrites--;
+  }
+});
+
+app.post('/api/duplicates', requireAdmin, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (req.get('sec-fetch-site') === 'cross-site') {
+    return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
+  }
+  if (reindexState.running || scrapeState.running || infographicWrites || markdownEditor.running || ttsJobs.running) {
+    return res.status(409).json({ error: 'Es läuft bereits ein anderer Archiv- oder Speicherauftrag.' });
+  }
+  const action = String(req.body?.action || '');
+  const blogId = String(req.body?.blogId || '');
+  const facebookId = String(req.body?.facebookId || '');
+  infographicWrites++;
+  try {
+    if (action === 'reset') {
+      await duplicateStore.remove(blogId, facebookId);
+      refreshDuplicateState();
+      return res.json({ ok: true });
+    }
+    const { blog, facebook } = duplicatePair(blogId, facebookId);
+    if (action === 'ignore') {
+      await duplicateStore.set({
+        blogId, facebookId, status: 'ignored',
+        blogHash: blog.duplicateProfile.hash,
+        facebookHash: facebook.duplicateProfile.hash,
+        user: req.session.user.email,
+      });
+      refreshDuplicateState();
+      return res.json({ ok: true });
+    }
+    if (!['link', 'migrate'].includes(action)) throw duplicateFail(400, 'Unbekannte Dublettenaktion.');
+    const existing = duplicateStore.find(blogId, facebookId);
+    if (action === 'migrate' && existing?.status !== 'linked') {
+      throw duplicateFail(409, 'Grafiken können erst nach dem Verknüpfen migriert werden.');
+    }
+    const result = await linkDuplicatePair({
+      blogId, facebookId,
+      userEmail: req.session.user.email,
+      migrateImages: !!req.body?.migrateImages || action === 'migrate',
+    });
+    await bookmarks.replaceArticleId(facebookId, blogId);
+    if (result.migrations.length) await buildIndex();
+    else refreshDuplicateState();
+    return res.json({ ok: true, migrations: result.migrations });
+  } catch (error) {
+    if (!error.status) console.error('Dublettenverwaltung:', error);
+    return res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Dublettenaktion ist fehlgeschlagen.' });
+  } finally {
+    infographicWrites--;
+  }
+});
+
 app.get('/api/articles', attachUser, (req, res) => {
   const { q, author, year, category, page = '1', limit = '24', telegram, externalAudio } = req.query;
   const user = req.user;
@@ -1576,6 +1979,10 @@ app.get('/api/articles', attachUser, (req, res) => {
   if (user.allowedAuthors !== null) {
     filtered = filtered.filter(a => user.allowedAuthors.includes(a.author));
   }
+
+  // Bestätigte Facebook-Dubletten verschwinden aus allen normalen Ansichten,
+  // sofern der Nutzer ihren kanonischen Blogartikel sehen darf.
+  filtered = filtered.filter(article => !duplicateCanonicalFor(article, user));
 
   // Nur Artikel mit Lesezeichen (Gäste: keine). Die übrigen Filter gelten weiter.
   if (onlyBookmarks) filtered = filtered.filter(a => marks.has(a.id));
@@ -1656,12 +2063,14 @@ app.get('/api/articles/*', attachUser, (req, res) => {
   const requested = articleById.get(id);
   if (!requested) return res.status(404).json({ error: 'Not found' });
 
-  if (!canAccessAuthor(req.user, requested.author)) {
+  const canonical = duplicateCanonicalFor(requested, req.user);
+  const visibleRequested = canonical || requested;
+  if (!canAccessAuthor(req.user, visibleRequested.author)) {
     return res.status(403).json({ error: 'Access denied' });
   }
   // Eine gruppierte Infografik öffnet ihre Gruppe; requestedId sagt, welches Bild gemeint war.
-  const anchor = visibleGroupAnchor(requested, req.user);
-  const article = anchor || requested;
+  const anchor = visibleGroupAnchor(visibleRequested, req.user);
+  const article = anchor || visibleRequested;
 
   try {
     const content = fs.readFileSync(article.filePath, 'utf8');
@@ -1671,7 +2080,7 @@ app.get('/api/articles/*', attachUser, (req, res) => {
     res.json({
       ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article),
       bookmarked: bookmarks.has(req.user.email, article.id),
-      ...(anchor ? { requestedId: id } : {}),
+      ...((anchor || canonical) ? { requestedId: id } : {}),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
