@@ -7,12 +7,14 @@
     "start": "node server.js",
     "scrape": "node scraper/scrape_all.js",
     "build:editor": "esbuild public/markdown-editors.js --bundle --minify --format=iife --target=es2020 --outfile=public/vendor/article-editor.bundle.js --legal-comments=linked",
+    "build:duplicate-diff": "esbuild public/duplicate-diff.js --bundle --minify --format=iife --target=es2020 --global-name=duplicateTextDiff --outfile=public/vendor/duplicate-diff.bundle.js --legal-comments=linked",
     "test": "npm run test:node && npm run test:python",
     "test:node": "node --test --test-isolation=none \"test/*.test.cjs\" \"scraper/test/*.test.js\" \"epub-tool/test/*.test.js\" \"tts/test/*.test.cjs\" \"tts/test/*.test.js\"",
     "test:python": "python -B -m unittest discover -s tts/test -p \"test_*.py\" -v"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "diff": "^8.0.4",
     "express": "^4.18.2",
     "express-session": "^1.19.0",
     "fuse.js": "^7.3.0",

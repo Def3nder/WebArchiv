@@ -11,7 +11,8 @@ test('Dublettenprüfung ist als Admin-Dialog mit allen Entscheidungswegen eingeb
   const ui = read('public/duplicates.js');
   assert.match(html, /data-action="duplicates"[^>]*data-admin-only/);
   assert.match(html, /id="duplicate-review"[\s\S]*data-duplicate-tab="pending"[\s\S]*data-duplicate-tab="linked"[\s\S]*data-duplicate-tab="ignored"/);
-  assert.match(html, /duplicates\.js\?v=4/);
+  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=3[\s\S]*duplicates\.js\?v=9/);
+  assert.match(html, /id="duplicate-detail-dialog"[\s\S]*id="duplicate-detail-content"/);
   assert.match(app, /action === 'duplicates'[\s\S]*openDuplicateReview/);
   for (const action of ['inspect', 'toggle-selection', 'mobile-side', 'ignore', 'migrate', 'reset']) {
     assert.match(ui, new RegExp(`data-duplicate-action=\\"${action}\\"`));
@@ -44,9 +45,16 @@ test('beide Artikelseiten zeigen ihre Infografikanzahl und der Detailfuß bleibt
   const css = read('public/styles.css');
   assert.match(ui, /duplicateInfographicGallery\(pair\.blog, 'blog'\)/);
   assert.match(ui, /duplicateInfographicGallery\(pair\.facebook, 'facebook'\)/);
-  assert.match(ui, /duplicateContent\.classList\.add\('is-detail'\)/);
-  assert.match(css, /\.duplicate-detail\s*\{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\) auto auto/);
-  assert.match(css, /\.duplicate-fulltext\s*\{[\s\S]*overflow-y: auto/);
+  assert.match(ui, /<details class="duplicate-infographic-gallery"/);
+  assert.match(ui, /duplicateDetailContent\.innerHTML/);
+  assert.match(ui, /duplicateDetailDialog\.showModal\(\)/);
+  assert.match(css, /\.duplicate-detail\s*\{[\s\S]*grid-template-rows: auto auto minmax\(0, 1fr\) auto auto/);
+  assert.match(css, /\.duplicate-comparison-scroll\s*\{[^}]*overflow-y: auto/);
+  assert.match(css, /\.duplicate-detail-header-grid h3\s*\{[^}]*-webkit-line-clamp: 3/);
+  assert.match(css, /\.duplicate-infographic-gallery\[open\]\s*\{ height: 122px;/);
+  assert.match(ui, /duplicateDetailContent\.addEventListener\('toggle'[\s\S]*other\.open = gallery\.open/);
+  assert.match(ui, /<details class="duplicate-migration-note">[\s\S]*<summary>/);
+  assert.doesNotMatch(css, /\.duplicate-migration-note ul \{ display: none;/);
 });
 
 test('Blog- und Facebook-Infografiken lassen sich vergleichen und bildschirmfüllend öffnen', () => {
@@ -90,7 +98,36 @@ test('Mobil zeigt der Vergleich genau eine umschaltbare Textseite', () => {
   assert.match(ui, /duplicateUi\.tab === 'pending' && !duplicateUi\.detail/);
   assert.match(ui, /data-mobile-side="\$\{duplicateUi\.mobileSide\}"/);
   assert.match(ui, /data-side="blog"[\s\S]*data-side="facebook"/);
-  assert.match(css, /\.duplicate-detail-grid article \{ display: none;/);
-  assert.match(css, /data-mobile-side="blog"[\s\S]*data-duplicate-side="blog"/);
-  assert.match(css, /data-mobile-side="facebook"[\s\S]*data-duplicate-side="facebook"/);
+  assert.match(css, /\.duplicate-comparison-cell \{ grid-column: 1; grid-row: 1; visibility: hidden;/);
+  assert.match(css, /data-mobile-side="blog"\] \.duplicate-comparison-cell\[data-duplicate-side="blog"\]/);
+  assert.match(css, /data-mobile-side="facebook"\] \.duplicate-comparison-cell\[data-duplicate-side="facebook"\]/);
+  assert.match(ui, /duplicateDetailContent\.querySelector\('\.duplicate-detail'\)\.dataset\.mobileSide/);
+});
+
+test('Prüfansicht kehrt bei Auswahl, Ignorieren und Escape in die Trefferliste zurück', () => {
+  const ui = read('public/duplicates.js');
+  assert.match(ui, /duplicateDetailDialog\.addEventListener\('close'[\s\S]*renderDuplicateList\(\{ restoreScroll: true \}\)/);
+  assert.match(ui, /action === 'toggle-selection'[\s\S]*setDuplicateSelected[\s\S]*closeDuplicateDetail\(\)/);
+  assert.match(ui, /action === 'ignore'[\s\S]*closeDuplicateDetail\(\);[\s\S]*mutateDuplicate/);
+  assert.match(ui, /function closeTopDuplicateDialog\(\)[\s\S]*duplicateImageViewer\.open[\s\S]*duplicateDetailDialog\.open[\s\S]*duplicateDialog\.open/);
+  assert.match(ui, /document\.addEventListener\('keydown'[\s\S]*event\.key !== 'Escape'[\s\S]*event\.preventDefault\(\)[\s\S]*closeTopDuplicateDialog\(\)/);
+});
+
+test('Volltext und nur Unterschiede lassen sich im Prüfdialog umschalten', () => {
+  const ui = read('public/duplicates.js');
+  const css = read('public/styles.css');
+  assert.match(ui, /onlyDifferences: false/);
+  assert.match(ui, /data-duplicate-action="toggle-differences" aria-pressed="\$\{duplicateUi\.onlyDifferences\}"/);
+  assert.match(ui, /function toggleDuplicateDiffMode\(\)[\s\S]*onlyDifferences = !duplicateUi\.onlyDifferences[\s\S]*duplicateComparisonRows\(pair\)/);
+  assert.match(ui, /duplicateTextDiff\.renderAlignedRows\(pair\.blog\.body, pair\.facebook\.body/);
+  assert.match(css, /\.duplicate-comparison-row\.is-context \.duplicate-comparison-cell \{[^}]*white-space: nowrap/);
+  assert.match(css, /\.duplicate-diff-toggle\[aria-pressed="true"\]/);
+});
+
+test('alle drei Dublettendialoge unterstützen Abwärtswischen', () => {
+  const ui = read('public/duplicates.js');
+  assert.match(ui, /enableDuplicateSwipeClose\(duplicateDialog/);
+  assert.match(ui, /enableDuplicateSwipeClose\(duplicateDetailDialog/);
+  assert.match(ui, /enableDuplicateSwipeClose\(duplicateImageViewer/);
+  assert.match(ui, /dy > 100[\s\S]*scrollTop === 0/);
 });

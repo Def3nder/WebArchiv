@@ -227,8 +227,17 @@ danach die Hörbuchansicht.
   Facebook-Infografiken lassen sich kombinieren; „Alle sichtbaren auswählen“ übernimmt die
   gefilterte Teilmenge. Die Auswahl bleibt lokal im Browser gespeichert. Reine Verknüpfungen
   aktualisieren den In-Memory-Index sofort, eine Sammelmigration liest das Archiv nur einmal neu ein.
-  Im Artikelvergleich stehen die zugeordneten Blog- und Facebook-Infografiken nebeneinander;
+  Im Artikelvergleich werden die Überschriften auf drei Zeilen begrenzt. Die zugeordneten
+  Blog- und Facebook-Infografiken klappen gemeinsam auf und zu und belegen gleich viel Platz;
   jede Vorschau lässt sich bildschirmfüllend öffnen und über beide Seiten hinweg durchblättern.
+  Der Volltextvergleich öffnet einen eigenen Dialog und ordnet gleiche Sätze in gemeinsamen
+  Zeilen an; ein Scrollbereich bewegt beide Seiten synchron (mobil auch die verdeckte Seite).
+  `jsdiff` markiert geänderte Wörter; unsichtbare Zeichen und Leerraum zählen nicht als
+  Unterschiede. „Nur Unterschiede“ blendet gleiche Textteile bis auf je einen Kontextsatz vor
+  und nach jeder Änderung aus und kennzeichnet Lücken mit `[…]`.
+  Die geplanten neuen Infografik-Dateinamen sind bei Bedarf
+  aufklappbar. Auswählen, Ignorieren und `Esc` führen aus der Prüfung zurück zur Trefferübersicht;
+  `Esc` und Abwärtswischen schließen jeweils den obersten Dublettendialog.
   Verknüpfte Facebook-Beiträge bleiben als Dateien erhalten, werden
   in normalen Ansichten aber durch den Blogartikel ersetzt. Zugeordnete Dateien aus
   `www/Infografiken/` können bestätigt für den Blogartikel umbenannt werden; das eigentliche
