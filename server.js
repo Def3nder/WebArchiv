@@ -400,6 +400,10 @@ function parseArticle(content, filePath) {
   return { title, date, sourceUrl, summary, tags, episodeNum, categories: [], body };
 }
 
+function renderArticleBody(body) {
+  return marked.parse(body);
+}
+
 // ─── File scanner ──────────────────────────────────────────────────────────
 
 function indexFilesByLowerName(entries) {
@@ -1838,7 +1842,7 @@ app.get('/api/duplicates/compare', requireAdmin, (req, res) => {
     const { blog, facebook } = duplicatePair(String(req.query.blogId || ''), String(req.query.facebookId || ''));
     const read = article => {
       const parsed = parseArticle(fs.readFileSync(article.filePath, 'utf8'), article.filePath);
-      return { ...duplicateArticleView(article), body: parsed.body, summary: parsed.summary || '' };
+      return { ...duplicateArticleView(article), bodyHtml: renderArticleBody(parsed.body), summary: parsed.summary || '' };
     };
     let migration = [];
     let migrationUnavailable = '';
@@ -2075,7 +2079,7 @@ app.get('/api/articles/*', attachUser, (req, res) => {
   try {
     const content = fs.readFileSync(article.filePath, 'utf8');
     const parsed = parseArticle(content, article.filePath);
-    const bodyHtml = marked.parse(parsed.body);
+    const bodyHtml = renderArticleBody(parsed.body);
     const rest = exposeGroupForUser(article, req.user);
     res.json({
       ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article),

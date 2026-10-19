@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { renderPair, renderAlignedRows } = require('../public/duplicate-diff.js');
+const { renderPair, renderAlignedRows, renderUnifiedRows } = require('../public/duplicate-diff.js');
 
 test('identische Texte bleiben vollständig unmarkiert', () => {
   assert.deepEqual(renderPair('Gleicher Text.', 'Gleicher Text.'), {
@@ -81,9 +81,9 @@ test('Kurzansicht escaped auch Kontext und Änderungen', () => {
   assert.match(html.blog, /&lt;/);
 });
 
-test('zusätzlicher Facebook-Einstieg belegt eine eigene Zeile, danach sind gleiche Sätze ausgerichtet', () => {
-  const blog = 'Sie kann eine Ehe verlassen. Danach beginnt etwas Neues.';
-  const facebook = 'Eine Frau kann frei aussehen. Sie kann eine Ehe verlassen. Danach beginnt etwas Neues.';
+test('zusätzlicher Facebook-Absatz belegt eine eigene Zeile, danach sind gleiche Textblöcke ausgerichtet', () => {
+  const blog = ['Sie kann eine Ehe verlassen.', 'Danach beginnt etwas Neues.'];
+  const facebook = ['Eine Frau kann frei aussehen.', ...blog];
   const rows = renderAlignedRows(blog, facebook);
   assert.deepEqual(rows.map(row => row.kind), ['facebook-only', 'equal', 'equal']);
   assert.match(rows[0].blog, /Kein Text im Blog/);
@@ -92,24 +92,78 @@ test('zusätzlicher Facebook-Einstieg belegt eine eigene Zeile, danach sind glei
 });
 
 test('Leerzeichen, Zeilenumbrüche und unsichtbare Unicode-Zeichen erzeugen keine Unterschiede', () => {
-  const rows = renderAlignedRows('Sie kann gehen.\nDas bleibt.', 'Sie\u200B kann  gehen.\r\nDas bleibt.');
-  assert.deepEqual(rows.map(row => row.kind), ['equal', 'equal']);
-  assert.deepEqual(renderAlignedRows('Sie kann gehen.', 'Sie\u00a0kann gehen.', { onlyDifferences: true })
+  const rows = renderAlignedRows(['Sie kann gehen.\nDas bleibt.'], ['Sie\u200B kann  gehen.\r\nDas bleibt.']);
+  assert.deepEqual(rows.map(row => row.kind), ['equal']);
+  assert.deepEqual(renderAlignedRows(['Sie kann gehen.'], ['Sie\u00a0kann gehen.'], { onlyDifferences: true })
     .map(row => row.kind), ['identical']);
 });
 
-test('geänderte Sätze stehen paarweise und markieren nur ihre sichtbaren Wörter', () => {
-  const rows = renderAlignedRows('Wir brauchen Vertrauen. Danach reden wir.', 'Wir brauchen Geduld. Danach reden wir.');
+test('geänderte Textblöcke stehen paarweise und markieren nur ihre sichtbaren Wörter', () => {
+  const rows = renderAlignedRows(['Wir brauchen Vertrauen.', 'Danach reden wir.'], ['Wir brauchen Geduld.', 'Danach reden wir.']);
   assert.deepEqual(rows.map(row => row.kind), ['changed', 'equal']);
   assert.match(rows[0].blog, /<mark>Vertrauen<\/mark>/);
   assert.match(rows[0].facebook, /<mark>Geduld<\/mark>/);
 });
 
-test('Kurzansicht behält genau einen gemeinsamen Satz vor und nach einem Änderungsblock', () => {
-  const blog = 'Weit davor. Direkt davor. Im Blog anders. Direkt danach. Weit danach.';
-  const facebook = 'Weit davor. Direkt davor. Auf Facebook anders. Direkt danach. Weit danach.';
+test('Kurzansicht behält genau einen gemeinsamen Textblock vor und nach einem Änderungsblock', () => {
+  const blog = ['Weit davor.', 'Direkt davor.', 'Im Blog anders.', 'Direkt danach.', 'Weit danach.'];
+  const facebook = ['Weit davor.', 'Direkt davor.', 'Auf Facebook anders.', 'Direkt danach.', 'Weit danach.'];
   const rows = renderAlignedRows(blog, facebook, { onlyDifferences: true });
   assert.deepEqual(rows.map(row => row.kind), ['ellipsis', 'context', 'changed', 'context', 'ellipsis']);
   assert.equal(rows[1].blog, rows[1].facebook);
   assert.equal(rows[3].blog, rows[3].facebook);
+});
+
+test('einspaltiger Diff kennzeichnet nur Facebook rot und nur Blog grün samt Zeilennummern', () => {
+  const rows = renderUnifiedRows(['Gemeinsam.', 'Im Blog neu.', 'Ende.'], ['Nur Facebook.', 'Gemeinsam.', 'Ende.']);
+  assert.deepEqual(rows.map(row => row.kind), ['removed', 'equal', 'added', 'equal']);
+  assert.deepEqual([rows[0].facebookNumber, rows[0].blogNumber], [1, null]);
+  assert.deepEqual([rows[2].facebookNumber, rows[2].blogNumber], [null, 2]);
+  assert.equal(rows[1].html, 'Gemeinsam.');
+});
+
+test('geänderte Wörter ergeben zuerst eine rote Facebook- und dann eine grüne Blog-Zeile', () => {
+  const rows = renderUnifiedRows(['Wir brauchen Vertrauen.'], ['Wir brauchen Geduld.']);
+  assert.deepEqual(rows.map(row => row.kind), ['removed', 'added']);
+  assert.match(rows[0].html, /<mark>Geduld<\/mark>/);
+  assert.match(rows[1].html, /<mark>Vertrauen<\/mark>/);
+});
+
+test('unveränderte Zeilen werden mit Anzahl faltbar und mit vollständigem Text angeboten', () => {
+  const blog = ['Eins.', 'Zwei.', 'Drei.', 'Blog anders.', 'Vier.', 'Fünf.', 'Sechs.'];
+  const facebook = ['Eins.', 'Zwei.', 'Drei.', 'Facebook anders.', 'Vier.', 'Fünf.', 'Sechs.'];
+  const rows = renderUnifiedRows(blog, facebook, { onlyDifferences: true });
+  assert.deepEqual(rows.map(row => row.kind), ['fold', 'equal', 'removed', 'added', 'equal', 'fold']);
+  assert.equal(rows[0].count, 2);
+  assert.deepEqual(rows[0].lines.map(line => line.html), ['Eins.', 'Zwei.']);
+  assert.equal(rows.at(-1).count, 2);
+  assert.deepEqual(rows.at(-1).lines.map(line => line.html), ['Fünf.', 'Sechs.']);
+  assert.doesNotMatch(rows[0].lines[0].html, /\[…\]/);
+});
+
+test('identischer Text zeigt eine Meldung und lässt sämtliche Zeilen ausklappen', () => {
+  const rows = renderUnifiedRows(['Eins.', 'Zwei.'], ['Eins.', 'Zwei.'], { onlyDifferences: true });
+  assert.deepEqual(rows.map(row => row.kind), ['identical', 'fold']);
+  assert.equal(rows[1].count, 2);
+});
+
+test('Steuerzeichen und unsichtbare Unicode-Zeichen erzeugen auch im Code-Diff keine Änderung', () => {
+  const rows = renderUnifiedRows(['Gleicher\u0000 Text.', 'Noch einer.'], ['Gleicher\u200b Text.', 'Noch einer.']);
+  assert.deepEqual(rows.map(row => row.kind), ['equal', 'equal']);
+});
+
+test('eingeschobener gerenderter Absatz bleibt vollständig vor dem nächsten gemeinsamen Absatz', () => {
+  const sharedStart = 'Ein gemeinsamer Absatz.';
+  const inserted = '„Ein Zitat“ Dr. C.G. Jung';
+  const sharedEnd = 'Stell dir vor, du baust einen Turm. Du setzt weitere Stockwerke darauf.';
+  const rows = renderUnifiedRows([sharedStart, inserted, sharedEnd], [sharedStart, sharedEnd]);
+  assert.deepEqual(rows.map(row => row.kind), ['equal', 'added', 'equal']);
+  assert.equal(rows[1].html, inserted);
+  assert.equal(rows[2].html, sharedEnd);
+});
+
+test('abweichende Leerabsätze ohne Textänderung bleiben unsichtbar', () => {
+  const rows = renderUnifiedRows(['Eine Zeile ohne Punkt  und weiter'], ['Eine Zeile ohne Punkt und weiter']);
+  assert.deepEqual(rows.map(row => row.kind), ['equal']);
+  assert.equal(rows[0].html, 'Eine Zeile ohne Punkt und weiter');
 });

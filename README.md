@@ -230,11 +230,13 @@ danach die Hörbuchansicht.
   Im Artikelvergleich werden die Überschriften auf drei Zeilen begrenzt. Die zugeordneten
   Blog- und Facebook-Infografiken klappen gemeinsam auf und zu und belegen gleich viel Platz;
   jede Vorschau lässt sich bildschirmfüllend öffnen und über beide Seiten hinweg durchblättern.
-  Der Volltextvergleich öffnet einen eigenen Dialog und ordnet gleiche Sätze in gemeinsamen
-  Zeilen an; ein Scrollbereich bewegt beide Seiten synchron (mobil auch die verdeckte Seite).
-  `jsdiff` markiert geänderte Wörter; unsichtbare Zeichen und Leerraum zählen nicht als
-  Unterschiede. „Nur Unterschiede“ blendet gleiche Textteile bis auf je einen Kontextsatz vor
-  und nach jeder Änderung aus und kennzeichnet Lücken mit `[…]`.
+  Der Volltextvergleich öffnet einen eigenen Dialog und zeigt einen einspaltigen Code-Diff:
+  rote Minus-Zeilen stammen nur aus Facebook, grüne Plus-Zeilen stehen neu im Blog. Geänderte
+  Wörter sind zusätzlich markiert. Verglichen werden die sichtbaren Textblöcke aus derselben
+  gerenderten HTML-Ausgabe wie in der Artikeldetailansicht; Markdown-Auszeichnung, Steuer- und
+  Formatzeichen sowie Leerraum zählen nicht als Unterschiede. „Nur Unterschiede“ ist anfangs
+  aktiv und zeigt je einen Textblock vor und nach einer Änderung; übrige unveränderte
+  Zeilen sind mit Anzahl eingeklappt und lassen sich bei Bedarf vollständig aufklappen.
   Die geplanten neuen Infografik-Dateinamen sind bei Bedarf
   aufklappbar. Auswählen, Ignorieren und `Esc` führen aus der Prüfung zurück zur Trefferübersicht;
   `Esc` und Abwärtswischen schließen jeweils den obersten Dublettendialog.

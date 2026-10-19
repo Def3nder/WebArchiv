@@ -13,7 +13,7 @@ const duplicateUi = {
   selection: new Set(),
   listScrollTop: 0,
   mobileSide: 'blog',
-  onlyDifferences: false,
+  onlyDifferences: true,
   infographicsOpen: false,
   viewerIndex: 0,
 };
@@ -303,19 +303,32 @@ function renderDuplicateList({ restoreScroll = false } = {}) {
   if (restoreScroll) requestAnimationFrame(() => { duplicateContent.scrollTop = duplicateUi.listScrollTop; });
 }
 
+function duplicateDiffLine(row) {
+  const sign = row.kind === 'removed' ? '−' : row.kind === 'added' ? '+' : ' ';
+  return `<div class="duplicate-diff-line is-${row.kind}">
+    <span class="duplicate-diff-number" title="Facebook-Zeile">${row.facebookNumber ?? ''}</span>
+    <span class="duplicate-diff-number" title="Blog-Zeile">${row.blogNumber ?? ''}</span>
+    <span class="duplicate-diff-sign" aria-hidden="true">${sign}</span>
+    <span class="duplicate-diff-text">${row.html}</span>
+  </div>`;
+}
+
 function duplicateComparisonRows(pair) {
-  const rows = duplicateTextDiff.renderAlignedRows(pair.blog.body, pair.facebook.body, {
-    onlyDifferences: duplicateUi.onlyDifferences,
-  });
+  const rows = duplicateTextDiff.renderUnifiedRows(
+    duplicateTextDiff.renderedBlocksFromHtml(pair.blog.bodyHtml),
+    duplicateTextDiff.renderedBlocksFromHtml(pair.facebook.bodyHtml), {
+      onlyDifferences: duplicateUi.onlyDifferences,
+    });
   if (!rows.length) return '<div class="duplicate-comparison-message">Keine Artikeltexte vorhanden.</div>';
   return rows.map(row => {
-    if (row.kind === 'ellipsis' || row.kind === 'identical') {
-      return `<div class="duplicate-comparison-message is-${row.kind}">${row.blog}</div>`;
+    if (row.kind === 'identical') return `<div class="duplicate-comparison-message is-identical">${duplicateEsc(row.text)}</div>`;
+    if (row.kind === 'fold') {
+      return `<details class="duplicate-diff-fold">
+        <summary><span class="duplicate-diff-fold-arrow" aria-hidden="true">▸</span><strong>${row.count} unveränderte Zeile${row.count === 1 ? '' : 'n'}</strong><span class="duplicate-diff-fold-label">Aufklappen</span><span class="duplicate-diff-fold-label is-open">Zuklappen</span></summary>
+        <div class="duplicate-diff-fold-lines">${row.lines.map(duplicateDiffLine).join('')}</div>
+      </details>`;
     }
-    return `<div class="duplicate-comparison-row is-${row.kind}">
-      <div class="duplicate-comparison-cell" data-duplicate-side="blog">${row.blog}</div>
-      <div class="duplicate-comparison-cell" data-duplicate-side="facebook">${row.facebook}</div>
-    </div>`;
+    return duplicateDiffLine(row);
   }).join('');
 }
 
@@ -326,8 +339,8 @@ function renderDuplicateDetail(pair) {
   duplicateDetailContent.innerHTML = `<div class="duplicate-detail" data-mobile-side="${duplicateUi.mobileSide}">
     <div class="duplicate-detail-nav">
       <button type="button" class="duplicate-back" data-duplicate-action="back">← Zur Trefferliste</button>
-      <button type="button" class="duplicate-diff-toggle" data-duplicate-action="toggle-differences" aria-pressed="${duplicateUi.onlyDifferences}" title="Pro Unterschied eine Kontextzeile davor und danach anzeigen">Nur Unterschiede</button>
-      <div class="duplicate-detail-switch" role="tablist" aria-label="Vergleichsseite">
+      <button type="button" class="duplicate-diff-toggle" data-duplicate-action="toggle-differences" aria-pressed="${duplicateUi.onlyDifferences}" title="Unveränderte Textblöcke mit je einem Kontextblock einklappen">Nur Unterschiede</button>
+      <div class="duplicate-detail-switch" role="tablist" aria-label="Artikelkopf und Infografiken">
         <button type="button" role="tab" data-duplicate-action="mobile-side" data-side="blog" aria-selected="${duplicateUi.mobileSide === 'blog'}">Blog</button>
         <button type="button" role="tab" data-duplicate-action="mobile-side" data-side="facebook" aria-selected="${duplicateUi.mobileSide === 'facebook'}">Facebook</button>
       </div>
@@ -336,7 +349,8 @@ function renderDuplicateDetail(pair) {
       <article data-duplicate-side="blog"><span class="duplicate-source">BLOG · ORIGINAL</span><h3 title="${duplicateEsc(pair.blog.title)}">${duplicateEsc(pair.blog.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.blog.date)}</p>${duplicateInfographicGallery(pair.blog, 'blog')}</article>
       <article data-duplicate-side="facebook"><span class="duplicate-source">FACEBOOK · QUELLE</span><h3 title="${duplicateEsc(pair.facebook.title)}">${duplicateEsc(pair.facebook.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.facebook.date)}</p>${duplicateInfographicGallery(pair.facebook, 'facebook')}</article>
     </div>
-    <div class="duplicate-comparison-scroll" tabindex="0" aria-label="Gemeinsam scrollbarer Artikelvergleich">
+    <div class="duplicate-comparison-scroll" tabindex="0" aria-label="Änderungen zwischen Facebook und Blog">
+      <div class="duplicate-diff-legend"><span class="is-removed">− Nur Facebook</span><span class="is-added">+ Nur Blog</span><small>Zeilen: Facebook · Blog</small></div>
       <div class="duplicate-comparison-rows">${duplicateComparisonRows(pair)}</div>
     </div>
     ${migration.length ? `<details class="duplicate-migration-note">

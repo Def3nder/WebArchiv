@@ -103,15 +103,67 @@ function renderPair(blogText, facebookText, { onlyDifferences = false, contextCh
   };
 }
 
-// Unsichtbare Zeichen und Umbrüche haben keinen Einfluss auf die Satz-Zuordnung.
-function comparisonSentences(value) {
-  const visible = String(value ?? '').normalize('NFC').replace(/\p{Cf}/gu, '').replace(/\s+/gu, ' ').trim();
-  if (!visible) return [];
-  return [...new Intl.Segmenter('de', { granularity: 'sentence' }).segment(visible)]
-    .map(part => part.segment.trim()).filter(Boolean);
+// Der Artikeldetailbereich zeigt bodyHtml. Dessen sichtbare Blocktexte sind die Diff-Eingabe.
+function normalizeRenderedBlock(value) {
+  return String(value ?? '').normalize('NFC')
+    .replace(/[\p{Cc}\p{Cf}]/gu, character => /\s/u.test(character) ? ' ' : '')
+    .replace(/\s+/gu, ' ').trim();
 }
 
-function sentenceSimilarity(left, right) {
+function renderedBlocksFromHtml(html, documentRef = globalThis.document) {
+  const template = documentRef.createElement('template');
+  template.innerHTML = String(html ?? '');
+  template.content.querySelectorAll('script,style,noscript,template,svg,math,iframe,object,embed,canvas,video,audio,img,picture,link,meta,[hidden],[aria-hidden="true"]')
+    .forEach(node => node.remove());
+  template.content.querySelectorAll('[style]').forEach(node => {
+    if (node.style.display === 'none' || node.style.visibility === 'hidden') node.remove();
+  });
+  template.content.querySelectorAll('br').forEach(node => node.replaceWith(documentRef.createTextNode(' ')));
+
+  const blockTags = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'LI', 'TR',
+    'BLOCKQUOTE', 'DIV', 'SECTION', 'ARTICLE', 'UL', 'OL', 'TABLE', 'THEAD', 'TBODY', 'TFOOT',
+    'DL', 'DT', 'DD', 'HR']);
+  const leafTags = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'DT', 'DD']);
+  const blocks = [];
+  const add = value => {
+    const text = normalizeRenderedBlock(value);
+    if (text) blocks.push(text);
+  };
+  function walkChildren(parent) {
+    let inline = '';
+    for (const child of parent.childNodes) {
+      if (child.nodeType === 3) inline += child.nodeValue;
+      else if (child.nodeType === 1) {
+        if (blockTags.has(child.tagName)) {
+          add(inline);
+          inline = '';
+          walk(child);
+        } else {
+          inline += child.textContent;
+        }
+      }
+    }
+    add(inline);
+  }
+  function walk(node) {
+    if (node.nodeType === 11) return walkChildren(node);
+    if (node.tagName === 'TR') {
+      add([...node.children].filter(cell => cell.matches('th,td')).map(cell => cell.textContent).join(' | '));
+    } else if (leafTags.has(node.tagName)) {
+      add(node.textContent);
+    } else {
+      walkChildren(node);
+    }
+  }
+  walk(template.content);
+  return blocks;
+}
+
+function comparisonBlocks(value) {
+  return (Array.isArray(value) ? value : [value]).map(normalizeRenderedBlock).filter(Boolean);
+}
+
+function blockSimilarity(left, right) {
   const words = value => new Set(value.toLocaleLowerCase('de-DE').match(/[\p{L}\p{N}]+/gu) || []);
   const a = words(left);
   const b = words(right);
@@ -132,7 +184,7 @@ function comparisonRow(blog, facebook) {
   return { kind: 'changed', blog: difference.blog, facebook: difference.facebook };
 }
 
-function alignChangedSentences(blog, facebook) {
+function alignChangedBlocks(blog, facebook) {
   const m = blog.length;
   const n = facebook.length;
   if (!m || !n) return [...blog.map(line => comparisonRow(line, null)), ...facebook.map(line => comparisonRow(null, line))];
@@ -147,7 +199,7 @@ function alignChangedSentences(blog, facebook) {
       if (i === m) cost[i][j] = (n - j) * gapCost;
       else if (j === n) cost[i][j] = (m - i) * gapCost;
       else cost[i][j] = Math.min(
-        1 - sentenceSimilarity(blog[i], facebook[j]) + cost[i + 1][j + 1],
+        1 - blockSimilarity(blog[i], facebook[j]) + cost[i + 1][j + 1],
         gapCost + cost[i + 1][j],
         gapCost + cost[i][j + 1],
       );
@@ -157,7 +209,7 @@ function alignChangedSentences(blog, facebook) {
   let i = 0;
   let j = 0;
   while (i < m || j < n) {
-    if (i < m && j < n && 1 - sentenceSimilarity(blog[i], facebook[j]) + cost[i + 1][j + 1] <= cost[i][j] + 0.000001) {
+    if (i < m && j < n && 1 - blockSimilarity(blog[i], facebook[j]) + cost[i + 1][j + 1] <= cost[i][j] + 0.000001) {
       rows.push(comparisonRow(blog[i++], facebook[j++]));
     } else if (i < m && (j === n || gapCost + cost[i + 1][j] <= gapCost + cost[i][j + 1])) {
       rows.push(comparisonRow(blog[i++], null));
@@ -189,9 +241,9 @@ function compactComparisonRows(rows) {
   return visible;
 }
 
-function renderAlignedRows(blogText, facebookText, { onlyDifferences = false } = {}) {
-  const blog = comparisonSentences(blogText);
-  const facebook = comparisonSentences(facebookText);
+function renderAlignedRows(blogBlocks, facebookBlocks, { onlyDifferences = false } = {}) {
+  const blog = comparisonBlocks(blogBlocks);
+  const facebook = comparisonBlocks(facebookBlocks);
   const changes = diffArrays(blog, facebook);
   const rows = [];
   for (let index = 0; index < changes.length;) {
@@ -208,9 +260,60 @@ function renderAlignedRows(blogText, facebookText, { onlyDifferences = false } =
       else added.push(...changes[index].value);
       index++;
     }
-    rows.push(...alignChangedSentences(removed, added));
+    rows.push(...alignChangedBlocks(removed, added));
   }
   return onlyDifferences ? compactComparisonRows(rows) : rows;
 }
 
-module.exports = { renderPair, renderAlignedRows };
+function unifiedLines(row, blogNumber, facebookNumber) {
+  if (row.kind === 'equal') return [{ kind: 'equal', html: row.blog, blogNumber, facebookNumber }];
+  const lines = [];
+  if (row.kind === 'facebook-only' || row.kind === 'changed') {
+    lines.push({ kind: 'removed', html: row.facebook, blogNumber: null, facebookNumber });
+  }
+  if (row.kind === 'blog-only' || row.kind === 'changed') {
+    lines.push({ kind: 'added', html: row.blog, blogNumber, facebookNumber: null });
+  }
+  return lines;
+}
+
+// Einspaltige Code-Diff-Daten: Facebook ist die alte, Blog die bevorzugte neue Fassung.
+function renderUnifiedRows(blogBlocks, facebookBlocks, { onlyDifferences = false } = {}) {
+  const aligned = renderAlignedRows(blogBlocks, facebookBlocks);
+  let blogNumber = 0;
+  let facebookNumber = 0;
+  const numbered = aligned.map(row => {
+    if (row.kind !== 'facebook-only') blogNumber++;
+    if (row.kind !== 'blog-only') facebookNumber++;
+    return { ...row, blogNumber: row.kind === 'facebook-only' ? null : blogNumber,
+      facebookNumber: row.kind === 'blog-only' ? null : facebookNumber };
+  });
+  if (!onlyDifferences) return numbered.flatMap(row => unifiedLines(row, row.blogNumber, row.facebookNumber));
+
+  const keep = new Set();
+  for (let index = 0; index < numbered.length; index++) {
+    if (numbered[index].kind === 'equal') continue;
+    for (let context = Math.max(0, index - 1); context <= Math.min(numbered.length - 1, index + 1); context++) keep.add(context);
+  }
+  const visible = [];
+  if (!keep.size && numbered.length) visible.push({ kind: 'identical', text: 'Keine sichtbaren Textunterschiede.' });
+  let hidden = [];
+  const flushHidden = () => {
+    if (!hidden.length) return;
+    visible.push({ kind: 'fold', count: hidden.length, lines: hidden.flatMap(row => unifiedLines(row, row.blogNumber, row.facebookNumber)) });
+    hidden = [];
+  };
+  for (let index = 0; index < numbered.length; index++) {
+    const row = numbered[index];
+    if (!keep.has(index)) {
+      hidden.push(row);
+    } else {
+      flushHidden();
+      visible.push(...unifiedLines(row, row.blogNumber, row.facebookNumber));
+    }
+  }
+  flushHidden();
+  return visible;
+}
+
+module.exports = { renderPair, renderedBlocksFromHtml, renderAlignedRows, renderUnifiedRows };

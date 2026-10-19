@@ -11,7 +11,7 @@ test('Dublettenprüfung ist als Admin-Dialog mit allen Entscheidungswegen eingeb
   const ui = read('public/duplicates.js');
   assert.match(html, /data-action="duplicates"[^>]*data-admin-only/);
   assert.match(html, /id="duplicate-review"[\s\S]*data-duplicate-tab="pending"[\s\S]*data-duplicate-tab="linked"[\s\S]*data-duplicate-tab="ignored"/);
-  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=3[\s\S]*duplicates\.js\?v=9/);
+  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=6[\s\S]*duplicates\.js\?v=11/);
   assert.match(html, /id="duplicate-detail-dialog"[\s\S]*id="duplicate-detail-content"/);
   assert.match(app, /action === 'duplicates'[\s\S]*openDuplicateReview/);
   for (const action of ['inspect', 'toggle-selection', 'mobile-side', 'ignore', 'migrate', 'reset']) {
@@ -92,15 +92,15 @@ test('Sammelverknüpfung indiziert höchstens einmal und reine Links gar nicht n
   assert.equal((batch.match(/await buildIndex\(\)/g) || []).length, 1);
 });
 
-test('Mobil zeigt der Vergleich genau eine umschaltbare Textseite', () => {
+test('Mobil wechselt nur Artikelkopf und Infografiken; der einspaltige Diff bleibt sichtbar', () => {
   const ui = read('public/duplicates.js');
   const css = read('public/styles.css');
   assert.match(ui, /duplicateUi\.tab === 'pending' && !duplicateUi\.detail/);
   assert.match(ui, /data-mobile-side="\$\{duplicateUi\.mobileSide\}"/);
   assert.match(ui, /data-side="blog"[\s\S]*data-side="facebook"/);
-  assert.match(css, /\.duplicate-comparison-cell \{ grid-column: 1; grid-row: 1; visibility: hidden;/);
-  assert.match(css, /data-mobile-side="blog"\] \.duplicate-comparison-cell\[data-duplicate-side="blog"\]/);
-  assert.match(css, /data-mobile-side="facebook"\] \.duplicate-comparison-cell\[data-duplicate-side="facebook"\]/);
+  assert.match(ui, /aria-label="Artikelkopf und Infografiken"/);
+  assert.match(css, /\.duplicate-diff-line \{ grid-template-columns: 2\.2rem 2\.2rem 1\.15rem/);
+  assert.doesNotMatch(css, /data-mobile-side="blog"\] \.duplicate-comparison-cell/);
   assert.match(ui, /duplicateDetailContent\.querySelector\('\.duplicate-detail'\)\.dataset\.mobileSide/);
 });
 
@@ -116,11 +116,14 @@ test('Prüfansicht kehrt bei Auswahl, Ignorieren und Escape in die Trefferliste 
 test('Volltext und nur Unterschiede lassen sich im Prüfdialog umschalten', () => {
   const ui = read('public/duplicates.js');
   const css = read('public/styles.css');
-  assert.match(ui, /onlyDifferences: false/);
+  assert.match(ui, /onlyDifferences: true/);
   assert.match(ui, /data-duplicate-action="toggle-differences" aria-pressed="\$\{duplicateUi\.onlyDifferences\}"/);
   assert.match(ui, /function toggleDuplicateDiffMode\(\)[\s\S]*onlyDifferences = !duplicateUi\.onlyDifferences[\s\S]*duplicateComparisonRows\(pair\)/);
-  assert.match(ui, /duplicateTextDiff\.renderAlignedRows\(pair\.blog\.body, pair\.facebook\.body/);
-  assert.match(css, /\.duplicate-comparison-row\.is-context \.duplicate-comparison-cell \{[^}]*white-space: nowrap/);
+  assert.match(ui, /duplicateTextDiff\.renderUnifiedRows\([\s\S]*renderedBlocksFromHtml\(pair\.blog\.bodyHtml\)[\s\S]*renderedBlocksFromHtml\(pair\.facebook\.bodyHtml\)/);
+  assert.match(ui, /<details class="duplicate-diff-fold">[\s\S]*unveränderte Zeile/);
+  assert.match(ui, /duplicate-diff-line is-\$\{row\.kind\}/);
+  assert.match(css, /\.duplicate-diff-line\.is-removed \{[^}]*background: color-mix/);
+  assert.match(css, /\.duplicate-diff-line\.is-added \{[^}]*background: color-mix/);
   assert.match(css, /\.duplicate-diff-toggle\[aria-pressed="true"\]/);
 });
 
