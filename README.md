@@ -320,6 +320,8 @@ FFprobe benötigt. Zugangsdaten bleiben serverseitig in `OPENAI_API_KEY` bzw.
   aufklappbar. Auswählen, Ignorieren und `Esc` führen aus der Prüfung zurück zur Trefferübersicht;
   `Esc` schließt jeweils den obersten Dublettendialog; beim Ziehen nach unten folgt der gesamte
   Dialog sichtbar dem Finger und schließt erst nach Überschreiten der Ziehschwelle, sonst federt er zurück.
+  Solange einer der Dublettendialoge offen ist, bleibt die Webseite dahinter gegen Scrollen
+  gesperrt; Trefferliste und Textvergleich bleiben innerhalb der Dialoge scrollbar.
   Verknüpfte Quellbeiträge bleiben als Dateien erhalten, werden
   in normalen Ansichten aber durch den Blogartikel ersetzt. Zugeordnete Dateien aus
   `www/Infografiken/` können bestätigt für den Blogartikel umbenannt werden; das eigentliche

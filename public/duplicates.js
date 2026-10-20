@@ -46,6 +46,12 @@ const duplicateImageViewerTitle = document.getElementById('duplicate-image-viewe
 const duplicateImageViewerCounter = document.getElementById('duplicate-image-viewer-counter');
 const duplicateImageViewerPrev = document.getElementById('duplicate-image-viewer-prev');
 const duplicateImageViewerNext = document.getElementById('duplicate-image-viewer-next');
+const duplicateDialogs = [duplicateDialog, duplicateDetailDialog, duplicateImageViewer];
+
+function syncDuplicatePageScroll() {
+  document.documentElement.classList.toggle('duplicate-modal-open',
+    duplicateDialogs.some(dialog => dialog.open));
+}
 
 // Wie die Navigation der Kachelansicht: beim Abwärtsscrollen mitlaufen,
 // nach 24 px Aufwärtsbewegung wieder vollständig einblenden.
@@ -229,6 +235,7 @@ function openDuplicateImageViewer(side, sideIndex) {
   duplicateUi.viewerIndex = index;
   renderDuplicateImageViewer();
   if (!duplicateImageViewer.open) duplicateImageViewer.showModal();
+  syncDuplicatePageScroll();
 }
 
 function stepDuplicateImageViewer(offset) {
@@ -594,6 +601,7 @@ function renderDuplicateDetail(pair) {
     ${duplicateActions(pair, duplicateUi.tab, { detail: true })}
   </div>`;
   if (!duplicateDetailDialog.open) duplicateDetailDialog.showModal();
+  syncDuplicatePageScroll();
   updateDuplicateTools();
 }
 
@@ -713,6 +721,7 @@ async function openDuplicateReview() {
   duplicateUi.tab = 'pending';
   duplicateUi.detail = null;
   duplicateDialog.showModal();
+  syncDuplicatePageScroll();
   showDuplicateChrome();
   updateDuplicateChromeHeight();
   duplicateContent.scrollTop = 0;
@@ -730,6 +739,8 @@ function refreshDuplicateMenuCount() {
 }
 
 loadDuplicateSelection();
+
+for (const dialog of duplicateDialogs) dialog.addEventListener('close', syncDuplicatePageScroll);
 
 document.getElementById('duplicate-review-close').addEventListener('click', () => duplicateDialog.close());
 duplicateDialog.addEventListener('click', event => {

@@ -3446,11 +3446,20 @@ function enablePullToClose({ scroller, moving, fading, canStart, onClose }) {
   scroller.addEventListener('touchcancel', end, { passive: true });
 }
 
-// Solange Artikel/Hörbuch offen sind, darf die Seite dahinter weder scrollen noch
-// federn – sonst übernimmt Safari (Adressleiste unten) das Herunterziehen selbst.
-new MutationObserver(() => {
+// Alle modalen Ebenen sperren die Seite dahinter. Offene Dialoge können gestapelt
+// sein; erst nach dem Schließen der letzten Ebene darf die Seite wieder scrollen.
+const modalOverlays = [$overlay, $loginOverlay, $scrapeOverlay, $ttsOverlay,
+  document.getElementById('img-fullscreen')];
+function syncModalPageScroll() {
+  const modalOpen = !!document.querySelector('dialog[open]')
+    || modalOverlays.some(overlay => overlay && !overlay.hidden);
+  document.documentElement.classList.toggle('modal-open', modalOpen);
   document.documentElement.classList.toggle('overlay-open', !$overlay.hidden);
-}).observe($overlay, { attributes: true, attributeFilter: ['hidden'] });
+}
+new MutationObserver(syncModalPageScroll).observe(document.body, {
+  attributes: true, attributeFilter: ['hidden', 'open'], subtree: true,
+});
+syncModalPageScroll();
 
 const dialogOpen = () => !!document.querySelector('dialog[open]') || !$ttsOverlay.hidden;
 enablePullToClose({

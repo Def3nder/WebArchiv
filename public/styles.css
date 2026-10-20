@@ -1015,9 +1015,13 @@ body.layout-list .card-preview { grid-area: preview; max-height: 4.5em; flex: no
   justify-content: center;
 }
 .overlay[hidden] { display: none; }
-/* Seite hinter dem offenen Artikel sperren (auch das Federn in Safari). */
+/* Seite hinter modalen Dialogen sperren (auch das Federn in Safari). */
 html.overlay-open,
-html.overlay-open body {
+html.overlay-open body,
+html.duplicate-modal-open,
+html.duplicate-modal-open body,
+html.modal-open,
+html.modal-open body {
   overflow: hidden;
   overscroll-behavior: none;
 }

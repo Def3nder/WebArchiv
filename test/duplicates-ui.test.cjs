@@ -11,7 +11,7 @@ test('Dublettenprüfung ist als Admin-Dialog mit allen Entscheidungswegen eingeb
   const ui = read('public/duplicates.js');
   assert.match(html, /data-action="duplicates"[^>]*data-admin-only/);
   assert.match(html, /id="duplicate-review"[\s\S]*data-duplicate-tab="pending"[\s\S]*data-duplicate-tab="linked"[\s\S]*data-duplicate-tab="ignored"/);
-  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=7[\s\S]*duplicates\.js\?v=16/);
+  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=7[\s\S]*duplicates\.js\?v=17/);
   assert.match(html, /id="duplicate-detail-dialog"[\s\S]*id="duplicate-detail-content"/);
   assert.match(app, /action === 'duplicates'[\s\S]*openDuplicateReview/);
   for (const action of ['inspect', 'toggle-selection', 'mobile-side', 'ignore', 'migrate', 'reset']) {
@@ -96,7 +96,7 @@ test('Autorfilter bietet alle konfigurierten Quellen zur Mehrfachauswahl auf jed
   assert.match(ui, /duplicateVisibleItems\(duplicateUi\.tab\)/);
   assert.match(ui, /duplicateSelectionTools\.hidden = !pending/);
   assert.match(css, /\.duplicate-filter-menu \.header-menu-dropdown \{/);
-  assert.match(html, /styles\.css\?v=137/);
+  assert.match(html, /styles\.css\?v=139/);
 });
 
 test('Mobilgeräte nutzen System-Selects; Autorenauswahl bleibt mehrfach kombinierbar', () => {
@@ -191,4 +191,17 @@ test('alle drei Dublettendialoge verwenden das sichtbare Ziehen und Rückfedern 
   assert.match(app, /const PULL_CLOSE_DISTANCE = 120/);
   assert.match(app, /moving\.style\.transform = `translateY\(\$\{offset\}px\)`/);
   assert.match(app, /dy < PULL_CLOSE_DISTANCE\) \{ reset\(true\); return; \}/);
+});
+
+test('offene Dublettendialoge sperren die Seite dahinter, nicht ihre inneren Scrollbereiche', () => {
+  const ui = read('public/duplicates.js');
+  const css = read('public/styles.css');
+  assert.match(ui, /function syncDuplicatePageScroll\(\)[\s\S]*duplicateDialogs\.some\(dialog => dialog\.open\)/);
+  assert.match(ui, /duplicateImageViewer\.showModal\(\);\s*syncDuplicatePageScroll\(\)/);
+  assert.match(ui, /duplicateDetailDialog\.showModal\(\);\s*syncDuplicatePageScroll\(\)/);
+  assert.match(ui, /duplicateDialog\.showModal\(\);\s*syncDuplicatePageScroll\(\)/);
+  assert.match(ui, /dialog\.addEventListener\('close', syncDuplicatePageScroll\)/);
+  assert.match(css, /html\.duplicate-modal-open,\s*html\.duplicate-modal-open body,/);
+  assert.match(css, /\.duplicate-content \{[^}]*overflow-y: auto;/);
+  assert.match(css, /\.duplicate-comparison-scroll \{[^}]*overflow-y: auto;/);
 });
