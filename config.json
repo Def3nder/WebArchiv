@@ -2,12 +2,19 @@
   "authorPriority": [
     "Joe Turan",
     "Facebook",
-    "Telegram"
+    "Coaching",
+    "Ralf",
+    "Stefan Hiene",
+    "Telegram",
+    "Infografiken",
+    "PDF",
+    "Videos"
   ],
   "duplicates": {
     "blogAuthor": "Joe Turan",
     "facebookAuthors": [
-      "Facebook"
+      "Facebook",
+      "Coaching"
     ],
     "maxDateDistanceDays": 730,
     "minimumTokens": 35

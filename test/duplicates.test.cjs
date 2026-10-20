@@ -5,7 +5,7 @@ const fs = require('fs/promises');
 
 const {
   normalizeDuplicateText, buildDuplicateProfile, compareDuplicateProfiles,
-  detectDuplicateCandidates, createDuplicateStore, decisionStillApplies,
+  detectDuplicateCandidates, createDuplicateStore, decisionStillApplies, loadDuplicateConfig,
 } = require('../duplicates.cjs');
 
 const article = (author, id, title, body, date = '2026-01-01') => ({
@@ -38,6 +38,15 @@ test('Telegram und nicht konfigurierte Facebook-Autoren bleiben unberücksichtig
   const telegram = article('Telegram', 'Telegram/2026/a', 'Titel', body);
   const publicFacebook = article('Joe Turan Facebook', 'Joe Turan Facebook/2026/a', 'Titel', body);
   assert.deepEqual(detectDuplicateCandidates([blog, telegram, publicFacebook]), []);
+});
+
+test('Facebook und Coaching sind konfigurierte Quellen, Telegram bleibt ausgeschlossen', () => {
+  const config = loadDuplicateConfig(path.join(__dirname, '..', 'config.json'));
+  assert.deepEqual(config.facebookAuthors, ['Facebook', 'Coaching']);
+  const body = 'Ein ausreichend langer identischer Beispieltext über das Leben und die innere Entwicklung. '.repeat(10);
+  const blog = article(config.blogAuthor, 'Joe Turan/2026/a', 'Titel', body);
+  const sources = ['Facebook', 'Coaching', 'Telegram'].map(author => article(author, `${author}/2026/a`, 'Titel', body));
+  assert.deepEqual(detectDuplicateCandidates([blog, ...sources], config).map(item => item.facebook.author), ['Facebook', 'Coaching']);
 });
 
 test('ignorierte Entscheidung gilt nur für unveränderte Inhalte, Verknüpfung dauerhaft', () => {

@@ -1037,7 +1037,7 @@ function duplicatePair(blogId, facebookId) {
   const facebook = articleById.get(facebookId);
   if (!blog || !facebook) throw duplicateFail(404, 'Einer der Artikel wurde nicht gefunden.');
   if (blog.author !== duplicateConfig.blogAuthor || !duplicateConfig.facebookAuthors.includes(facebook.author)) {
-    throw duplicateFail(400, 'Diese Autoren können nicht als Blog-/Facebook-Dublette verknüpft werden.');
+    throw duplicateFail(400, 'Diese Autoren können nicht als Blog-/Quellen-Dublette verknüpft werden.');
   }
   return { blog, facebook };
 }
@@ -1875,7 +1875,7 @@ app.post('/api/duplicates/batch', requireAdmin, async (req, res) => {
     for (const item of items) {
       duplicatePair(item.blogId, item.facebookId);
       if (facebookIds.has(item.facebookId)) {
-        throw duplicateFail(400, 'Ein Facebook-Artikel darf nur einmal in einer Sammelaktion vorkommen.');
+        throw duplicateFail(400, 'Ein Quellartikel darf nur einmal in einer Sammelaktion vorkommen.');
       }
       facebookIds.add(item.facebookId);
     }

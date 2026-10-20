@@ -277,9 +277,64 @@ function unifiedLines(row, blogNumber, facebookNumber) {
   return lines;
 }
 
-// Einspaltige Code-Diff-Daten: Facebook ist die alte, Blog die bevorzugte neue Fassung.
+// Einspaltige Code-Diff-Daten: Absatzgrenzen beeinflussen nur die Anzeige, nicht den Textabgleich.
 function renderUnifiedRows(blogBlocks, facebookBlocks, { onlyDifferences = false } = {}) {
-  const aligned = renderAlignedRows(blogBlocks, facebookBlocks);
+  const blog = comparisonBlocks(blogBlocks);
+  const facebook = comparisonBlocks(facebookBlocks);
+  const stream = blocks => {
+    const words = [];
+    const boundaries = new Set();
+    for (const block of blocks) {
+      words.push(...block.split(' '));
+      boundaries.add(words.length);
+    }
+    return { words, boundaries };
+  };
+  const blogStream = stream(blog);
+  const facebookStream = stream(facebook);
+  const changes = diffArrays(blogStream.words, facebookStream.words);
+  const aligned = [];
+  let blogOffset = 0;
+  let facebookOffset = 0;
+  let blogRow = [];
+  let facebookRow = [];
+  const flushRow = () => {
+    if (!blogRow.length && !facebookRow.length) return;
+    aligned.push(comparisonRow(blogRow.length ? blogRow.join(' ') : null,
+      facebookRow.length ? facebookRow.join(' ') : null));
+    blogRow = [];
+    facebookRow = [];
+  };
+  const atBoundary = () => blogStream.boundaries.has(blogOffset)
+    || facebookStream.boundaries.has(facebookOffset);
+  for (let index = 0; index < changes.length;) {
+    const change = changes[index];
+    if (!change.added && !change.removed) {
+      // Gemeinsame Wörter an den ursprünglichen Blockgrenzen oder nach 32 Wörtern umbrechen.
+      for (const word of change.value) {
+        blogRow.push(word);
+        facebookRow.push(word);
+        blogOffset++;
+        facebookOffset++;
+        if (atBoundary() || Math.max(blogRow.length, facebookRow.length) >= 32) flushRow();
+      }
+      index++;
+      continue;
+    }
+    const blogOnly = [];
+    const facebookOnly = [];
+    while (index < changes.length && (changes[index].added || changes[index].removed)) {
+      if (changes[index].removed) blogOnly.push(...changes[index].value);
+      else facebookOnly.push(...changes[index].value);
+      index++;
+    }
+    blogRow.push(...blogOnly);
+    facebookRow.push(...facebookOnly);
+    blogOffset += blogOnly.length;
+    facebookOffset += facebookOnly.length;
+    if (atBoundary()) flushRow();
+  }
+  flushRow();
   let blogNumber = 0;
   let facebookNumber = 0;
   const numbered = aligned.map(row => {
@@ -296,7 +351,12 @@ function renderUnifiedRows(blogBlocks, facebookBlocks, { onlyDifferences = false
     for (let context = Math.max(0, index - 1); context <= Math.min(numbered.length - 1, index + 1); context++) keep.add(context);
   }
   const visible = [];
-  if (!keep.size && numbered.length) visible.push({ kind: 'identical', text: 'Keine sichtbaren Textunterschiede.' });
+  if (!keep.size && numbered.length) {
+    const sameBlocks = blog.length === facebook.length && blog.every((block, index) => block === facebook[index]);
+    visible.push({ kind: 'identical', text: sameBlocks
+      ? 'Keine sichtbaren Textunterschiede.'
+      : 'Gleicher sichtbarer Text – nur die Absatzstruktur weicht ab.' });
+  }
   let hidden = [];
   const flushHidden = () => {
     if (!hidden.length) return;

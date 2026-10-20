@@ -30,6 +30,26 @@ test('Der Limit-Handler sichert und restauriert die erste gerade sichtbare Kache
   assert.match(app, /const position = captureListPosition\(\)[\s\S]*?pageForLimitChange\([\s\S]*?position\.anchorIndex[\s\S]*?await loadArticles\(\)[\s\S]*?await restoreListPosition\(position\)/);
 });
 
+test('Ein alter App-Hash verdrängt nach Neustart und Anmeldung nicht den gespeicherten Zustand', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const linkFunctions = app.slice(app.indexOf('function parseArticleHash('), app.indexOf('function updateNavButtons('));
+  const startupLink = new Function('history', 'location', `${linkFunctions}\nreturn startupArticleLink();`);
+  assert.equal(startupLink({ state: { webarchivView: true } }, { hash: '#/article/alt.md' }), null);
+  assert.deepEqual(startupLink({ state: null }, { hash: '#/article/neu.md?bild=2' }), { id: 'neu.md', image: 2 });
+  const historyCalls = [...app.matchAll(/history\.(?:pushState|replaceState)\(([^,]+),/g)];
+  assert.ok(historyCalls.length > 0);
+  assert.ok(historyCalls.every(match => match[1] === 'APP_VIEW_HISTORY_STATE'));
+
+  const login = app.slice(app.indexOf('async function login('), app.indexOf('async function logout('));
+  assert.match(login, /clearActiveViewForAccountSwitch\(\);[\s\S]*currentUser = data;[\s\S]*await restoreSessionView\(\{ explicitDeepLink: pendingLoginDeepLink \}\)/);
+  assert.match(app, /function clearActiveViewForAccountSwitch\(\) \{[\s\S]*\$overlay\.hidden = true;[\s\S]*currentViewItemId = '';/);
+  assert.match(app, /pendingLoginDeepLink = parseArticleHash\(location\.hash\);[\s\S]*showLogin\('Dieser Artikel ist geschützt/);
+  assert.match(app, /async function restoreSessionView\(\{ explicitDeepLink = null \} = \{\}\)/);
+  assert.match(app, /sessionViewStore\?\.load\(deviceStorage\(\), currentUser\)\s*\|\| sessionViewStore\?\.normalize\(\{ version: sessionViewStore\.VERSION \}\)/);
+  assert.match(app, /await restoreSessionView\(\{ explicitDeepLink: startupArticleLink\(\) \}\)/);
+  assert.match(app, /async function logout\(\) \{[\s\S]*clearActiveViewForAccountSwitch\(\);[\s\S]*clearCurrentViewState\(currentUser\);/);
+});
+
 test('Sitzungsansicht wird pro Benutzer vollständig und normalisiert gespeichert', () => {
   const device = storage();
   assert.equal(sessionState.save(device, user, {

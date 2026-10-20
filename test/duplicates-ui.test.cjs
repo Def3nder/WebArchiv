@@ -11,7 +11,7 @@ test('Dublettenprüfung ist als Admin-Dialog mit allen Entscheidungswegen eingeb
   const ui = read('public/duplicates.js');
   assert.match(html, /data-action="duplicates"[^>]*data-admin-only/);
   assert.match(html, /id="duplicate-review"[\s\S]*data-duplicate-tab="pending"[\s\S]*data-duplicate-tab="linked"[\s\S]*data-duplicate-tab="ignored"/);
-  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=6[\s\S]*duplicates\.js\?v=11/);
+  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=7[\s\S]*duplicates\.js\?v=16/);
   assert.match(html, /id="duplicate-detail-dialog"[\s\S]*id="duplicate-detail-content"/);
   assert.match(app, /action === 'duplicates'[\s\S]*openDuplicateReview/);
   for (const action of ['inspect', 'toggle-selection', 'mobile-side', 'ignore', 'migrate', 'reset']) {
@@ -72,14 +72,63 @@ test('Blog- und Facebook-Infografiken lassen sich vergleichen und bildschirmfül
   assert.match(css, /\.duplicate-image-viewer\s*\{[\s\S]*width: 100vw;[\s\S]*height: 100dvh;/);
 });
 
-test('Filter sind kombinierbar, Auswahl bleibt gespeichert und doppelte Facebook-Ziele werden vermieden', () => {
+test('Filter sind kombinierbar, Auswahl bleibt gespeichert und doppelte Quellen-Ziele werden vermieden', () => {
   const ui = read('public/duplicates.js');
   const server = read('server.js');
-  assert.match(ui, /filters: \{ score: 'all', infographics: 'all' \}/);
+  assert.match(ui, /filters: \{ score: 'all', infographics: 'all', authors: null \}/);
   assert.match(ui, /localStorage\.setItem\(DUPLICATE_SELECTION_KEY/);
-  assert.match(ui, /scoreMatch[\s\S]*infographicMatch[\s\S]*return scoreMatch && infographicMatch/);
+  assert.match(ui, /scoreMatch[\s\S]*infographicMatch[\s\S]*return duplicateAuthorMatches\(item\) && scoreMatch && infographicMatch/);
   assert.match(ui, /facebookId[\s\S]*duplicateUi\.selection\.delete/);
-  assert.match(server, /Ein Facebook-Artikel darf nur einmal in einer Sammelaktion vorkommen/);
+  assert.match(server, /Ein Quellartikel darf nur einmal in einer Sammelaktion vorkommen/);
+});
+
+test('Autorfilter bietet alle konfigurierten Quellen zur Mehrfachauswahl auf jedem Tab', () => {
+  const html = read('public/index.html');
+  const ui = read('public/duplicates.js');
+  const css = read('public/styles.css');
+  assert.match(html, /id="duplicate-author-filter"[\s\S]*id="duplicate-author-options"/);
+  assert.match(ui, /duplicateUi\.data\.config\?\.facebookAuthors/);
+  assert.match(html, /data-duplicate-filter-menu="authors"[\s\S]*data-duplicate-filter-menu="score"[\s\S]*data-duplicate-filter-menu="infographics"/);
+  assert.match(html, /class="header-menu-dropdown" role="menu"/);
+  assert.match(ui, /authors\.map\(author => `<button type="button" class="header-menu-item" role="menuitemcheckbox"/);
+  assert.match(ui, /menu\.addEventListener\('click'/);
+  assert.match(ui, /duplicateUi\.filters\[root\.dataset\.duplicateFilterMenu\] = item\.dataset\.duplicateFilterValue/);
+  assert.match(ui, /duplicateVisibleItems\(duplicateUi\.tab\)/);
+  assert.match(ui, /duplicateSelectionTools\.hidden = !pending/);
+  assert.match(css, /\.duplicate-filter-menu \.header-menu-dropdown \{/);
+  assert.match(html, /styles\.css\?v=137/);
+});
+
+test('Mobilgeräte nutzen System-Selects; Autorenauswahl bleibt mehrfach kombinierbar', () => {
+  const html = read('public/index.html');
+  const ui = read('public/duplicates.js');
+  const css = read('public/styles.css');
+  for (const id of ['author', 'score', 'infographic']) {
+    assert.match(html, new RegExp(`<select id="duplicate-${id}-native" class="filter-select filter-menu-native duplicate-filter-native"`));
+  }
+  assert.match(html, /class="header-menu filter-header-menu duplicate-filter-menu"/);
+  assert.match(css, /\.header-menu\.filter-header-menu \{ display: none; \}/);
+  assert.match(css, /@media \(min-width: 601px\) and \(hover: hover\) and \(pointer: fine\)/);
+  assert.match(ui, /duplicateAuthorNative\.addEventListener\('change'/);
+  assert.match(ui, /new Option\('Alle Autoren auswählen', 'all'\)/);
+  assert.match(ui, /new Option\('Keine Autoren auswählen', 'none'\)/);
+  assert.match(ui, /duplicateUi\.filters\.authors = selected\.size === authors\.length \? null : selected/);
+  assert.match(ui, /function sizeDuplicateNativeFilter\(select\)[\s\S]*measureText\(label\)/);
+});
+
+test('Dublettenfilter folgen den Beschriftungseinstellungen und der Kopf reagiert auf Listenscrollen', () => {
+  const html = read('public/index.html');
+  const ui = read('public/duplicates.js');
+  const css = read('public/styles.css');
+  assert.match(html, /id="duplicate-chrome"[\s\S]*id="duplicate-content"/);
+  assert.match(css, /body\[data-filter-labels="hidden"\] \.duplicate-filter-caption \{ display: none; \}/);
+  assert.match(css, /@media \(max-width: 600px\) \{\s*\.duplicate-filter-caption \{ display: none; \}/);
+  assert.match(css, /\.duplicate-filter-menu \.filter-menu-trigger \{ width: max-content;/);
+  assert.match(css, /\.duplicate-filter-menu \.header-menu-dropdown \{[^}]*width: max-content; min-width: 100%;/);
+  assert.match(ui, /DUPLICATE_CHROME_SCROLL_THRESHOLD = 24/);
+  assert.match(ui, /duplicateContent\.addEventListener\('scroll'/);
+  assert.match(ui, /direction > 0[\s\S]*setDuplicateChromeOffset\(duplicateChromeOffset \+ delta\)/);
+  assert.match(ui, /duplicateChromeTravel >= DUPLICATE_CHROME_SCROLL_THRESHOLD\) showDuplicateChrome\(true\)/);
 });
 
 test('Sammelverknüpfung indiziert höchstens einmal und reine Links gar nicht neu', () => {
@@ -120,17 +169,26 @@ test('Volltext und nur Unterschiede lassen sich im Prüfdialog umschalten', () =
   assert.match(ui, /data-duplicate-action="toggle-differences" aria-pressed="\$\{duplicateUi\.onlyDifferences\}"/);
   assert.match(ui, /function toggleDuplicateDiffMode\(\)[\s\S]*onlyDifferences = !duplicateUi\.onlyDifferences[\s\S]*duplicateComparisonRows\(pair\)/);
   assert.match(ui, /duplicateTextDiff\.renderUnifiedRows\([\s\S]*renderedBlocksFromHtml\(pair\.blog\.bodyHtml\)[\s\S]*renderedBlocksFromHtml\(pair\.facebook\.bodyHtml\)/);
-  assert.match(ui, /<details class="duplicate-diff-fold">[\s\S]*unveränderte Zeile/);
+  assert.match(ui, /<details class="duplicate-diff-fold">[\s\S]*unveränderte/);
   assert.match(ui, /duplicate-diff-line is-\$\{row\.kind\}/);
   assert.match(css, /\.duplicate-diff-line\.is-removed \{[^}]*background: color-mix/);
   assert.match(css, /\.duplicate-diff-line\.is-added \{[^}]*background: color-mix/);
   assert.match(css, /\.duplicate-diff-toggle\[aria-pressed="true"\]/);
 });
 
-test('alle drei Dublettendialoge unterstützen Abwärtswischen', () => {
+test('100-Prozent-Filter nimmt nur echte normalisierte Textgleichheit und rundet andere Werte nicht auf 100', () => {
   const ui = read('public/duplicates.js');
-  assert.match(ui, /enableDuplicateSwipeClose\(duplicateDialog/);
-  assert.match(ui, /enableDuplicateSwipeClose\(duplicateDetailDialog/);
-  assert.match(ui, /enableDuplicateSwipeClose\(duplicateImageViewer/);
-  assert.match(ui, /dy > 100[\s\S]*scrollTop === 0/);
+  assert.match(ui, /duplicateUi\.filters\.score === '100'\s*\? !!item\.exact/);
+  assert.match(ui, /similarity >= 1 \? '< 100 %'/);
+  assert.match(ui, /Wortfolge gleich/);
+});
+
+test('alle drei Dublettendialoge verwenden das sichtbare Ziehen und Rückfedern der Hauptansicht', () => {
+  const ui = read('public/duplicates.js');
+  const app = read('public/app.js');
+  assert.match(ui, /for \(const dialog of \[duplicateDialog, duplicateDetailDialog, duplicateImageViewer\]\)/);
+  assert.match(ui, /enablePullToClose\(\{[\s\S]*scroller: dialog,[\s\S]*moving: dialog,[\s\S]*scrolledWithin\(event\.target, dialog\)/);
+  assert.match(app, /const PULL_CLOSE_DISTANCE = 120/);
+  assert.match(app, /moving\.style\.transform = `translateY\(\$\{offset\}px\)`/);
+  assert.match(app, /dy < PULL_CLOSE_DISTANCE\) \{ reset\(true\); return; \}/);
 });

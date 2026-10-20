@@ -21,6 +21,6 @@ test('abgeschnittene Kachelvorschauen erhalten zuverlässig ein Auslassungszeich
 });
 
 test('geänderte Vorschau-Ressourcen werden ohne alten Browser-Cache geladen', () => {
-  assert.match(HTML, /styles\.css\?v=133/);
-  assert.match(HTML, /app\.js\?v=112/);
+  assert.match(HTML, /styles\.css\?v=137/);
+  assert.match(HTML, /app\.js\?v=113/);
 });

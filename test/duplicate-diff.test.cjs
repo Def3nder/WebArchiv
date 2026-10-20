@@ -167,3 +167,34 @@ test('abweichende Leerabsätze ohne Textänderung bleiben unsichtbar', () => {
   assert.deepEqual(rows.map(row => row.kind), ['equal']);
   assert.equal(rows[0].html, 'Eine Zeile ohne Punkt und weiter');
 });
+
+test('unterschiedliche Absatzgrenzen bei identischer Wortfolge erzeugen keine roten oder grünen Zeilen', () => {
+  const blog = [
+    'Die Entwicklung der Psychiatrie:',
+    'Psychiatrie 1.0 vs. 2.0 vs. 3.0',
+    'Am Anfang wurde der Mensch durch seine Geschichte verstanden.',
+  ];
+  const facebook = [blog.join(' ')];
+  const rows = renderUnifiedRows(blog, facebook);
+  assert.deepEqual(rows.map(row => row.kind), ['equal', 'equal', 'equal']);
+  assert.equal(rows.map(row => row.html).join(' '), facebook[0]);
+  const compact = renderUnifiedRows(blog, facebook, { onlyDifferences: true });
+  assert.deepEqual(compact.map(row => row.kind), ['identical', 'fold']);
+  assert.match(compact[0].text, /Absatzstruktur/);
+  assert.equal(compact[1].count, 3);
+});
+
+test('echte Wortänderung wird auch über unterschiedliche Absatzgrenzen hinweg lokal markiert', () => {
+  const blog = [
+    'Die Entwicklung der Psychiatrie:',
+    'Psychiatrie 1.0 vs. 2.0 vs. 3.0',
+    'Am Anfang wurde der Mensch durch seine Geschichte verstanden. Danach ging es weiter.',
+  ];
+  const facebook = [blog.join(' ').replace('Geschichte', 'Vergangenheit')];
+  const rows = renderUnifiedRows(blog, facebook);
+  assert.deepEqual(rows.filter(row => row.kind !== 'equal').map(row => row.kind), ['removed', 'added']);
+  assert.match(rows.find(row => row.kind === 'removed').html, /<mark>Vergangenheit<\/mark>/);
+  assert.match(rows.find(row => row.kind === 'added').html, /<mark>Geschichte<\/mark>/);
+  assert.ok(rows.filter(row => row.kind === 'equal').length >= 2);
+  assert.doesNotMatch(rows.find(row => row.kind === 'removed').html, /Die Entwicklung/);
+});

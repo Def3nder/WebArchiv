@@ -97,7 +97,7 @@ function compareDuplicateProfiles(blog, facebook, config = DEFAULT_CONFIG) {
   if (!exact && (body.shared < 8 || body.containment < 0.55 || score < 0.62)) return null;
   if (!exact && days !== null && days > config.maxDateDistanceDays && body.containment < 0.9) return null;
   const reasons = [];
-  if (exact) reasons.push('Text identisch');
+  if (exact) reasons.push('Normalisierte Wortfolge identisch');
   else {
     if (body.containment >= 0.85) reasons.push('Inhalt nahezu vollständig enthalten');
     else reasons.push('Hohe Textüberschneidung');

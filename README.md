@@ -1,8 +1,10 @@
 # WebArchiv
 
 Ressourcenschonender **Artikel-Archiv-Viewer** (Node.js/Express + Vanilla-JS-SPA).
-Liest Markdown-Artikel samt Bildern/Audio/Video/PDF aus einem `www/`-Verzeichnis,
-indexiert sie im Speicher (Volltextsuche, Auto-Kategorisierung) und stellt sie
+Liest Markdown-Artikel samt Bildern, Videos und PDFs aus `www/`; Artikel-MP3s sowie
+Hörbücher mit ihren Extras liegen im parallelen `audio/`-Baum. Die Inhalte werden
+im Speicher indexiert (gewichtete Suche über Titel, Episodennummer, Autor,
+Kategorien und Auszug; keine Suche über den gesamten Artikeltext) und
 über eine schlanke Single-Page-App mit Login/Rechteverwaltung bereit. Optional
 lassen sich neue Artikel per integriertem Scraper (Blog/Facebook/Telegram)
 direkt aus dem Web-UI nachladen.
@@ -21,35 +23,60 @@ Browser (SPA: public/index.html + app.js + styles.css)
 Express-Server (server.js, CommonJS)
     ├── In-Memory-Index (articles[], Fuse.js)   ← buildIndex() scannt www/
     ├── Auth (express-session + bcryptjs, users.json)
-    ├── /files/*  geschützte Datei-Auslieferung (ACL pro Autor)
+    ├── /files/*, /audio-files/*  geschützte Medien (ACL pro Autor)
     ├── /a/*, /og-image/*  Link-Vorschau (Open Graph)
     └── /api/scrape  → spawnt scraper/scrape_all.js (eigener Prozess)
     ▼
-Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Audio/Video/PDF)
+Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Video/PDF)
+             audio/<Autor>/<Jahr>/<Artikel>.mp3
+             audio/Hoerbuecher/<Buch>/… (Tracks, eBook, Extras)
 ```
 
-- **Backend**: ein einzelnes `server.js` (Express 4). CommonJS (`require`), kein Build-Schritt.
+- **Backend**: `server.js` ist die zentrale Express-4-Anwendung; ergänzende
+  CommonJS-Module übernehmen u. a. Editor, Hörbücher, Dubletten und TTS-Aufträge.
+  Für den normalen Serverstart gibt es keinen Build-Schritt. Geänderte Quellen des
+  Markdown-Editors bzw. der Dubletten-Diff-Anzeige müssen jedoch mit
+  `npm run build:editor` bzw. `npm run build:duplicate-diff` gebündelt werden.
 - **Frontend**: statische SPA unter `public/` (kein Framework), Hash-Routing (`#/article/<id>`), Cache-Busting per `?v=N`.
   Die aktuelle Ansicht wird pro Benutzer auf dem Gerät gespeichert: Suche, Filter, Seite, Layout,
   Listenposition sowie geöffneter Artikel bzw. Hörbuch-/eBook-Reader werden nach einem vollständigen
-  Browser- oder PWA-Neustart wiederhergestellt. Ein ausdrücklich anderer Artikel-Link hat Vorrang;
-  beim Abmelden wird der lokale Sitzungsstand des Benutzers gelöscht.
+  Browser- oder PWA-Neustart wiederhergestellt. Ein neu aufgerufener Artikel-Link hat Vorrang;
+  ein von der App selbst hinterlassener Artikel-Hash dagegen nicht. Nach der Anmeldung ersetzt
+  der persönliche Speicherstand eine zuvor geöffnete Gastansicht; ein geschützter, ausdrücklich
+  aufgerufener Artikellink bleibt bis zur Anmeldung vorgemerkt.
+  Beim Abmelden wird der lokale Sitzungsstand des Benutzers gelöscht.
 - **PWA-Aktualisierung**: Änderungen an den Frontend-Dateien werden automatisch erkannt. Eine
   installierte Web-App zeigt „Neue Version verfügbar“ und übernimmt sie über „Jetzt aktualisieren“
   ohne Löschen oder erneutes Anlegen des Home-Screen-Symbols. Der Update-Worker cached selbst keine
   App-Dateien; reguläres Cache-Busting per `?v=N` bleibt maßgeblich.
-- **Bedienmenüs**: Das vorhandene ARIA-Aktionsmenü ist das gemeinsame Muster für Dropdown-Menüs
-  in Header, Artikel-/Hörbuchaktionen und den Desktop-Filtern. Neue Menüs erweitern dieses Muster
-  (`role="menu"`, `menuitem`/`menuitemradio`, Tastatur, Escape und Außenklick), statt eine zweite
-  Menükomponente einzuführen. Touch-Geräte behalten bei den Filtern ihre nativen Auswahlfelder.
+- **Bedienmenüs (verbindliche UI-Regel)**: Auswahlfilter verwenden auf Touch-Geräten immer
+  native `<select>`-Systemmenüs. Auf Desktopgeräten mit Maus/präzisem Zeiger verwenden sie den
+  vorhandenen Menü-Typ: `.header-menu` mit `.filter-menu-trigger`, `.header-menu-dropdown` und
+  `.header-menu-item`. Beide Varianten halten denselben Filterzustand synchron. Für andere
+  Aktionsmenüs bleibt dieser vorhandene ARIA-Menü-Typ maßgeblich; keine eigenen `<details>`-Menüs,
+  abweichenden Popup-Stile oder neuen Menükomponenten einführen. Auswahlmenüs verwenden
+  `role="menu"` und je nach Verhalten `menuitemradio` oder `menuitemcheckbox` mit `aria-checked`;
+  Tastatursteuerung, Escape, Außenklick und Fokus-Rückgabe gehören dazu.
+- **Pull-to-Close (Touch-Dialoge und Overlays)**: Neue Ansichten verwenden die gemeinsame
+  Funktion `enablePullToClose({ scroller, moving, fading, canStart, onClose })` aus `public/app.js`;
+  keine eigene Wisch-Erkennung pro Dialog einführen. `moving` ist der gesamte sichtbare Dialog
+  bzw. das Panel, damit es dem Finger beim Ziehen nach unten unmittelbar folgt; `fading` kann
+  zusätzlich den Hintergrund ausblenden. Die Geste beginnt nur mit einem Finger,
+  bei vertikaler Bewegung und wenn der betreffende Scrollbereich ganz oben steht. Eine aktive
+  Textauswahl, ein verschobener Zoom-Ausschnitt oder ein noch gescrollter innerer Bereich dürfen
+  nicht zum Schließen führen; weitere Ausschlüsse (z. B. Eingabefelder) gehören in `canStart`.
+  Beim Loslassen unter 120 px federt die Ansicht zurück. Ab 120 px gleitet sie aus dem Bild;
+  danach ruft die Funktion `onClose` auf. Auch ein von iOS ausgelöstes `touchcancel` behandelt
+  sie wie das Loslassen. `Esc` und die sichtbare Schließen-Schaltfläche bleiben unabhängig davon
+  bedienbar; bei gestapelten Dialogen schließt nur die oberste Ebene.
 - **Markdown-Editor**: Artikel, Hörbuch-Abstracts und Markdown-Extras verwenden denselben lokalen
   CodeMirror-basierten Live-Editor. Formatierter Text wird direkt dargestellt; die Markdown-Zeichen
   erscheinen an der aktiven Cursorposition in einer zurückgenommenen Farbe.
-- **Daten**: reine Dateien unter `www/` — keine Datenbank. Der Index wird beim Start und auf Anforderung neu aufgebaut.
+- **Daten**: reine Dateien unter `www/` und `audio/` — keine Datenbank. Der Index wird beim Start und auf Anforderung neu aufgebaut.
 
 ---
 
-## Inhaltsmodell (`www/`)
+## Inhaltsmodell (`www/` und `audio/`)
 
 Jeder **Top-Level-Ordner in `www/` ist ein „Autor"** (z. B. `Joe Turan`,
 `Telegram`, `Facebook`, `Infografiken`, `PDF`, `Stefan Hiene`, `Videos`).
@@ -67,9 +94,21 @@ www/
 └── Facebook/…
 ```
 
-**Begleitdateien** (gleicher Stamm wie die `.md`): `.jpg`/`.jpeg`/`.png` (Bild),
-`.mp3` (Audioquickie), `.mp4` (Video), `.pdf`. Fehlt ein Bild, greift
-`www/<Autor>/standard.<ext>`.
+**Begleitdateien unter `www/`** (gleicher Stamm wie die `.md`):
+`.jpg`/`.jpeg`/`.png` (Artikelbild), `.mp4` (Video), `.pdf`. Fehlt ein Bild,
+greift `www/<Autor>/standard.<ext>`.
+
+**Artikel-Audio** liegt regulär als gleichnamige `.mp3` unter
+`audio/<Autor>/<Unterpfad>/<Artikel>.mp3`, also bei Jahresordnern z. B.
+`audio/Joe Turan/2026/2026-01-25_titel-slug.mp3` zur Markdown-Datei unter
+`www/Joe Turan/2026/2026-01-25_titel-slug.md`. Auch neu erzeugtes TTS-Audio
+wird dort abgelegt. Für ältere Bestände unterstützt der Server weiterhin
+gleichnamige MP3s direkt neben der Markdown-Datei unter `www/` (insbesondere
+Stefan Hiene); falls beide Orte belegt sind, hat diese alte Datei Vorrang.
+Das ist eine Kompatibilitätsregel, **keine Empfehlung für neue MP3s**.
+Reguläres Artikel-Audio wird über `/audio-files/*` ausgeliefert, Altdateien
+unter `www/` über `/files/*`. Der Filter „mit Audio“ meint ausschließlich
+Audio aus dem separaten `audio/`-Baum.
 
 **Artikel-ID**: `Autor/<Unterpfad>/<Dateiname-ohne-.md>` (z. B.
 `Joe Turan/2026/2026-01-25_titel-slug`).
@@ -94,8 +133,10 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
 
 - Datum notfalls aus dem Dateinamen-Präfix `YYYY-MM-DD_…`.
 - Titel = Zeilen vor „Datum:", ohne die „Quelle:"-Zeile.
-- Body = alles nach dem letzten Trenner (bzw. nach der letzten Metazeile) und wird
-  mit `marked` zu HTML gerendert.
+- Body = alles nach dem Trenner; ohne Trenner beginnt er nach Datum und den
+  unmittelbar folgenden Metadaten mit der ersten normalen Textzeile. Spätere
+  `Quelle:`-Zeilen im Artikeltext bleiben Inhalt. Der Body wird mit `marked`
+  zu HTML gerendert; Blogartikel benötigen keinen künstlichen Trenner.
 - **Auto-Kategorien**: `autoCategorize()` ordnet aus Titel+Zusammenfassung+Body
   über eine feste Stichwort-Taxonomie bis zu 5 Kategorien zu (für Filter/Facetten).
   Das Feld `Kategorien:` bleibt davon getrennt als reine Anzeige-Tags.
@@ -134,7 +175,7 @@ Je Buch ein Ordner unter `audio/Hoerbuecher/` mit `cover.jpg`/`.jpeg`/`.png`, nu
 Tracks (`.mp3`/`.m4b`/`.m4a`) und optional `abstract.md`
 (`Titel:`, `Autor:`, `Datum:`, `Inhalt:` + Markdown). (EPUB-Bücher als eBook-Text: siehe `epub-tool/`
 unten.) Fallback-Cover:
-`audio/Hoerbuecher/standard.png`. Der Ordner heißt bewusst ohne Umlaute, angezeigt
+`audio/Hoerbuecher/standard.jpg`/`.jpeg`/`.png`. Der Ordner heißt bewusst ohne Umlaute, angezeigt
 wird „Hörbücher“ (Alternativen: Ordner `Hörbücher` oder `audiobooks.directory` in
 `config.json`). Hörbücher sind keine Artikel: Sie erscheinen nur
 beim Autorenfilter „Hörbücher“ (Sortierung zuletzt gehört / Name / Datum), sind nie
@@ -169,7 +210,8 @@ Rücksprung:
 (Details: `epub-tool/README.md`; danach Reindex).
 
 **Extras anzeigen und verwalten:** Sichtbare Extras liegen ohne Manifest direkt unter
-`<Buch>/extras/`; eingebettete Textbilder unter `<Buch>/extras/images/`. Administratoren erreichen
+`audio/Hoerbuecher/<Buch>/extras/`; eingebettete Textbilder unter
+`audio/Hoerbuecher/<Buch>/extras/images/`. Administratoren erreichen
 *Extras verwalten …* sowohl im Aktionen-Menü des Hörbuchs als auch über *Verwalten* in der
 Extras-Anzeige. Der Dialog kann Texte und Bilder anlegen, hochladen, ersetzen, umbenennen, löschen,
 vorab anzeigen und die sichtbaren Extras per Ziehen oder Pfeiltasten sortieren. Die Reihenfolge wird
@@ -183,11 +225,38 @@ die Bildfunktion ausgeblendet. Escape, die Zurück-Schaltfläche und ein Klick n
 immer zuerst die innerste Ebene (Vorschau oder Editor), anschließend die Extras-Verwaltung und erst
 danach die Hörbuchansicht.
 
+### Artikel-Audio erzeugen (TTS)
+
+Ein Admin kann in der **Artikeldetailansicht** für einen Artikel ohne vorhandene MP3
+*Audio erzeugen* wählen. Vor dem Start zeigt ein Dialog die verfügbaren Anbieter
+und deren Hinweise als Radio-Auswahl. Qwen ist vorausgewählt, wenn sein
+authentifizierter Dienst den erforderlichen Vertrag meldet. Fällt Qwen aus, wird
+OpenAI **nicht** automatisch gewählt; eine möglicherweise kostenpflichtige
+OpenAI-Erzeugung erfordert eine bewusste Auswahl und Startbestätigung. Ein
+Healthcheck allein garantiert keine erfolgreiche Synthese.
+
+Nur der Server kontaktiert den gewählten Anbieter. Qwen erhält das vollständige
+Original-Markdown und liefert über den `webarchiv-qwen-v5`-Vertrag eine fertige
+MP3; Bereinigung, Aufteilung und Stimme bestimmt das Qwen-Originalskript.
+OpenAI verwendet die separate lokale Aufbereitung. Das Ergebnis wird ohne
+Überschreiben vorhandener Dateien unter `audio/<relativer www-Pfad>.mp3`
+veröffentlicht und danach indexiert. Ein fehlgeschlagener Reindex löscht die
+fertige MP3 nicht und startet keine zweite Synthese. Es gibt nur einen aktiven
+WebArchiv-TTS-Auftrag; Schließen des Statusdialogs bricht ihn nicht ab. Aufträge
+liegen nur im Arbeitsspeicher und überstehen keinen Serverneustart.
+
+Die Anbindung liegt in `tts/` (eigenes Paket). Für die gesamte Anwendung mit TTS
+ist **Node.js 22 oder neuer** nötig; auf dem Server werden außerdem FFmpeg und
+FFprobe benötigt. Zugangsdaten bleiben serverseitig in `OPENAI_API_KEY` bzw.
+`QWEN_TTS_BASE_URL` und `QWEN_TTS_TOKEN`, nicht im Frontend oder Repository.
+
 ---
 
 ## Suche, Filter, Facetten
 
-- **Volltextsuche** über `Fuse.js` (Felder: Titel×3, Autor×1.5, Kategorien, Auszug).
+- **Gewichtete Suche** über `Fuse.js` (Titel×3, Episodennummer×2,
+  Autor×1,5, Kategorien×1, Auszug×0,8). Der vollständige Body ist kein
+  eigener Suchschlüssel.
 - **Datums-Tokens** in der Suche werden erkannt und als Filter angewandt
   (`2026`, `2026-03`, `03.2026`, `25.01.2026`) — kombinierbar mit Textsuche
   (z. B. „Achtsamkeit 2025").
@@ -221,29 +290,40 @@ danach die Hörbuchansicht.
   Lesezeichen-Button im Header (blau = aktiv) zeigt nur Artikel mit Lesezeichen, kombinierbar mit
   Autor/Jahr/Kategorie/Suche, sortiert nach Artikeldatum; Telegram-Lesezeichen erscheinen auch ohne
   Telegram-Schalter. Gespeichert pro Nutzer in `bookmarks.json`. Hörbücher haben keine Lesezeichen.
-- **Blog–Facebook-Dubletten** (Admin, Aktionen → *Dubletten prüfen*): Inhaltlich gleiche oder
-  stark überlappende Beiträge aus „Joe Turan“ und der geschlossenen Quelle „Facebook“ prüfen,
-  vormerken, gesammelt verknüpfen oder ignorieren. Übereinstimmungsgrad und vorhandene
-  Facebook-Infografiken lassen sich kombinieren; „Alle sichtbaren auswählen“ übernimmt die
+- **Blog–Quellen-Dubletten** (Admin, Aktionen → *Dubletten prüfen*): Inhaltlich gleiche oder
+  stark überlappende Beiträge aus „Joe Turan“ und den in `config.json` unter
+  `duplicates.facebookAuthors` konfigurierten Quellen (derzeit „Facebook“ und „Coaching“) prüfen,
+  vormerken, gesammelt verknüpfen oder ignorieren. Der Autorfilter erlaubt Mehrfachauswahl und gilt
+  für alle drei Tabs. Bei offenen Treffern lassen sich zusätzlich Übereinstimmungsgrad und vorhandene
+  Quell-Infografiken kombinieren; „Alle sichtbaren auswählen“ übernimmt die
   gefilterte Teilmenge. Die Auswahl bleibt lokal im Browser gespeichert. Reine Verknüpfungen
   aktualisieren den In-Memory-Index sofort, eine Sammelmigration liest das Archiv nur einmal neu ein.
+  Filterbeschriftungen folgen der Anzeige-Einstellung; auf Touch-Geräten öffnen die Filter native
+  Systemmenüs, auf Desktopgeräten die vorhandenen ARIA-Menüs. Die Felder passen sich ihrem aktuellen
+  Text an. Beim Scrollen der Trefferliste gleitet der Dialogkopf nach oben aus dem Bild und
+  erscheint nach kurzer Bewegung nach unten wieder, wie die Navigation in der Kachelansicht.
   Im Artikelvergleich werden die Überschriften auf drei Zeilen begrenzt. Die zugeordneten
-  Blog- und Facebook-Infografiken klappen gemeinsam auf und zu und belegen gleich viel Platz;
+  Blog- und Quell-Infografiken klappen gemeinsam auf und zu und belegen gleich viel Platz;
   jede Vorschau lässt sich bildschirmfüllend öffnen und über beide Seiten hinweg durchblättern.
   Der Volltextvergleich öffnet einen eigenen Dialog und zeigt einen einspaltigen Code-Diff:
-  rote Minus-Zeilen stammen nur aus Facebook, grüne Plus-Zeilen stehen neu im Blog. Geänderte
-  Wörter sind zusätzlich markiert. Verglichen werden die sichtbaren Textblöcke aus derselben
-  gerenderten HTML-Ausgabe wie in der Artikeldetailansicht; Markdown-Auszeichnung, Steuer- und
-  Formatzeichen sowie Leerraum zählen nicht als Unterschiede. „Nur Unterschiede“ ist anfangs
-  aktiv und zeigt je einen Textblock vor und nach einer Änderung; übrige unveränderte
-  Zeilen sind mit Anzahl eingeklappt und lassen sich bei Bedarf vollständig aufklappen.
+  rote Minus-Zeilen stammen nur aus dem Quellartikel, grüne Plus-Zeilen stehen neu im Blog. Geänderte
+  Wörter sind zusätzlich markiert. Verglichen wird die sichtbare Wortfolge aus derselben
+  gerenderten HTML-Ausgabe wie in der Artikeldetailansicht. Absatz- und Überschriftengrenzen
+  bestimmen nur die Anzeigeabschnitte, nicht die Textgleichheit; Markdown-Auszeichnung,
+  Steuer- und Formatzeichen sowie Leerraum zählen nicht als Unterschiede. „Nur Unterschiede“
+  ist anfangs aktiv und zeigt je einen gemeinsamen Textabschnitt vor und nach einer Änderung;
+  übrige unveränderte Abschnitte sind mit Anzahl eingeklappt und lassen sich aufklappen.
+  „100 %“ in der Übersicht bezeichnet eine gleiche normalisierte Wortfolge, nicht gleiche
+  Absatzstruktur. Nicht exakte Treffer werden auch bei gerundetem Wert nicht als 100 %
+  angezeigt oder vom Filter „genau 100 %“ erfasst.
   Die geplanten neuen Infografik-Dateinamen sind bei Bedarf
   aufklappbar. Auswählen, Ignorieren und `Esc` führen aus der Prüfung zurück zur Trefferübersicht;
-  `Esc` und Abwärtswischen schließen jeweils den obersten Dublettendialog.
-  Verknüpfte Facebook-Beiträge bleiben als Dateien erhalten, werden
+  `Esc` schließt jeweils den obersten Dublettendialog; beim Ziehen nach unten folgt der gesamte
+  Dialog sichtbar dem Finger und schließt erst nach Überschreiten der Ziehschwelle, sonst federt er zurück.
+  Verknüpfte Quellbeiträge bleiben als Dateien erhalten, werden
   in normalen Ansichten aber durch den Blogartikel ersetzt. Zugeordnete Dateien aus
   `www/Infografiken/` können bestätigt für den Blogartikel umbenannt werden; das eigentliche
-  Facebook-Artikelbild bleibt unverändert. Entscheidungen
+  Quell-Artikelbild bleibt unverändert. Entscheidungen
   liegen in `duplicate-decisions.json`; Telegram und „Joe Turan Facebook“ werden nicht verglichen.
 - **Einstellungen** (Aktionen → *Einstellungen*, angemeldet): Schriftart (Editorial/Klassisch/
   Modern/System), Darstellung (Hell/Dunkel/Automatisch = folgt dem Gerät), Textgröße des
@@ -350,7 +430,9 @@ Editor- oder Menülogik einbezogen.
   `users.json`, `public-directories.txt`, `config.json` **und** das App-Verzeichnis.
 - **Sessions** via `express-session` (Cookie 7 Tage, `httpOnly`, `sameSite=lax`);
   Secret über `SESSION_SECRET` (Env) setzen. Nach dem Login wird die Session-ID
-  neu vergeben.
+  neu vergeben. Die Server-Sessions liegen im RAM: Ein Dienstneustart macht
+  bestehende Logins ungültig, auch wenn die lokal gespeicherte Ansicht nach
+  erneuter Anmeldung wiederhergestellt werden kann.
 - Datei-Auslieferung `/files/*` prüft die Autor-ACL (kein Zugriff auf fremde Autoren,
   Path-Traversal-Schutz).
 
@@ -374,17 +456,22 @@ Editor- oder Menülogik einbezogen.
 | `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen; `bookmarks=1` nur Artikel mit Lesezeichen; jeder Eintrag trägt `bookmarked` |
 | `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml`, `images` und `bookmarked`; eine gruppierte Infografik liefert ihre Gruppe (`requestedId`) |
 | `PUT /api/bookmarks/*` · `DELETE /api/bookmarks/*` | Auth | Lesezeichen setzen (Artikel muss existieren, Autorenrecht) bzw. löschen |
-| `GET /api/duplicates` | Admin | Offene, verknüpfte und ignorierte Blog–Facebook-Paare |
+| `GET /api/duplicates` | Admin | Offene, verknüpfte und ignorierte Blog–Quellen-Paare samt konfigurierter Quellautoren |
 | `GET /api/duplicates/compare` | Admin | Volltextvergleich und Vorschau möglicher Infografikmigrationen |
 | `POST /api/duplicates` | Admin | Paar verknüpfen/ignorieren/lösen oder Infografiken migrieren |
 | `POST /api/duplicates/batch` | Admin | 1–500 ausgewählte Paare gesammelt verknüpfen, optional mit einer gemeinsamen Infografikmigration |
-| `GET /files/*` | Soft | Geschützte Datei (Bild/Audio/…), ACL pro Autor |
+| `GET /files/*` | Soft | Dateien aus `www/` (Bilder, Videos, PDFs und alte MP3s), ACL pro Autor |
+| `GET /audio-files/*` | Soft | Artikel-MP3s und Hörbuchmedien aus `audio/`, ACL pro Autor |
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht); `?sq=256|512` liefert einen quadratischen Ausschnitt vom oberen Bildteil (Sperrbildschirm) |
 | `POST /api/new-infographic` | Admin | Neue Infografik `{markdown, image(base64)}` → `{id}` |
 | `GET /api/prompts` · `GET /api/prompts/:file` | Soft | Prompt-Textbausteine aus `prompts/` (Copy-Menü) |
 | `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/title/date),page,limit` |
 | `GET /api/audiobooks/*` | Auth + Autor | Hörbuch mit Tracks, Beschreibung, eigenem Fortschritt |
+| `GET /api/tts/provider` | Admin | Verfügbarkeit und Hinweise zu Qwen und OpenAI |
+| `POST /api/tts` | Admin + Artikelrecht | Bestätigten Auftrag mit `{articleId,provider}` starten |
+| `GET /api/tts/latest` · `GET /api/tts/:jobId/status` | Admin | Letzten Auftrag bzw. Status und Log lesen |
+| `POST /api/tts/:jobId/cancel` | Admin | Laufenden Auftrag ausdrücklich abbrechen |
 | `GET`/`PUT /api/article-markdown/*` | Admin | Vollständige Markdown-Datei mit Versionsprüfung lesen bzw. atomar speichern |
 | `GET /api/audiobook-extra-manage/*` | Admin + Autor | Extras und Textbilder für den Verwaltungsdialog auflisten |
 | `GET`/`PUT /api/audiobook-extra-source/*` | Admin + Autor | Markdown-Extra mit Versionsprüfung lesen bzw. speichern |
@@ -413,8 +500,9 @@ hinter dem Reverse Proxy.
 
 ## Index (Reindex)
 
-`buildIndex()` scannt `www/` rekursiv, parst alle `.md`, ermittelt Begleitdateien,
-Kategorien und baut den Fuse-Index. Läuft **beim Serverstart**, auf
+`buildIndex()` scannt `www/` rekursiv, parst alle Artikel-`.md`, ordnet Bilder,
+Videos, PDFs und MP3s nach der oben beschriebenen Suchreihenfolge in `www/` und
+`audio/` zu, ermittelt Kategorien und baut den Fuse-Index. Läuft **beim Serverstart**, auf
 `POST /api/reindex` (Admin) und bei **`SIGHUP`** (für Cron/Automation ohne
 Neustart — offene Sessions bleiben erhalten). Da der Index im Speicher liegt,
 werden **neu hinzugefügte Dateien erst nach einem Reindex sichtbar**.
@@ -458,7 +546,12 @@ unten).
 
 Voraussetzungen für den Scrape: installierte Playwright-Browser + System-Libs und
 gesetztes `PLAYWRIGHT_BROWSERS_PATH` (siehe `LXC-container node.js Setup.txt`).
-Facebook benötigt `scraper/cookies.txt` (Netscape-Format) und `scraper/Abonenten-URL.txt`.
+Die aktiven Quellen stehen in den Arrays `Blog`, `Facebook` und `Telegram` von
+`scraper/scraper-config.json` (jeweils `Name`, `URL`, `OutputPath`); mehrere
+Einträge je Quellentyp werden nacheinander verarbeitet. Facebook benötigt
+zusätzlich `scraper/cookies.txt` im Netscape-Format. Die frühere
+`scraper/Abonenten-URL.txt` ist **keine** aktive URL-Quelle mehr. Nach drei
+bereits vorhandenen Artikeln pro Quelle stoppt der Scraper diese Quelle.
 
 ---
 
@@ -472,12 +565,12 @@ article-editor.cjs            Sicheres Lesen/Speichern von Artikel- und Abstract
 bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
 duplicates.cjs                Dublettenerkennung und persistente Entscheidungen
 config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten)
-package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp
+package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp, diff
 test/                         Tests der Hauptanwendung
 public/
 ├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
-├── duplicates.js             Admin-Prüfung und Verknüpfung von Blog-/Facebook-Dubletten
+├── duplicates.js             Admin-Prüfung und Verknüpfung von Blog-/Quellen-Dubletten
 ├── article-editor.js         Dialoglogik für Artikel- und Abstract-Markdown
 ├── markdown-live-preview.js  CodeMirror-Live-Darstellung, Toolbar und Cursor-Navigation
 ├── markdown-commands.mjs     Reine Markdown-Transformationen der Toolbar
@@ -502,7 +595,9 @@ scripts/strip-infographic-categories.js  „Kategorien:“ aus Infografik-.md en
 prompts/*.txt                 Prompt-Bausteine fürs Copy-Menü (Zahl-Präfix = Reihenfolge)
 scraper/                      Eigenständiger Scraper; Tests unter scraper/test/
 tts/                          Text-zu-Sprache-Anbindung; Tests unter tts/test/
-www/<Autor>/<Jahr>/           Inhalte (per .gitignore ausgenommen)
+www/<Autor>/<Jahr>/           Artikel-Markdown, Bilder, Videos, PDFs (Inhalte ignoriert)
+audio/<Autor>/<Jahr>/         Artikel-MP3s mit entsprechendem Dateistamm (ignoriert)
+audio/Hoerbuecher/<Buch>/     Tracks, Cover, eBook, abstract.md, extras/ (ignoriert)
 download/                     Arbeitsordner (ignored)
 users.json                    Nutzer/Rechte (ignored)
 public-directories.txt        Öffentliche Autoren für Gäste
@@ -510,7 +605,7 @@ LXC-container node.js Setup.txt   Server-/Deployment-Doku
 ```
 
 Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
-`www/<Autor>/2*` (Jahresinhalte), `download/`, `users.json`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`,
+`www/<Autor>/2*` (Jahresinhalte), `audio/`, `download/`, `users.json`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`,
 `scraper/cookies.txt`, `scraper/Abonenten-URL.txt`, Logs.
 
 ---
@@ -519,6 +614,7 @@ Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
 
 ```bash
 npm install
+npm install --prefix tts  # nur für die lokale TTS-Anbindung; Node.js >= 22
 
 # Nutzer anlegen: Passwort-Hash erzeugen und in users.json eintragen
 node scripts/hash-passwords.js
@@ -531,7 +627,8 @@ node server.js            # bzw. npm start  →  http://localhost:3000
 ### Tests
 
 Alle Testskripte liegen in `test/`-Unterordnern. Der gemeinsame Einstieg im
-Projektroot führt 16 Node-Testdateien und den Python-Vertragstest aus:
+Projektroot führt die Node-Tests aus `test/`, `scraper/test/`, `epub-tool/test/`
+und `tts/test/` sowie die Python-Tests unter `tts/test/` aus:
 
 ```bash
 npm test
@@ -588,10 +685,12 @@ npx playwright install --with-deps chromium
   ```
 - Reine Änderungen unter `public/` benötigen keinen Serverneustart. Die passende `?v=`-Query in
   `public/index.html` erhöhen, Dateien übertragen und Browser/PWA neu laden bzw. das angebotene
-  PWA-Update anwenden. Änderungen an Editor-Quellen vorher mit `npm run build:editor` bündeln.
+  PWA-Update anwenden. Änderungen an Editor-Quellen vorher mit `npm run build:editor`,
+  Änderungen an der Dubletten-Diff-Quelle mit `npm run build:duplicate-diff` bündeln.
 - Änderungen an `server.js`, `*.cjs`, Abhängigkeiten oder Umgebungsvariablen benötigen einen
   Neustart des Dienstes. Bei geänderter `package.json`/`package-lock.json` vorher in `/opt/nodeapp`
-  `npm install` ausführen.
+  `npm ci` ausführen; die eigenständigen Pakete `scraper/` und `tts/` benötigen
+  ihre eigenen Installationen (`npm ci --prefix scraper`, `npm ci --prefix tts`).
 - **Reindex ohne Neustart**: der Server hat einen `SIGHUP`-Handler, der
   `buildIndex()` auslöst, ohne den Prozess zu beenden — offene Sessions bleiben
   erhalten. Auslösen (als `ralf`, ohne sudo):
@@ -600,7 +699,14 @@ npx playwright install --with-deps chromium
 
 ### Täglicher Scrape per Cron
 
-Wrapper `/opt/nodeapp/scraper/run-scrape.sh` (als `ralf`, danach `chmod +x`):
+Empfohlener Wrapper für `/opt/nodeapp/scraper/run-scrape.sh` (als `ralf`, danach
+`chmod +x`):
+
+**Ist-Zustand des eingecheckten Skripts:** `scraper/run-scrape.sh` führt nach dem
+Scrape derzeit noch `sudo /usr/bin/systemctl restart nodeapp` aus. Das folgende
+Beispiel zeigt die schonendere, aber in dieser Datei noch **nicht umgesetzte**
+Umstellung auf `SIGHUP`. Vor dem Einsatz die tatsächlich installierte
+Produktionsdatei prüfen; ihr Stand ist hier nicht bestätigt.
 
 ```bash
 #!/usr/bin/env bash
@@ -616,7 +722,8 @@ PID=$(systemctl show -p MainPID --value nodeapp)
 [ "${PID:-0}" -gt 0 ] && kill -HUP "$PID"
 ```
 
-Crontab von `ralf` (`crontab -e`), täglich 04:30 (Server läuft auf **UTC**):
+Crontab von `ralf` (`crontab -e`), täglich 04:30 **UTC** (nicht durchgehend
+04:30 Uhr deutscher Ortszeit):
 
 ```cron
 30 4 * * * /opt/nodeapp/scraper/run-scrape.sh

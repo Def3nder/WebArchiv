@@ -39,6 +39,8 @@ let lastListPosition = null;
 let lastDetailPosition = null;
 let restoringSessionView = false;
 let sessionViewSaveTimer = null;
+let pendingLoginDeepLink = null;
+const APP_VIEW_HISTORY_STATE = { webarchivView: true };
 let layoutChangeGeneration = 0;
 let cardPreviewObserver = null;
 let cardPreviewFrame = 0;
@@ -585,7 +587,7 @@ function showFullscreenImage(index) {
   document.getElementById('img-fullscreen-download').href = url;
   prepareImageFile(url);
   if (fsGallery.articleId && count > 1) {
-    history.replaceState(null, '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
+    history.replaceState(APP_VIEW_HISTORY_STATE, '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
   }
 }
 function openGalleryFullscreen(urls, index = 0, articleId = null, bounded = false) {
@@ -603,7 +605,7 @@ function closeImageFullscreen() {
   document.getElementById('img-fullscreen').hidden = true;
   resetImageZoom();
   if (fsGallery.articleId && location.hash.includes('?bild=')) {
-    history.replaceState(null, '', `#/article/${sanitizeForId(fsGallery.articleId)}`);
+    history.replaceState(APP_VIEW_HISTORY_STATE, '', `#/article/${sanitizeForId(fsGallery.articleId)}`);
   }
   fsGallery.articleId = null;
   fsGallery.bounded = false;
@@ -625,6 +627,12 @@ function parseArticleHash(hash) {
   const [rawId, query = ''] = hash.slice('#/article/'.length).split('?');
   const image = parseInt(new URLSearchParams(query).get('bild'), 10);
   return { id: decodeURIComponent(rawId), image: image > 0 ? image : null };
+}
+
+function startupArticleLink() {
+  // Ein vom Archiv selbst gesetzter Hash ist die alte Browseradresse, kein neu
+  // aufgerufener Artikellink. Nur ein externer Link überstimmt den Speicherstand.
+  return history.state?.webarchivView ? null : parseArticleHash(location.hash);
 }
 
 function updateNavButtons() {
@@ -756,6 +764,19 @@ async function ensurePasswordChanged() {
   return false;
 }
 
+function clearActiveViewForAccountSwitch() {
+  if (typeof closeBookReader === 'function') closeBookReader();
+  if (typeof closeBookExtras === 'function') closeBookExtras(false);
+  if (!document.getElementById('img-fullscreen').hidden) closeImageFullscreen();
+  $overlay.hidden = true;
+  $detail.replaceChildren();
+  document.body.style.overflow = '';
+  currentViewItemId = '';
+  lastDetailPosition = null;
+  stopAudio();
+  stopVideo();
+}
+
 async function login(email, password) {
   $loginSubmit.disabled = true;
   $loginBtnText.textContent = '…';
@@ -774,11 +795,15 @@ async function login(email, password) {
       $loginEmail.focus();
       return;
     }
+    // Die Gastansicht darf weder sichtbar bleiben noch ihren Hash als neuen
+    // Deep-Link in die persönliche Sitzungsansicht hinübertragen.
+    clearActiveViewForAccountSwitch();
     currentUser = data;
     hideLogin();
     applyUserUI(currentUser);
     if (!(await ensurePasswordChanged())) return;
-    await restoreSessionView();
+    await restoreSessionView({ explicitDeepLink: pendingLoginDeepLink });
+    pendingLoginDeepLink = null;
   } catch {
     $loginError.textContent = 'Netzwerkfehler. Bitte erneut versuchen.';
     $loginError.hidden = false;
@@ -792,7 +817,10 @@ async function login(email, password) {
 async function logout() {
   // Hörposition vor dem Abmelden sichern und Wiedergabe beenden.
   if (typeof bookPlayerClose === 'function') await bookPlayerClose();
+  clearActiveViewForAccountSwitch();
   clearCurrentViewState(currentUser);
+  pendingLoginDeepLink = null;
+  history.replaceState(APP_VIEW_HISTORY_STATE, '', '#/');
   try { await fetch('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
   // Auf Guest-User umstellen (oder null, falls keine Public-Autoren konfiguriert)
   try {
@@ -1194,15 +1222,15 @@ async function openArticle(id, {
 
   // Beim Wiederherstellen/Zurücknavigieren keinen zusätzlichen Verlaufseintrag erzeugen.
   const articleHash = `#/article/${sanitizeForId(id)}`;
-  if (historyMode === 'replace') history.replaceState(null, '', articleHash);
-  else if (historyMode === 'push') history.pushState(null, '', articleHash);
+  if (historyMode === 'replace') history.replaceState(APP_VIEW_HISTORY_STATE, '', articleHash);
+  else if (historyMode === 'push') history.pushState(APP_VIEW_HISTORY_STATE, '', articleHash);
 
   try {
     const article = await fetchArticle(id);
     // Eine gruppierte Infografik liefert ihre Gruppe (requestedId = angefragtes Bild).
     state.currentArticleIdx = state.currentItems.findIndex(a => a.id === id);
     if (state.currentArticleIdx < 0) state.currentArticleIdx = state.currentItems.findIndex(a => a.id === article.id);
-    if (article.id !== id) history.replaceState(null, '', `#/article/${sanitizeForId(article.id)}`);
+    if (article.id !== id) history.replaceState(APP_VIEW_HISTORY_STATE, '', `#/article/${sanitizeForId(article.id)}`);
     currentViewItemId = article.id;
     updateNavButtons();
     renderDetail(article);
@@ -1235,6 +1263,7 @@ async function openArticle(id, {
       $overlay.hidden = true;
       stopAudio();
       stopVideo();
+      pendingLoginDeepLink = parseArticleHash(location.hash);
       showLogin('Dieser Artikel ist geschützt. Bitte melden Sie sich an.');
       return false;
     }
@@ -1243,7 +1272,7 @@ async function openArticle(id, {
       document.body.style.overflow = '';
       currentViewItemId = '';
       lastDetailPosition = null;
-      history.replaceState(null, '', '#/');
+      history.replaceState(APP_VIEW_HISTORY_STATE, '', '#/');
       return false;
     }
     $detail.innerHTML = `<div style="padding:40px"><p>Artikel nicht gefunden.</p></div>`;
@@ -1261,7 +1290,7 @@ function closeOverlay() {
   lastDetailPosition = null;
   stopAudio();
   stopVideo();
-  history.pushState(null, '', '#/');
+  history.pushState(APP_VIEW_HISTORY_STATE, '', '#/');
   // Hörfortschritt und „zuletzt gehört“ in der Liste auffrischen.
   if (isBookMode()) loadArticles();
   // Lesezeichen-Ansicht: entfernte Lesezeichen erst nach dem Schließen aus der Liste
@@ -1960,9 +1989,11 @@ function applySavedFilterControls() {
   applyBookMode();
 }
 
-async function restoreSessionView() {
-  const explicitDeepLink = parseArticleHash(location.hash);
-  const saved = sessionViewStore?.load(deviceStorage(), currentUser);
+async function restoreSessionView({ explicitDeepLink = null } = {}) {
+  // Ein neues Konto ohne Speicherstand startet mit Standardfiltern, nicht mit
+  // den gerade sichtbaren Gastfiltern.
+  const saved = sessionViewStore?.load(deviceStorage(), currentUser)
+    || sessionViewStore?.normalize({ version: sessionViewStore.VERSION });
   restoringSessionView = true;
   try {
     applySavedListState(saved);
@@ -2009,7 +2040,7 @@ async function restoreSessionView() {
         }
       }
     } else if (!explicitDeepLink) {
-      history.replaceState(null, '', '#/');
+      history.replaceState(APP_VIEW_HISTORY_STATE, '', '#/');
     }
   } finally {
     restoringSessionView = false;
@@ -3530,7 +3561,7 @@ document.addEventListener('click', async e => {
 // Handle back button
 window.addEventListener('popstate', () => {
   if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) {
-    history.pushState(null, '', articleEditorState.url);
+    history.pushState(APP_VIEW_HISTORY_STATE, '', articleEditorState.url);
     return;
   }
   const hash = location.hash;
@@ -3618,12 +3649,13 @@ async function init() {
   // Wenn weder Session noch Public-Autoren konfiguriert → 401 fällt nicht mehr,
   // sondern /api/me liefert weiterhin guest. Wenn /api/me wirklich fehlschlug → Login.
   if (!currentUser) {
+    pendingLoginDeepLink = startupArticleLink();
     showLogin();
     return;
   }
   if (!(await ensurePasswordChanged())) return;
 
-  await restoreSessionView();
+  await restoreSessionView({ explicitDeepLink: startupArticleLink() });
 }
 
 init();

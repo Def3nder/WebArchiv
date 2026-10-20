@@ -1,4 +1,4 @@
-// Admin-Arbeitsbereich zum Sichten und gebündelten Verknüpfen von Blog-/Facebook-Dubletten.
+// Admin-Arbeitsbereich zum Sichten und gebündelten Verknüpfen von Blog-/Quellen-Dubletten.
 'use strict';
 
 const DUPLICATE_SELECTION_KEY = 'webarchiv-duplicate-selection-v1';
@@ -9,7 +9,8 @@ const duplicateUi = {
   tab: 'pending',
   detail: null,
   busy: false,
-  filters: { score: 'all', infographics: 'all' },
+  filters: { score: 'all', infographics: 'all', authors: null },
+  authorOptionsKey: '',
   selection: new Set(),
   listScrollTop: 0,
   mobileSide: 'blog',
@@ -19,14 +20,20 @@ const duplicateUi = {
 };
 
 const duplicateDialog = document.getElementById('duplicate-review');
+const duplicateChrome = document.getElementById('duplicate-chrome');
 const duplicateContent = document.getElementById('duplicate-content');
 const duplicateDetailDialog = document.getElementById('duplicate-detail-dialog');
 const duplicateDetailContent = document.getElementById('duplicate-detail-content');
 const duplicateStatus = document.getElementById('duplicate-status');
 const duplicateMenuCount = document.getElementById('duplicate-menu-count');
 const duplicateTools = document.getElementById('duplicate-tools');
-const duplicateScoreFilter = document.getElementById('duplicate-score-filter');
-const duplicateInfographicFilter = document.getElementById('duplicate-infographic-filter');
+const duplicateSelectionTools = document.getElementById('duplicate-selection-tools');
+const duplicateAuthorNative = document.getElementById('duplicate-author-native');
+const duplicateScoreNative = document.getElementById('duplicate-score-native');
+const duplicateInfographicNative = document.getElementById('duplicate-infographic-native');
+const duplicateAuthorFilterLabel = document.getElementById('duplicate-author-filter-label');
+const duplicateAuthorOptions = document.getElementById('duplicate-author-options');
+const duplicateFilterMenus = [...document.querySelectorAll('[data-duplicate-filter-menu]')];
 const duplicateSelectionCount = document.getElementById('duplicate-selection-count');
 const duplicateSelectAll = document.getElementById('duplicate-select-all');
 const duplicateSelectNone = document.getElementById('duplicate-select-none');
@@ -40,6 +47,70 @@ const duplicateImageViewerCounter = document.getElementById('duplicate-image-vie
 const duplicateImageViewerPrev = document.getElementById('duplicate-image-viewer-prev');
 const duplicateImageViewerNext = document.getElementById('duplicate-image-viewer-next');
 
+// Wie die Navigation der Kachelansicht: beim Abwärtsscrollen mitlaufen,
+// nach 24 px Aufwärtsbewegung wieder vollständig einblenden.
+const DUPLICATE_CHROME_SCROLL_THRESHOLD = 24;
+let duplicateChromeOffset = 0;
+let duplicateLastScrollTop = 0;
+let duplicateChromeDirection = 0;
+let duplicateChromeTravel = 0;
+let duplicateChromeFrame = 0;
+let duplicateChromeScrollPaused = false;
+
+function setDuplicateChromeOffset(offset, returning = false) {
+  const height = Math.max(1, duplicateChrome.offsetHeight);
+  duplicateChromeOffset = Math.max(0, Math.min(height, offset));
+  duplicateChrome.classList.toggle('is-returning', returning);
+  duplicateChrome.style.setProperty('--duplicate-chrome-translate', `${-duplicateChromeOffset}px`);
+}
+
+function showDuplicateChrome(returning = false) {
+  setDuplicateChromeOffset(0, returning && duplicateChromeOffset > 0);
+  duplicateChromeDirection = 0;
+  duplicateChromeTravel = 0;
+}
+
+function updateDuplicateChromeHeight() {
+  const previousHeight = parseFloat(duplicateDialog.style.getPropertyValue('--duplicate-chrome-height')) || 0;
+  const height = duplicateChrome.offsetHeight;
+  if (!height) return;
+  duplicateDialog.style.setProperty('--duplicate-chrome-height', `${height}px`);
+  if (duplicateChromeOffset > height
+      || (previousHeight > 0 && duplicateChromeOffset >= previousHeight - 1)) setDuplicateChromeOffset(height);
+}
+
+function updateDuplicateChromeOnScroll() {
+  duplicateChromeFrame = 0;
+  const current = duplicateContent.scrollTop;
+  const delta = current - duplicateLastScrollTop;
+  duplicateLastScrollTop = current;
+  if (!duplicateDialog.open || duplicateChromeScrollPaused) return;
+  if (current <= 8 || duplicateFilterMenus.some(root => !root.querySelector('[role="menu"]').hidden)) {
+    showDuplicateChrome(duplicateChromeOffset > 0);
+    return;
+  }
+  if (Math.abs(delta) < 1) return;
+  const direction = Math.sign(delta);
+  if (direction !== duplicateChromeDirection) {
+    duplicateChromeDirection = direction;
+    duplicateChromeTravel = 0;
+  }
+  if (direction > 0) {
+    duplicateChromeTravel = 0;
+    setDuplicateChromeOffset(duplicateChromeOffset + delta);
+    return;
+  }
+  duplicateChromeTravel += Math.abs(delta);
+  if (duplicateChromeTravel >= DUPLICATE_CHROME_SCROLL_THRESHOLD) showDuplicateChrome(true);
+}
+
+duplicateContent.addEventListener('scroll', () => {
+  if (!duplicateChromeFrame) duplicateChromeFrame = requestAnimationFrame(updateDuplicateChromeOnScroll);
+}, { passive: true });
+duplicateChrome.addEventListener('focusin', () => showDuplicateChrome(true));
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(updateDuplicateChromeHeight).observe(duplicateChrome);
+window.addEventListener('resize', updateDuplicateChromeHeight);
+
 function duplicateEsc(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -50,6 +121,15 @@ function duplicateDate(value) {
   if (!value) return 'ohne Datum';
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('de-DE');
+}
+
+function duplicateSourceLabel(article) {
+  return String(article?.author || 'Quelle').trim() || 'Quelle';
+}
+
+function duplicateSourceAuthors() {
+  return Array.isArray(duplicateUi.data.config?.facebookAuthors)
+    ? duplicateUi.data.config.facebookAuthors : [];
 }
 
 function duplicateRequest(url, options = {}) {
@@ -105,7 +185,7 @@ function duplicateInfographics(article) {
 
 function duplicateInfographicGallery(article, side) {
   const items = duplicateInfographics(article);
-  const sideLabel = side === 'blog' ? 'Blog' : 'Facebook';
+  const sideLabel = side === 'blog' ? 'Blog' : duplicateEsc(duplicateSourceLabel(article));
   return `<details class="duplicate-infographic-gallery" data-duplicate-infographic-side="${side}" aria-label="${sideLabel}-Infografiken"${duplicateUi.infographicsOpen ? ' open' : ''}>
     <summary class="duplicate-infographic-heading"><strong>Infografiken</strong><span>${duplicateInfographicLabel(article)}</span></summary>
     <div class="duplicate-infographic-thumbs">
@@ -132,7 +212,7 @@ function renderDuplicateImageViewer() {
   if (!items.length) return duplicateImageViewer.close();
   duplicateUi.viewerIndex = Math.max(0, Math.min(duplicateUi.viewerIndex, items.length - 1));
   const item = items[duplicateUi.viewerIndex];
-  const sideLabel = item.side === 'blog' ? 'Blog' : 'Facebook';
+  const sideLabel = item.side === 'blog' ? 'Blog' : duplicateSourceLabel(duplicateUi.detail.facebook);
   duplicateImageViewerImage.src = item.imageUrl;
   duplicateImageViewerImage.alt = `${sideLabel}-Infografik ${item.sideIndex + 1} von ${item.sideCount}`;
   duplicateImageViewerSide.textContent = `${sideLabel.toUpperCase()} · INFOGRAFIK ${item.sideIndex + 1} VON ${item.sideCount}`;
@@ -162,7 +242,7 @@ function duplicateArticleMini(article, side) {
   if (!article) return `<article class="duplicate-side is-missing"><p>Artikel fehlt</p></article>`;
   return `<article class="duplicate-side duplicate-side-${side}">
     <div class="duplicate-side-copy">
-      <div class="duplicate-side-kicker"><span class="duplicate-source">${side === 'blog' ? 'BLOG · ORIGINAL' : 'FACEBOOK · QUELLE'}</span><span class="duplicate-infographic-count">${duplicateInfographicLabel(article)}</span></div>
+      <div class="duplicate-side-kicker"><span class="duplicate-source">${side === 'blog' ? 'BLOG · ORIGINAL' : `${duplicateEsc(duplicateSourceLabel(article).toLocaleUpperCase('de-DE'))} · QUELLE`}</span><span class="duplicate-infographic-count">${duplicateInfographicLabel(article)}</span></div>
       <h3>${duplicateEsc(article.title)}</h3>
       <p class="duplicate-meta">${duplicateDate(article.date)}${article.hasOwnImage ? ' · mit Artikelbild' : ''}</p>
       <p class="duplicate-excerpt">${duplicateEsc(article.excerpt || '')}</p>
@@ -208,7 +288,7 @@ function duplicateActions(item, status, { detail = false } = {}) {
     const hasInfographic = (Number(item.facebook?.infographicCount) || 0) > 0;
     return `<div class="duplicate-actions" ${attrs}>
       ${detail ? '' : '<button type="button" class="duplicate-btn" data-duplicate-action="inspect">Prüfen</button>'}
-      <button type="button" class="duplicate-btn" data-duplicate-action="migrate"${hasInfographic ? '' : ' disabled title="Keine Facebook-Infografik vorhanden"'}>Infografik migrieren</button>
+      <button type="button" class="duplicate-btn" data-duplicate-action="migrate"${hasInfographic ? '' : ' disabled title="Keine Quell-Infografik vorhanden"'}>Infografik migrieren</button>
       <button type="button" class="duplicate-btn is-danger" data-duplicate-action="reset">Verknüpfung lösen</button>
     </div>`;
   }
@@ -221,7 +301,10 @@ function duplicateActions(item, status, { detail = false } = {}) {
 function duplicateCard(item, status) {
   const key = duplicatePairKey(item);
   const selected = duplicateUi.selection.has(key);
-  const score = item.score == null ? '' : `${Math.round(item.score * 100)} %`;
+  const similarity = Number(item.score);
+  const score = item.score == null ? '' : item.exact ? '100 %' : similarity >= 1 ? '< 100 %'
+    : similarity >= 0.995 ? `${(similarity * 100).toFixed(1).replace('.', ',')} %`
+      : `${Math.round(similarity * 100)} %`;
   const notes = status === 'pending' ? item.reasons || [] : [
     item.changed ? 'Seit der Entscheidung geändert' : (status === 'linked' ? 'Bestätigt verknüpft' : 'Bewusst ignoriert'),
     item.updatedAt ? `am ${new Date(item.updatedAt).toLocaleDateString('de-DE')}` : '',
@@ -229,7 +312,7 @@ function duplicateCard(item, status) {
   return `<article class="duplicate-card${item.changed ? ' is-changed' : ''}${selected ? ' is-selected' : ''}" ${duplicatePairAttrs(item)}>
     <header class="duplicate-card-head">
       ${status === 'pending' ? `<label class="duplicate-select"><input type="checkbox" data-duplicate-select ${selected ? 'checked' : ''}><span>Auswählen</span></label>` : ''}
-      <div class="duplicate-score"><strong>${duplicateEsc(score || (status === 'linked' ? '✓' : '–'))}</strong><span>${score ? 'Übereinstimmung' : status === 'linked' ? 'verknüpft' : 'Entscheidung'}</span></div>
+      <div class="duplicate-score" ${item.exact ? 'title="Gleiche normalisierte Wortfolge; Absätze und Satzzeichen können abweichen"' : ''}><strong>${duplicateEsc(score || (status === 'linked' ? '✓' : '–'))}</strong><span>${score ? item.exact ? 'Wortfolge gleich' : 'Übereinstimmung' : status === 'linked' ? 'verknüpft' : 'Entscheidung'}</span></div>
       <div class="duplicate-reasons">${notes.map(note => `<span>${duplicateEsc(note)}</span>`).join('')}</div>
       ${status === 'pending' ? duplicateActions(item, status) : ''}
     </header>
@@ -242,45 +325,183 @@ function duplicateCard(item, status) {
   </article>`;
 }
 
+function syncDuplicateAuthorFilter() {
+  const authors = duplicateSourceAuthors();
+  const selected = duplicateUi.filters.authors;
+  const count = selected === null ? authors.length : authors.filter(author => selected.has(author)).length;
+  duplicateAuthorFilterLabel.textContent = count === authors.length ? 'Alle Autoren'
+    : count === 0 ? 'Keine Autoren'
+      : count === 1 ? authors.find(author => selected.has(author)) : `${count} von ${authors.length}`;
+  duplicateAuthorNative.options[0].textContent = duplicateAuthorFilterLabel.textContent;
+  authors.forEach((author, index) => {
+    duplicateAuthorNative.options[index + 3].textContent = `${selected === null || selected.has(author) ? '✓ ' : ''}${author}`;
+  });
+  duplicateAuthorNative.value = '';
+  sizeDuplicateNativeFilter(duplicateAuthorNative);
+  const all = duplicateAuthorOptions.querySelector('[data-duplicate-author-all]');
+  if (all) all.setAttribute('aria-checked', count === authors.length ? 'true' : count === 0 ? 'false' : 'mixed');
+  duplicateAuthorOptions.querySelectorAll('[data-duplicate-author]').forEach(item => {
+    item.setAttribute('aria-checked', String(selected === null || selected.has(item.dataset.duplicateAuthor)));
+  });
+}
+
+function renderDuplicateAuthorFilter() {
+  const authors = duplicateSourceAuthors();
+  const key = JSON.stringify(authors);
+  if (key !== duplicateUi.authorOptionsKey) {
+    duplicateUi.authorOptionsKey = key;
+    duplicateUi.filters.authors = null;
+    duplicateAuthorOptions.innerHTML = `<button type="button" class="header-menu-item duplicate-author-all" role="menuitemcheckbox" aria-checked="true" data-duplicate-author-all>Alle Autoren</button>
+      ${authors.map(author => `<button type="button" class="header-menu-item" role="menuitemcheckbox" aria-checked="true" data-duplicate-author="${duplicateEsc(author)}">${duplicateEsc(author)}</button>`).join('')}`;
+    const summary = new Option('Alle Autoren', '');
+    summary.disabled = true;
+    duplicateAuthorNative.replaceChildren(
+      summary,
+      new Option('Alle Autoren auswählen', 'all'),
+      new Option('Keine Autoren auswählen', 'none'),
+      ...authors.map((author, index) => new Option(author, `author:${index}`)),
+    );
+  }
+  syncDuplicateAuthorFilter();
+}
+
+function syncDuplicateSingleFilters() {
+  for (const root of duplicateFilterMenus) {
+    const filter = root.dataset.duplicateFilterMenu;
+    if (filter === 'authors') continue;
+    const selected = root.querySelector(`[data-duplicate-filter-value="${duplicateUi.filters[filter]}"]`);
+    const trigger = root.querySelector('.filter-menu-trigger');
+    trigger.querySelector('span').textContent = selected?.textContent || '';
+    trigger.title = selected?.textContent || '';
+    root.querySelectorAll('[data-duplicate-filter-value]').forEach(item => {
+      item.setAttribute('aria-checked', String(item === selected));
+    });
+    const native = filter === 'score' ? duplicateScoreNative : duplicateInfographicNative;
+    native.value = duplicateUi.filters[filter];
+    sizeDuplicateNativeFilter(native);
+  }
+}
+
+// Anders als die Optionsliste soll das native Feld nur so breit wie sein
+// aktuell angezeigter Wert sein; die System-Auswahl öffnet trotzdem alle Optionen.
+function sizeDuplicateNativeFilter(select) {
+  const style = getComputedStyle(select);
+  const context = sizeDuplicateNativeFilter.context ||= document.createElement('canvas').getContext('2d');
+  if (!context) return;
+  context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  const inset = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+    .reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0);
+  const label = select.selectedOptions[0]?.textContent || '';
+  select.style.width = `${Math.ceil(context.measureText(label).width + inset + 4)}px`;
+}
+
+function chooseDuplicateAuthors(choice) {
+  const authors = duplicateSourceAuthors();
+  if (choice === 'all') duplicateUi.filters.authors = null;
+  else if (choice === 'none') duplicateUi.filters.authors = new Set();
+  else if (choice === 'toggle-all') duplicateUi.filters.authors = duplicateUi.filters.authors === null ? new Set() : null;
+  else {
+    if (!authors.includes(choice)) return;
+    const selected = new Set(duplicateUi.filters.authors === null ? authors : duplicateUi.filters.authors);
+    if (selected.has(choice)) selected.delete(choice);
+    else selected.add(choice);
+    duplicateUi.filters.authors = selected.size === authors.length ? null : selected;
+  }
+  syncDuplicateAuthorFilter();
+  duplicateUi.listScrollTop = 0;
+  renderDuplicateList();
+}
+
+function closeDuplicateFilterMenu(root, restoreFocus = false) {
+  const trigger = root.querySelector('.filter-menu-trigger');
+  root.querySelector('[role="menu"]').hidden = true;
+  trigger.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) trigger.focus();
+}
+
+function closeDuplicateFilterMenus(except = null) {
+  duplicateFilterMenus.forEach(root => {
+    if (root !== except) closeDuplicateFilterMenu(root);
+  });
+}
+
+function openDuplicateFilterMenu(root, focusSelection = false) {
+  closeDuplicateFilterMenus(root);
+  const menu = root.querySelector('[role="menu"]');
+  menu.hidden = false;
+  root.querySelector('.filter-menu-trigger').setAttribute('aria-expanded', 'true');
+  requestAnimationFrame(() => {
+    if (menu.hidden) return;
+    menu.style.transform = '';
+    const rect = menu.getBoundingClientRect();
+    const margin = 8;
+    const shift = rect.left < margin ? margin - rect.left
+      : rect.right > window.innerWidth - margin ? window.innerWidth - margin - rect.right : 0;
+    if (shift) menu.style.transform = `translateX(${Math.round(shift)}px)`;
+    if (focusSelection) (menu.querySelector('[aria-checked="true"]') || menu.querySelector('.header-menu-item'))?.focus();
+  });
+}
+
+function moveDuplicateFilterFocus(menu, direction) {
+  const items = [...menu.querySelectorAll('.header-menu-item:not(:disabled)')];
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement);
+  const next = direction === 'first' ? 0 : direction === 'last' ? items.length - 1
+    : (current + direction + items.length) % items.length;
+  items[next].focus();
+}
+
+function duplicateAuthorMatches(item) {
+  return duplicateUi.filters.authors === null
+    || duplicateUi.filters.authors.has(item.facebook?.author);
+}
+
 function duplicateVisiblePending() {
   const minimum = duplicateUi.filters.score === 'all' ? 0 : Number(duplicateUi.filters.score) / 100;
   return duplicateUi.data.pending.filter(item => {
     const scoreMatch = duplicateUi.filters.score === '100'
-      ? !!item.exact || Number(item.score) >= 0.9995
+      ? !!item.exact
       : Number(item.score) >= minimum;
     const count = Number(item.facebook?.infographicCount) || 0;
     const infographicMatch = duplicateUi.filters.infographics === 'all'
       || (duplicateUi.filters.infographics === 'with' && count > 0)
       || (duplicateUi.filters.infographics === 'without' && count === 0);
-    return scoreMatch && infographicMatch;
+    return duplicateAuthorMatches(item) && scoreMatch && infographicMatch;
   });
+}
+
+function duplicateVisibleItems(tab) {
+  return tab === 'pending' ? duplicateVisiblePending()
+    : (duplicateUi.data[tab] || []).filter(duplicateAuthorMatches);
 }
 
 function duplicateEmpty(tab, filtered = false) {
   const copy = filtered
-    ? ['Keine Treffer für diese Filter', 'Passe Übereinstimmung oder Infografikfilter an.']
+    ? ['Keine Treffer für diese Filter', 'Passe den Autor oder die übrigen Filter an.']
     : {
       pending: ['Keine offenen Treffer', 'Nach dem nächsten Einlesen erscheinen hier neue, ausreichend ähnliche Artikelpaare.'],
-      linked: ['Noch nichts verknüpft', 'Bestätigte Blog–Facebook-Paare werden hier dauerhaft dokumentiert.'],
+      linked: ['Noch nichts verknüpft', 'Bestätigte Blog–Quellen-Paare werden hier dauerhaft dokumentiert.'],
       ignored: ['Keine ignorierten Treffer', 'Bewusst getrennte Artikel können hier wieder zur Prüfung freigegeben werden.'],
     }[tab];
   return `<div class="duplicate-empty"><span>◎</span><h3>${copy[0]}</h3><p>${copy[1]}</p></div>`;
 }
 
 function updateDuplicateStatus() {
+  const visible = duplicateVisibleItems(duplicateUi.tab).length;
+  const total = duplicateUi.data[duplicateUi.tab]?.length || 0;
   if (duplicateUi.tab === 'pending') {
-    const visible = duplicateVisiblePending().length;
-    const total = duplicateUi.data.pending.length;
     duplicateStatus.textContent = `${visible} von ${total} offenen Treffern sichtbar · Auswahl bleibt im Browser gespeichert`;
   } else {
-    const count = duplicateUi.data[duplicateUi.tab]?.length || 0;
-    duplicateStatus.textContent = `${count} ${duplicateUi.tab === 'linked' ? 'verknüpfte' : 'ignorierte'} Treffer`;
+    duplicateStatus.textContent = `${visible} von ${total} ${duplicateUi.tab === 'linked' ? 'verknüpften' : 'ignorierten'} Treffern sichtbar`;
   }
 }
 
 function updateDuplicateTools() {
   const pending = duplicateUi.tab === 'pending' && !duplicateUi.detail;
-  duplicateTools.hidden = !pending;
+  duplicateTools.hidden = !!duplicateUi.detail;
+  duplicateTools.dataset.tab = duplicateUi.tab;
+  duplicateSelectionTools.hidden = !pending;
+  duplicateTools.querySelectorAll('.duplicate-pending-filter').forEach(filter => { filter.hidden = !pending; });
   if (!pending) return;
   const selected = selectedDuplicateItems();
   const withInfographics = selected.filter(item => Number(item.facebook?.infographicCount) > 0).length;
@@ -292,22 +513,33 @@ function updateDuplicateTools() {
 }
 
 function renderDuplicateList({ restoreScroll = false } = {}) {
+  duplicateChromeScrollPaused = true;
   duplicateUi.detail = null;
   const allItems = duplicateUi.data[duplicateUi.tab] || [];
-  const items = duplicateUi.tab === 'pending' ? duplicateVisiblePending() : allItems;
+  const items = duplicateVisibleItems(duplicateUi.tab);
   duplicateContent.innerHTML = items.length
     ? `<div class="duplicate-stack">${items.map(item => duplicateCard(item, duplicateUi.tab)).join('')}</div>`
-    : duplicateEmpty(duplicateUi.tab, duplicateUi.tab === 'pending' && allItems.length > 0);
+    : duplicateEmpty(duplicateUi.tab, allItems.length > 0);
   updateDuplicateStatus();
   updateDuplicateTools();
-  if (restoreScroll) requestAnimationFrame(() => { duplicateContent.scrollTop = duplicateUi.listScrollTop; });
+  updateDuplicateChromeHeight();
+  if (!restoreScroll) {
+    duplicateContent.scrollTop = 0;
+    duplicateLastScrollTop = 0;
+    showDuplicateChrome(duplicateChromeOffset > 0);
+  }
+  requestAnimationFrame(() => {
+    if (restoreScroll) duplicateContent.scrollTop = duplicateUi.listScrollTop;
+    duplicateLastScrollTop = duplicateContent.scrollTop;
+    duplicateChromeScrollPaused = false;
+  });
 }
 
 function duplicateDiffLine(row) {
   const sign = row.kind === 'removed' ? '−' : row.kind === 'added' ? '+' : ' ';
   return `<div class="duplicate-diff-line is-${row.kind}">
-    <span class="duplicate-diff-number" title="Facebook-Zeile">${row.facebookNumber ?? ''}</span>
-    <span class="duplicate-diff-number" title="Blog-Zeile">${row.blogNumber ?? ''}</span>
+    <span class="duplicate-diff-number" title="Quell-Abschnitt">${row.facebookNumber ?? ''}</span>
+    <span class="duplicate-diff-number" title="Blog-Abschnitt">${row.blogNumber ?? ''}</span>
     <span class="duplicate-diff-sign" aria-hidden="true">${sign}</span>
     <span class="duplicate-diff-text">${row.html}</span>
   </div>`;
@@ -324,7 +556,7 @@ function duplicateComparisonRows(pair) {
     if (row.kind === 'identical') return `<div class="duplicate-comparison-message is-identical">${duplicateEsc(row.text)}</div>`;
     if (row.kind === 'fold') {
       return `<details class="duplicate-diff-fold">
-        <summary><span class="duplicate-diff-fold-arrow" aria-hidden="true">▸</span><strong>${row.count} unveränderte Zeile${row.count === 1 ? '' : 'n'}</strong><span class="duplicate-diff-fold-label">Aufklappen</span><span class="duplicate-diff-fold-label is-open">Zuklappen</span></summary>
+        <summary><span class="duplicate-diff-fold-arrow" aria-hidden="true">▸</span><strong>${row.count} unveränderte${row.count === 1 ? 'r Abschnitt' : ' Abschnitte'}</strong><span class="duplicate-diff-fold-label">Aufklappen</span><span class="duplicate-diff-fold-label is-open">Zuklappen</span></summary>
         <div class="duplicate-diff-fold-lines">${row.lines.map(duplicateDiffLine).join('')}</div>
       </details>`;
     }
@@ -336,21 +568,23 @@ function renderDuplicateDetail(pair) {
   duplicateUi.detail = pair;
   duplicateTools.hidden = true;
   const migration = pair.migration || [];
+  const sourceLabel = duplicateEsc(duplicateSourceLabel(pair.facebook));
+  const sourceKicker = duplicateEsc(duplicateSourceLabel(pair.facebook).toLocaleUpperCase('de-DE'));
   duplicateDetailContent.innerHTML = `<div class="duplicate-detail" data-mobile-side="${duplicateUi.mobileSide}">
     <div class="duplicate-detail-nav">
       <button type="button" class="duplicate-back" data-duplicate-action="back">← Zur Trefferliste</button>
-      <button type="button" class="duplicate-diff-toggle" data-duplicate-action="toggle-differences" aria-pressed="${duplicateUi.onlyDifferences}" title="Unveränderte Textblöcke mit je einem Kontextblock einklappen">Nur Unterschiede</button>
+      <button type="button" class="duplicate-diff-toggle" data-duplicate-action="toggle-differences" aria-pressed="${duplicateUi.onlyDifferences}" title="Unveränderte Textabschnitte bis auf je einen Kontextabschnitt einklappen">Nur Unterschiede</button>
       <div class="duplicate-detail-switch" role="tablist" aria-label="Artikelkopf und Infografiken">
         <button type="button" role="tab" data-duplicate-action="mobile-side" data-side="blog" aria-selected="${duplicateUi.mobileSide === 'blog'}">Blog</button>
-        <button type="button" role="tab" data-duplicate-action="mobile-side" data-side="facebook" aria-selected="${duplicateUi.mobileSide === 'facebook'}">Facebook</button>
+        <button type="button" role="tab" data-duplicate-action="mobile-side" data-side="facebook" aria-selected="${duplicateUi.mobileSide === 'facebook'}">${sourceLabel}</button>
       </div>
     </div>
     <div class="duplicate-detail-header-grid">
       <article data-duplicate-side="blog"><span class="duplicate-source">BLOG · ORIGINAL</span><h3 title="${duplicateEsc(pair.blog.title)}">${duplicateEsc(pair.blog.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.blog.date)}</p>${duplicateInfographicGallery(pair.blog, 'blog')}</article>
-      <article data-duplicate-side="facebook"><span class="duplicate-source">FACEBOOK · QUELLE</span><h3 title="${duplicateEsc(pair.facebook.title)}">${duplicateEsc(pair.facebook.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.facebook.date)}</p>${duplicateInfographicGallery(pair.facebook, 'facebook')}</article>
+      <article data-duplicate-side="facebook"><span class="duplicate-source">${sourceKicker} · QUELLE</span><h3 title="${duplicateEsc(pair.facebook.title)}">${duplicateEsc(pair.facebook.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.facebook.date)}</p>${duplicateInfographicGallery(pair.facebook, 'facebook')}</article>
     </div>
-    <div class="duplicate-comparison-scroll" tabindex="0" aria-label="Änderungen zwischen Facebook und Blog">
-      <div class="duplicate-diff-legend"><span class="is-removed">− Nur Facebook</span><span class="is-added">+ Nur Blog</span><small>Zeilen: Facebook · Blog</small></div>
+    <div class="duplicate-comparison-scroll" tabindex="0" aria-label="Änderungen zwischen ${sourceLabel} und Blog">
+      <div class="duplicate-diff-legend"><span class="is-removed">− Nur ${sourceLabel}</span><span class="is-added">+ Nur Blog</span><small>Abschnitte: ${sourceLabel} · Blog</small></div>
       <div class="duplicate-comparison-rows">${duplicateComparisonRows(pair)}</div>
     </div>
     ${migration.length ? `<details class="duplicate-migration-note">
@@ -401,6 +635,8 @@ async function loadDuplicates({ quiet = false, restoreScroll = false } = {}) {
   if (!quiet) duplicateStatus.textContent = 'Treffer werden geladen …';
   const data = await duplicateRequest('/api/duplicates');
   duplicateUi.data = data;
+  renderDuplicateAuthorFilter();
+  syncDuplicateSingleFilters();
   pruneDuplicateSelection();
   updateDuplicateCounts();
   if (!duplicateDetailDialog.open) renderDuplicateList({ restoreScroll });
@@ -410,7 +646,7 @@ async function inspectDuplicate(blogId, facebookId) {
   duplicateUi.listScrollTop = duplicateContent.scrollTop;
   duplicateStatus.textContent = 'Artikelvergleich wird geladen …';
   const pair = await duplicateRequest(`/api/duplicates/compare?blogId=${encodeURIComponent(blogId)}&facebookId=${encodeURIComponent(facebookId)}`);
-  duplicateStatus.textContent = 'Abweichende Wörter sind markiert. Auf dem Smartphone wechselst du zwischen Blog und Facebook.';
+  duplicateStatus.textContent = `Abweichende Wörter sind markiert. Auf dem Smartphone wechselst du zwischen Blog und ${duplicateSourceLabel(pair.facebook)}.`;
   duplicateUi.mobileSide = 'blog';
   renderDuplicateDetail(pair);
 }
@@ -444,7 +680,7 @@ async function linkSelectedDuplicates(migrateImages = false) {
   if (!items.length) return;
   const infographicPairs = selectedDuplicateItems().filter(item => Number(item.facebook?.infographicCount) > 0).length;
   const message = migrateImages
-    ? `${items.length} ausgewählte Paare verknüpfen und die Infografiken von ${infographicPairs} Facebook-Beiträgen umbenennen?`
+    ? `${items.length} ausgewählte Paare verknüpfen und die Infografiken von ${infographicPairs} Quellbeiträgen umbenennen?`
     : `${items.length} ausgewählte Paare jetzt verknüpfen?`;
   if (!window.confirm(message)) return;
 
@@ -477,6 +713,10 @@ async function openDuplicateReview() {
   duplicateUi.tab = 'pending';
   duplicateUi.detail = null;
   duplicateDialog.showModal();
+  showDuplicateChrome();
+  updateDuplicateChromeHeight();
+  duplicateContent.scrollTop = 0;
+  duplicateLastScrollTop = 0;
   duplicateContent.innerHTML = '<div class="duplicate-loading"><span class="spinner"></span></div>';
   try { await loadDuplicates(); }
   catch (error) {
@@ -515,7 +755,9 @@ document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || ![duplicateDialog, duplicateDetailDialog, duplicateImageViewer].some(dialog => dialog.open)) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  closeTopDuplicateDialog();
+  const openMenu = duplicateFilterMenus.find(root => !root.querySelector('[role="menu"]').hidden);
+  if (openMenu) closeDuplicateFilterMenu(openMenu, true);
+  else closeTopDuplicateDialog();
 }, true);
 for (const dialog of [duplicateDialog, duplicateDetailDialog, duplicateImageViewer]) {
   dialog.addEventListener('cancel', event => {
@@ -532,27 +774,18 @@ document.getElementById('duplicate-image-viewer-close').addEventListener('click'
 duplicateImageViewerPrev.addEventListener('click', () => stepDuplicateImageViewer(-1));
 duplicateImageViewerNext.addEventListener('click', () => stepDuplicateImageViewer(1));
 
-function enableDuplicateSwipeClose(dialog, scrollSelector) {
-  let start = null;
-  dialog.addEventListener('touchstart', event => {
-    if (event.touches.length !== 1) return;
-    const target = event.target;
-    const scroller = scrollSelector && target.closest(scrollSelector);
-    start = { x: event.touches[0].clientX, y: event.touches[0].clientY, scroller };
-  }, { passive: true });
-  dialog.addEventListener('touchend', event => {
-    if (!start || event.changedTouches.length !== 1) return;
-    const dx = event.changedTouches[0].clientX - start.x;
-    const dy = event.changedTouches[0].clientY - start.y;
-    if (dy > 100 && Math.abs(dx) < 60 && (!start.scroller || start.scroller.scrollTop === 0)) dialog.close();
-    start = null;
-  }, { passive: true });
-  dialog.addEventListener('touchcancel', () => { start = null; }, { passive: true });
+// Dieselbe sichtbare Zieh- und Rückfederbewegung wie bei Artikel- und
+// Einstellungsdialogen; gescrollte Inhalte und System-Auswahllisten bleiben frei.
+for (const dialog of [duplicateDialog, duplicateDetailDialog, duplicateImageViewer]) {
+  enablePullToClose({
+    scroller: dialog,
+    moving: dialog,
+    fading: null,
+    canStart: event => !event.target.closest?.('textarea, input, select, [contenteditable]')
+      && !scrolledWithin(event.target, dialog),
+    onClose: () => dialog.close(),
+  });
 }
-
-enableDuplicateSwipeClose(duplicateDialog, '.duplicate-content');
-enableDuplicateSwipeClose(duplicateDetailDialog, '.duplicate-comparison-scroll, .duplicate-infographic-thumbs');
-enableDuplicateSwipeClose(duplicateImageViewer);
 duplicateDetailContent.addEventListener('toggle', event => {
   const gallery = event.target;
   if (!gallery.matches?.('details.duplicate-infographic-gallery')) return;
@@ -564,22 +797,75 @@ duplicateDetailContent.addEventListener('toggle', event => {
 document.getElementById('duplicate-tabs').addEventListener('click', event => {
   const button = event.target.closest('[data-duplicate-tab]');
   if (!button) return;
+  closeDuplicateFilterMenus();
   duplicateUi.tab = button.dataset.duplicateTab;
   duplicateUi.listScrollTop = 0;
   document.querySelectorAll('[data-duplicate-tab]').forEach(tab => tab.setAttribute('aria-selected', String(tab === button)));
   renderDuplicateList();
 });
 
-duplicateScoreFilter.addEventListener('change', () => {
-  duplicateUi.filters.score = duplicateScoreFilter.value;
-  duplicateUi.listScrollTop = 0;
-  renderDuplicateList();
+for (const root of duplicateFilterMenus) {
+  const trigger = root.querySelector('.filter-menu-trigger');
+  const menu = root.querySelector('[role="menu"]');
+  trigger.addEventListener('click', () => {
+    if (menu.hidden) openDuplicateFilterMenu(root);
+    else closeDuplicateFilterMenu(root);
+  });
+  trigger.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    openDuplicateFilterMenu(root, true);
+  });
+  menu.addEventListener('click', event => {
+    const item = event.target.closest('.header-menu-item');
+    if (!item) return;
+    if (root.dataset.duplicateFilterMenu === 'authors') {
+      chooseDuplicateAuthors(item.hasAttribute('data-duplicate-author-all') ? 'toggle-all' : item.dataset.duplicateAuthor);
+      return;
+    } else {
+      duplicateUi.filters[root.dataset.duplicateFilterMenu] = item.dataset.duplicateFilterValue;
+      syncDuplicateSingleFilters();
+      closeDuplicateFilterMenu(root, true);
+    }
+    duplicateUi.listScrollTop = 0;
+    renderDuplicateList();
+  });
+  menu.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveDuplicateFilterFocus(menu, event.key === 'ArrowDown' ? 1 : -1);
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      moveDuplicateFilterFocus(menu, event.key === 'Home' ? 'first' : 'last');
+    } else if (event.key === 'Tab') closeDuplicateFilterMenu(root);
+  });
+}
+duplicateAuthorNative.addEventListener('change', () => {
+  const choice = duplicateAuthorNative.value;
+  if (choice === 'all' || choice === 'none') chooseDuplicateAuthors(choice);
+  else if (choice.startsWith('author:')) {
+    const author = duplicateSourceAuthors()[Number(choice.slice(7))];
+    if (author !== undefined) chooseDuplicateAuthors(author);
+  }
+  duplicateAuthorNative.value = '';
 });
-duplicateInfographicFilter.addEventListener('change', () => {
-  duplicateUi.filters.infographics = duplicateInfographicFilter.value;
-  duplicateUi.listScrollTop = 0;
-  renderDuplicateList();
+for (const [select, filter] of [[duplicateScoreNative, 'score'], [duplicateInfographicNative, 'infographics']]) {
+  select.addEventListener('change', () => {
+    duplicateUi.filters[filter] = select.value;
+    syncDuplicateSingleFilters();
+    duplicateUi.listScrollTop = 0;
+    renderDuplicateList();
+  });
+}
+window.addEventListener('resize', () => {
+  sizeDuplicateNativeFilter(duplicateAuthorNative);
+  sizeDuplicateNativeFilter(duplicateScoreNative);
+  sizeDuplicateNativeFilter(duplicateInfographicNative);
 });
+document.addEventListener('click', event => {
+  if (!event.target.closest('[data-duplicate-filter-menu]')) closeDuplicateFilterMenus();
+});
+duplicateDialog.addEventListener('close', () => closeDuplicateFilterMenus());
 duplicateSelectAll.addEventListener('click', () => {
   duplicateUi.listScrollTop = duplicateContent.scrollTop;
   const seenFacebook = new Set();
