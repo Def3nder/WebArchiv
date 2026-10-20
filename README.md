@@ -57,6 +57,27 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Video/PDF)
   abweichenden Popup-Stile oder neuen Menükomponenten einführen. Auswahlmenüs verwenden
   `role="menu"` und je nach Verhalten `menuitemradio` oder `menuitemcheckbox` mit `aria-checked`;
   Tastatursteuerung, Escape, Außenklick und Fokus-Rückgabe gehören dazu.
+- **Modale Dialoge (verbindliches Muster)**: Neue Dialoge grundsätzlich als natives `<dialog>`
+  in `public/index.html` anlegen, mit eindeutiger ID, `aria-labelledby` und sichtbarer
+  Überschrift/Schließen-Schaltfläche. Für normale Formulare `.account-dialog`, für breite
+  Ansichten zusätzlich `.account-dialog-wide` verwenden; nur den *Inhalt im Dialog* scrollbar
+  machen. In der zuständigen Frontend-Datei mit `dialog.showModal()` öffnen und mit
+  `dialog.close()` schließen, nicht das `open`-Attribut selbst setzen. Den zuvor aktiven
+  Auslöser merken und nach `close` wieder fokussieren; beim Öffnen einen sinnvollen Fokus setzen
+  (bei mobilen Auswahlfeldern ggf. den Dialog selbst mit `focus({ preventScroll: true })`,
+  siehe `public/settings.js`). Schließen-Schaltfläche, `cancel`/`Esc`, Außenklick und
+  Pull-to-Close sollen denselben Schließweg nutzen, damit z. B. eine Rückfrage bei
+  ungespeicherten Änderungen immer greift. Beim Außenklick nur schließen, wenn der Klick
+  wirklich auf dem `<dialog>`-Hintergrund **außerhalb seiner Begrenzung** liegt; ein Klick
+  in den Dialoginhalt darf ihn nicht schließen. Gestapelte Dialoge schließen von oben nach
+  unten. Native Dialoge werden durch `syncModalPageScroll()` in `public/app.js` automatisch
+  erkannt: `html.modal-open` sperrt die Seite dahinter, bis der letzte Dialog zu ist; innere
+  Scrollbereiche bleiben nutzbar. Keine eigene `body.style.overflow`-Sperre pro neuem Dialog
+  ergänzen. Nur für besondere bildschirmfüllende Ansichten ein bestehendes Overlay-Muster
+  statt `<dialog>` übernehmen; neue solche Overlays zusätzlich in `modalOverlays` registrieren
+  und per `hidden` öffnen/schließen. Neue Touch-Dialoge in `PULL_DIALOGS` in `public/app.js`
+  eintragen oder bei Sonderfällen `enablePullToClose()` direkt aufrufen. Bei geänderten
+  Frontend-Dateien die `?v=`-Kennung in `public/index.html` erhöhen.
 - **Pull-to-Close (Touch-Dialoge und Overlays)**: Neue Ansichten verwenden die gemeinsame
   Funktion `enablePullToClose({ scroller, moving, fading, canStart, onClose })` aus `public/app.js`;
   keine eigene Wisch-Erkennung pro Dialog einführen. `moving` ist der gesamte sichtbare Dialog
@@ -320,8 +341,8 @@ FFprobe benötigt. Zugangsdaten bleiben serverseitig in `OPENAI_API_KEY` bzw.
   aufklappbar. Auswählen, Ignorieren und `Esc` führen aus der Prüfung zurück zur Trefferübersicht;
   `Esc` schließt jeweils den obersten Dublettendialog; beim Ziehen nach unten folgt der gesamte
   Dialog sichtbar dem Finger und schließt erst nach Überschreiten der Ziehschwelle, sonst federt er zurück.
-  Solange einer der Dublettendialoge offen ist, bleibt die Webseite dahinter gegen Scrollen
-  gesperrt; Trefferliste und Textvergleich bleiben innerhalb der Dialoge scrollbar.
+  Wie bei allen modalen Dialogen bleibt die Webseite dahinter gegen Scrollen gesperrt;
+  Trefferliste und Textvergleich bleiben innerhalb der Dialoge scrollbar.
   Verknüpfte Quellbeiträge bleiben als Dateien erhalten, werden
   in normalen Ansichten aber durch den Blogartikel ersetzt. Zugeordnete Dateien aus
   `www/Infografiken/` können bestätigt für den Blogartikel umbenannt werden; das eigentliche
