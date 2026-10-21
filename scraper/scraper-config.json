@@ -16,6 +16,11 @@
       "Name": "Joe Turan Facebook",
       "URL": "https://www.facebook.com/profile.php?id=61551902387350",
       "OutputPath": "../www/Joe Turan Facebook"
+    },
+    {
+      "Name": "Joe Turan Gruppe",
+      "URL": "https://www.facebook.com/groups/1022236843366004/",
+      "OutputPath": "../www/Joe Turan Gruppe"
     }
   ],
   "Telegram": [

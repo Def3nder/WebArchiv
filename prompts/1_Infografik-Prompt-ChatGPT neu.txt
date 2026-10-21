@@ -1,0 +1,365 @@
+URL:
+https://chatgpt.com/g/g-p-6a744f59cc5881918c4c84045a582a11-infografiken-9-16/project
+
+PROMPT:
+# MASTER-PROMPT – PREMIUM-EDITORIAL-INFOGRAFIK 9:16
+
+Erstelle aus dem ARTIKELTEXT am Ende dieses Prompts eine hochwertige, inhaltlich aussagekräftige **Infografik im exakten 9:16-Hochformat**.
+
+Die Grafik soll wie ein luxuriöses, durchgehend illustriertes Coaching-Magazinposter wirken: emotional intelligent, cineastisch, modern, organisch und auf einem Smartphone hervorragend lesbar.
+
+**WICHTIGSTE PRIORITÄT:**
+
+Die Grafik ist weder eine bloße Spruchgrafik noch eine Kopie des Artikels. Sie ist eine visuelle Verdichtung seiner wichtigsten Erkenntnisse, Zusammenhänge und Botschaften.
+
+---
+
+## 1. INHALTLICHE ANALYSE UND VERDICHTUNG
+
+Analysiere den ARTIKELTEXT und identifiziere:
+
+- seine zentrale Botschaft
+- die drei bis fünf wichtigsten Kernaussagen
+- wesentliche psychologische Zusammenhänge
+- gegebenenfalls einen inneren Entwicklungsprozess
+- die wichtigste praktische Erkenntnis für den Betrachter
+
+Verdichte diese Inhalte zu einer verständlichen, emotional ansprechenden Infografik.
+
+**Regeln:**
+
+- Keine vollständigen Absätze aus dem Artikel übernehmen.
+- Keine unnötigen Wiederholungen.
+- Keine künstliche Nummerierung.
+- Keine erfundenen wissenschaftlichen Behauptungen.
+- Keine pauschalen Heilungsversprechen.
+- Keine komplizierten Fachbegriffe ohne Erklärung.
+- Ausschließlich korrektes, natürliches Deutsch.
+- Keine Fantasiewörter.
+
+Unterscheide zwischen wissenschaftlich gesicherten Erkenntnissen, psychologischen Interpretationen und subjektiven Erfahrungen.
+
+### Informationsdichte
+
+Verwende:
+
+- eine große Hauptüberschrift
+- drei bis fünf kurze inhaltliche Aussagen
+- zwei bis vier kurze erklärende Sätze, die die zentrale Botschaft verständlich machen
+- gegebenenfalls einen kurzen abschließenden Gedanken
+
+Die Erklärungen sollen die Aussagen inhaltlich vertiefen, nicht bloß wiederholen.
+
+**Weniger Text, aber mehr Erkenntnis.**
+
+Die Grafik muss auch ohne Kenntnis des Originalartikels verständlich sein.
+
+---
+
+## 2. GESTALTERISCHES LEITPRINZIP – HÖCHSTE PRIORITÄT
+
+Gestalte eine **organische, cineastische Premium-Editorial-Infografik mit fließender Text-Bild-Integration**.
+
+Die gesamte Grafik soll wie eine einzige zusammenhängende visuelle Erzählung wirken.
+
+Vermeide eine starre Anordnung von Kästen, Karten und Panels.
+
+Stattdessen:
+
+- fließende Übergänge zwischen Text und Illustration
+- dynamische, aber harmonische Komposition
+- ineinandergreifende Bildebenen
+- natürliche Blickführung von oben nach unten
+- großzügiger Weißraum
+- subtile Licht- und Farbverläufe
+- abwechslungsreiche Textpositionen
+- symbolische Verbindung der einzelnen Inhalte
+- elegante visuelle Hierarchie
+
+Die Gestaltung darf asymmetrisch sein, sofern sie ausgewogen bleibt.
+
+**Maximal zwei dezente, halbtransparente Informationsflächen verwenden, wenn sie für die Lesbarkeit erforderlich sind.**
+
+Keine Dashboard-Optik. Keine starren Kachelraster. Keine überladenen Informationsblöcke.
+
+---
+
+## 3. STIL UND ÄSTHETIK
+
+Moderne Premium-Editorial-Infografik, kombiniert mit emotional intelligenter Psychologie-, Coaching-, Beziehungs- und Nervensystem-Ästhetik.
+
+Visuelle Orientierung:
+
+- luxuriöses Self-Development-Magazin
+- hochwertige Pinterest-Coaching-Illustration
+- moderne psychologische Editorial-Grafik
+- cinematic soft UI design
+- atmosphärische digitale Kunst
+- emotional intelligente Bildsprache
+- ruhige, elegante Premium-Ästhetik
+
+Die Grafik soll hochwertig, menschlich, berührend und zeitlos wirken.
+
+Keine Comic-Optik, keine überladene Business-Grafik, keine generischen Cliparts.
+
+---
+
+## 4. FARBPALETTE
+
+Bevorzuge ein helles, freundliches Gesamtbild.
+
+Verwende harmonische Abstufungen aus:
+
+- warmem Rosé
+- sanftem Coral
+- Cremeweiß
+- weichem Pfirsich
+- hellem Beige
+- Himmelblau
+- zartem Lavendel
+- Navy
+- Mitternachtsblau
+
+### Emotionale Farblogik
+
+**Kühle und dunklere Farbtöne:**
+
+Innere Anspannung, Unsicherheit, Distanz, Überforderung, Schutzmechanismen oder ungelöste Konflikte.
+
+**Warme und helle Farbtöne:**
+
+Sicherheit, Vertrauen, Verbindung, Akzeptanz, Ruhe, Bewusstheit und persönliche Entwicklung.
+
+Nutze fließende Übergänge zwischen beiden Farbwelten, um psychologische Veränderungsprozesse sichtbar zu machen.
+
+Keine harten Farbbrüche, sofern sie nicht bewusst eine inhaltliche Spannung verdeutlichen.
+
+---
+
+## 5. TYPOGRAFIE
+
+### Hauptüberschrift
+
+Die Hauptüberschrift ist groß, dominant und emotional ansprechend.
+
+Verwende eine hochwertige Kombination aus:
+
+- moderner, eleganter Serifenschrift oder klarer Sans-Serif-Schrift
+- einer ausdrucksstarken Script-/Brush-Schreibschrift als gestalterischem Akzent
+
+**WICHTIG: Der Schreibschrift-Akzent wird ausschließlich in der Hauptüberschrift verwendet.**
+
+Hebe dort ein bis drei inhaltlich zentrale Wörter oder eine kurze Schlüsselphrase in eleganter Schreibschrift hervor.
+
+Die übrigen Wörter der Hauptüberschrift bleiben in einer gut lesbaren hochwertigen Schrift.
+
+### Weitere Texte
+
+Alle Zwischenüberschriften, Kernaussagen und Erklärungstexte ausschließlich in klarer, moderner Sans-Serif-Schrift.
+
+Keine Schreibschrift in Zwischenüberschriften oder Erklärungstexten.
+
+### Smartphone-Lesbarkeit
+
+- Hoher Kontrast zwischen Text und Hintergrund.
+- Großzügige Zeilenabstände.
+- Kurze, prägnante Textblöcke.
+- Keine winzige Schrift.
+- Erklärungstexte mit gut lesbarer Buchstabenhöhe.
+- Visuelle Motive gegebenenfalls verkleinern, niemals wichtige Texte unlesbar machen.
+
+Die tatsächliche Buchstabenhöhe des zentralen Erklärungstextes soll ungefähr 50–55 % der Hauptüberschrift betragen.
+
+---
+
+## 6. ILLUSTRATIONEN UND BILDERSPRACHE
+
+Erstelle hochwertige, semi-realistische, emotional intelligente Illustrationen.
+
+Geeignete Motive sind:
+
+- vollständig bekleidete Menschen in natürlichen Alltagssituationen
+- nachdenkliche oder entspannte Personen
+- respektvolle zwischenmenschliche Begegnungen
+- symbolische Silhouetten
+- atmosphärische Landschaften
+- Licht, das durch Wolken oder Fenster fällt
+- weiche organische Formen
+- abstrakte neuronale Netzwerke
+- ruhige Wasserflächen
+- Pflanzen, Wurzeln und Wachstum
+- symbolische Brücken oder Wege
+- minimalistische Line-Art-Icons
+- dezente Verbindungslinien und Lichtströme
+
+Die Bildmotive sollen die Kernaussagen tatsächlich erklären oder emotional verständlich machen.
+
+**Keine rein dekorativen Illustrationen ohne inhaltlichen Bezug.**
+
+Bevorzuge eine große zusammenhängende Bildwelt gegenüber mehreren voneinander isolierten Einzelbildern.
+
+---
+
+## 7. SENSIBLE THEMEN UND SICHERE VISUALISIERUNG
+
+Der ARTIKELTEXT kann Themen wie Intimität, Sexualität, Körperwahrnehmung, Trauma, Verletzlichkeit oder emotionale Nähe behandeln.
+
+Solche Inhalte dienen ausschließlich als Ausgangsmaterial für eine sachliche, psychologisch-pädagogische Infografik.
+
+**Die Bildgestaltung konzentriert sich ausschließlich auf nicht explizite psychologische und zwischenmenschliche Aspekte.**
+
+Geeignete Schwerpunkte sind:
+
+- emotionale Sicherheit
+- gegenseitiges Vertrauen
+- Nervensystemregulation
+- achtsame Kommunikation
+- respektierte Grenzen
+- gegenseitiges Einverständnis
+- bewusste Langsamkeit
+- Entspannung
+- Selbstwahrnehmung
+- emotionale Präsenz
+- Verbundenheit ohne Leistungsdruck
+
+### Verbindliche Darstellungsregeln
+
+Verzichte vollständig auf:
+
+- Nacktheit
+- entblößte Körper
+- sexuelle Handlungen
+- Genitalien oder explizite anatomische Details
+- erotische Körperhaltungen
+- sexuell suggestive Bildkompositionen
+- Fetischdarstellungen
+- sexualisierte Berührungen
+
+Verwende stattdessen symbolische, vollständig bekleidete und nicht sexualisierte Darstellungen von Nähe, Vertrauen und Verbundenheit.
+
+Explizite Beschreibungen aus dem Artikel werden nicht wörtlich visualisiert.
+
+Formuliere die für die Grafik ausgewählten Aussagen in einer sachlichen, nicht expliziten Coaching-Sprache.
+
+**Wichtig:** Die inhaltliche Kernaussage soll erhalten bleiben. Es geht nicht darum, sensible Themen zu verfälschen, sondern ihre psychologischen Zusammenhänge visuell verständlich darzustellen.
+
+---
+
+## 8. VISUELLE INFORMATIONSARCHITEKTUR
+
+Gestalte eine fließende vertikale Komposition mit drei ineinander übergehenden Bereichen.
+
+### OBEN – EMOTIONALER EINSTIEG
+
+- Große, ausdrucksstarke Hauptüberschrift.
+- Ein gezielter Schreibschrift-Akzent innerhalb der Hauptüberschrift.
+- Ein atmosphärisches Hero-Motiv.
+- Eine kurze zentrale Aussage als Einstieg.
+
+### MITTE – PSYCHOLOGISCHE ZUSAMMENHÄNGE
+
+- Drei bis fünf wesentliche Kernaussagen.
+- Kurze, verständliche Erklärungen.
+- Organisch integrierte symbolische Illustrationen.
+- Gegebenenfalls dezente Pfeile, Verbindungslinien oder kleine Diagramme.
+
+Die einzelnen Aussagen sollen visuell miteinander verbunden sein.
+
+Zeige Ursache, Wirkung, Kontrast oder Entwicklung, wenn dies zum Artikel passt.
+
+### UNTEN – ERKENNTNIS UND INTEGRATION
+
+- Die wichtigste praktische Erkenntnis.
+- Eine emotional stimmige, ruhige Bildkomposition.
+- Ein kurzer abschließender Gedanke, sofern inhaltlich sinnvoll.
+
+Falls im Artikel ein Autorenname genannt wird, darf dieser klein und dezent am unteren Rand erscheinen.
+
+---
+
+## 9. DYNAMIK UND KOMPOSITION
+
+Die Grafik soll lebendig wirken, ohne unruhig zu werden.
+
+Nutze:
+
+- diagonale und geschwungene Blickführungen
+- weiche Lichtbewegungen
+- organische Übergänge
+- unterschiedliche Größenverhältnisse
+- natürliche Tiefenwirkung
+- dezente Überlagerungen
+- fließende Farbverläufe
+- visuelle Spannungsbögen
+
+Vermeide:
+
+- identisch große Textkästen
+- symmetrische Standardraster
+- monotone Listenoptik
+- dekorative Überfrachtung
+- zu viele Icons
+- übermäßige Trennlinien
+- starre Infografik-Schablonen
+
+Das Ergebnis soll eher an eine hochwertige redaktionelle Magazinillustration erinnern als an ein Präsentationsdiagramm.
+
+---
+
+## 10. QUALITÄTSANFORDERUNGEN
+
+Ultra polished premium infographic aesthetic.
+
+Cinematic composition.
+
+Luxury coaching brand style.
+
+Emotionally intelligent visual storytelling.
+
+Soft atmospheric lighting.
+
+Subtle glassmorphism.
+
+Premium digital illustration quality.
+
+Elegant editorial typography.
+
+Harmonious visual hierarchy.
+
+Highly detailed but clean.
+
+### Vor der Fertigstellung prüfen
+
+- Exaktes Seitenverhältnis 9:16.
+- Zentrale Aussagen des Artikels korrekt erfasst.
+- Keine bloße Textkopie.
+- Echte Infografik statt Spruchgrafik.
+- Keine überflüssigen Kästen.
+- Organische, dynamische Gestaltung.
+- Schreibschrift ausschließlich als Akzent in der Hauptüberschrift.
+- Alle Texte gut lesbar auf Smartphones.
+- Korrekte deutsche Rechtschreibung.
+- Keine unbelegten wissenschaftlichen Gewissheiten.
+- Keine expliziten oder sexualisierten Bildinhalte.
+- Harmonische Verbindung von Text, Illustration und Emotion.
+
+---
+
+## 11. AUSFÜHRUNG
+
+Analysiere den nachfolgenden ARTIKELTEXT selbstständig.
+
+Wähle die passende visuelle Metapher und die wichtigsten Kernaussagen.
+
+Erstelle unmittelbar die fertige Infografik.
+
+Gib keine vorherige Analyse und keinen Bildgenerierungs-Prompt aus.
+
+Frage nicht nach einer Bestätigung.
+
+Wenn der Artikel sensible Themen enthält, konzentriere die visuelle Darstellung auf die nicht expliziten psychologischen und zwischenmenschlichen Kernaussagen.
+
+---
+
+# ARTIKELTEXT
+

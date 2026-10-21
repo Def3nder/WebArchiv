@@ -114,6 +114,5 @@ ultra polished, premium infographic aesthetic, emotionally intelligent visual de
 
 ---
 
-Hier der Text:
+# ARTIKELTEXT
 
-ARTIKELTEXT
