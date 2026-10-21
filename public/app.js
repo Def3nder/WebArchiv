@@ -1413,9 +1413,7 @@ function renderDetail(article) {
   const shareBtnHtml = `<button class="detail-cat-pill detail-share-btn" id="detail-share-btn" aria-label="Link teilen" title="Link zum Artikel teilen">${svgShare()}<span class="detail-share-text">Teilen</span></button>`;
   const infographicBtnHtml = article.canUploadInfographic
     ? `<div class="detail-infographic-wrap">
-        <button type="button" class="detail-cat-pill detail-infographic-btn" id="detail-infographic-btn" aria-label="Neue Infografik hochladen" title="Neue Infografik hochladen">neue Grafik</button>
-        <input type="file" id="detail-infographic-file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden />
-        <span class="detail-infographic-status" id="detail-infographic-status" aria-live="polite"></span>
+        <button type="button" class="detail-cat-pill detail-infographic-btn" id="detail-infographic-btn" aria-label="Infografiken verwalten" title="Infografiken verwalten">Infografiken</button>
       </div>`
     : '';
   const dateHtml = `<div class="detail-date-row">
@@ -1525,44 +1523,10 @@ function renderDetail(article) {
   // Copy-Button → zwei Klick-Zonen:
   //   Icon  → öffnet Menü mit Prompt-Varianten (vorangestellt)
   //   "copy" → nur Titel + Body
-  const $infographicBtn = document.getElementById('detail-infographic-btn');
-  const $infographicFile = document.getElementById('detail-infographic-file');
-  const $infographicStatus = document.getElementById('detail-infographic-status');
-  if ($infographicBtn && $infographicFile) {
-    const setUploadStatus = (text, kind = '') => {
-      if (!$infographicStatus) return;
-      $infographicStatus.textContent = text;
-      $infographicStatus.dataset.kind = kind;
-    };
-
-    $infographicBtn.addEventListener('click', ev => {
-      ev.stopPropagation();
-      $infographicFile.value = '';
-      $infographicFile.click();
-    });
-
-    $infographicFile.addEventListener('change', async () => {
-      const file = $infographicFile.files?.[0];
-      if (!file) return;
-      const detailPosition = captureDetailPosition();
-      $infographicBtn.disabled = true;
-      $infographicBtn.setAttribute('aria-busy', 'true');
-      setUploadStatus('Wird hochgeladen ...');
-      try {
-        await uploadInfographic(article, file);
-        setUploadStatus('Gespeichert.', 'success');
-        await loadArticles();
-        if (!$overlay.hidden && currentViewItemId === article.id) {
-          await openArticle(article.id, { historyMode: 'none', detailPosition });
-        }
-      } catch (err) {
-        setUploadStatus(err.message || 'Upload fehlgeschlagen.', 'error');
-      } finally {
-        $infographicBtn.disabled = false;
-        $infographicBtn.removeAttribute('aria-busy');
-      }
-    });
-  }
+  document.getElementById('detail-infographic-btn')?.addEventListener('click', ev => {
+    ev.stopPropagation();
+    window.openInfographicManager?.(article);
+  });
 
   const $copyBtn  = document.getElementById('detail-copy-btn');
   const $copyMenu = document.getElementById('copy-prompt-menu');
@@ -3496,6 +3460,7 @@ const PULL_DIALOGS = [
   ['#tts-provider-dialog', '#tts-provider-dialog button[value="cancel"]'],
   ['#article-editor', '#article-editor-close'],
   ['#book-extras-manager', '#book-extras-manager [data-bem-close]'],
+  ['#infographic-manager', '#infographic-manager [data-igm-close]'],
   ['#infographic-new', '#infographic-new-cancel'],
   ['#password-dialog', '#password-cancel'],
   ['#settings-dialog', '#settings-form button[type="submit"]'],

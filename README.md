@@ -164,19 +164,96 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
 
 ### Infografiken und Gruppen
 
-Infografiken liegen unter `www/Infografiken/<Jahr>/` mit demselben Dateistamm wie
-ihr Artikel (`<Stamm>.png`, Varianten `<Stamm>_2`, `_3` …). Die Endung `_N` gilt nur
+Infografiken liegen unter `www/Infografiken/<Jahr>/`. Der Dateistamm ohne Suffix
+(`<Stamm>.md` + gleichnamiges Bild) ist einer **eigenständigen Infografik** als
+Artikel und Hauptbild vorbehalten. Anhänge eines normalen Artikels oder einer
+eigenständigen Infografik beginnen mit `<Stamm>_1.md` + Bild; weitere heißen
+`<Stamm>_2`, `_3` usw. Die Endung `_N` gilt nur
 als Variante, wenn es den verkürzten Stamm gibt (Stefan Hiene: `…_Audioquickie_2961`
-ist ein Name, `…_2961_2` die Variante). Eine Infografik-`.md` ohne Text unter den
-Metadaten ist ein **Platzhalter**: Sie wird in den Kachelansichten mit ihrem Artikel
+ist ein Name, `…_2961_1` der erste Anhang). Eine nummerierte Infografik-`.md`
+ohne Text unter den Metadaten ist ein **Platzhalter**: Sie wird in den Kachelansichten mit ihrem Artikel
 zu **einer Kachel** zusammengefasst (Bilder per Maus/Wischen, Striche ●○○), erbt
 dessen Kategorien und Audio. Ohne Artikel ist die Basis-Infografik der Anker; eine
 Infografik mit eigenem Text ist selbst ein Original und nimmt ihre Varianten auf.
+Eine Infografik mit eigener Audiodatei bleibt ebenfalls eigenständig und wird
+nicht als Artikelanhang gruppiert.
+Alte, noch nicht migrierte Anhänge ohne Suffix werden bis zur Umstellung weiterhin erkannt.
+Bis dahin beginnt ein weiterer Upload für solche Altgruppen weiterhin bei `_2`,
+damit die bisherige Zuordnung nicht kippt; nach der Migration gilt `_1`.
+Existiert unter demselben Stamm bereits eine eigenständige Infografik, kann der
+gleichnamige Artikel dort keine weiteren Anhänge anlegen; die App meldet den
+Namenskonflikt statt Grafiken dem falschen Anker zuzuordnen.
 Die Liste und der Autorenfilter „Infografiken“ zeigen weiter jede Grafik einzeln;
 wer den Artikel nicht sehen darf (Gäste), bekommt die Grafik einzeln ohne Text/Audio.
 Im Artikel zeigt eine Bildleiste alle Bilder (drei 9:16 nebeneinander, ab vier
 wischbar); die Vollansicht blättert durch die Bilder und danach zum Nachbarartikel.
 Link auf ein Bild: `#/article/<Artikel-ID>?bild=3`.
+
+**Artikel-Infografiken verwalten** (Admin, Artikel-Detailansicht →
+*Infografiken*): Der Dialog zeigt nur die eigenen Grafiken dieses Artikels;
+bei verknüpften Blog-/Facebook-Beiträgen also die des bevorzugten Blogartikels,
+nicht zusätzlich die Facebook-Grafiken. PNG/JPG (max. 10 MB) wird einzeln
+hinzugefügt. Die Reihenfolge lässt sich am Desktop ziehen oder mit ↑/↓ ändern,
+mobil über ⋯ und ↑/↓. Jede Änderung wird sofort gespeichert: Bild und
+zugehörige `.md` werden gemeinsam auf `<Stamm>_1`, `<Stamm>_2`, `_3` usw.
+umbenannt; die Titelnummer in der `.md` folgt der neuen Position. Entfernen
+verschiebt beide Dateien nach `www/Infografiken/trash/<Jahr>/<Vorgang>/`.
+Dieser Papierkorb wird nicht indexiert und nicht über `/files/*` ausgeliefert;
+eine Wiederherstellung erfolgt bei Bedarf manuell über die Dateien. Die
+eigenständige Basis-Infografik samt Hauptbild bleibt beim Verwalten ihrer
+Anhänge unberührt. Ein nummerierter Anhang kann auch kopierten Text in seiner
+`.md` enthalten; dieser Inhalt bleibt beim Umbenennen erhalten. Grafiken mit
+eigenem Audio werden nicht als Anhang verwaltet. Da die
+Reihenfolge Teil des Dateinamens und der Infografik-ID ist, können sich direkte
+Links auf einzelne Grafiken beim Umordnen ändern; der Artikellink bleibt gleich.
+
+**Bestehende Dateinamen umstellen:** Vorher ein Backup von `www/Infografiken/`
+anlegen und zunächst `node scripts/migrate-infographic-names.js` als Vorschau
+ausführen. Die Ausgabe listet zuerst noch nicht migrierte, zugeordnete Grafiken: 1.1 mit
+leerem/reinem `.md`-Kopf und 1.2 mit eigenem Textkörper, jeweils bei einem
+normalen Artikel; 1.3 umfasst Anhänge, deren zugeordneter Artikel selbst eine
+Infografik ist. Danach folgen Grafiken ohne zugewiesenen Artikel (2) und
+bereits migrierte Grafiken (3), ohne Dopplungen mit 1.1–1.3. Zwischen den
+Bereichen stehen mindestens zwei Leerzeilen. Geplante neue Namen und
+übersprungene Konflikte stehen jeweils am Eintrag. Mit
+`node scripts/migrate-infographic-names.js --apply` werden nur
+eindeutig zugeordnete Bild/`.md`-Paare umbenannt: bisherige Artikelgrafiken
+`<Stamm>` werden `_1`, weitere Anhänge lückenlos nummeriert. Eigenständige
+Basis-Infografiken behalten ihren Namen; ihre bisherigen Zusatzgrafiken können
+von `_2` auf `_1` aufrücken. Bei fehlenden Zusatzdateien, Mehrdeutigkeiten oder
+belegten Zielnamen wird nichts geändert und der Konflikt gemeldet. Nach der
+Migration den Server neu starten oder den Index über die Admin-Funktion neu
+einlesen. Für Testarchive kann `--root <Pfad-zu-www>` angegeben werden.
+Hat eine Basis-Infografik keinen normalen Artikel, ist sie selbst der
+Stammartikel und bleibt als `<Stamm>.md` mit Hauptbild unverändert. Ihre
+Zusatzgrafiken aus `<Stamm>_2`, `_3` usw. gehören zu Bereich 1.3 und rücken
+auf `_1`, `_2` usw. vor. Das Skript erkennt solche Zusätze auch dann, wenn die
+Basis-`.md` leer ist und eine Zusatz-`.md` eigenen Text enthält; nach der
+Migration verknüpft die App sie anhand von `_1`. Ein isoliertes `_2` ohne
+vorhandene Basis wird dagegen nicht auf Verdacht umbenannt.
+
+Die Bereiche lassen sich auch getrennt ausführen: `--section 1.1` wählt nur
+Anhänge normaler Artikel mit leerer beziehungsweise reiner Kopf-`.md`,
+`--section 1.2` nur deren Anhänge mit eigenem Textkörper und `--section 1.3`
+alle Anhänge eigenständiger Infografik-Artikel, unabhängig vom eigenen Textkörper.
+`--section 1` wählt alle drei Teilbereiche;
+ohne Angabe gilt `all` mit demselben Migrationsergebnis. Zuerst jeweils die
+Vorschau ohne `--apply` prüfen, dann zum Beispiel
+`node scripts/migrate-infographic-names.js --section 1.1 --apply` ausführen.
+Ein noch belegter Zielname wird nicht überschrieben, sondern als Konflikt
+gemeldet; bei einem Konflikt startet die gewählte Teilmigration nicht.
+Eine vorhandene `<Stamm>_1.md` oder gleichnamige PNG-/JPG-Datei irgendwo im
+aktiven `www/Infografiken/`-Baum kennzeichnet den gesamten Artikelstamm als
+**bereits migriert**: Die Vorschau weist ihn einzeln und in der Gruppensumme aus,
+und spätere Läufe benennen keine weiteren Dateien dieses Stamms um. Dateien im
+`trash/` zählen nicht als Marker. Stehen noch eine alte Basisgrafik und `_1`
+nebeneinander, wird die widersprüchliche Zuordnung stattdessen als Konflikt
+gemeldet. Bereits migrierte Grafiken erscheinen unabhängig vom gewählten
+Migrationsbereich ausschließlich in Abschnitt 3. `--section 2` zeigt die
+eigenständigen Infografiken, `--section 3` die bereits migrierten Anhänge;
+beide Bereiche sind nur zur Anzeige da. Jeder Lauf prüft die Dateien neu;
+nach einer Teilmigration vor dem nächsten Lauf die neue Vorschau ansehen.
+Die Umstellung wurde nicht automatisch auf das Archiv angewendet.
 
 **Neue eigenständige Infografik** (Admin, Aktionen → *Neue Infografik*): Dialog mit
 Markdown-Vorlage (`# [Titel]`, `Datum: <heute>`, `----`, `[Inhalt]`), Häkchen für die
@@ -478,6 +555,9 @@ Editor- oder Menülogik einbezogen.
 | `GET /api/meta` | Soft | Autoren/Jahre/Kategorien (ACL-gefiltert) |
 | `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen; `bookmarks=1` nur Artikel mit Lesezeichen; jeder Eintrag trägt `bookmarked` |
 | `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml`, `images` und `bookmarked`; eine gruppierte Infografik liefert ihre Gruppe (`requestedId`) |
+| `GET /api/infographic-manager/*` | Admin + Artikelrecht | Verwaltbare, eigene Artikel-Infografiken in Reihenfolge |
+| `POST /api/infographic-manager/*` | Admin + Artikelrecht | `{action:"order",ids:[…]}` benennt Bild/Markdown um; `{action:"trash",id}` verschiebt ein Paar in den Papierkorb und nummeriert übrige Grafiken neu |
+| `POST /api/infographics/*` | Admin + Artikelrecht | Einzelne PNG-/JPG-Infografik zum Artikel hochladen |
 | `PUT /api/bookmarks/*` · `DELETE /api/bookmarks/*` | Auth | Lesezeichen setzen (Artikel muss existieren, Autorenrecht) bzw. löschen |
 | `GET /api/duplicates` | Admin | Offene, verknüpfte und ignorierte Blog–Quellen-Paare samt konfigurierter Quellautoren |
 | `GET /api/duplicates/compare` | Admin | Volltextvergleich und Vorschau möglicher Infografikmigrationen |

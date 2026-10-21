@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=139" />
+  <link rel="stylesheet" href="styles.css?v=141" />
 </head>
 <body>
 
@@ -403,6 +403,32 @@
       </section>
     </div>
   </dialog>
+  <dialog id="infographic-manager" class="account-dialog account-dialog-wide" aria-labelledby="infographic-manager-title">
+    <div class="article-editor-heading">
+      <div><p class="article-editor-eyebrow">INFOGRAFIKEN</p><h2 id="infographic-manager-title">Infografiken verwalten</h2></div>
+      <button type="button" class="detail-cat-pill" data-igm-close aria-label="Infografiken-Verwaltung schließen">✕</button>
+    </div>
+    <p id="infographic-manager-article" class="bem-book"></p>
+    <div class="igm-toolbar">
+      <button type="button" class="detail-cat-pill" data-igm-add>Grafik hinzufügen</button>
+      <input type="file" data-igm-file accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden />
+      <span class="igm-count" data-igm-count></span>
+    </div>
+    <p class="bem-section-hint igm-hint"><span class="bem-hint-desktop">Am Griff ziehen oder mit ↑ und ↓ verschieben.</span><span class="bem-hint-mobile">Unter ⋯ mit ↑ und ↓ verschieben.</span> Änderungen werden sofort gespeichert.</p>
+    <p id="infographic-manager-status" class="bem-status" role="status" aria-live="polite"></p>
+    <div class="bem-content">
+      <section class="bem-library" data-igm-library aria-label="Artikel-Infografiken">
+        <div class="bem-list" data-igm-list></div>
+      </section>
+      <section class="bem-preview-pane" data-igm-preview hidden aria-labelledby="igm-preview-title">
+        <div class="bem-preview-heading">
+          <button type="button" class="detail-cat-pill" data-igm-preview-close>← Zurück</button>
+          <h3 id="igm-preview-title" data-igm-preview-title>Infografik</h3>
+        </div>
+        <div class="bem-preview-body"><div class="bem-image-preview" data-igm-preview-body></div></div>
+      </section>
+    </div>
+  </dialog>
   <!-- Neue eigenständige Infografik: Markdown-Vorlage + Grafik in einem Schritt -->
   <dialog id="infographic-new" aria-labelledby="infographic-new-title">
     <div class="article-editor-heading">
@@ -623,12 +649,13 @@
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=114"></script>
+  <script src="app.js?v=115"></script>
   <script src="vendor/duplicate-diff.bundle.js?v=7"></script>
   <script src="duplicates.js?v=17"></script>
   <script src="audiobooks.js?v=24"></script>
   <script src="book-reader.js?v=14"></script>
   <script src="vendor/article-editor.bundle.js?v=16"></script>
   <script src="infographic-new.js?v=2"></script>
+  <script src="infographic-manager.js?v=1"></script>
 </body>
 </html>

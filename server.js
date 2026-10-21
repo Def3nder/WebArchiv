@@ -29,6 +29,7 @@ const WWW_DIR = path.join(__dirname, 'www');
 const AUDIO_DIR = path.join(__dirname, 'audio');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 const INFOGRAPHICS_AUTHOR = 'Infografiken';
+const INFOGRAPHIC_TRASH_DIR = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR, 'trash');
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const PWA_SHELL_EXTENSIONS = new Set(['.css', '.html', '.ico', '.js', '.json', '.png', '.svg']);
 
@@ -468,6 +469,9 @@ async function scanDir(dirPath, author, year, collector) {
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
+      // Gelöschte Infografiken bleiben als Dateien erhalten, gehören aber nie
+      // wieder in den Artikelindex oder in eine Bildgruppe.
+      if (author === INFOGRAPHICS_AUTHOR && fullPath === INFOGRAPHIC_TRASH_DIR) continue;
       const nextYear = /^\d{4}$/.test(entry.name) ? entry.name : year;
       await scanDir(fullPath, author, nextYear, collector);
       continue;
@@ -546,14 +550,17 @@ async function scanDir(dirPath, author, year, collector) {
   }
 }
 
-// Zuordnung Infografik → Artikel über Jahr + Dateistamm. Varianten heißen
-// „<Stamm>_2“, „<Stamm>_3“ … Die Endung _N wird aber nur abgeschnitten, wenn es
+// Zuordnung Infografik → Artikel über Jahr + Dateistamm. Anhänge heißen
+// „<Stamm>_1“, „<Stamm>_2“ …; der Stamm ohne Suffix bleibt einem eigenständigen
+// Artikel samt Hauptbild vorbehalten. Die Endung _N wird nur abgeschnitten, wenn es
 // den verkürzten Stamm tatsächlich gibt – sonst gehört die Zahl zum Namen
 // (Stefan Hiene: „…_Audioquickie_2961“).
 function resolveInfographicStem(stem, hasArticle, hasInfographic) {
   if (hasArticle(stem)) return { baseStem: stem, ordinal: 1 };
   const m = stem.match(/^(.+)_(\d+)$/);
-  if (m && (hasArticle(m[1]) || hasInfographic(m[1]))) return { baseStem: m[1], ordinal: parseInt(m[2], 10) };
+  if (m && /^[1-9]\d*$/.test(m[2]) && (hasArticle(m[1]) || hasInfographic(m[1]))) {
+    return { baseStem: m[1], ordinal: parseInt(m[2], 10) };
+  }
   return { baseStem: stem, ordinal: 1 };
 }
 
@@ -600,14 +607,22 @@ function linkInfographics(articleList, authorPriority = []) {
   const groups = new Map();   // Anker-ID → Mitglieder (sortiert)
   const anchorOf = new Map(); // Mitglieds-ID → Anker-ID
   for (const info of infographics) {
+    // Eigene Audio-Datei bedeutet eigenständige Infografik, nicht Artikelanhang.
+    if (info.audioUrl) continue;
     const k = key(info.year, info.infographicBase);
     const baseArticle = baseArticleFor(k);
     const baseInfo = infographicsByKey.get(k);
+    // Eine vorhandene _1 macht die suffixlose Infografik eindeutig zum
+    // eigenständigen Anker. Ohne _1 bleibt die alte Basis-Zuordnung bis zur
+    // Dateimigration lesbar.
+    const standaloneBase = baseInfo && (baseInfo.hasBody
+      || (baseInfo.audioUrl && !baseInfo.inheritedAudioAuthor)
+      || infographicsByKey.has(key(info.year, infographicAttachmentStem(info.infographicBase, 1))));
     const isBase = baseInfo === info;
     let anchor = null;
     if (isBase) {
-      if (!info.hasBody && baseArticle) anchor = baseArticle;
-    } else if (baseInfo?.hasBody) {
+      if (!standaloneBase && baseArticle) anchor = baseArticle;
+    } else if (standaloneBase) {
       anchor = baseInfo;
     } else if (!info.hasBody) {
       // Ohne Artikel ist die Basis-Infografik der Anker (und selbst das erste Bild).
@@ -803,8 +818,17 @@ function canUploadInfographic(sessionUser, article) {
     sessionUser?.role === 'admin' &&
     article &&
     canAccessAuthor(sessionUser, article.author) &&
-    article.author !== INFOGRAPHICS_AUTHOR
+    (article.author !== INFOGRAPHICS_AUTHOR || !groupAnchorOf.has(article.id)) &&
+    !conflictingInfographicBase(article)
   );
+}
+
+function conflictingInfographicBase(article, byId = articleById, anchorOf = groupAnchorOf) {
+  if (article.author === INFOGRAPHICS_AUTHOR) return false;
+  const year = article.year || article.date?.slice(0, 4) || '';
+  const stem = path.basename(article.filePath, '.md');
+  const base = byId.get([INFOGRAPHICS_AUTHOR, year, stem].join('/'));
+  return !!base && anchorOf.get(base.id) !== article.id;
 }
 
 function imageExtensionFromContentType(contentType) {
@@ -824,6 +848,19 @@ function infographicStemExists(dir, stem) {
   return ['.md', '.jpg', '.jpeg', '.png'].some(ext => fs.existsSync(path.join(dir, stem + ext)));
 }
 
+function infographicAttachmentStem(baseStem, ordinal) {
+  return `${baseStem}_${ordinal}`;
+}
+
+function firstAvailableInfographicOrdinal(article, byId = articleById, anchorOf = groupAnchorOf) {
+  const year = article.year || article.date?.slice(0, 4) || '';
+  const stem = path.basename(article.filePath, '.md');
+  const base = byId.get([INFOGRAPHICS_AUTHOR, year, stem].join('/'));
+  // Solange eine alte suffixlose Grafik noch diesem Artikel gehört, darf _1
+  // nicht neu entstehen: sonst würde die alte Basis als Original erscheinen.
+  return base && anchorOf.get(base.id) === article.id ? 2 : 1;
+}
+
 function getInfographicTarget(article, imageExt) {
   const year = article.year || (article.date ? article.date.slice(0, 4) : '');
   if (!/^\d{4}$/.test(year)) return null;
@@ -832,8 +869,8 @@ function getInfographicTarget(article, imageExt) {
   if (!dir) return null;
 
   const baseStem = path.basename(article.filePath, '.md');
-  for (let ordinal = 1; ordinal < 1000; ordinal++) {
-    const stem = ordinal === 1 ? baseStem : `${baseStem}_${ordinal}`;
+  for (let ordinal = firstAvailableInfographicOrdinal(article); ordinal < 1000; ordinal++) {
+    const stem = infographicAttachmentStem(baseStem, ordinal);
     if (!infographicStemExists(dir, stem)) {
       return {
         dir,
@@ -1055,14 +1092,195 @@ function filesForInfographic(article) {
     .map(entry => path.join(dir, entry.name));
 }
 
+// Die Artikelverwaltung bearbeitet ausschließlich die zu diesem Artikel
+// gruppierten Grafiken. Eine eigenständige Basis-Infografik (mit eigenem Text
+// oder Audio) wird niemals durch Umordnen/Löschen ihrer Anhänge verändert.
+function managedInfographicContext(id, user) {
+  const requested = articleById.get(id);
+  if (!requested) throw duplicateFail(404, 'Artikel nicht gefunden.');
+  const article = duplicateCanonicalFor(requested, user) || requested;
+  if (!canUploadInfographic(user, article)) throw duplicateFail(403, 'Keine Berechtigung für diese Infografiken.');
+  const year = article.year || article.date?.slice(0, 4) || '';
+  if (!/^\d{4}$/.test(year)) throw duplicateFail(400, 'Der Artikel hat kein gültiges Jahr.');
+  const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
+  const baseStem = path.basename(article.filePath, '.md');
+  if (!dir || !baseStem) throw duplicateFail(400, 'Kein gültiges Infografik-Ziel gefunden.');
+  const members = (infographicGroups.get(article.id) || []).filter(item => item.ownImage);
+  const bundles = members.map(item => {
+    if (item.author !== INFOGRAPHICS_AUTHOR || path.resolve(path.dirname(item.filePath)) !== dir
+      || item.infographicBase !== baseStem) {
+      throw duplicateFail(409, 'Eine Grafik gehört nicht zu den verwaltbaren Artikel-Infografiken.');
+    }
+    const files = filesForInfographic(item);
+    const imageFiles = files.filter(file => ['.png', '.jpg', '.jpeg'].includes(path.extname(file).toLowerCase()));
+    if (files.length !== 2 || imageFiles.length !== 1 || !files.includes(item.filePath)) {
+      throw duplicateFail(409, 'Eine Infografik hat zusätzliche oder unvollständige Dateien und kann nicht automatisch verwaltet werden.');
+    }
+    return { id: item.id, ordinal: item.infographicOrdinal, title: item.title,
+      imageUrl: item.imageUrl, files, mdPath: item.filePath };
+  });
+  return { article, dir, year, baseStem, bundles };
+}
+
+function retitleInfographicMarkdown(content, oldOrdinal, newOrdinal) {
+  if (oldOrdinal === newOrdinal) return content;
+  const eol = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+  let datumIdx = lines.findIndex((line, index) => index < 20
+    && /^datum:/i.test(line.replace(/\*\*/g, '').replace(/^#+\s*/, '').replace(/^_+|_+$/g, '').trim()));
+  if (datumIdx < 0) datumIdx = Math.min(lines.length, 5);
+  if (oldOrdinal > 1) {
+    for (let i = datumIdx - 1; i >= 0; i--) {
+      const clean = lines[i].replace(/^#+\s*/, '').replace(/\*\*/g, '')
+        .replace(/^\*|\*$/g, '').replace(/^_+|_+$/g, '').trim();
+      if (!clean || /^quelle:/i.test(clean)) continue;
+      const suffix = new RegExp(' \\(' + oldOrdinal + '\\)(?=(?:\\*\\*|__|\\*|_)?\\s*$)');
+      lines[i] = lines[i].replace(suffix, '');
+      break;
+    }
+  }
+  appendOrdinalToMarkdownTitle(lines, newOrdinal);
+  return lines.join(eol);
+}
+
+// Alle Quellen erst in temporäre Namen verschieben, dann die Ziele belegen:
+// dadurch sind auch Vertauschungen von _1, _2, _3 usw. ohne Überschreiben
+// möglich. Fehler rollen sowohl Dateinamen als auch Markdown-Inhalte zurück.
+async function moveInfographicFiles(mappings) {
+  if (!mappings.length) return async () => {};
+  const key = file => process.platform === 'win32' ? file.toLowerCase() : file;
+  const sources = new Set(mappings.map(item => key(item.source)));
+  const targets = new Set();
+  if (sources.size !== mappings.length) throw duplicateFail(409, 'Eine Infografikdatei ist mehrfach enthalten.');
+  for (const item of mappings) {
+    const targetKey = key(item.target);
+    if (targets.has(targetKey)) throw duplicateFail(409, 'Zwei Infografikdateien hätten denselben Zielnamen.');
+    targets.add(targetKey);
+    const stat = await fs.promises.lstat(item.source);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw duplicateFail(409, 'Symbolische Links oder Ordner können nicht verschoben werden.');
+    try {
+      await fs.promises.lstat(item.target);
+      if (!sources.has(targetKey)) throw duplicateFail(409, 'Zieldatei existiert bereits: ' + path.basename(item.target));
+    } catch (error) {
+      if (error.status) throw error;
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+  const token = crypto.randomBytes(8).toString('hex');
+  const work = await Promise.all(mappings.map(async (item, index) => ({
+    ...item,
+    temp: path.join(path.dirname(item.source), '.infographic-' + token + '-' + index + '.tmp'),
+    original: item.content === undefined ? undefined : await fs.promises.readFile(item.source),
+    state: 'source',
+  })));
+  try {
+    for (const item of work) {
+      await fs.promises.rename(item.source, item.temp);
+      item.state = 'temp';
+    }
+    for (const item of work) {
+      if (item.content !== undefined) await fs.promises.writeFile(item.temp, item.content);
+    }
+    for (const item of work) {
+      await fs.promises.rename(item.temp, item.target);
+      item.state = 'target';
+    }
+  } catch (error) {
+    for (const item of work.filter(item => item.state === 'target').reverse()) {
+      await fs.promises.rename(item.target, item.temp);
+      item.state = 'temp';
+    }
+    for (const item of work) {
+      if (item.state === 'temp' && item.original !== undefined) await fs.promises.writeFile(item.temp, item.original);
+    }
+    for (const item of [...work].reverse()) {
+      if (item.state === 'temp') await fs.promises.rename(item.temp, item.source);
+    }
+    throw error;
+  }
+  return async () => {
+    await moveInfographicFiles(work.map(item => ({
+      source: item.target, target: item.source, content: item.original,
+    })));
+  };
+}
+
+async function reorderManagedInfographics(context, orderedIds) {
+  const { bundles, baseStem, dir } = context;
+  if (!Array.isArray(orderedIds) || orderedIds.length !== bundles.length
+    || new Set(orderedIds).size !== bundles.length
+    || orderedIds.some(id => !bundles.some(item => item.id === id))) {
+    throw duplicateFail(400, 'Die Reihenfolge enthält nicht genau die vorhandenen Infografiken.');
+  }
+  if (!bundles.length) return async () => {};
+  const byId = new Map(bundles.map(item => [item.id, item]));
+  const key = file => process.platform === 'win32' ? file.toLowerCase() : file;
+  const ownedFiles = new Set(bundles.flatMap(item => item.files).map(key));
+  const blockedStems = new Set(fs.readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isFile())
+    .filter(entry => ['.md', '.png', '.jpg', '.jpeg'].includes(path.extname(entry.name).toLowerCase()))
+    .filter(entry => !ownedFiles.has(key(path.join(dir, entry.name))))
+    .map(entry => path.basename(entry.name, path.extname(entry.name)).toLowerCase()));
+  const mappings = [];
+  let nextOrdinal = 1;
+  for (const id of orderedIds) {
+    const bundle = byId.get(id);
+    while (nextOrdinal < 1000) {
+      const candidate = infographicAttachmentStem(baseStem, nextOrdinal);
+      if (!blockedStems.has(candidate.toLowerCase())) break;
+      nextOrdinal++;
+    }
+    if (nextOrdinal >= 1000) throw duplicateFail(409, 'Keine freien Infografik-Dateinamen gefunden.');
+    const ordinal = nextOrdinal++;
+    const stem = infographicAttachmentStem(baseStem, ordinal);
+    for (const source of bundle.files) {
+      const extension = path.extname(source).toLowerCase();
+      const item = { source, target: path.join(dir, stem + extension) };
+      if (extension === '.md' && ordinal !== bundle.ordinal) {
+        item.content = retitleInfographicMarkdown(await fs.promises.readFile(source, 'utf8'), bundle.ordinal, ordinal);
+      }
+      if (source !== item.target) mappings.push(item);
+    }
+  }
+  return moveInfographicFiles(mappings);
+}
+
+async function infographicTrashFolder(year) {
+  const root = await fs.promises.realpath(path.join(WWW_DIR, INFOGRAPHICS_AUTHOR));
+  const ensureDirectory = async dir => {
+    try {
+      const stat = await fs.promises.lstat(dir);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw duplicateFail(409, 'Der Infografik-Papierkorb ist kein sicherer Ordner.');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      await fs.promises.mkdir(dir);
+    }
+    const real = await fs.promises.realpath(dir);
+    if (!real.startsWith(root + path.sep)) throw duplicateFail(403, 'Der Papierkorb liegt außerhalb des Infografik-Ordners.');
+  };
+  await ensureDirectory(INFOGRAPHIC_TRASH_DIR);
+  const yearDir = path.join(INFOGRAPHIC_TRASH_DIR, year);
+  await ensureDirectory(yearDir);
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const name = new Date().toISOString().replace(/[:.]/g, '-') + '-' + crypto.randomBytes(4).toString('hex');
+    const folder = path.join(yearDir, name);
+    try { await fs.promises.mkdir(folder); return folder; }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
+  }
+  throw duplicateFail(409, 'Kein freier Platz im Infografik-Papierkorb gefunden.');
+}
+
 function nextDuplicateInfographicTarget(blog, reserved) {
+  if (conflictingInfographicBase(blog)) {
+    throw duplicateFail(409, 'Unter diesem Dateistamm existiert eine eigenständige oder anders zugeordnete Infografik.');
+  }
   const year = blog.year || blog.date?.slice(0, 4) || '';
   if (!/^\d{4}$/.test(year)) throw duplicateFail(400, 'Der Blogartikel hat kein gültiges Jahr.');
   const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
   if (!dir) throw duplicateFail(400, 'Kein gültiges Infografik-Ziel gefunden.');
   const baseStem = path.basename(blog.filePath, '.md');
-  for (let ordinal = 1; ordinal < 1000; ordinal++) {
-    const stem = ordinal === 1 ? baseStem : `${baseStem}_${ordinal}`;
+  for (let ordinal = firstAvailableInfographicOrdinal(blog); ordinal < 1000; ordinal++) {
+    const stem = infographicAttachmentStem(baseStem, ordinal);
     if (!reserved.has(stem.toLowerCase()) && !infographicStemExists(dir, stem)) {
       reserved.add(stem.toLowerCase());
       return { dir, stem, ordinal };
@@ -1280,7 +1498,11 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/files/*', attachUser, (req, res) => {
   const relPath = req.params[0];
-  const author  = relPath.split('/')[0];
+  const segments = relPath.split(/[\\/]/);
+  const author  = segments[0];
+  if (author === INFOGRAPHICS_AUTHOR && segments[1]?.toLowerCase() === 'trash') {
+    return res.status(404).end();
+  }
   if (!canAccessAuthor(req.user, author)) {
     return res.status(403).json({ error: 'Access denied' });
   }
@@ -1288,6 +1510,9 @@ app.get('/files/*', attachUser, (req, res) => {
   if (!absPath.startsWith(WWW_DIR + path.sep)) {
     return res.status(403).end();
   }
+  const normalized = process.platform === 'win32' ? absPath.toLowerCase() : absPath;
+  const trashPath = process.platform === 'win32' ? INFOGRAPHIC_TRASH_DIR.toLowerCase() : INFOGRAPHIC_TRASH_DIR;
+  if (normalized === trashPath || normalized.startsWith(trashPath + path.sep)) return res.status(404).end();
   res.sendFile(absPath, err => { if (err && !res.headersSent) res.status(404).end(); });
 });
 
@@ -1532,12 +1757,82 @@ app.post('/api/reindex', requireAdmin, (req, res) => {
   res.json({ started: true });
 });
 
+app.get('/api/infographic-manager/*', requireAdmin, (req, res) => {
+  if (infographicWrites) return res.status(409).json({ error: 'Infografiken werden gerade geändert. Bitte gleich erneut öffnen.' });
+  try {
+    const context = managedInfographicContext(req.params[0], req.session.user);
+    res.set('Cache-Control', 'no-store').json({
+      articleId: context.article.id,
+      title: context.article.title,
+      items: context.bundles.map(item => ({
+        id: item.id, title: item.title, ordinal: item.ordinal,
+        filename: path.basename(item.files.find(file => path.extname(file).toLowerCase() !== '.md')),
+        imageUrl: item.imageUrl,
+      })),
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message || 'Infografiken konnten nicht geladen werden.' });
+  }
+});
+
+app.post('/api/infographic-manager/*', requireAdmin, async (req, res) => {
+  if (req.get('sec-fetch-site') === 'cross-site') {
+    return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
+  }
+  if (ttsJobs.running || scrapeState.running || reindexState.running || infographicWrites || markdownEditor.running) {
+    return res.status(409).json({ error: 'Es läuft bereits ein Speicher- oder Indexauftrag.' });
+  }
+  infographicWrites++;
+  let undoOrder = null;
+  let undoTrash = null;
+  let trashFolder = null;
+  try {
+    const context = managedInfographicContext(req.params[0], req.session.user);
+    if (req.body?.action === 'order') {
+      undoOrder = await reorderManagedInfographics(context, req.body.ids);
+    } else if (req.body?.action === 'trash') {
+      const item = context.bundles.find(bundle => bundle.id === req.body.id);
+      if (!item) throw duplicateFail(404, 'Infografik nicht gefunden.');
+      trashFolder = await infographicTrashFolder(context.year);
+      undoTrash = await moveInfographicFiles(item.files.map(source => ({
+        source, target: path.join(trashFolder, path.basename(source)),
+      })));
+      const remaining = context.bundles.filter(bundle => bundle.id !== item.id);
+      undoOrder = await reorderManagedInfographics(
+        { ...context, bundles: remaining }, remaining.map(bundle => bundle.id));
+    } else {
+      throw duplicateFail(400, 'Unbekannte Infografik-Aktion.');
+    }
+    await buildIndex();
+    res.json({ ok: true, trash: trashFolder
+      ? path.relative(WWW_DIR, trashFolder).replace(/\\/g, '/') : undefined });
+  } catch (error) {
+    let rollbackError = null;
+    try {
+      if (undoOrder) await undoOrder();
+      if (undoTrash) await undoTrash();
+      if (undoOrder || undoTrash) await buildIndex();
+      if (trashFolder) await fs.promises.rmdir(trashFolder).catch(() => {});
+    } catch (failed) { rollbackError = failed; }
+    res.status(error.status || 500).json({ error: rollbackError
+      ? (error.message + ' Wiederherstellung fehlgeschlagen: ' + rollbackError.message)
+      : (error.message || 'Infografiken konnten nicht geändert werden.') });
+  } finally {
+    infographicWrites--;
+  }
+});
+
 app.post(
   '/api/infographics/*',
   requireAdmin,
   express.raw({ type: ['image/png', 'image/jpeg'], limit: INFOGRAPHIC_MAX_BYTES }),
   async (req, res) => {
-    if (ttsJobs.running || markdownEditor.running) return res.status(409).json({ error: 'Es läuft bereits ein Audio- oder Speicherauftrag.' });
+    if (req.get('sec-fetch-site') === 'cross-site') {
+      return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
+    }
+    if (ttsJobs.running || scrapeState.running || reindexState.running || infographicWrites || markdownEditor.running) {
+      return res.status(409).json({ error: 'Es läuft bereits ein Speicher- oder Indexauftrag.' });
+    }
     const id = req.params[0];
     const requested = articleById.get(id);
     if (!requested) return res.status(404).json({ error: 'Artikel nicht gefunden.' });
@@ -2154,4 +2449,7 @@ module.exports = {
   buildInfographicMarkdown, removeCategoryLines, slugify,
   normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
   computeAppShellVersion, serviceWorkerSource,
+  infographicAttachmentStem, firstAvailableInfographicOrdinal,
+  canUploadInfographic, conflictingInfographicBase, retitleInfographicMarkdown,
+  moveInfographicFiles, reorderManagedInfographics,
 };

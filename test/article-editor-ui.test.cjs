@@ -36,7 +36,7 @@ test('aktive Markdown-Zeichen und gerenderte Strukturen besitzen eigene Stile', 
   assert.match(CSS, /\.cm-md-table-widget/);
   assert.match(CSS, /\.cm-md-image-widget/);
   assert.match(CSS, /\.cm-md-task-widget/);
-  assert.match(HTML, /styles\.css\?v=139/);
+  assert.match(HTML, /styles\.css\?v=141/);
   assert.match(CSS, /\.markdown-live-editor \.cm-md-markup/);
   assert.match(PREVIEW, /replaceSelection\(value\)/);
   assert.match(PREVIEW, /reflectReadOnly\(readOnly\)/);

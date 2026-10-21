@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 
 const {
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
-  buildInfographicMarkdown, slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
+  buildInfographicMarkdown, infographicAttachmentStem, firstAvailableInfographicOrdinal,
+  canUploadInfographic, conflictingInfographicBase,
+  slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
 } = require('../server.js');
 
 test('liest URL und Prompt aus einer Prompt-Datei getrennt', () => {
@@ -129,6 +131,52 @@ test('Varianten ohne Artikel werden unter der Basis-Infografik gruppiert', () =>
   const { groups } = linkInfographics(list);
   assert.deepEqual(memberIds(groups, 'Infografiken/2026/2026-02-01_thema'),
     ['Infografiken/2026/2026-02-01_thema_2', 'Infografiken/2026/2026-02-01_thema_3']);
+});
+
+test('_1 ist der erste Anhang sowohl für normale Artikel als auch für eigenständige Infografiken', () => {
+  const list = [
+    entry('Joe Turan', '2026-02-01_artikel'),
+    entry('Infografiken', '2026-02-01_artikel_1'),
+    entry('Infografiken', '2026-02-01_artikel_2'),
+    entry('Infografiken', '2026-02-02_eigenstaendig', { hasBody: true }),
+    entry('Infografiken', '2026-02-02_eigenstaendig_1'),
+  ];
+  const { groups, anchorOf } = linkInfographics(list);
+  assert.deepEqual(memberIds(groups, list[0].id), [list[1].id, list[2].id]);
+  assert.deepEqual(memberIds(groups, list[3].id), [list[4].id]);
+  assert.equal(anchorOf.has(list[3].id), false);
+  assert.equal(infographicAttachmentStem('2026-02-01_artikel', 1), '2026-02-01_artikel_1');
+  assert.equal(infographicAttachmentStem('2026-02-01_artikel', 2), '2026-02-01_artikel_2');
+  assert.equal(canUploadInfographic({ role: 'admin', allowedAuthors: null }, list[3]), true);
+});
+
+test('Suffixlose Infografik mit _1 bleibt auch bei gleichnamigem Artikel eigenständig', () => {
+  const list = [
+    entry('Joe Turan', '2026-02-03_thema'),
+    entry('Infografiken', '2026-02-03_thema'),
+    entry('Infografiken', '2026-02-03_thema_1'),
+  ];
+  const { groups, anchorOf } = linkInfographics(list);
+  assert.equal(groups.has(list[0].id), false);
+  assert.equal(anchorOf.has(list[1].id), false);
+  assert.deepEqual(memberIds(groups, list[1].id), [list[2].id]);
+  const byId = new Map(list.map(item => [item.id, item]));
+  assert.equal(conflictingInfographicBase(list[0], byId, anchorOf), true);
+  assert.equal(conflictingInfographicBase(list[0], byId, new Map([[list[1].id, list[0].id]])), false);
+  assert.equal(firstAvailableInfographicOrdinal(list[0], byId, anchorOf), 1);
+  assert.equal(firstAvailableInfographicOrdinal(list[0], byId, new Map([[list[1].id, list[0].id]])), 2);
+});
+
+test('Infografiken mit eigener Audio-Datei bleiben eigenständig', () => {
+  const list = [
+    entry('Facebook', '2026-02-02_thema'),
+    entry('Infografiken', '2026-02-02_thema', { audioUrl: '/audio-files/Infografiken/2026/2026-02-02_thema.mp3' }),
+    entry('Infografiken', '2026-02-02_thema_1'),
+  ];
+  const { groups, anchorOf } = linkInfographics(list);
+  assert.equal(groups.has(list[0].id), false);
+  assert.equal(anchorOf.has(list[1].id), false);
+  assert.deepEqual(memberIds(groups, list[1].id), [list[2].id]);
 });
 
 test('Infografik mit eigenem Text ist ein Original; ihre Varianten gehören zu ihr', () => {

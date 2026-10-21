@@ -3,10 +3,27 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-test('Ein erfolgreicher Infografik-Upload aktualisiert den geöffneten Artikel', () => {
+test('Artikel öffnen die Infografik-Verwaltung statt eines einzelnen Upload-Felds', () => {
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(app, /id="detail-infographic-btn" aria-label="Infografiken verwalten"/);
+  assert.match(app, /window\.openInfographicManager\?\.\(article\)/);
+  assert.match(html, /id="infographic-manager"[\s\S]*data-igm-add>Grafik hinzufügen[\s\S]*data-igm-list/);
+  assert.match(html, /infographic-manager\.js\?v=1/);
+});
+
+test('Upload im Verwaltungsdialog aktualisiert Artikel und Grafikliste', () => {
+  const manager = fs.readFileSync(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
   assert.match(
-    app,
-    /const detailPosition = captureDetailPosition\(\)[\s\S]*?await uploadInfographic\(article, file\)[\s\S]*?await loadArticles\(\)[\s\S]*?currentViewItemId === article\.id[\s\S]*?await openArticle\(article\.id, \{ historyMode: 'none', detailPosition \}\)/,
+    manager,
+    /await uploadInfographic\(igmState\.article, file\)[\s\S]*?await igmLoad\(\)[\s\S]*?await igmRefreshArticle\(\)/,
   );
+  assert.match(manager, /const detailPosition = captureDetailPosition\(\)[\s\S]*?await loadArticles\(\)[\s\S]*?await openArticle\(articleId, \{ historyMode: 'none', detailPosition \}\)/);
+});
+
+test('Dialog kann per Escape und Pull-to-Close geschlossen werden', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const manager = fs.readFileSync(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
+  assert.match(app, /\['#infographic-manager', '#infographic-manager \[data-igm-close\]'\]/);
+  assert.match(manager, /\$igm\.addEventListener\('cancel', event =>/);
 });
