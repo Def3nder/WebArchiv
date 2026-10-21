@@ -1,36 +1,32 @@
-URL: 
+URL:
 https://chatgpt.com/g/g-p-6a744f59cc5881918c4c84045a582a11-infografiken-9-16/project
 
 PROMPT:
-Erstelle eine Infografik im exakten 9:16 Format von dem Text, der unter den Anweisungen folgt.
+Erstelle eine Infografik im exakten 9:16-Format aus dem ARTIKELTEXT am Ende dieser Anweisungen.
+
+GESTALTERISCHES LEITPRINZIP – HÖCHSTE PRIORITÄT:
+Gestalte eine organische, cineastische Premium-Editorial-Infografik mit fließender Text-Bild-Integration statt eines kachelbasierten Layouts. Die gesamte Grafik soll wie eine einzige zusammenhängende visuelle Erzählung wirken. Es bleibt eine echte, inhaltlich aussagekräftige Infografik – keine bloße Spruchgrafik.
 
 STIL & ÄSTHETIK:
 Moderne Premium-Editorial-Infografik kombiniert mit emotional intelligenter Psychologie-, Coaching- und Nervensystem-Ästhetik.
 
 Die Grafik soll wirken wie:
-- hochwertige Pinterest-/Instagram-Coaching-Grafik
+- hochwertiges, durchgehend illustriertes Pinterest-/Instagram-Coaching-Magazinposter
 - luxuriöse Self-Development-Infografik
 - moderne Relationship-/Mindset-Visualisierung
-- ruhige emotionale Premium-Ästhetik
-- cinematic soft UI design
+- ruhige, emotionale Premium-Ästhetik
+- cinematic soft UI design, ohne Dashboard- oder Kacheloptik
 
 VISUELLE MERKMALE:
-- cinematic pastel gradients
-- soft atmospheric lighting
-- warm-vs-cool color contrast
-- glassmorphism-light
-- soft glow effects
-- ultra clean rendering
-- premium digital illustration quality
-- harmonische Informationshierarchie
-- strukturierte modulare Panels
-- abgerundete Karten
-- subtile Transparenzen
-- elegante Trennlinien
-- sanfte Schatten
-- viel Weißraum
-- visuell ausgewogen
-- leicht verträumte Atmosphäre
+- cinematic pastel gradients und soft atmospheric lighting
+- warm-vs-cool color contrast und sanfte Lichtakzente
+- glassmorphism-light nur als subtile, organische Transparenz
+- soft glow effects, atmosphärischer Nebel und weiche Übergänge
+- ultra clean rendering und premium digital illustration quality
+- klare Informationshierarchie ohne starres Raster
+- frei fließende Textinseln mit sanft auslaufenden Konturen
+- subtile Transparenzen und sanfte Schatten statt sichtbarer Kartenrahmen
+- viel ruhiger Bildraum und eine leicht verträumte Atmosphäre
 
 FARBPALETTE:
 - warmes Rosé
@@ -42,55 +38,84 @@ FARBPALETTE:
 - sanfte Lavendeltöne
 - weiche Beige-/Pfirsichtöne
 
-INHALTLICHE TREUE – ZWINGEND:  
+INHALTLICHE TREUE – ZWINGEND:
 - Übernimm ausschließlich Strukturen, Kategorien, Aufzählungen und Nummerierungen, die im ARTIKELTEXT ausdrücklich vorhanden sind.
 - Erfinde keine nummerierten Punkte, Schritte, Regeln, Phasen, Kategorien oder Checklisten.
 - Wenn der ARTIKELTEXT keine nummerierte Aufzählung enthält, darf die Grafik ebenfalls keine Nummerierung enthalten.
 - Verwandle Fließtext nicht eigenständig in „5 Punkte“, „7 Zeichen“, „8 Merkmale“, „Schritte“ oder ähnliche künstliche Systeme.
 - Die visuelle Gliederung darf den Inhalt ordnen, aber keine neue inhaltliche Struktur suggerieren.
-- Überschriften für einzelne Bereiche dürfen nur verwendet werden, wenn sie den tatsächlich vorhandenen Aussagen des Textes entsprechen und keine zusätzliche Systematik vortäuschen.
-- Keine erfundenen Inhalte, Dummy-Texte, zusätzlichen Aussagen oder scheinbaren Zitate.
-- Grundregel: Die Grafik visualisiert die Struktur des Artikels – sie erfindet keine eigene Struktur.
+- Bereichsüberschriften müssen durch tatsächliche Aussagen des Artikels gedeckt sein.
+- Keine erfundenen Inhalte, Dummy-Texte, zusätzlichen Behauptungen oder scheinbaren Zitate.
+- Zitate und Zuschreibungen nur verwenden, wenn sie im Artikel enthalten sind; Unsicherheiten der Zuschreibung beibehalten.
+- Grundregel: Die Grafik visualisiert die gedankliche Struktur des Artikels – sie erfindet keine eigene Systematik.
 
-LAYOUT:  
-- vertikale 9:16-Komposition
-- große Hero-Zone oben
-- zentrale visuelle Hauptaussage
-- modulare Bereiche nur dort, wo sie sich inhaltlich aus dem Artikel ergeben
-- unterschiedliche Panelgrößen für visuelle Dynamik
-- viel Weißraum und klare Leserichtung
-- Illustrationen und symbolische Motive zur Unterstützung des Inhalts
-- Diagramme, Pfeile, nummerierte Elemente und Prozessdarstellungen nur dann, wenn der Artikel selbst eine entsprechende Struktur enthält
-- keine Dummy-Inhalte
-- keine künstliche Checkliste oder nummerierte Systematik
+INHALTLICHE VERDICHTUNG – ZWINGEND:
+- Übernimm den Originaltitel vollständig und wortgetreu, sofern der Artikel einen Titel enthält.
+- Extrahiere die zentralen Aussagen und gedanklichen Zusammenhänge des Artikels.
+- Reduziere den übrigen Text auf wenige prägnante, eigenständig verständliche Kernaussagen mit kurzen Erklärungen.
+- Vermeide Wiederholungen, Nebendetails und lange Fließtextblöcke.
+- Bewahre wichtige Differenzierungen, Widersprüche und Einschränkungen des Originals.
+- Jede Textgruppe muss einen eigenen Erkenntnisgewinn bieten; keine dekorativen Fülltexte.
+- Visualisiere Zusammenhänge nach Möglichkeit durch Motive, Kontrast und Komposition statt durch zusätzliche Worte.
+- Bei Platzmangel kürze und bündele den Text weiter; verkleinere ihn nicht bis zur Unlesbarkeit.
+- Ziel: maximale Aussagekraft bei geringer visueller Überladung – informativ statt bloß plakativ.
 
-TYPOGRAFIE:
-- große elegante Script-/Brush-Headline
-- moderne Sans-Serif-Untertexte
-- klare visuelle Hierarchie
-- Editorial-Magazin-Stil
+LAYOUT & KOMPOSITION – ZWINGEND:
+- Vertikale 9:16-Komposition mit großem, dominantem Titel im oberen Bereich.
+- Verwende möglichst eine durchgängige atmosphärische Bildwelt, die sich über die gesamte Höhe erstreckt.
+- Integriere thematisch passende semi-realistische Illustrationen direkt in diese Bildwelt.
+- Ordne Text in frei fließenden, organischen Bereichen an, die mit den Illustrationen verschmelzen.
+- Nutze geschwungene Übergänge, Lichtverläufe, Nebel, Transparenz und natürliche Konturen zur Gliederung.
+- Bevorzuge eine bewusst asymmetrische, aber harmonisch ausbalancierte Komposition.
+- Variiere Position, Größe und Ausrichtung der Text-Bild-Gruppen, ohne ein starres Spaltenraster zu bilden.
+- Führe den Blick natürlich von oben nach unten durch Licht, Landschaftselemente und wechselnde Bildausschnitte.
+- Setze kühle/dunkle und warme/helle Bildbereiche zur emotionalen Differenzierung ein, sofern es zum Inhalt passt.
+- Illustrationen dürfen teilweise hinter, zwischen und um Textbereiche herum verlaufen; Text selbst muss stets klar lesbar bleiben.
+- Bewahre ausreichend ruhige Flächen für gute Lesbarkeit auf dem Smartphone.
+- Modulare Bereiche nur dort, wo sie sich tatsächlich aus dem Artikel ergeben; keine künstliche Gliederung.
+- Diagramme, Pfeile, Nummerierungen und Prozessdarstellungen nur dann, wenn der Artikel eine entsprechende Struktur enthält.
+
+UNBEDINGT VERMEIDEN:
+- starre Kartenraster und gleichförmige rechteckige Textboxen
+- sichtbare Tabellen-, Dashboard- und Business-Folien-Strukturen
+- regelmäßig wiederholte Kacheln und harte Trennlinien
+- durchgehend symmetrische Zwei-Spalten-Anordnung
+- isoliert wirkende Stockbild-Illustrationen
+- zu viele kleinteilige Textabschnitte oder winzige Schriften
+- künstliche Checklisten, erfundene Nummerierungen und Dummy-Inhalte
+- reine Zitat-/Spruchposter ohne substanziellen Informationsgehalt
+
+TYPOGRAFIE – SCHREIBSCHRIFT AUSSCHLIESSLICH IN DER HAUPTÜBERSCHRIFT:
+- HAUPTÜBERSCHRIFT bedeutet ausschließlich der einmalige, übergeordnete Originaltitel der gesamten Infografik (in der Regel ganz oben in der Hero-Zone). Der Originaltitel bleibt vollständig und wortgetreu.
+- Nur in dieser einen Hauptüberschrift: Kombiniere eine hochwertige, gut lesbare Serifenschrift als Basis mit eleganter Script-/Brush-Schreibschrift als deutlich sichtbarem Akzent.
+- Hebe genau ein inhaltlich bedeutendes Wort oder eine kurze zusammenhängende Phrase der Hauptüberschrift in Schreibschrift hervor. Setze nicht die gesamte Hauptüberschrift in Schreibschrift.
+- Optional kann ausschließlich dieser Schreibschrift-Akzent durch Coral oder Rosé gegenüber Navy farblich hervorgehoben werden, sofern die Lesbarkeit erhalten bleibt.
+- ALLE weiteren Zwischenüberschriften, Abschnittstitel, Labels, Zitate, Hervorhebungen, Bildunterschriften und sonstigen Texte: KEINE Schreibschrift, KEINE Brush-Schrift und KEINE handschriftlichen Akzente. Verwende hierfür ausschließlich klare Serifenschrift oder Sans-Serif.
+- Erklärungstexte immer in gut lesbarer Sans-Serif-Schrift; auch auf dem Smartphone bequem lesbar, nicht als Kleinstschrift.
+- Die zweischriftige Gestaltung ist exklusiv der Hauptüberschrift vorbehalten und darf nirgendwo sonst auf dem Blatt wiederholt werden, auch nicht als dekoratives Einzelelement.
+- Deutliche visuelle Hierarchie, korrektes Deutsch, saubere Rechtschreibung, keine Fantasiewörter; Editorial-Magazin-Stil statt Präsentationsoptik.
 
 ILLUSTRATIONEN:
 - semi-realistische emotionale Illustrationen
-- symbolische Personen-Silhouetten
-- abstrakte Beziehungsszenen
-- minimalistische Line-Art-Icons
-- emotionale Landschaften
-- Himmel mit sanften Lichtverläufen
-- subtile symbolische Motive
+- symbolische Personen-Silhouetten und abstrakte Beziehungsszenen, wenn thematisch passend
+- minimalistische Line-Art-Icons nur, wenn sie einen echten Informationsbeitrag leisten
+- emotionale Landschaften und Himmel mit sanften Lichtverläufen
+- subtile symbolische Motive, die Aussagen des Artikels sichtbar machen
+- Illustrationen als Teil einer zusammenhängenden visuellen Erzählung statt isolierter Einzelbilder
 
 WICHTIG:
 - keine überladene Business-Optik
 - keine Comic-Optik
 - keine flachen Standard-Infografiken
-- bitte verwende farbliche Abstufungen, wenn immer es sinnvoll ist
-- assoziiere dunkele/kühle Farbtöne in Richtung 'negativ' und helle/warme Farbtöne in Richtung 'positiv'
+- Farbabstufungen verwenden, wenn sinnvoll
+- dunkle/kühle Farbtöne bevorzugt für Belastung, Enge oder Konflikt und helle/warme für Entlastung, Öffnung oder Hoffnung, soweit inhaltlich passend
+- Informationsgehalt und Lesbarkeit haben Vorrang vor dekorativer Komplexität
 
 QUALITÄT:
-ultra polished, premium infographic aesthetic, emotionally intelligent visual design, cinematic composition, luxury coaching brand style, highly detailed but clean
+ultra polished, premium infographic aesthetic, emotionally intelligent visual design, cinematic composition, luxury coaching brand style, highly detailed but clean; dynamic organic editorial layout, seamless visual storytelling, legible typography.
 
 ---
 
 Hier der Text:
 
-
+ARTIKELTEXT

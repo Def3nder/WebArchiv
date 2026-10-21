@@ -206,6 +206,10 @@ Anhänge unberührt. Ein nummerierter Anhang kann auch kopierten Text in seiner
 eigenem Audio werden nicht als Anhang verwaltet. Da die
 Reihenfolge Teil des Dateinamens und der Infografik-ID ist, können sich direkte
 Links auf einzelne Grafiken beim Umordnen ändern; der Artikellink bleibt gleich.
+Nach Hinzufügen, Umordnen oder Entfernen liest der Server nur die Infografiken
+des betroffenen Jahres erneut von der Festplatte. Artikel anderer Autoren und
+andere Infografik-Jahre bleiben im Speicher; Zuordnungen und Suche werden aus
+diesen Daten neu berechnet. Ein manueller Reindex bleibt ein vollständiger Scan.
 
 **Bestehende Dateinamen umstellen:** Vorher ein Backup von `www/Infografiken/`
 anlegen und zunächst `node scripts/migrate-infographic-names.js` als Vorschau

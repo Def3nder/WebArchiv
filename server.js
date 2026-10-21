@@ -82,6 +82,9 @@ userStore.load();
 console.log(`Public-Autoren: ${userStore.publicAuthors.length ? userStore.publicAuthors.join(', ') : '(keine)'}`);
 
 let articles = [];
+// Unverknüpfte Scan-Ergebnisse: linkInfographics verändert abgeleitete Felder.
+// Für einen Teil-Neuindex müssen die übrigen Artikel aus diesem Stand neu verknüpft werden.
+let sourceArticles = [];
 let articleById = new Map();
 // Infografik-Gruppen (siehe linkInfographics): Anker-ID → Mitglieder, Mitglied → Anker-ID.
 let infographicGroups = new Map();
@@ -457,11 +460,12 @@ function audioFileUrl(relPath, absPath) {
   return `/audio-files/${relPath}${v}`;
 }
 
-async function scanDir(dirPath, author, year, collector) {
+async function scanDir(dirPath, author, year, collector, { strict = false } = {}) {
   let entries;
   try {
     entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
-  } catch {
+  } catch (error) {
+    if (strict) throw error;
     return;
   }
   const filesByLowerName = indexFilesByLowerName(entries);
@@ -473,7 +477,7 @@ async function scanDir(dirPath, author, year, collector) {
       // wieder in den Artikelindex oder in eine Bildgruppe.
       if (author === INFOGRAPHICS_AUTHOR && fullPath === INFOGRAPHIC_TRASH_DIR) continue;
       const nextYear = /^\d{4}$/.test(entry.name) ? entry.name : year;
-      await scanDir(fullPath, author, nextYear, collector);
+      await scanDir(fullPath, author, nextYear, collector, { strict });
       continue;
     }
     if (!entry.name.endsWith('.md')) continue;
@@ -748,6 +752,86 @@ async function buildIndex() {
   }
 }
 
+function uniqueArticles(articleList) {
+  const seen = new Set();
+  return articleList.filter(article => {
+    if (seen.has(article.id)) return false;
+    seen.add(article.id);
+    return true;
+  });
+}
+
+function replaceInfographicYearArticles(articleList, year, scanned) {
+  const folderPrefix = `${INFOGRAPHICS_AUTHOR}/${year}/`;
+  return uniqueArticles([
+    ...articleList.filter(article => !article.id.startsWith(folderPrefix)),
+    ...scanned,
+  ]);
+}
+
+function prepareLinkedArticles(nextSourceArticles, authorPriority) {
+  // Gruppen, Kategorien und Audio-Vererbung nur auf Kopien berechnen; die
+  // unverknüpften Scan-Ergebnisse bleiben für spätere Teil-Neuindizes sauber.
+  const nextArticles = nextSourceArticles.map(article => ({
+    ...article,
+    categories: [...article.categories],
+    tags: [...article.tags],
+  }));
+  const { groups, anchorOf } = linkInfographics(nextArticles, authorPriority);
+  return { articles: nextArticles, groups, anchorOf };
+}
+
+function publishArticleIndex(nextSourceArticles) {
+  const { articles: nextArticles, groups, anchorOf } = prepareLinkedArticles(nextSourceArticles, userStore.authorPriority);
+  const nextById = new Map(nextArticles.map(article => [article.id, article]));
+  const isInfografik = article => (article.author === INFOGRAPHICS_AUTHOR ? 1 : 0);
+  nextArticles.sort((a, b) =>
+    (b.date || '').localeCompare(a.date || '') ||
+    (a.title || '').localeCompare(b.title || '', 'de', { sensitivity: 'base' }) ||
+    isInfografik(a) - isInfografik(b)
+  );
+
+  const authorsSet = new Set(nextArticles.map(article => article.author));
+  if (audiobooks.books.length) authorsSet.add(AUDIOBOOK_AUTHOR);
+  const yearsSet = new Set(nextArticles.map(article => article.year).filter(Boolean));
+  const catsSet = new Set(nextArticles.flatMap(article => article.categories));
+  const nextMeta = {
+    authors: [...authorsSet].sort(),
+    years: [...yearsSet].sort().reverse(),
+    categories: [...catsSet].filter(Boolean).sort((a, b) => a.localeCompare(b, 'de')),
+  };
+  const nextFuseIndex = buildArticleSearchIndex(nextArticles);
+
+  sourceArticles = nextSourceArticles;
+  articles = nextArticles;
+  infographicGroups = groups;
+  groupAnchorOf = anchorOf;
+  articleById = nextById;
+  meta = nextMeta;
+  fuseIndex = nextFuseIndex;
+  refreshDuplicateState();
+}
+
+async function refreshInfographicsForYear(year) {
+  if (!/^\d{4}$/.test(year)) throw new Error('Ungültiges Infografik-Jahr.');
+  if (!sourceArticles.length) return buildIndex();
+  const yearDir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
+  const t0 = Date.now();
+  reindexState = { running: true, processed: 0, articles: 0, done: false };
+  try {
+    const stat = await fs.promises.lstat(yearDir);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Infografik-Jahresverzeichnis ist ungültig.');
+    const scanned = [];
+    await scanDir(yearDir, INFOGRAPHICS_AUTHOR, year, scanned, { strict: true });
+    publishArticleIndex(replaceInfographicYearArticles(sourceArticles, year, scanned));
+    reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
+    console.log(`✓ Infografiken ${year} neu eingelesen (${scanned.length} Einträge, ${Date.now() - t0}ms)`);
+  } catch (error) {
+    reindexState = { ...reindexState, running: false, done: true, error: error.message };
+    throw error;
+  }
+}
+
 async function rebuildIndex() {
   console.log('Building article index…');
   const t0 = Date.now();
@@ -767,38 +851,10 @@ async function rebuildIndex() {
     await scanDir(path.join(WWW_DIR, dir.name), dir.name, null, collector);
   }
 
-  // Deduplicate by id (orig/ subdirs may duplicate files)
-  const seen = new Set();
-  articles = collector.filter(a => {
-    if (seen.has(a.id)) return false;
-    seen.add(a.id);
-    return true;
-  });
-
-  ({ groups: infographicGroups, anchorOf: groupAnchorOf } = linkInfographics(articles, userStore.authorPriority));
-  articleById = new Map(articles.map(article => [article.id, article]));
-  refreshDuplicateState();
+  // Deduplicate by id (orig/ subdirs may duplicate files).
+  // Hörbücher werden nur beim vollständigen Neuindex erneut eingelesen.
   await audiobooks.rebuild();
-
-  const isInfografik = a => (a.author === 'Infografiken' ? 1 : 0);
-  articles.sort((a, b) =>
-    (b.date || '').localeCompare(a.date || '') ||
-    (a.title || '').localeCompare(b.title || '', 'de', { sensitivity: 'base' }) ||
-    isInfografik(a) - isInfografik(b)
-  );
-
-  const authorsSet = new Set(articles.map(a => a.author));
-  if (audiobooks.books.length) authorsSet.add(AUDIOBOOK_AUTHOR);
-  const yearsSet = new Set(articles.map(a => a.year).filter(Boolean));
-  const catsSet = new Set(articles.flatMap(a => a.categories));
-
-  meta = {
-    authors: [...authorsSet].sort(),
-    years: [...yearsSet].sort().reverse(),
-    categories: [...catsSet].filter(Boolean).sort((a, b) => a.localeCompare(b, 'de')),
-  };
-
-  fuseIndex = buildArticleSearchIndex(articles);
+  publishArticleIndex(uniqueArticles(collector));
 
   reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
   console.log(`✓ ${articles.length} articles, ${audiobooks.books.length} Hörbücher indexed in ${Date.now() - t0}ms`);
@@ -1803,7 +1859,7 @@ app.post('/api/infographic-manager/*', requireAdmin, async (req, res) => {
     } else {
       throw duplicateFail(400, 'Unbekannte Infografik-Aktion.');
     }
-    await buildIndex();
+    await refreshInfographicsForYear(context.year);
     res.json({ ok: true, trash: trashFolder
       ? path.relative(WWW_DIR, trashFolder).replace(/\\/g, '/') : undefined });
   } catch (error) {
@@ -1811,7 +1867,7 @@ app.post('/api/infographic-manager/*', requireAdmin, async (req, res) => {
     try {
       if (undoOrder) await undoOrder();
       if (undoTrash) await undoTrash();
-      if (undoOrder || undoTrash) await buildIndex();
+      if (undoOrder || undoTrash) await refreshInfographicsForYear(context.year);
       if (trashFolder) await fs.promises.rmdir(trashFolder).catch(() => {});
     } catch (failed) { rollbackError = failed; }
     res.status(error.status || 500).json({ error: rollbackError
@@ -1882,7 +1938,7 @@ app.post(
         throw err;
       }
 
-      await buildIndex();
+      await refreshInfographicsForYear(header.date.slice(0, 4));
       res.json({
         ok: true,
         id: target.id,
@@ -2446,6 +2502,7 @@ if (require.main === module) {
 
 module.exports = {
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
+  replaceInfographicYearArticles, prepareLinkedArticles,
   buildInfographicMarkdown, removeCategoryLines, slugify,
   normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
   computeAppShellVersion, serviceWorkerSource,

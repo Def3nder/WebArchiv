@@ -2,7 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { retitleInfographicMarkdown, moveInfographicFiles, reorderManagedInfographics } = require('../server.js');
+const {
+  retitleInfographicMarkdown, moveInfographicFiles, reorderManagedInfographics,
+  replaceInfographicYearArticles, prepareLinkedArticles,
+} = require('../server.js');
 
 async function fixture(run) {
   const dir = await fs.mkdtemp(path.join(__dirname, '.infographic-manager-test-'));
@@ -130,4 +133,54 @@ test('Manager bleibt auf Artikelgruppen beschränkt und der Papierkorb bleibt un
   assert.match(server, /segments\[1\]\?\.toLowerCase\(\) === 'trash'/);
   assert.match(server, /infographicGroups\.get\(article\.id\)/);
   assert.match(server, /item\.author !== INFOGRAPHICS_AUTHOR[\s\S]*item\.infographicBase !== baseStem/);
+});
+
+test('Teil-Neuindex ersetzt nur Infografiken des Jahres und verknüpft aus unveränderten Rohdaten', () => {
+  const article = {
+    id: 'Joe Turan/2026/artikel', author: 'Joe Turan', year: '2026',
+    filePath: path.join('www', 'Joe Turan', '2026', 'artikel.md'),
+    categories: ['Thema'], tags: ['Original'], audioUrl: '/audio/artikel.mp3',
+  };
+  const oldInfo = {
+    id: 'Infografiken/2026/artikel_1', author: 'Infografiken', year: '2026',
+    filePath: path.join('www', 'Infografiken', '2026', 'artikel_1.md'),
+    categories: [], tags: [], audioUrl: null, hasBody: false,
+  };
+  const otherYear = {
+    id: 'Infografiken/2025/anderer_1', author: 'Infografiken', year: '2025',
+    filePath: path.join('www', 'Infografiken', '2025', 'anderer_1.md'),
+    categories: [], tags: [], audioUrl: null, hasBody: false,
+  };
+  const raw = [article, oldInfo, otherYear];
+  const first = prepareLinkedArticles(raw, ['Joe Turan']);
+  assert.deepEqual(first.groups.get(article.id).map(item => item.id), [oldInfo.id]);
+  assert.deepEqual(first.groups.get(article.id)[0].categories, ['Thema']);
+  assert.equal(first.groups.get(article.id)[0].audioUrl, article.audioUrl);
+  assert.deepEqual(oldInfo.categories, []);
+  assert.equal(oldInfo.audioUrl, null);
+
+  const newInfo = { ...oldInfo, id: 'Infografiken/2026/artikel_2',
+    filePath: path.join('www', 'Infografiken', '2026', 'artikel_2.md') };
+  const nextRaw = replaceInfographicYearArticles(raw, '2026', [newInfo]);
+  assert.equal(nextRaw[0], article);
+  assert.equal(nextRaw[1], otherYear);
+  assert.equal(nextRaw.includes(oldInfo), false);
+  const second = prepareLinkedArticles(nextRaw, ['Joe Turan']);
+  assert.deepEqual(second.groups.get(article.id).map(item => item.id), [newInfo.id]);
+  assert.deepEqual(newInfo.categories, []);
+  assert.equal(newInfo.audioUrl, null);
+
+  const removed = prepareLinkedArticles(replaceInfographicYearArticles(nextRaw, '2026', []), ['Joe Turan']);
+  assert.equal(removed.groups.has(article.id), false);
+  assert.equal(removed.articles.some(item => item.id === otherYear.id), true);
+});
+
+test('Manager-Aktionen und Upload lesen nur das betroffene Infografik-Jahr neu ein', async () => {
+  const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const manager = server.slice(server.indexOf("app.post('/api/infographic-manager/*'"), server.indexOf("'/api/infographics/*'"));
+  const upload = server.slice(server.indexOf("'/api/infographics/*'"), server.indexOf('// ─── Neue eigenständige Infografik'));
+  assert.match(manager, /await refreshInfographicsForYear\(context\.year\)/);
+  assert.doesNotMatch(manager, /await buildIndex\(\)/);
+  assert.match(upload, /await refreshInfographicsForYear\(header\.date\.slice\(0, 4\)\)/);
+  assert.doesNotMatch(upload, /await buildIndex\(\)/);
 });
