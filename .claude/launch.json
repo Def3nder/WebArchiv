@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["server.js"],
       "port": 3000
+    },
+    {
+      "name": "duplicates-tool",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["duplicates-tool/server.js"],
+      "port": 3100
     }
   ]
 }
