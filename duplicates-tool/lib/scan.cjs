@@ -35,7 +35,8 @@ function companionsFor(mdName, fileNames) {
   }).sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
 }
 
-async function scanFolder(root, { side, exclude = [] } = {}) {
+// idPrefix trennt mehrere Ordner derselben Seite (A1, A2 …), damit IDs eindeutig bleiben.
+async function scanFolder(root, { side, idPrefix = side, rootIndex = 1, exclude = [] } = {}) {
   const resolvedRoot = path.resolve(root);
   const excluded = exclude.filter(Boolean).map(item => path.resolve(item))
     .filter(item => item !== resolvedRoot && isInside(item, resolvedRoot));
@@ -64,9 +65,10 @@ async function scanFolder(root, { side, exclude = [] } = {}) {
         const parsed = parseArticle(content, full);
         const relPath = path.relative(resolvedRoot, full);
         articles.push({
-          id: `${side}:${relPath.split(path.sep).join('/')}`,
+          id: `${idPrefix}:${relPath.split(path.sep).join('/')}`,
           side,
           root: resolvedRoot,
+          rootIndex,
           relPath,
           absPath: full,
           title: parsed.title,

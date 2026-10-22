@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <title>Dubletten-Werkzeug</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='5' width='17' height='21' rx='3' fill='%23c9a84c'/%3E%3Crect x='12' y='8' width='17' height='21' rx='3' fill='%23191714' stroke='%23c9a84c' stroke-width='2'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <header class="app-header">
@@ -19,10 +19,11 @@
 
   <form id="setup" class="setup" autocomplete="off">
     <div class="setup-folders">
-      <label class="setup-field">
-        <span class="setup-caption"><b class="side-badge side-a">A</b> Original</span>
-        <span class="setup-input"><input type="text" name="folderA" spellcheck="false" placeholder="Ordner mit den Originalen"><button type="button" class="duplicate-btn" data-browse="folderA">Durchsuchen …</button></span>
-      </label>
+      <div id="originals-list" class="originals-list"></div>
+      <div class="setup-field setup-add">
+        <span></span>
+        <span><button type="button" id="add-original" class="duplicate-btn">+ Weiterer Original-Ordner</button></span>
+      </div>
       <label class="setup-field">
         <span class="setup-caption"><b class="side-badge side-b">B</b> Kandidaten</span>
         <span class="setup-input"><input type="text" name="folderB" spellcheck="false" placeholder="Ordner, aus dem Dubletten verschoben werden"><button type="button" class="duplicate-btn" data-browse="folderB">Durchsuchen …</button></span>
@@ -125,6 +126,6 @@
 
   <script src="vendor/diff.min.js"></script>
   <script src="duplicate-diff.js?v=2"></script>
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

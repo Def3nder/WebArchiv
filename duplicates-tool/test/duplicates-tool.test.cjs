@@ -106,9 +106,11 @@ test('API: scannen, vergleichen, ignorieren, verschieben, rückgängig', async (
     return { status: response.status, data: await response.json() };
   };
   try {
-    let result = await call('/api/config', { method: 'PUT', body: { folderA, folderB, target: folderA } });
+    let result = await call('/api/config', { method: 'PUT', body: { originals: [folderA], folderB, target: folderA } });
     assert.equal(result.status, 400);
-    result = await call('/api/config', { method: 'PUT', body: { folderA, folderB, target } });
+    result = await call('/api/config', { method: 'PUT', body: { originals: [folderA, path.join(folderA, 'sub')], folderB, target } });
+    assert.equal(result.status, 400);
+    result = await call('/api/config', { method: 'PUT', body: { originals: [folderA], folderB, target } });
     assert.equal(result.status, 200);
     await call('/api/scan', { method: 'POST' });
     result = await call('/api/duplicates');
@@ -154,6 +156,56 @@ test('API: scannen, vergleichen, ignorieren, verschieben, rückgängig', async (
 
     const foreign = await fetch(`${base}/api/scan`, { method: 'POST', headers: { Origin: 'http://evil.example' } });
     assert.equal(foreign.status, 403);
+  } finally {
+    server.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('API: mehrere Original-Ordner werden gemeinsam als Seite A verglichen', async () => {
+  const root = await tempDir();
+  const first = path.join(root, 'Blog');
+  const second = path.join(root, 'Archiv');
+  const folderB = path.join(root, 'B');
+  const otherBody = BODY.replace(/Wort/g, 'Begriff');
+  await write(path.join(first, 'gleich.md'), articleText('Gleich', '2021-01-01', BODY));
+  await write(path.join(second, 'gleich.md'), articleText('Anders', '2021-01-01', otherBody));
+  await write(path.join(folderB, 'eins.md'), articleText('Gleich', '2021-01-02', BODY));
+  await write(path.join(folderB, 'zwei.md'), articleText('Anders', '2021-01-02', otherBody));
+  // Alte Konfiguration mit nur „folderA“ wird als erster Original-Ordner gelesen.
+  await write(path.join(root, 'config.json'), JSON.stringify({ folderA: first, folderB }));
+  process.env.DUPLICATES_TOOL_CONFIG = path.join(root, 'config.json');
+  process.env.DUPLICATES_TOOL_DATA = path.join(root, 'data');
+  delete require.cache[require.resolve('../server.js')];
+  const { app } = require('../server.js');
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const call = async (url, options = {}) => {
+    const response = await fetch(base + url, {
+      ...options,
+      headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    return { status: response.status, data: await response.json() };
+  };
+  try {
+    let result = await call('/api/config');
+    assert.deepEqual(result.data.config.originals, [first]);
+    result = await call('/api/config', { method: 'PUT', body: { originals: [first, second] } });
+    assert.equal(result.status, 200);
+    const stored = JSON.parse(await fs.readFile(path.join(root, 'config.json'), 'utf8'));
+    assert.deepEqual(stored.originals, [first, second]);
+    assert.equal(stored.folderA, undefined);
+
+    await call('/api/scan', { method: 'POST' });
+    result = await call('/api/duplicates');
+    assert.deepEqual(result.data.scan.originalFolders, [first, second]);
+    const byCandidate = Object.fromEntries(result.data.pending.map(item => [item.candidate.relPath, item.original]));
+    assert.equal(byCandidate['eins.md'].id, 'A1:gleich.md');
+    assert.equal(byCandidate['zwei.md'].id, 'A2:gleich.md');
+    assert.equal(byCandidate['zwei.md'].rootIndex, 2);
+    assert.equal(byCandidate['zwei.md'].rootName, 'Archiv');
   } finally {
     server.close();
     await fs.rm(root, { recursive: true, force: true });

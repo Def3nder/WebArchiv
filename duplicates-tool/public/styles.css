@@ -404,3 +404,12 @@ input[type="search"].duplicate-select-input { width: 14rem; }
   input[type="search"].duplicate-select-input { width: 100%; }
   .folder-dialog { width: 100vw; max-height: 100dvh; border: 0; border-radius: 0; }
 }
+
+/* ── Mehrere Original-Ordner ─────────────────────────────────────────────── */
+.originals-list { display: grid; gap: 8px; }
+.side-badge { width: auto; min-width: 1.45rem; padding: 0 4px; }
+.setup-add .duplicate-btn { padding: 5px 10px; font-size: .74rem; }
+[data-remove-original][hidden] { display: none; }
+@media (max-width: 760px) {
+  .setup-add > span:first-child { display: none; }
+}

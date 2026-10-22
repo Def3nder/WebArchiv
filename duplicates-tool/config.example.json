@@ -1,5 +1,8 @@
 {
-  "folderA": "C:\\Pfad\\zu\\Originalen",
+  "originals": [
+    "C:\\Pfad\\zu\\Originalen",
+    "C:\\Pfad\\zu\\weiteren\\Originalen"
+  ],
   "folderB": "C:\\Pfad\\zu\\Kandidaten",
   "target": "C:\\Pfad\\zu\\Dubletten",
   "host": "127.0.0.1",

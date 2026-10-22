@@ -144,8 +144,16 @@ function pruneDuplicateSelection() {
 
 // ─── Karten ──────────────────────────────────────────────────────────────
 
-function duplicateSideLabel(side) {
-  return side === 'blog' ? 'A · ORIGINAL' : 'B · KANDIDAT';
+// Bei mehreren Original-Ordnern zeigt das Etikett, aus welchem (A1, A2 …) der Treffer stammt.
+function duplicateSideLabel(side, article = null) {
+  if (side !== 'blog') return 'B · KANDIDAT';
+  const multiple = (duplicateUi.data.scan?.originalFolders?.length || 0) > 1;
+  return multiple && article?.rootIndex ? `A${article.rootIndex} · ORIGINAL` : 'A · ORIGINAL';
+}
+
+function duplicateArticlePath(article) {
+  const multiple = article?.side === 'A' && (duplicateUi.data.scan?.originalFolders?.length || 0) > 1;
+  return multiple ? `${article.rootName}/${article.relPath}` : article?.relPath || '';
 }
 
 function duplicateFileNote(article) {
@@ -158,9 +166,9 @@ function duplicateArticleMini(article, side) {
   if (!article) return `<article class="duplicate-side is-missing"><p>Artikel fehlt</p></article>`;
   return `<article class="duplicate-side duplicate-side-${side}">
     <div class="duplicate-side-copy">
-      <div class="duplicate-side-kicker"><span class="duplicate-source">${duplicateSideLabel(side)}</span><span class="duplicate-infographic-count">${duplicateEsc(duplicateFileNote(article))}</span></div>
+      <div class="duplicate-side-kicker"><span class="duplicate-source">${duplicateSideLabel(side, article)}</span><span class="duplicate-infographic-count">${duplicateEsc(duplicateFileNote(article))}</span></div>
       <h3 title="${duplicateEsc(article.title)}">${duplicateEsc(article.title)}</h3>
-      <p class="duplicate-meta">${duplicateDate(article.date)} · <span class="duplicate-path" title="${duplicateEsc(article.relPath)}">${duplicateEsc(article.relPath)}</span></p>
+      <p class="duplicate-meta">${duplicateDate(article.date)} · <span class="duplicate-path" title="${duplicateEsc(duplicateArticlePath(article))}">${duplicateEsc(duplicateArticlePath(article))}</span></p>
       <p class="duplicate-excerpt">${duplicateEsc(article.excerpt || '')}</p>
     </div>
   </article>`;
@@ -367,7 +375,7 @@ function renderDuplicateDetail(pair) {
       </div>
     </div>
     <div class="duplicate-detail-header-grid">
-      <article data-duplicate-side="blog"><span class="duplicate-source">A · ORIGINAL</span><h3 title="${duplicateEsc(pair.original.title)}">${duplicateEsc(pair.original.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.original.date)} · ${duplicateEsc(pair.original.relPath)}</p>${duplicateCompanionGallery(pair.original, 'blog')}</article>
+      <article data-duplicate-side="blog"><span class="duplicate-source">${duplicateSideLabel('blog', pair.original)}</span><h3 title="${duplicateEsc(pair.original.title)}">${duplicateEsc(pair.original.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.original.date)} · ${duplicateEsc(duplicateArticlePath(pair.original))}</p>${duplicateCompanionGallery(pair.original, 'blog')}</article>
       <article data-duplicate-side="facebook"><span class="duplicate-source">B · KANDIDAT</span><h3 title="${duplicateEsc(pair.candidate.title)}">${duplicateEsc(pair.candidate.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.candidate.date)} · ${duplicateEsc(pair.candidate.relPath)}</p>${duplicateCompanionGallery(pair.candidate, 'facebook')}</article>
     </div>
     <div class="duplicate-comparison-scroll" tabindex="0" aria-label="Änderungen zwischen B und A">
@@ -400,7 +408,7 @@ function renderDuplicateImageViewer() {
   if (!item) return;
   duplicateImageViewerImage.src = item.url;
   duplicateImageViewerImage.alt = item.name;
-  duplicateImageViewerSide.textContent = duplicateSideLabel(item.side);
+  duplicateImageViewerSide.textContent = duplicateSideLabel(item.side, item.article);
   duplicateImageViewerTitle.textContent = item.name;
   duplicateImageViewerCounter.textContent = `${duplicateUi.viewerIndex + 1} / ${duplicateUi.viewerItems.length}`;
   duplicateImageViewerPrev.disabled = duplicateUi.viewerIndex === 0;
@@ -412,7 +420,7 @@ function openDuplicateImageViewer(side, sideIndex) {
   if (!pair) return;
   const entries = [['blog', pair.original], ['facebook', pair.candidate]];
   duplicateUi.viewerItems = entries.flatMap(([itemSide, article]) => duplicateImageNames(article)
-    .map(name => ({ side: itemSide, name, url: duplicateImageUrl(article, name) })));
+    .map(name => ({ side: itemSide, article, name, url: duplicateImageUrl(article, name) })));
   const offset = side === 'facebook' ? duplicateImageNames(pair.original).length : 0;
   duplicateUi.viewerIndex = offset + sideIndex;
   renderDuplicateImageViewer();
@@ -431,12 +439,52 @@ function stepDuplicateImageViewer(offset) {
 function describeScan(scan) {
   if (!scan) return 'Noch nicht gescannt.';
   const when = new Date(scan.scannedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  const text = `${scan.originals} Originale in A · ${scan.candidates} Kandidaten in B · Scan um ${when} (${(scan.durationMs / 1000).toFixed(1).replace('.', ',')} s)`;
+  const folders = scan.originalFolders?.length || 1;
+  const text = `${scan.originals} Originale in ${folders === 1 ? 'A' : `${folders} Ordnern`} · ${scan.candidates} Kandidaten in B · Scan um ${when} (${(scan.durationMs / 1000).toFixed(1).replace('.', ',')} s)`;
   return scan.stale ? `${text} – Einstellungen geändert, bitte neu scannen.` : text;
 }
 
+// ─── Original-Ordner (beliebig viele Zeilen) ─────────────────────────────
+
+const originalsList = document.getElementById('originals-list');
+
+function originalInputs() {
+  return [...originalsList.querySelectorAll('input[name="original"]')];
+}
+
+function renumberOriginals() {
+  const rows = [...originalsList.querySelectorAll('.setup-field')];
+  rows.forEach((row, index) => {
+    row.querySelector('.side-badge').textContent = rows.length > 1 ? `A${index + 1}` : 'A';
+    row.querySelector('[data-remove-original]').hidden = rows.length === 1;
+  });
+}
+
+function addOriginalRow(value = '', { focus = false } = {}) {
+  const row = document.createElement('label');
+  row.className = 'setup-field';
+  row.innerHTML = `<span class="setup-caption"><b class="side-badge side-a">A</b> Original</span>
+    <span class="setup-input"><input type="text" name="original" spellcheck="false" placeholder="Ordner mit Originalen"><button type="button" class="duplicate-btn" data-browse="original">Durchsuchen …</button><button type="button" class="duplicate-btn is-quiet" data-remove-original aria-label="Original-Ordner entfernen" title="Entfernen">✕</button></span>`;
+  row.querySelector('input').value = value;
+  originalsList.append(row);
+  renumberOriginals();
+  if (focus) row.querySelector('input').focus();
+}
+
+document.getElementById('add-original').addEventListener('click', () => addOriginalRow('', { focus: true }));
+
+originalsList.addEventListener('click', event => {
+  const remove = event.target.closest('[data-remove-original]');
+  if (!remove) return;
+  event.preventDefault();
+  remove.closest('.setup-field').remove();
+  renumberOriginals();
+});
+
 function fillSetup(config, defaults) {
-  for (const name of ['folderA', 'folderB', 'target']) setupForm.elements[name].value = config[name] || '';
+  originalsList.replaceChildren();
+  for (const folder of config.originals?.length ? config.originals : ['']) addOriginalRow(folder);
+  for (const name of ['folderB', 'target']) setupForm.elements[name].value = config[name] || '';
   setupForm.elements.minimumTokens.value = config.minimumTokens ?? defaults?.minimumTokens ?? '';
   setupForm.elements.maxDateDistanceDays.value = config.maxDateDistanceDays ?? defaults?.maxDateDistanceDays ?? '';
 }
@@ -462,7 +510,7 @@ async function saveAndScan() {
     await duplicateRequest('/api/config', {
       method: 'PUT',
       body: JSON.stringify({
-        folderA: form.folderA.value,
+        originals: originalInputs().map(input => input.value.trim()).filter(Boolean),
         folderB: form.folderB.value,
         target: form.target.value,
         minimumTokens: form.minimumTokens.value,
@@ -565,7 +613,7 @@ function reportError(error) {
 
 // ─── Ordner-Browser ──────────────────────────────────────────────────────
 
-const folderPicker = { field: null, path: '', parent: null };
+const folderPicker = { input: null, path: '', parent: null };
 
 async function openFolder(dir) {
   folderInfo.textContent = 'Wird geladen …';
@@ -595,12 +643,14 @@ function joinFolder(parent, child) {
   return parent.endsWith(separator) ? parent + child : parent + separator + child;
 }
 
-function openFolderPicker(field) {
-  folderPicker.field = field;
-  const labels = { folderA: 'Ordner A (Original) wählen', folderB: 'Ordner B (Kandidaten) wählen', target: 'Ziel-Ordner wählen' };
-  document.getElementById('folder-dialog-title').textContent = labels[field];
+function openFolderPicker(button) {
+  const input = button.closest('.setup-input').querySelector('input');
+  folderPicker.input = input;
+  const badge = button.closest('.setup-field').querySelector('.side-badge')?.textContent;
+  const labels = { original: `Ordner ${badge} (Original) wählen`, folderB: 'Ordner B (Kandidaten) wählen', target: 'Ziel-Ordner wählen' };
+  document.getElementById('folder-dialog-title').textContent = labels[button.dataset.browse];
   folderDialog.showModal();
-  openFolder(setupForm.elements[field].value.trim());
+  openFolder(input.value.trim());
 }
 
 // ─── Ereignisse ──────────────────────────────────────────────────────────
@@ -612,7 +662,9 @@ setupForm.addEventListener('submit', event => {
 
 setupForm.addEventListener('click', event => {
   const button = event.target.closest('[data-browse]');
-  if (button) openFolderPicker(button.dataset.browse);
+  if (!button) return;
+  event.preventDefault();
+  openFolderPicker(button);
 });
 
 folderDialog.addEventListener('click', event => {
@@ -625,7 +677,7 @@ folderDialog.addEventListener('click', event => {
   else if (action === 'go') openFolder(folderPathInput.value.trim());
   else if (action === 'close') folderDialog.close();
   else if (action === 'choose' && folderPicker.path) {
-    setupForm.elements[folderPicker.field].value = folderPicker.path;
+    folderPicker.input.value = folderPicker.path;
     folderDialog.close();
   }
 });

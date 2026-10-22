@@ -17,8 +17,9 @@ npm test
 
 ## Bedienung
 
-- **Ordner A (Original)**, **Ordner B (Kandidaten)** und **Ziel-Ordner** im Kopf eintragen oder
-  per „Durchsuchen …“ wählen, dann „Speichern & scannen“. Beide Ordner werden rekursiv gelesen
+- Einen oder mehrere **Original-Ordner** (A1, A2 … – „+ Weiterer Original-Ordner“, ✕ entfernt eine Zeile),
+  **Ordner B (Kandidaten)** und **Ziel-Ordner** eintragen oder per „Durchsuchen …“ wählen, dann
+  „Speichern & scannen“. Die Original-Ordner werden gemeinsam als Seite A behandelt. Alle Ordner werden rekursiv gelesen
   (versteckte Ordner, `node_modules` und ein Ziel-Ordner innerhalb von B werden übersprungen).
 - Verglichen werden nur Paare A↔B. Pro Kandidat aus B werden höchstens drei Originale gezeigt.
   Der Text wird wie im WebArchiv geparst: Titel/Datum/Zusammenfassung aus dem Kopf, verglichen
@@ -38,7 +39,8 @@ npm test
 
 | Schlüssel | Bedeutung | Standard |
 | --- | --- | --- |
-| `folderA`, `folderB`, `target` | Ordnerpfade | leer |
+| `originals` | Liste der Original-Ordner (alte Konfigs mit `folderA` werden übernommen) | leer |
+| `folderB`, `target` | Kandidaten- und Ziel-Ordner | leer |
 | `host` | Bind-Adresse | `127.0.0.1` |
 | `port` | Port | `3100` |
 | `minimumTokens` | Mindestwörter je Text | `35` |

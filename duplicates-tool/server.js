@@ -33,8 +33,10 @@ function readConfigFile() {
 
 function normalizeConfig(value = {}) {
   const folder = item => (typeof item === 'string' && item.trim() ? path.resolve(item.trim()) : '');
+  // Mehrere Original-Ordner; ältere Konfigurationen mit nur „folderA“ werden übernommen.
+  const originals = Array.isArray(value.originals) ? value.originals : [value.folderA];
   return {
-    folderA: folder(value.folderA),
+    originals: originals.map(folder).filter(Boolean),
     folderB: folder(value.folderB),
     target: folder(value.target),
     host: String(value.host || '127.0.0.1'),
@@ -58,21 +60,37 @@ async function isDirectory(dir) {
 }
 
 async function validateFolders(next) {
-  if (next.folderA && !(await isDirectory(next.folderA))) throw fail(400, 'Ordner A existiert nicht.');
+  for (const [index, folder] of next.originals.entries()) {
+    if (!(await isDirectory(folder))) throw fail(400, `Ordner ${originalLabel(index)} existiert nicht.`);
+  }
   if (next.folderB && !(await isDirectory(next.folderB))) throw fail(400, 'Ordner B existiert nicht.');
-  if (next.folderA && next.folderB && (isInside(next.folderA, next.folderB) || isInside(next.folderB, next.folderA))) {
-    throw fail(400, 'Ordner A und B dürfen nicht gleich sein oder ineinander liegen.');
+  const named = [
+    ...next.originals.map((folder, index) => [originalLabel(index), folder]),
+    ...(next.folderB ? [['B', next.folderB]] : []),
+  ];
+  for (let i = 0; i < named.length; i++) {
+    for (let j = i + 1; j < named.length; j++) {
+      if (isInside(named[i][1], named[j][1]) || isInside(named[j][1], named[i][1])) {
+        throw fail(400, `Ordner ${named[i][0]} und ${named[j][0]} dürfen nicht gleich sein oder ineinander liegen.`);
+      }
+    }
   }
   if (next.target) {
-    for (const [label, folder] of [['A', next.folderA], ['B', next.folderB]]) {
-      if (folder && isInside(folder, next.target)) {
+    for (const [label, folder] of named) {
+      if (isInside(folder, next.target)) {
         throw fail(400, `Der Ziel-Ordner darf nicht Ordner ${label} sein oder ihn enthalten.`);
       }
     }
-    if (next.folderA && isInside(next.target, next.folderA)) {
-      throw fail(400, 'Der Ziel-Ordner darf nicht innerhalb von Ordner A liegen.');
+    for (const [index, folder] of next.originals.entries()) {
+      if (isInside(next.target, folder)) {
+        throw fail(400, `Der Ziel-Ordner darf nicht innerhalb von Ordner ${originalLabel(index)} liegen.`);
+      }
     }
   }
+}
+
+function originalLabel(index) {
+  return `A${index + 1}`;
 }
 
 // ─── Scan-Zustand (nur im Speicher) ────────────────────────────────────────
@@ -86,16 +104,19 @@ let scan = null;
 let scanning = null;
 
 async function runScan() {
-  if (!config.folderA || !config.folderB) throw fail(400, 'Bitte zuerst Ordner A und B wählen.');
+  if (!config.originals.length || !config.folderB) throw fail(400, 'Bitte zuerst mindestens einen Original-Ordner und Ordner B wählen.');
   await validateFolders(config);
   const started = Date.now();
   const exclude = config.target ? [config.target] : [];
-  const [originals, candidates] = await Promise.all([
-    scanFolder(config.folderA, { side: 'A', exclude }),
+  const [candidates, ...originalLists] = await Promise.all([
     scanFolder(config.folderB, { side: 'B', exclude }),
+    ...config.originals.map((folder, index) => scanFolder(folder, {
+      side: 'A', idPrefix: originalLabel(index), rootIndex: index + 1, exclude,
+    })),
   ]);
+  const originals = originalLists.flat();
   scan = {
-    folderA: config.folderA,
+    originalFolders: [...config.originals],
     folderB: config.folderB,
     thresholds: normalizeThresholds(config),
     originals,
@@ -121,6 +142,8 @@ function articleView(article) {
     title: article.title,
     date: article.date,
     relPath: article.relPath,
+    rootIndex: article.rootIndex,
+    rootName: path.basename(article.root),
     excerpt: article.excerpt,
     companions: article.companions,
     imageCount: article.companions.filter(name => IMAGE_EXTENSIONS.has(splitName(name).ext)).length,
@@ -150,14 +173,14 @@ function isIgnored(match) {
 function scanSummary() {
   if (!scan) return null;
   return {
-    folderA: scan.folderA,
+    originalFolders: scan.originalFolders,
     folderB: scan.folderB,
     thresholds: scan.thresholds,
     originals: scan.originals.length,
     candidates: scan.candidates.length,
     scannedAt: scan.scannedAt,
     durationMs: scan.durationMs,
-    stale: scan.folderA !== config.folderA || scan.folderB !== config.folderB
+    stale: JSON.stringify(scan.originalFolders) !== JSON.stringify(config.originals) || scan.folderB !== config.folderB
       || scan.thresholds.minimumTokens !== config.minimumTokens
       || scan.thresholds.maxDateDistanceDays !== config.maxDateDistanceDays,
   };
@@ -201,14 +224,15 @@ app.put('/api/config', route(async (req, res) => {
   const body = req.body || {};
   const next = normalizeConfig({
     ...config,
-    folderA: body.folderA ?? config.folderA,
+    originals: Array.isArray(body.originals) ? body.originals : config.originals,
     folderB: body.folderB ?? config.folderB,
     target: body.target ?? config.target,
     minimumTokens: body.minimumTokens ?? config.minimumTokens,
     maxDateDistanceDays: body.maxDateDistanceDays ?? config.maxDateDistanceDays,
   });
   await validateFolders(next);
-  const stored = { ...readConfigFile(), ...next };
+  const { folderA, ...previous } = readConfigFile();
+  const stored = { ...previous, ...next };
   await writeJsonAtomic(CONFIG_FILE, stored);
   config = next;
   res.json({ config, scan: scanSummary() });
@@ -336,7 +360,7 @@ app.post('/api/move', route(async (req, res) => {
 app.post('/api/moves/:id/undo', route(async (req, res) => {
   const entry = await moveLog.undo(String(req.params.id));
   // Zurückgelegte Dateien wieder einlesen, damit der Treffer erneut erscheint.
-  if (scan && config.folderA && config.folderB) await scanOnce().catch(error => console.warn('Neu-Scan fehlgeschlagen:', error.message));
+  if (scan && config.originals.length && config.folderB) await scanOnce().catch(error => console.warn('Neu-Scan fehlgeschlagen:', error.message));
   res.json({ ok: true, entry });
 }));
 
@@ -355,7 +379,7 @@ app.get('/api/file', route(async (req, res) => {
 if (require.main === module) {
   app.listen(LISTEN_PORT, LISTEN_HOST, () => {
     console.log(`Dubletten-Werkzeug läuft auf http://${LOOPBACK_HOSTS.has(LISTEN_HOST) ? 'localhost' : LISTEN_HOST}:${LISTEN_PORT}`);
-    if (config.folderA && config.folderB) {
+    if (config.originals.length && config.folderB) {
       scanOnce().then(() => console.log(`Scan: ${scan.originals.length} Originale, ${scan.candidates.length} Kandidaten, ${scan.matches.length} Treffer`))
         .catch(error => console.warn('Start-Scan fehlgeschlagen:', error.message));
     }
