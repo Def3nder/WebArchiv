@@ -282,7 +282,11 @@ app.get('/api/duplicates', route(async (req, res) => {
       pending.push(matchView(match));
     }
   }
-  res.json({ pending, ignored, moved: moveLog.all(), scan: scanSummary(), config });
+  // „Verschoben“ gilt pro Kandidaten-Ordner: nur Einträge, deren Quelle im aktuellen B liegt.
+  const moved = config.folderB
+    ? moveLog.all().filter(entry => entry.candidate?.path && isInside(entry.candidate.path, config.folderB))
+    : [];
+  res.json({ pending, ignored, moved, scan: scanSummary(), config });
 }));
 
 app.get('/api/duplicates/compare', route((req, res) => {

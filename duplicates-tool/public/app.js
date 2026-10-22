@@ -481,9 +481,16 @@ originalsList.addEventListener('click', event => {
   renumberOriginals();
 });
 
+// Ältere Server liefern nur „folderA“; dann wenigstens diesen einen Ordner zeigen.
+function configOriginals(config) {
+  if (Array.isArray(config.originals)) return config.originals;
+  return config.folderA ? [config.folderA] : [];
+}
+
 function fillSetup(config, defaults) {
   originalsList.replaceChildren();
-  for (const folder of config.originals?.length ? config.originals : ['']) addOriginalRow(folder);
+  const originals = configOriginals(config);
+  for (const folder of originals.length ? originals : ['']) addOriginalRow(folder);
   for (const name of ['folderB', 'target']) setupForm.elements[name].value = config[name] || '';
   setupForm.elements.minimumTokens.value = config.minimumTokens ?? defaults?.minimumTokens ?? '';
   setupForm.elements.maxDateDistanceDays.value = config.maxDateDistanceDays ?? defaults?.maxDateDistanceDays ?? '';
@@ -507,24 +514,33 @@ async function saveAndScan() {
   scanInfo.textContent = 'Einstellungen werden gespeichert …';
   try {
     const form = setupForm.elements;
+    const originals = originalInputs().map(input => input.value.trim()).filter(Boolean);
     await duplicateRequest('/api/config', {
       method: 'PUT',
       body: JSON.stringify({
-        originals: originalInputs().map(input => input.value.trim()).filter(Boolean),
+        originals,
         folderB: form.folderB.value,
         target: form.target.value,
         minimumTokens: form.minimumTokens.value,
         maxDateDistanceDays: form.maxDateDistanceDays.value,
       }),
-    }).then(result => fillSetup(result.config));
+    }).then(result => {
+      // Ein noch laufender alter Server kennt „originals“ nicht und würde die Liste verwerfen:
+      // Eingaben stehen lassen und nicht scannen.
+      if (!Array.isArray(result.config?.originals)) {
+        throw new Error('Der laufende Server ist veraltet und kann nur einen Original-Ordner speichern – bitte den Server neu starten (npm start).');
+      }
+      fillSetup(result.config);
+    });
     scanInfo.textContent = 'Ordner werden gescannt …';
     duplicateContent.innerHTML = '<div class="duplicate-loading"><span class="spinner"></span></div>';
     await duplicateRequest('/api/scan', { method: 'POST' });
     await loadDuplicates({ quiet: true });
     duplicateStatus.textContent = `${duplicateUi.data.pending.length} offene Treffer gefunden.`;
   } catch (error) {
-    scanInfo.textContent = `Fehler: ${error.message}`;
+    // Erst die Liste neu laden, dann die Fehlermeldung setzen, damit sie sichtbar bleibt.
     await loadDuplicates({ quiet: true }).catch(() => {});
+    scanInfo.textContent = `Fehler: ${error.message}`;
   } finally {
     duplicateUi.busy = false;
     updateDuplicateTools();

@@ -145,6 +145,14 @@ test('API: scannen, vergleichen, ignorieren, verschieben, rückgängig', async (
     assert.equal(result.data.pending.length, 0);
     assert.equal(result.data.moved.length, 1);
 
+    // „Verschoben“ zeigt nur Einträge des aktuellen B-Ordners.
+    const otherB = path.join(root, 'B2');
+    await fs.mkdir(otherB);
+    await call('/api/config', { method: 'PUT', body: { folderB: otherB, target: path.join(root, 'Ziel2') } });
+    assert.equal((await call('/api/duplicates')).data.moved.length, 0);
+    await call('/api/config', { method: 'PUT', body: { folderB, target } });
+    assert.equal((await call('/api/duplicates')).data.moved.length, 1);
+
     // Der Ziel-Ordner liegt in B, wird aber nicht mitgescannt.
     await call('/api/scan', { method: 'POST' });
     assert.equal((await call('/api/duplicates')).data.pending.length, 0);
