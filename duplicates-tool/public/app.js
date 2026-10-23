@@ -936,7 +936,11 @@ duplicateImageViewerNext.addEventListener('click', () => stepDuplicateImageViewe
 
 loadDuplicateSelection();
 duplicateRequest('/api/config')
-  .then(data => fillSetup(data.config, data.defaults))
+  .then(data => {
+    duplicateUi.apiVersion = data.apiVersion;
+    updateServerWarning();
+    fillSetup(data.config, data.defaults);
+  })
   .then(() => loadDuplicates())
   .catch(error => {
     scanInfo.textContent = `Fehler: ${error.message}`;

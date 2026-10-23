@@ -48,6 +48,7 @@ npm test
 | --- | --- | --- |
 | `originals` | Liste der Original-Ordner (alte Konfigs mit `folderA` werden übernommen) | leer |
 | `folderB`, `target` | Kandidaten- und Ziel-Ordner | leer |
+| `recentFolderB`, `recentTargets` | Die letzten fünf verwendeten B- bzw. Ziel-Ordner (Aufklappliste beim Eingeben) | wird automatisch gepflegt |
 | `host` | Bind-Adresse | `127.0.0.1` |
 | `port` | Port | `3100` |
 | `minimumTokens` | Mindestwörter je Text | `35` |

@@ -388,6 +388,7 @@ input[type="search"].duplicate-select-input { width: 14rem; }
   .duplicate-image-viewer-close { width: 36px; height: 36px; }
   .duplicate-image-viewer-stage { grid-template-columns: 34px minmax(0, 1fr) 34px; padding: 8px 4px; }
   .duplicate-image-viewer-nav { width: 32px; height: 44px; border: 0; background: transparent; }
+}
 
 /* ── Anpassungen für die eigenständige Seite ─────────────────────────────── */
 .duplicate-content { padding: clamp(10px, 2vw, 22px); }
@@ -421,3 +422,42 @@ input[type="search"].duplicate-select-input { width: 14rem; }
 @media (max-width: 760px) {
   .duplicate-search-filter, .duplicate-search-filter .duplicate-select-input { width: 100%; }
 }
+
+/* ── Zuletzt verwendete Ordner ───────────────────────────────────────────── */
+.recent-wrap { position: relative; display: flex; flex: 1; min-width: 0; }
+.recent-wrap input { flex: 1; }
+.recent-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: grid;
+  padding: 4px;
+  border: 1px solid var(--border-hi);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
+}
+.recent-menu[hidden] { display: none; }
+.recent-caption { padding: 3px 8px 4px; color: var(--text-muted); font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.recent-option {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: .76rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.recent-option:hover, .recent-option.is-active { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.recent-option[aria-selected="true"] { color: var(--accent); font-weight: 700; }
+
+.server-warning { margin: 0; padding: 10px clamp(16px, 3vw, 34px); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--red) 18%, var(--surface)); color: var(--text); font-size: .82rem; font-weight: 600; }
+.server-warning[hidden] { display: none; }

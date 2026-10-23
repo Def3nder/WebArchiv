@@ -239,3 +239,38 @@ test('detectDuplicateCandidates findet umformulierte Texte mit anderem Titel inh
   assert.equal(matches[0].method, 'content');
   assert.ok(matches[0].reasons.includes('Anderer Titel'));
 });
+
+test('API: Schwelle wird gespeichert, letzte fünf B- und Ziel-Ordner werden gemerkt', async () => {
+  const root = await tempDir();
+  const folderA = path.join(root, 'A');
+  const bs = Array.from({ length: 7 }, (_, i) => path.join(root, `B${i}`));
+  for (const dir of [folderA, ...bs]) await fs.mkdir(dir, { recursive: true });
+  process.env.DUPLICATES_TOOL_CONFIG = path.join(root, 'config.json');
+  process.env.DUPLICATES_TOOL_DATA = path.join(root, 'data');
+  delete require.cache[require.resolve('../server.js')];
+  const { app } = require('../server.js');
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const put = body => fetch(`${base}/api/config`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).then(response => response.json());
+  try {
+    for (const [i, folderB] of bs.entries()) {
+      await put({ originals: [folderA], folderB, target: path.join(root, `Ziel${i % 2}`), minContentSimilarity: 60 });
+    }
+    // B2 erneut verwenden: rückt nach vorn, keine Doppelung.
+    const result = await put({ folderB: bs[2] });
+    assert.equal(result.apiVersion, 4);
+    assert.deepEqual(result.config.recentFolderB, [bs[2], bs[6], bs[5], bs[4], bs[3]]);
+    assert.deepEqual(result.config.recentTargets, [path.join(root, 'Ziel0'), path.join(root, 'Ziel1')]);
+    const stored = JSON.parse(await fs.readFile(path.join(root, 'config.json'), 'utf8'));
+    assert.equal(stored.minContentSimilarity, 60);
+    assert.deepEqual(stored.recentFolderB, result.config.recentFolderB);
+    const config = await fetch(`${base}/api/config`).then(response => response.json());
+    assert.equal(config.config.minContentSimilarity, 60);
+  } finally {
+    server.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
