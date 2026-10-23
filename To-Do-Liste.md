@@ -4,7 +4,6 @@ To-Do-Liste (abgehakt, wenn erledigt):
 bitte überprüfe "Scrape-Log anzeigen", "Audio-Auftrag anzeigen"
 * \[x] Ich würde gerne bei den Hörbüchern den eBook-Reader auch dadurch schließen können,
 dass ich den Bereich ganz oben klicke und halte und nach unten ziehe - geht das ?
-* \[ ] **Alle Menüs durch System-Menüs ersetzen**, wie das in der Kachelansicht bei den Filtern der Fall ist.
 * \[ ] **Scraper-Zentrale:** Zentrale Übersicht über alle Scraper-Quellen mit letztem Lauf, Ergebnis, neu gefundenen Artikeln, Fehlern und notwendigen Aktionen.
 * \[ ] **Themen-Dossiers:** Artikel, Infografiken, Hörbücher und eigene Notizen zu einem Thema in einer benannten, frei sortierbaren Sammlung zusammenstellen.
 * \[ ] **Qualitäts-Dashboard:** Fehlende Bilder oder Metadaten, ungültige Daten, defekte Links, verwaiste Medien und andere Auffälligkeiten im Archiv anzeigen.
@@ -14,5 +13,5 @@ dass ich den Bereich ganz oben klicke und halte und nach unten ziehe - geht das 
 * \[ ] **Mehrfachauswahl bei Kategorien und Autoren:** Mehrere Autoren und Kategorien gleichzeitig als Filter auswählen und sinnvoll miteinander kombinieren können.
 * \[ ] **Eigene Tags/Labels:** Nutzer können Artikeln eigene Tags oder Labels geben und anschließend danach suchen und filtern.
 * \[ ] **Markierungen und Notizen pro Benutzer:** Textstellen in Artikeln markieren und persönliche Notizen speichern; die Daten bleiben je Benutzer getrennt.
-* \[ ] **Infografiken von Artikeln verwalten:** Vorhandene Infografiken pro Artikel in der Reihenfolge ändern, löschen oder hinzufügen (wie im Extras-Dialog bei den Hörbüchern).
+* \[x] **Infografiken von Artikeln verwalten:** Vorhandene Infografiken pro Artikel in der Reihenfolge ändern, löschen oder hinzufügen (wie im Extras-Dialog bei den Hörbüchern).
 
