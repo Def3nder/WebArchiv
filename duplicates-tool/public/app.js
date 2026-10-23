@@ -611,7 +611,32 @@ function fillSetup(config, defaults) {
   setupForm.elements.minimumTokens.value = config.minimumTokens ?? defaults?.minimumTokens ?? '';
   setupForm.elements.maxDateDistanceDays.value = config.maxDateDistanceDays ?? defaults?.maxDateDistanceDays ?? '';
   setupForm.elements.minContentSimilarity.value = config.minContentSimilarity ?? defaults?.minContentSimilarity ?? '';
+  renderScoreFilterOptions();
 }
+
+// Stufen des Filters „Übereinstimmung“: 100 %, 95 %, dann in 10er-Schritten bis zur
+// eingestellten inhaltlichen Schwelle. Ist der Inhaltsvergleich aus (100), reicht der
+// Wortfolgen-Vergleich bis etwa 62 %, also bis 60 %.
+function renderScoreFilterOptions() {
+  const entered = Number(setupForm.elements.minContentSimilarity.value);
+  const lowest = Number.isFinite(entered) && entered >= 20 && entered < 100 ? Math.round(entered) : 60;
+  const steps = [95];
+  for (let value = 90; value > lowest; value -= 10) steps.push(value);
+  if (lowest < 95) steps.push(lowest);
+  const options = [['all', 'Alle Grade'], ['100', 'genau 100 %'],
+    ...steps.map(value => [String(value), `mindestens ${value} %`])];
+  const current = duplicateUi.filters.score;
+  duplicateScoreFilter.innerHTML = options
+    .map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+  if (!options.some(([value]) => value === current)) duplicateUi.filters.score = 'all';
+  duplicateScoreFilter.value = duplicateUi.filters.score;
+}
+
+setupForm.elements.minContentSimilarity.addEventListener('input', () => {
+  const before = duplicateUi.filters.score;
+  renderScoreFilterOptions();
+  if (before !== duplicateUi.filters.score) renderDuplicateList();
+});
 
 async function loadDuplicates({ quiet = false } = {}) {
   if (!quiet) duplicateStatus.textContent = 'Treffer werden geladen …';
