@@ -10,7 +10,7 @@ const duplicateUi = {
   tab: 'pending',
   detail: null,
   busy: false,
-  filters: { score: 'all', query: '' },
+  filters: { score: 'all', method: 'all', query: '' },
   selection: new Set(),
   mobileSide: 'blog',
   onlyDifferences: true,
@@ -202,7 +202,7 @@ function duplicateCard(item, status) {
   return `<article class="duplicate-card${selected ? ' is-selected' : ''}" ${duplicatePairAttrs(item)}>
     <header class="duplicate-card-head">
       ${status === 'pending' ? `<label class="duplicate-select"><input type="checkbox" data-duplicate-select ${selected ? 'checked' : ''}><span>Auswählen</span></label>` : ''}
-      <div class="duplicate-score" ${item.exact ? 'title="Gleiche normalisierte Wortfolge; Absätze und Satzzeichen können abweichen"' : ''}><strong>${duplicateEsc(score || '–')}</strong><span>${item.exact ? 'Wortfolge gleich' : 'Übereinstimmung'}</span></div>
+      <div class="duplicate-score" ${item.exact ? 'title="Gleiche normalisierte Wortfolge; Absätze und Satzzeichen können abweichen"' : ''}><strong>${duplicateEsc(score || '–')}</strong><span>${item.exact ? 'Wortfolge gleich' : item.method === 'content' ? 'inhaltlich ähnlich' : 'Übereinstimmung'}</span></div>
       <div class="duplicate-reasons">${notes.map(note => `<span>${duplicateEsc(note)}</span>`).join('')}</div>
       ${status === 'pending' ? duplicateActions(item, status) : ''}
     </header>
@@ -234,19 +234,34 @@ function movedCard(entry) {
 
 // ─── Liste ───────────────────────────────────────────────────────────────
 
+function duplicateSearchTerms() {
+  return duplicateUi.filters.query.toLocaleLowerCase('de-DE').split(/\s+/).filter(Boolean);
+}
+
+// Suche gilt in allen Tabs: jedes Suchwort muss in Titel, Pfad, Ordnername oder Textanfang
+// einer der beiden Seiten vorkommen (bei „Verschoben“ in den protokollierten Angaben).
+function duplicateMatchesSearch(item) {
+  const terms = duplicateSearchTerms();
+  if (!terms.length) return true;
+  const fields = [item.original, item.candidate].flatMap(article => [
+    article?.title, article?.relPath, article?.rootName, article?.excerpt,
+  ]);
+  if (item.files) fields.push(...item.files.flatMap(file => [file.from, file.to]));
+  const haystack = fields.filter(Boolean).join('\n').toLocaleLowerCase('de-DE');
+  return terms.every(term => haystack.includes(term));
+}
+
 function duplicateMatchesFilters(item) {
   const minimum = duplicateUi.filters.score;
   if (minimum === '100' && !item.exact) return false;
   if (minimum !== 'all' && minimum !== '100' && Number(item.score) * 100 < Number(minimum)) return false;
-  const query = duplicateUi.filters.query.trim().toLocaleLowerCase('de-DE');
-  if (!query) return true;
-  return [item.original?.title, item.original?.relPath, item.candidate?.title, item.candidate?.relPath]
-    .some(value => String(value || '').toLocaleLowerCase('de-DE').includes(query));
+  if (duplicateUi.filters.method !== 'all' && (item.method || 'text') !== duplicateUi.filters.method) return false;
+  return duplicateMatchesSearch(item);
 }
 
 function duplicateVisibleItems(tab) {
   const items = duplicateUi.data[tab] || [];
-  return tab === 'moved' ? items : items.filter(duplicateMatchesFilters);
+  return items.filter(tab === 'moved' ? duplicateMatchesSearch : duplicateMatchesFilters);
 }
 
 function duplicateEmpty(tab, filtered = false) {
@@ -262,17 +277,23 @@ function duplicateEmpty(tab, filtered = false) {
   return `<div class="duplicate-empty"><div><span>✓</span><h3>${text[0]}</h3><p>${text[1]}</p></div></div>`;
 }
 
+// Bei aktiver Suche zeigen die Tabs „Treffer / gesamt“, damit man sieht, wo etwas gefunden wurde.
 function updateDuplicateCounts() {
+  const searching = duplicateSearchTerms().length > 0;
   for (const tab of ['pending', 'ignored', 'moved']) {
     const element = document.querySelector(`[data-duplicate-count="${tab}"]`);
-    if (element) element.textContent = String(duplicateUi.data[tab]?.length || 0);
+    if (!element) continue;
+    const total = duplicateUi.data[tab]?.length || 0;
+    element.textContent = searching ? `${(duplicateUi.data[tab] || []).filter(duplicateMatchesSearch).length} / ${total}` : String(total);
   }
 }
 
 function updateDuplicateTools() {
   const pending = duplicateUi.tab === 'pending';
-  duplicateTools.hidden = duplicateUi.tab === 'moved' || !duplicateUi.data.scan;
+  const moved = duplicateUi.tab === 'moved';
+  duplicateTools.hidden = !duplicateUi.data.scan && !duplicateUi.data.moved?.length;
   duplicateTools.dataset.tab = duplicateUi.tab;
+  for (const filter of duplicateTools.querySelectorAll('.duplicate-pending-filter')) filter.hidden = moved;
   document.getElementById('duplicate-selection-tools').hidden = !pending;
   const selected = selectedDuplicateItems().length;
   duplicateSelectionCount.textContent = `${selected} ausgewählt`;
@@ -286,7 +307,8 @@ function updateDuplicateTools() {
 function renderDuplicateList() {
   const tab = duplicateUi.tab;
   const items = duplicateVisibleItems(tab);
-  const filtered = tab !== 'moved' && items.length !== (duplicateUi.data[tab]?.length || 0);
+  const filtered = items.length !== (duplicateUi.data[tab]?.length || 0);
+  updateDuplicateCounts();
   duplicateContent.innerHTML = items.length
     ? `<div class="duplicate-stack">${items.map(item => tab === 'moved' ? movedCard(item) : duplicateCard(item, tab)).join('')}</div>`
     : duplicateEmpty(tab, filtered);
@@ -367,7 +389,7 @@ function renderDuplicateDetail(pair) {
   duplicateDetailContent.innerHTML = `<div class="duplicate-detail" data-mobile-side="${duplicateUi.mobileSide}">
     <div class="duplicate-detail-nav">
       <button type="button" class="duplicate-back" data-duplicate-action="back">← Zur Trefferliste</button>
-      ${pair.score != null ? `<span class="duplicate-detail-score">${duplicateEsc(duplicateScoreText(pair))} Übereinstimmung</span>` : ''}
+      ${pair.score != null ? `<span class="duplicate-detail-score">${duplicateEsc(duplicateScoreText(pair))} ${pair.method === 'content' ? 'inhaltlich ähnlich' : 'Übereinstimmung'}</span>` : ''}
       <button type="button" class="duplicate-diff-toggle" data-duplicate-action="toggle-differences" aria-pressed="${duplicateUi.onlyDifferences}" title="Unveränderte Textabschnitte bis auf je einen Kontextabschnitt einklappen">Nur Unterschiede</button>
       <div class="duplicate-detail-switch" role="tablist" aria-label="Artikelkopf">
         <button type="button" role="tab" data-duplicate-action="mobile-side" data-side="blog" aria-selected="${duplicateUi.mobileSide === 'blog'}">A</button>
@@ -494,6 +516,7 @@ function fillSetup(config, defaults) {
   for (const name of ['folderB', 'target']) setupForm.elements[name].value = config[name] || '';
   setupForm.elements.minimumTokens.value = config.minimumTokens ?? defaults?.minimumTokens ?? '';
   setupForm.elements.maxDateDistanceDays.value = config.maxDateDistanceDays ?? defaults?.maxDateDistanceDays ?? '';
+  setupForm.elements.minContentSimilarity.value = config.minContentSimilarity ?? defaults?.minContentSimilarity ?? '';
 }
 
 async function loadDuplicates({ quiet = false } = {}) {
@@ -523,6 +546,7 @@ async function saveAndScan() {
         target: form.target.value,
         minimumTokens: form.minimumTokens.value,
         maxDateDistanceDays: form.maxDateDistanceDays.value,
+        minContentSimilarity: form.minContentSimilarity.value,
       }),
     }).then(result => {
       // Ein noch laufender alter Server kennt „originals“ nicht und würde die Liste verwerfen:
@@ -714,6 +738,11 @@ document.getElementById('duplicate-tabs').addEventListener('click', event => {
 
 duplicateScoreFilter.addEventListener('change', () => {
   duplicateUi.filters.score = duplicateScoreFilter.value;
+  renderDuplicateList();
+});
+
+document.getElementById('duplicate-method-filter').addEventListener('change', event => {
+  duplicateUi.filters.method = event.target.value;
   renderDuplicateList();
 });
 

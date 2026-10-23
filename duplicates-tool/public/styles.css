@@ -413,3 +413,11 @@ input[type="search"].duplicate-select-input { width: 14rem; }
 @media (max-width: 760px) {
   .setup-add > span:first-child { display: none; }
 }
+
+/* ── Suche über alle Tabs ────────────────────────────────────────────────── */
+.duplicate-search-filter { max-width: none; }
+.duplicate-search-filter .duplicate-select-input { width: 18rem; }
+.duplicate-pending-filter[hidden] { display: none; }
+@media (max-width: 760px) {
+  .duplicate-search-filter, .duplicate-search-filter .duplicate-select-input { width: 100%; }
+}

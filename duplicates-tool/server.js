@@ -182,7 +182,8 @@ function scanSummary() {
     durationMs: scan.durationMs,
     stale: JSON.stringify(scan.originalFolders) !== JSON.stringify(config.originals) || scan.folderB !== config.folderB
       || scan.thresholds.minimumTokens !== config.minimumTokens
-      || scan.thresholds.maxDateDistanceDays !== config.maxDateDistanceDays,
+      || scan.thresholds.maxDateDistanceDays !== config.maxDateDistanceDays
+      || scan.thresholds.minContentSimilarity !== config.minContentSimilarity,
   };
 }
 
@@ -229,6 +230,7 @@ app.put('/api/config', route(async (req, res) => {
     target: body.target ?? config.target,
     minimumTokens: body.minimumTokens ?? config.minimumTokens,
     maxDateDistanceDays: body.maxDateDistanceDays ?? config.maxDateDistanceDays,
+    minContentSimilarity: body.minContentSimilarity ?? config.minContentSimilarity,
   });
   await validateFolders(next);
   const { folderA, ...previous } = readConfigFile();
@@ -345,6 +347,7 @@ app.post('/api/move', route(async (req, res) => {
         target: config.target,
         score: match?.score ?? null,
         exact: Boolean(match?.exact),
+        method: match?.method || 'text',
         original: { path: original.absPath, relPath: original.relPath, title: original.title, date: original.date },
         candidate: { path: candidate.absPath, relPath: candidate.relPath, title: candidate.title, date: candidate.date },
         files,

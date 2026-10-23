@@ -219,3 +219,23 @@ test('API: mehrere Original-Ordner werden gemeinsam als Seite A verglichen', asy
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('detectDuplicateCandidates findet umformulierte Texte mit anderem Titel inhaltlich', () => {
+  const make = (id, title, date, body) => ({ id, title, date, duplicateProfile: buildDuplicateProfile(title, body) });
+  const sentences = Array.from({ length: 30 }, (_, i) =>
+    `Vertrauen${i} Beziehung${i} Nähe${i} Partnerschaft${i} Verletzlichkeit${i} Heilung${i}`);
+  // Gleiche Inhaltswörter, aber jede Wortfolge umgedreht und mit anderen Füllwörtern: keine gemeinsamen 5-Wort-Folgen.
+  const original = sentences.map(s => `Die ${s} ist wichtig.`).join(' ');
+  const paraphrase = sentences.map(s => `Und auch ${s.split(' ').reverse().join(' und ')} sind so.`).join(' ');
+  const unrelated = Array.from({ length: 30 }, (_, i) => `Garten${i} Werkzeug${i} Schaufel${i} Rasen${i} Blume${i} Erde${i}`).join(' ');
+  const a = [make('A:1', 'Über Vertrauen', '2021-01-01', original), make('A:2', 'Gartenarbeit', '2021-01-01', unrelated)];
+  const b = [make('B:1', 'Ein völlig anderer Titel', '2021-02-01', paraphrase)];
+
+  const off = detectDuplicateCandidates(a, b, { ...DEFAULT_THRESHOLDS, minContentSimilarity: 100 });
+  assert.equal(off.length, 0);
+  const matches = detectDuplicateCandidates(a, b, DEFAULT_THRESHOLDS);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].original.id, 'A:1');
+  assert.equal(matches[0].method, 'content');
+  assert.ok(matches[0].reasons.includes('Anderer Titel'));
+});

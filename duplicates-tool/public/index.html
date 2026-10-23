@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <title>Dubletten-Werkzeug</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='5' width='17' height='21' rx='3' fill='%23c9a84c'/%3E%3Crect x='12' y='8' width='17' height='21' rx='3' fill='%23191714' stroke='%23c9a84c' stroke-width='2'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
   <header class="app-header">
@@ -42,6 +42,10 @@
         <span class="setup-caption">Max. Datumsabstand (Tage)</span>
         <input type="number" name="maxDateDistanceDays" min="1" step="1" inputmode="numeric">
       </label>
+      <label class="setup-number" title="Findet auch umformulierte Texte mit anderem Titel. Kleiner = mehr Treffer, 100 = aus.">
+        <span class="setup-caption">Inhaltl. Ähnlichkeit ab (%)</span>
+        <input type="number" name="minContentSimilarity" min="20" max="100" step="5" inputmode="numeric">
+      </label>
       <button type="submit" id="scan-button" class="duplicate-btn is-primary">Speichern &amp; scannen</button>
       <p id="scan-info" class="scan-info" role="status" aria-live="polite"></p>
     </div>
@@ -56,7 +60,11 @@
     <p id="duplicate-status" class="duplicate-status" role="status" aria-live="polite"></p>
     <section id="duplicate-tools" class="duplicate-tools" aria-label="Treffer filtern und gesammelt verschieben" hidden>
       <div class="duplicate-filters">
-        <label class="duplicate-filter">
+        <label class="duplicate-filter duplicate-search-filter">
+          <span class="duplicate-filter-caption">Suche (alle Tabs)</span>
+          <input type="search" id="duplicate-search" class="duplicate-select-input" placeholder="Titel, Pfad oder Text">
+        </label>
+        <label class="duplicate-filter duplicate-pending-filter">
           <span class="duplicate-filter-caption">Übereinstimmung</span>
           <select id="duplicate-score-filter" class="duplicate-select-input">
             <option value="all">Alle Grade</option>
@@ -65,13 +73,18 @@
             <option value="90">mindestens 90 %</option>
             <option value="80">mindestens 80 %</option>
             <option value="70">mindestens 70 %</option>
+            <option value="60">mindestens 60 %</option>
+            <option value="50">mindestens 50 %</option>
           </select>
         </label>
-        <label class="duplicate-filter">
-          <span class="duplicate-filter-caption">Suche</span>
-          <input type="search" id="duplicate-search" class="duplicate-select-input" placeholder="Titel oder Pfad">
-        </label>
-      </div>
+        <label class="duplicate-filter duplicate-pending-filter">
+          <span class="duplicate-filter-caption">Trefferart</span>
+          <select id="duplicate-method-filter" class="duplicate-select-input">
+            <option value="all">Alle Arten</option>
+            <option value="text">Wortgleich</option>
+            <option value="content">Inhaltlich ähnlich</option>
+          </select>
+        </label>      </div>
       <div id="duplicate-selection-tools" class="duplicate-selection-tools">
         <button type="button" id="duplicate-select-all" class="duplicate-btn">Alle sichtbaren auswählen</button>
         <button type="button" id="duplicate-select-none" class="duplicate-btn">Auswahl aufheben</button>
@@ -126,6 +139,6 @@
 
   <script src="vendor/diff.min.js"></script>
   <script src="duplicate-diff.js?v=2"></script>
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

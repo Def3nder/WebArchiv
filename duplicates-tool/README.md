@@ -24,6 +24,13 @@ npm test
 - Verglichen werden nur Paare A↔B. Pro Kandidat aus B werden höchstens drei Originale gezeigt.
   Der Text wird wie im WebArchiv geparst: Titel/Datum/Zusammenfassung aus dem Kopf, verglichen
   wird der Body nach dem `****`/`----`-Trenner; Titel und Datum fließen in den Score ein.
+- Zwei Arten von Treffern: **wortgleich** (gemeinsame 5-Wort-Folgen, wie im WebArchiv) und
+  **inhaltlich ähnlich** (TF-IDF-Kosinus über Inhaltswörter ohne Füllwörter, unabhängig von Titel
+  und Wortreihenfolge). So werden auch umformulierte Texte mit anderem Titel gefunden. Die
+  Schwelle „Inhaltl. Ähnlichkeit ab (%)“ steuert das: kleiner = mehr Treffer, 100 = aus.
+- **Suche (alle Tabs)** grenzt Offen, Ignoriert und Verschoben gleichzeitig ein (alle Suchwörter
+  müssen in Titel, Pfad, Ordnername oder Textanfang vorkommen); die Tabs zeigen dann „Treffer / gesamt“.
+  „Übereinstimmung“ und „Trefferart“ filtern zusätzlich Offen und Ignoriert.
 - **Prüfen** öffnet die Diff-Ansicht (Wortunterschiede, „Nur Unterschiede“ klappt Gleiches ein).
 - **Ignorieren** speichert die Entscheidung in `data/decisions.json`; ändert sich einer der
   beiden Texte, ist der Treffer wieder offen.
@@ -45,6 +52,7 @@ npm test
 | `port` | Port | `3100` |
 | `minimumTokens` | Mindestwörter je Text | `35` |
 | `maxDateDistanceDays` | Max. Datumsabstand für Teiltreffer | `730` |
+| `minContentSimilarity` | Mindest-Ähnlichkeit (%) für inhaltliche Treffer, 100 = aus | `45` |
 
 Umgebungsvariablen: `PORT`, `HOST`, `DUPLICATES_TOOL_CONFIG` (Pfad zur Konfig),
 `DUPLICATES_TOOL_DATA` (Ordner für Entscheidungen und Protokoll).
