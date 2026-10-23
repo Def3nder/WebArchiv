@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 
@@ -11,7 +12,7 @@ test('Dublettenprüfung ist als Admin-Dialog mit allen Entscheidungswegen eingeb
   const ui = read('public/duplicates.js');
   assert.match(html, /data-action="duplicates"[^>]*data-admin-only/);
   assert.match(html, /id="duplicate-review"[\s\S]*data-duplicate-tab="pending"[\s\S]*data-duplicate-tab="linked"[\s\S]*data-duplicate-tab="ignored"/);
-  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=7[\s\S]*duplicates\.js\?v=17/);
+  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=7[\s\S]*duplicates\.js\?v=19/);
   assert.match(html, /id="duplicate-detail-dialog"[\s\S]*id="duplicate-detail-content"/);
   assert.match(app, /action === 'duplicates'[\s\S]*openDuplicateReview/);
   for (const action of ['inspect', 'toggle-selection', 'mobile-side', 'ignore', 'migrate', 'reset']) {
@@ -96,7 +97,37 @@ test('Autorfilter bietet alle konfigurierten Quellen zur Mehrfachauswahl auf jed
   assert.match(ui, /duplicateVisibleItems\(duplicateUi\.tab\)/);
   assert.match(ui, /duplicateSelectionTools\.hidden = !pending/);
   assert.match(css, /\.duplicate-filter-menu \.header-menu-dropdown \{/);
-  assert.match(html, /styles\.css\?v=141/);
+  assert.match(html, /styles\.css\?v=144/);
+});
+
+test('Suche grenzt beide Artikelseiten in allen Dublettentabs ein und kombiniert sich mit Filtern', () => {
+  const html = read('public/index.html');
+  const ui = read('public/duplicates.js');
+  assert.match(html, /id="duplicate-search"[^>]*type="search"/);
+  assert.match(ui, /duplicateSearch\.addEventListener\('input'/);
+
+  const source = ui.slice(ui.indexOf('function duplicateAuthorMatches('), ui.indexOf('function duplicateEmpty('));
+  const first = { blog: { title: 'Über Nähe', excerpt: 'Ein ruhiger Text', author: 'Blog' }, facebook: { title: 'Ueber Naehe', excerpt: 'Größere Verbindung', author: 'Coaching', infographicCount: 0 }, score: 1, exact: true };
+  const second = { blog: { title: 'Ein anderer Artikel', excerpt: 'Ohne Treffer', author: 'Blog' }, facebook: { title: 'Andere Quelle', excerpt: 'Nichts Passendes', author: 'Facebook', infographicCount: 2 }, score: .9, exact: false };
+  const context = {
+    duplicateUi: {
+      search: 'grossere nähe',
+      filters: { score: 'all', infographics: 'all', authors: null },
+      data: { pending: [first, second], linked: [first, second], ignored: [first, second] },
+    },
+    duplicateDate: value => value || '',
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+  for (const tab of ['pending', 'linked', 'ignored']) {
+    assert.equal(context.duplicateVisibleItems(tab).length, 1, tab);
+    assert.equal(context.duplicateVisibleItems(tab)[0], first, tab);
+  }
+  context.duplicateUi.filters.authors = new Set(['Facebook']);
+  assert.equal(context.duplicateVisibleItems('linked').length, 0);
+  context.duplicateUi.filters.authors = null;
+  context.duplicateUi.search = 'fehlend';
+  assert.equal(context.duplicateVisibleItems('pending').length, 0);
 });
 
 test('Mobilgeräte nutzen System-Selects; Autorenauswahl bleibt mehrfach kombinierbar', () => {
@@ -129,6 +160,10 @@ test('Dublettenfilter folgen den Beschriftungseinstellungen und der Kopf reagier
   assert.match(ui, /duplicateContent\.addEventListener\('scroll'/);
   assert.match(ui, /direction > 0[\s\S]*setDuplicateChromeOffset\(duplicateChromeOffset \+ delta\)/);
   assert.match(ui, /duplicateChromeTravel >= DUPLICATE_CHROME_SCROLL_THRESHOLD\) showDuplicateChrome\(true\)/);
+  assert.match(ui, /duplicateDialog\.style\.setProperty\('--duplicate-chrome-offset'/);
+  assert.match(css, /\.duplicate-content \{[^}]*margin-top: calc\(var\(--duplicate-chrome-height, 0px\) - var\(--duplicate-chrome-offset, 0px\)\);[^}]*overflow-y: auto;[^}]*padding: clamp/);
+  assert.match(css, /\.duplicate-chrome\.is-returning \+ \.duplicate-content \{ transition: margin-top/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.duplicate-content \{ padding: 8px; \}/);
 });
 
 test('Sammelverknüpfung indiziert höchstens einmal und reine Links gar nicht neu', () => {
@@ -160,6 +195,8 @@ test('Prüfansicht kehrt bei Auswahl, Ignorieren und Escape in die Trefferliste 
   assert.match(ui, /action === 'ignore'[\s\S]*closeDuplicateDetail\(\);[\s\S]*mutateDuplicate/);
   assert.match(ui, /function closeTopDuplicateDialog\(\)[\s\S]*duplicateImageViewer\.open[\s\S]*duplicateDetailDialog\.open[\s\S]*duplicateDialog\.open/);
   assert.match(ui, /document\.addEventListener\('keydown'[\s\S]*event\.key !== 'Escape'[\s\S]*event\.preventDefault\(\)[\s\S]*closeTopDuplicateDialog\(\)/);
+  assert.match(ui, /function topDuplicateDialog\(\)[\s\S]*duplicateImageViewer\.open[\s\S]*duplicateDetailDialog\.open[\s\S]*duplicateDialog\.open/);
+  assert.match(ui, /dialog\.addEventListener\('cancel'[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*event\.currentTarget !== topDuplicateDialog\(\)[\s\S]*event\.currentTarget\.close\(\)/);
 });
 
 test('Volltext und nur Unterschiede lassen sich im Prüfdialog umschalten', () => {

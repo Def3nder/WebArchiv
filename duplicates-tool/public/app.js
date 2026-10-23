@@ -509,7 +509,101 @@ function configOriginals(config) {
   return config.folderA ? [config.folderA] : [];
 }
 
+// ─── Server-Stand ────────────────────────────────────────────────────────
+// Server-Code wird erst beim Neustart geladen, die Oberfläche bei jedem Neuladen der Seite.
+// Ein älterer Server würde neue Einstellungen stillschweigend verwerfen.
+const EXPECTED_API_VERSION = 4;
+const SERVER_OUTDATED_MESSAGE = 'Der laufende Server ist älter als diese Oberfläche und würde Einstellungen verwerfen – bitte den Server neu starten (npm start).';
+
+function serverOutdated() {
+  return (Number(duplicateUi.apiVersion) || 0) < EXPECTED_API_VERSION;
+}
+
+function updateServerWarning() {
+  document.getElementById('server-warning').hidden = !serverOutdated();
+}
+
+// ─── Zuletzt verwendete Ordner (B und Ziel) ──────────────────────────────
+
+const recentInputs = [...setupForm.querySelectorAll('input[data-recent]')];
+
+function recentMenuOf(input) {
+  return document.getElementById(input.getAttribute('aria-controls'));
+}
+
+function recentEntries(input) {
+  const list = duplicateUi.recent?.[input.dataset.recent] || [];
+  const typed = input.value.trim().toLocaleLowerCase('de-DE');
+  // Solange das Feld einen Eintrag der Liste enthält, alle zeigen; sonst nach Eingabe filtern.
+  if (!typed || list.some(item => item.toLocaleLowerCase('de-DE') === typed)) return list;
+  return list.filter(item => item.toLocaleLowerCase('de-DE').includes(typed));
+}
+
+function closeRecentMenu(input) {
+  const menu = recentMenuOf(input);
+  menu.hidden = true;
+  input.setAttribute('aria-expanded', 'false');
+  input.removeAttribute('aria-activedescendant');
+}
+
+function openRecentMenu(input) {
+  const menu = recentMenuOf(input);
+  const entries = recentEntries(input);
+  if (!entries.length) return closeRecentMenu(input);
+  const current = input.value.trim().toLocaleLowerCase('de-DE');
+  menu.innerHTML = `<span class="recent-caption">Zuletzt verwendet</span>${entries.map((item, index) => `<button type="button" role="option" id="${menu.id}-${index}" class="recent-option" data-recent-value="${duplicateEsc(item)}" aria-selected="${item.toLocaleLowerCase('de-DE') === current}" tabindex="-1" title="${duplicateEsc(item)}">${duplicateEsc(item)}</button>`).join('')}`;
+  menu.hidden = false;
+  input.setAttribute('aria-expanded', 'true');
+}
+
+function moveRecentFocus(input, direction) {
+  const menu = recentMenuOf(input);
+  if (menu.hidden) openRecentMenu(input);
+  const options = [...menu.querySelectorAll('.recent-option')];
+  if (!options.length) return;
+  const active = options.findIndex(option => option.classList.contains('is-active'));
+  const next = active < 0 ? (direction > 0 ? 0 : options.length - 1) : (active + direction + options.length) % options.length;
+  options.forEach((option, index) => option.classList.toggle('is-active', index === next));
+  options[next].scrollIntoView({ block: 'nearest' });
+  input.setAttribute('aria-activedescendant', options[next].id);
+}
+
+function chooseRecent(input, value) {
+  input.value = value;
+  closeRecentMenu(input);
+  input.focus();
+}
+
+for (const input of recentInputs) {
+  const menu = recentMenuOf(input);
+  input.addEventListener('focus', () => openRecentMenu(input));
+  input.addEventListener('click', () => openRecentMenu(input));
+  input.addEventListener('input', () => openRecentMenu(input));
+  input.addEventListener('blur', () => setTimeout(() => closeRecentMenu(input), 120));
+  input.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveRecentFocus(input, event.key === 'ArrowDown' ? 1 : -1);
+    } else if (event.key === 'Enter' && !menu.hidden) {
+      const active = menu.querySelector('.recent-option.is-active');
+      if (!active) return;
+      event.preventDefault();
+      chooseRecent(input, active.dataset.recentValue);
+    } else if (event.key === 'Escape' && !menu.hidden) {
+      event.preventDefault();
+      closeRecentMenu(input);
+    }
+  });
+  // mousedown statt click, damit das Feld den Fokus nicht vorher verliert.
+  menu.addEventListener('mousedown', event => {
+    const option = event.target.closest('.recent-option');
+    event.preventDefault();
+    if (option) chooseRecent(input, option.dataset.recentValue);
+  });
+}
+
 function fillSetup(config, defaults) {
+  duplicateUi.recent = { recentFolderB: config.recentFolderB || [], recentTargets: config.recentTargets || [] };
   originalsList.replaceChildren();
   const originals = configOriginals(config);
   for (const folder of originals.length ? originals : ['']) addOriginalRow(folder);
@@ -536,6 +630,7 @@ async function saveAndScan() {
   updateDuplicateTools();
   scanInfo.textContent = 'Einstellungen werden gespeichert …';
   try {
+    if (serverOutdated()) throw new Error(SERVER_OUTDATED_MESSAGE);
     const form = setupForm.elements;
     const originals = originalInputs().map(input => input.value.trim()).filter(Boolean);
     await duplicateRequest('/api/config', {
@@ -548,14 +643,7 @@ async function saveAndScan() {
         maxDateDistanceDays: form.maxDateDistanceDays.value,
         minContentSimilarity: form.minContentSimilarity.value,
       }),
-    }).then(result => {
-      // Ein noch laufender alter Server kennt „originals“ nicht und würde die Liste verwerfen:
-      // Eingaben stehen lassen und nicht scannen.
-      if (!Array.isArray(result.config?.originals)) {
-        throw new Error('Der laufende Server ist veraltet und kann nur einen Original-Ordner speichern – bitte den Server neu starten (npm start).');
-      }
-      fillSetup(result.config);
-    });
+    }).then(result => fillSetup(result.config));
     scanInfo.textContent = 'Ordner werden gescannt …';
     duplicateContent.innerHTML = '<div class="duplicate-loading"><span class="spinner"></span></div>';
     await duplicateRequest('/api/scan', { method: 'POST' });

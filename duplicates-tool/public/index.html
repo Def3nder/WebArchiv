@@ -17,6 +17,8 @@
     </div>
   </header>
 
+  <p id="server-warning" class="server-warning" role="alert" hidden>Der laufende Server ist älter als diese Oberfläche – Einstellungen werden eventuell nicht gespeichert. Bitte den Server neu starten (<code>npm start</code>).</p>
+
   <form id="setup" class="setup" autocomplete="off">
     <div class="setup-folders">
       <div id="originals-list" class="originals-list"></div>
@@ -26,11 +28,11 @@
       </div>
       <label class="setup-field">
         <span class="setup-caption"><b class="side-badge side-b">B</b> Kandidaten</span>
-        <span class="setup-input"><input type="text" name="folderB" spellcheck="false" placeholder="Ordner, aus dem Dubletten verschoben werden"><button type="button" class="duplicate-btn" data-browse="folderB">Durchsuchen …</button></span>
+        <span class="setup-input"><span class="recent-wrap"><input type="text" name="folderB" spellcheck="false" placeholder="Ordner, aus dem Dubletten verschoben werden" data-recent="recentFolderB" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="recent-folderB"><span id="recent-folderB" class="recent-menu" role="listbox" aria-label="Zuletzt verwendete B-Ordner" hidden></span></span><button type="button" class="duplicate-btn" data-browse="folderB">Durchsuchen …</button></span>
       </label>
       <label class="setup-field">
         <span class="setup-caption"><b class="side-badge side-target">→</b> Ziel-Ordner</span>
-        <span class="setup-input"><input type="text" name="target" spellcheck="false" placeholder="Hierhin werden Dubletten aus B verschoben"><button type="button" class="duplicate-btn" data-browse="target">Durchsuchen …</button></span>
+        <span class="setup-input"><span class="recent-wrap"><input type="text" name="target" spellcheck="false" placeholder="Hierhin werden Dubletten aus B verschoben" data-recent="recentTargets" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="recent-target"><span id="recent-target" class="recent-menu" role="listbox" aria-label="Zuletzt verwendete Ziel-Ordner" hidden></span></span><button type="button" class="duplicate-btn" data-browse="target">Durchsuchen …</button></span>
       </label>
     </div>
     <div class="setup-row">

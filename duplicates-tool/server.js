@@ -31,14 +31,37 @@ function readConfigFile() {
   }
 }
 
+// Stand der Schnittstelle; die Oberfläche warnt, wenn ein älterer Server noch läuft.
+const API_VERSION = 4;
+const RECENT_LIMIT = 5;
+
+const folder = item => (typeof item === 'string' && item.trim() ? path.resolve(item.trim()) : '');
+
+function normalizeRecent(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).map(folder).filter(item => {
+    const key = item.toLowerCase();
+    if (!item || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, RECENT_LIMIT);
+}
+
+// Zuletzt verwendeter Ordner kommt nach vorn, höchstens fünf Einträge.
+function rememberRecent(list, value) {
+  return value ? normalizeRecent([value, ...list]) : normalizeRecent(list);
+}
+
 function normalizeConfig(value = {}) {
-  const folder = item => (typeof item === 'string' && item.trim() ? path.resolve(item.trim()) : '');
   // Mehrere Original-Ordner; ältere Konfigurationen mit nur „folderA“ werden übernommen.
   const originals = Array.isArray(value.originals) ? value.originals : [value.folderA];
   return {
     originals: originals.map(folder).filter(Boolean),
     folderB: folder(value.folderB),
     target: folder(value.target),
+    // Ohne gespeicherte Liste wenigstens den aktuellen Ordner anbieten.
+    recentFolderB: normalizeRecent(value.recentFolderB?.length ? value.recentFolderB : [value.folderB]),
+    recentTargets: normalizeRecent(value.recentTargets?.length ? value.recentTargets : [value.target]),
     host: String(value.host || '127.0.0.1'),
     port: Number(value.port) || 3100,
     ...normalizeThresholds(value),
@@ -218,7 +241,7 @@ const route = handler => (req, res) => Promise.resolve(handler(req, res)).catch(
 });
 
 app.get('/api/config', route((req, res) => {
-  res.json({ config, defaults: DEFAULT_THRESHOLDS, scan: scanSummary() });
+  res.json({ apiVersion: API_VERSION, config, defaults: DEFAULT_THRESHOLDS, scan: scanSummary() });
 }));
 
 app.put('/api/config', route(async (req, res) => {
@@ -233,11 +256,13 @@ app.put('/api/config', route(async (req, res) => {
     minContentSimilarity: body.minContentSimilarity ?? config.minContentSimilarity,
   });
   await validateFolders(next);
+  next.recentFolderB = rememberRecent(config.recentFolderB, next.folderB);
+  next.recentTargets = rememberRecent(config.recentTargets, next.target);
   const { folderA, ...previous } = readConfigFile();
   const stored = { ...previous, ...next };
   await writeJsonAtomic(CONFIG_FILE, stored);
   config = next;
-  res.json({ config, scan: scanSummary() });
+  res.json({ apiVersion: API_VERSION, config, scan: scanSummary() });
 }));
 
 // Ordner-Browser: nur Verzeichnisse, für die Auswahl in der Oberfläche.

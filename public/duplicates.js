@@ -10,6 +10,7 @@ const duplicateUi = {
   detail: null,
   busy: false,
   filters: { score: 'all', infographics: 'all', authors: null },
+  search: '',
   authorOptionsKey: '',
   selection: new Set(),
   listScrollTop: 0,
@@ -28,6 +29,7 @@ const duplicateStatus = document.getElementById('duplicate-status');
 const duplicateMenuCount = document.getElementById('duplicate-menu-count');
 const duplicateTools = document.getElementById('duplicate-tools');
 const duplicateSelectionTools = document.getElementById('duplicate-selection-tools');
+const duplicateSearch = document.getElementById('duplicate-search');
 const duplicateAuthorNative = document.getElementById('duplicate-author-native');
 const duplicateScoreNative = document.getElementById('duplicate-score-native');
 const duplicateInfographicNative = document.getElementById('duplicate-infographic-native');
@@ -68,6 +70,7 @@ function setDuplicateChromeOffset(offset, returning = false) {
   duplicateChromeOffset = Math.max(0, Math.min(height, offset));
   duplicateChrome.classList.toggle('is-returning', returning);
   duplicateChrome.style.setProperty('--duplicate-chrome-translate', `${-duplicateChromeOffset}px`);
+  duplicateDialog.style.setProperty('--duplicate-chrome-offset', `${duplicateChromeOffset}px`);
 }
 
 function showDuplicateChrome(returning = false) {
@@ -463,6 +466,20 @@ function duplicateAuthorMatches(item) {
     || duplicateUi.filters.authors.has(item.facebook?.author);
 }
 
+function normalizeDuplicateSearch(value) {
+  return String(value ?? '').normalize('NFKD').replace(/\p{M}/gu, '')
+    .toLocaleLowerCase('de-DE').replace(/ß/g, 'ss');
+}
+
+function duplicateSearchMatches(item) {
+  const terms = normalizeDuplicateSearch(duplicateUi.search).trim().split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+  const haystack = normalizeDuplicateSearch([item.blog, item.facebook].flatMap(article => article
+    ? [article.title, article.excerpt, article.author, article.date, duplicateDate(article.date), article.sourceUrl]
+    : []).filter(Boolean).join(' '));
+  return terms.every(term => haystack.includes(term));
+}
+
 function duplicateVisiblePending() {
   const minimum = duplicateUi.filters.score === 'all' ? 0 : Number(duplicateUi.filters.score) / 100;
   return duplicateUi.data.pending.filter(item => {
@@ -473,18 +490,18 @@ function duplicateVisiblePending() {
     const infographicMatch = duplicateUi.filters.infographics === 'all'
       || (duplicateUi.filters.infographics === 'with' && count > 0)
       || (duplicateUi.filters.infographics === 'without' && count === 0);
-    return duplicateAuthorMatches(item) && scoreMatch && infographicMatch;
+    return duplicateAuthorMatches(item) && scoreMatch && infographicMatch && duplicateSearchMatches(item);
   });
 }
 
 function duplicateVisibleItems(tab) {
   return tab === 'pending' ? duplicateVisiblePending()
-    : (duplicateUi.data[tab] || []).filter(duplicateAuthorMatches);
+    : (duplicateUi.data[tab] || []).filter(item => duplicateAuthorMatches(item) && duplicateSearchMatches(item));
 }
 
 function duplicateEmpty(tab, filtered = false) {
   const copy = filtered
-    ? ['Keine Treffer für diese Filter', 'Passe den Autor oder die übrigen Filter an.']
+    ? ['Keine Treffer für diese Suche oder Filter', 'Ändere den Suchbegriff oder passe die Filter an.']
     : {
       pending: ['Keine offenen Treffer', 'Nach dem nächsten Einlesen erscheinen hier neue, ausreichend ähnliche Artikelpaare.'],
       linked: ['Noch nichts verknüpft', 'Bestätigte Blog–Quellen-Paare werden hier dauerhaft dokumentiert.'],
@@ -720,6 +737,7 @@ async function linkSelectedDuplicates(migrateImages = false) {
 async function openDuplicateReview() {
   duplicateUi.tab = 'pending';
   duplicateUi.detail = null;
+  duplicateSearch.value = duplicateUi.search;
   duplicateDialog.showModal();
   syncDuplicatePageScroll();
   showDuplicateChrome();
@@ -762,6 +780,13 @@ function closeTopDuplicateDialog() {
   else if (duplicateDialog.open) duplicateDialog.close();
 }
 
+function topDuplicateDialog() {
+  if (duplicateImageViewer.open) return duplicateImageViewer;
+  if (duplicateDetailDialog.open) return duplicateDetailDialog;
+  if (duplicateDialog.open) return duplicateDialog;
+  return null;
+}
+
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || ![duplicateDialog, duplicateDetailDialog, duplicateImageViewer].some(dialog => dialog.open)) return;
   event.preventDefault();
@@ -770,11 +795,15 @@ document.addEventListener('keydown', event => {
   if (openMenu) closeDuplicateFilterMenu(openMenu, true);
   else closeTopDuplicateDialog();
 }, true);
+let duplicateCancelGuard = false;
 for (const dialog of [duplicateDialog, duplicateDetailDialog, duplicateImageViewer]) {
   dialog.addEventListener('cancel', event => {
     event.preventDefault();
-    event.stopPropagation();
-    closeTopDuplicateDialog();
+    event.stopImmediatePropagation();
+    if (duplicateCancelGuard || event.currentTarget !== topDuplicateDialog()) return;
+    duplicateCancelGuard = true;
+    event.currentTarget.close();
+    setTimeout(() => { duplicateCancelGuard = false; }, 0);
   });
 }
 duplicateImageViewer.addEventListener('keydown', event => {
@@ -812,6 +841,12 @@ document.getElementById('duplicate-tabs').addEventListener('click', event => {
   duplicateUi.tab = button.dataset.duplicateTab;
   duplicateUi.listScrollTop = 0;
   document.querySelectorAll('[data-duplicate-tab]').forEach(tab => tab.setAttribute('aria-selected', String(tab === button)));
+  renderDuplicateList();
+});
+
+duplicateSearch.addEventListener('input', () => {
+  duplicateUi.search = duplicateSearch.value;
+  duplicateUi.listScrollTop = 0;
   renderDuplicateList();
 });
 

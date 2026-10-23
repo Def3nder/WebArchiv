@@ -6,7 +6,9 @@ const $igmLibrary = $igm.querySelector('[data-igm-library]');
 const $igmPreview = $igm.querySelector('[data-igm-preview]');
 const $igmFile = $igm.querySelector('[data-igm-file]');
 const $igmStatus = document.getElementById('infographic-manager-status');
-const igmState = { article: null, items: [], busy: false, dragId: null, previewId: null, actionIndex: -1 };
+const igmState = {
+  article: null, items: [], busy: false, dragId: null, previewId: null, actionIndex: -1, returnFocus: null,
+};
 
 function igmPath() {
   return '/api/infographic-manager/' + igmState.article.id.split('/').map(encodeURIComponent).join('/');
@@ -151,8 +153,15 @@ function igmClose() {
   $igm.close();
 }
 
+function igmEscape() {
+  if (igmState.busy) return;
+  if (!$igmPreview.hidden) igmClosePreview();
+  else igmClose();
+}
+
 async function openInfographicManager(article) {
   if (currentUser?.role !== 'admin' || !article?.canUploadInfographic || $igm.open) return;
+  igmState.returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   igmState.article = article;
   igmState.items = [];
   igmState.dragId = null;
@@ -200,9 +209,22 @@ $igmFile.addEventListener('change', async () => {
 $igm.addEventListener('cancel', event => {
   // Auch das Abbrechen des System-Dateidialogs kann ein bubbling cancel senden.
   if (event.target !== $igm) return;
-  if (igmState.busy) { event.preventDefault(); return; }
-  if (!$igmPreview.hidden) { event.preventDefault(); igmClosePreview(); }
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  igmEscape();
 });
+$igm.addEventListener('close', () => {
+  const returnFocus = igmState.returnFocus;
+  igmState.returnFocus = null;
+  if (returnFocus?.isConnected) returnFocus.focus();
+  else if (!document.getElementById('article-overlay').hidden) document.getElementById('overlay-close').focus();
+});
+document.addEventListener('keydown', event => {
+  if (!$igm.open || event.key !== 'Escape') return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  igmEscape();
+}, true);
 $igm.addEventListener('click', event => {
   if (event.target !== $igm) return;
   const rect = $igm.getBoundingClientRect();

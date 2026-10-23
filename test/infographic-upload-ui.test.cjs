@@ -9,7 +9,7 @@ test('Artikel öffnen die Infografik-Verwaltung statt eines einzelnen Upload-Fel
   assert.match(app, /id="detail-infographic-btn" aria-label="Infografiken verwalten"/);
   assert.match(app, /window\.openInfographicManager\?\.\(article\)/);
   assert.match(html, /id="infographic-manager"[\s\S]*data-igm-add>Grafik hinzufügen[\s\S]*data-igm-list/);
-  assert.match(html, /infographic-manager\.js\?v=1/);
+  assert.match(html, /infographic-manager\.js\?v=2/);
 });
 
 test('Upload im Verwaltungsdialog aktualisiert Artikel und Grafikliste', () => {
@@ -26,4 +26,5 @@ test('Dialog kann per Escape und Pull-to-Close geschlossen werden', () => {
   const manager = fs.readFileSync(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
   assert.match(app, /\['#infographic-manager', '#infographic-manager \[data-igm-close\]'\]/);
   assert.match(manager, /\$igm\.addEventListener\('cancel', event =>/);
+  assert.match(manager, /document\.addEventListener\('keydown'[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)[\s\S]*}, true\)/);
 });
