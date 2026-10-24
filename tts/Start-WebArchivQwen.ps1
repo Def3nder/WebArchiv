@@ -28,7 +28,8 @@ $previousUrl = $env:QWEN_TTS_BASE_URL
 $previousToken = $env:QWEN_TTS_TOKEN
 $locationChanged = $false
 try {
-    & (Join-Path $PSScriptRoot 'Test-QwenServer.ps1') -BaseUrl $BaseUrl -Token $token | Out-Host
+    $qwenTest = Join-Path (Split-Path -Parent $PSScriptRoot) 'tts-server/Test-QwenServer.ps1'
+    & $qwenTest -BaseUrl $BaseUrl -Token $token | Out-Host
     $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
     $env:QWEN_TTS_BASE_URL = $BaseUrl.TrimEnd('/')
     $env:QWEN_TTS_TOKEN = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer).Trim()

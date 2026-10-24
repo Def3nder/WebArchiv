@@ -88,6 +88,33 @@ test('Autorenrechte, paralleler Start, Abbruch und Reindex-Fehler ohne erneute S
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
+test('Globale Qwen-Stimme wird beim Auftragsstart als Snapshot an den Worker übergeben', async () => {
+  const dir = await fs.mkdtemp(path.join(__dirname, '.test-audio-'));
+  try {
+    const root = path.join(dir, 'www'), audioRoot = path.join(dir, 'audio');
+    const input = path.join(root, 'Autor', 'Text.md');
+    await fs.mkdir(path.dirname(input), { recursive: true });
+    await fs.writeFile(input, 'Text');
+    const article = { id: 'voice', author: 'Autor', filePath: input };
+    let selected = 'Mandy', received;
+    const jobs = createTtsJobs({ root, audioRoot, getArticle: () => article,
+      canAccessAuthor: () => true, busy: () => false, selectedVoice: async () => selected,
+      reindex: async () => { article.audioUrl = '/audio-files/Autor/Text.mp3'; },
+      mediaUrl: () => article.audioUrl,
+      start: options => {
+        received = options.qwenVoiceId;
+        selected = 'Sachbuch-Autor';
+        return { cancel() {}, completion: fs.writeFile(options.outputPath, 'mp3', { flag: 'wx' })
+          .then(() => ({ outputPath: options.outputPath, chunks: 1 })) };
+      },
+    });
+    const id = await jobs.launch('voice', {}, 'qwen');
+    while (!jobs.status(id, {}).done) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(received, 'Mandy');
+    assert.equal(jobs.status(id, {}).voiceId, 'Mandy');
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
 test('Alle TTS-Routen sind adminpflichtig; Providerwechsel verhindert Start', async () => {
   const express = require('express');
   const app = express(); app.use(express.json());
@@ -132,5 +159,35 @@ test('Alle TTS-Routen sind adminpflichtig; Providerwechsel verhindert Start', as
     availableProvider = 'qwen'; // OpenAI-Schlüssel wurde entfernt.
     assert.equal((await post('openai')).status, 409);
     assert.equal(starts, 4);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('Sämtliche Stimmen- und Einstellungsrouten sind adminpflichtig', async () => {
+  const express = require('express');
+  const app = express(); app.use(express.json());
+  const jobs = { launch: async () => 'id', latest: () => null, status: () => ({}), cancel() {} };
+  const voices = {
+    selectedVoice: async () => null, getSettings: async () => ({}), select: async () => ({}),
+    createVoice: async () => ({}), voiceJob: async () => ({}), cancelVoiceJob: async () => ({}),
+    renameVoice: async () => ({}), trashVoice: async () => ({}), startPreview: async () => ({}),
+    previewStatus: async () => ({}), cancelPreview: async () => ({}), previewAudio: async () => ({}),
+    cachedPreviewAudio: async () => ({}),
+  };
+  installTtsRoutes(app, (_req, res) => res.sendStatus(403), jobs,
+    async () => ({ providers: [{ provider: 'qwen', available: true, confirmation: '' }] }), voices);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    for (const [route, method] of [
+      ['/api/tts/settings', 'GET'], ['/api/tts/settings', 'PUT'], ['/api/tts/voices', 'POST'],
+      ['/api/tts/voices/jobs/00000000-0000-4000-8000-000000000000', 'GET'],
+      ['/api/tts/voices/jobs/00000000-0000-4000-8000-000000000000', 'DELETE'],
+      ['/api/tts/voices/Voice', 'PATCH'], ['/api/tts/voices/Voice', 'DELETE'],
+      ['/api/tts/voices/Voice/preview-audio', 'GET'],
+      ['/api/tts/voices-preview', 'POST'],
+      ['/api/tts/voices-preview/00000000-0000-4000-8000-000000000000', 'GET'],
+      ['/api/tts/voices-preview/00000000-0000-4000-8000-000000000000/audio', 'GET'],
+    ]) assert.equal((await fetch(base + route, { method })).status, 403);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

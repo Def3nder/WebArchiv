@@ -19,11 +19,15 @@ npm test               # run all Node and Python tests from the test/ directorie
 node scripts/hash-passwords.js   # hash plaintext passwords in users.json (see Auth below)
 ```
 
-Tests are organized under `test/`, `scraper/test/`, `epub-tool/test/`, and `tts/test/`.
+Tests are organized under `test/`, `scraper/test/`, `epub-tool/test/`, `tts/test/`,
+and `tts-server/test/`. WebArchiv-side Node modules live under `tts/`; the separate
+Qwen model server, its launch helpers, and its Python tests live under `tts-server/`.
 There is no linter or build. `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button
 → `POST /api/reindex`, or restart). Frontend changes (`public/`) only need a browser reload;
 bump the `?v=` query on the `<script>`/`<link>` tags in `public/index.html` to bust caches.
+The separately deployed Qwen model service is the exception: its Python runtime and all
+server-side files are isolated under `tts-server/` and never run as part of `server.js`.
 
 ## Architecture
 

@@ -53,7 +53,7 @@
     "token_environment_variable": "QWEN_TTS_TOKEN"
   },
   "prefill": {
-    "text": "Dies ist ein kurzer technischer Vorspann.",
+    "text": "Der Tag kommt zu einem Ende.",
     "separator": "\n\n",
     "analysis_window_milliseconds": 20.0,
     "minimum_quiet_milliseconds": 80.0,

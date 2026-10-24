@@ -29,5 +29,5 @@ test('Artikel-Player zeigt Wiedergabe erst beim playing-Ereignis an', () => {
 });
 
 test('Cache-Buster liefert die korrigierte Player-Version aus', () => {
-  assert.match(html, /<script src="app\.js\?v=115"><\/script>/);
+  assert.match(html, /<script src="app\.js\?v=116"><\/script>/);
 });

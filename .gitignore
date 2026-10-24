@@ -28,7 +28,11 @@ migrate-audio.log
 /epub-tool/node_modules/
 /tts/.cache/
 /tts/.test-*/
+/tts-server/.test-*/
+/tts-server/test/.test-*/
 /.npm-cache/
+__pycache__/
+*.pyc
 *.tts-lock
 .markdown-tts-*/
 
@@ -38,6 +42,8 @@ users.json
 audiobook-progress.json
 bookmarks.json
 duplicate-decisions.json
+tts-settings.json
+/tts-voice-previews/
 /scraper/cookies.txt
 /scraper/Abonenten-URL.txt
 

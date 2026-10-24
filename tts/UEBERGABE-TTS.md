@@ -17,7 +17,7 @@ immer die fertige MP3. Der Worker führt den regulären CLI-Einstieg von
 Markdown-Bereinigung, Chunking-, Kalibrierungs-, Seed- und Exportlogik kommt aus
 diesem Script; die folgenden v2-/v3-Notizen sind historische Zwischenstände.
 WebArchiv prüft die MP3 und veröffentlicht sie bytegleich, ohne erneute Kodierung.
-Aktueller Vertrag und Update: [QWEN-ANBINDUNG.md](QWEN-ANBINDUNG.md).
+Aktueller Vertrag und Update: [QWEN-ANBINDUNG.md](../tts-server/QWEN-ANBINDUNG.md).
 
 **Weiterer Nachtrag vom 17.09.2026:** `webarchiv-qwen-v3` hält Modell und Sprecher
 für alle Chunks eines Artikels in einem GPU-Worker. Gesamtanzahl und Sitzungs-ID
@@ -25,19 +25,19 @@ werden im ersten Aufruf angekündigt. Seed und Konfiguration bleiben pro Sitzung
 identisch; Warmup erfolgt einmal. Polling erzeugt keine wiederholten Logzeilen,
 und die Anzeige erhält ihre Scrollposition. Beide Python-Dateien auf dem
 Modellrechner und die WebArchiv-Dateien müssen gemeinsam aktualisiert werden.
-Details: [QWEN-ANBINDUNG.md](QWEN-ANBINDUNG.md).
+Details: [QWEN-ANBINDUNG.md](../tts-server/QWEN-ANBINDUNG.md).
 
 **Nachtrag vom 17.09.2026:** Qwen-HTTP nutzt jetzt `node:http`/`node:https`
 statt des von einem Parser-Absturz betroffenen Undici. Chunking, Kalibrierung,
 Vorspann-Schnitt und Zusammenfügen erfolgen auf Wunsch des Benutzers in WebArchiv.
 Die neue HTTP-Brücke benötigt zusätzlich `qwen_chunk_worker.py` und liefert pro
 Anfrage einen PCM-WAV-Chunk (`webarchiv-qwen-v2`). Update-Anleitung und Prüfungen:
-[QWEN-ANBINDUNG.md](QWEN-ANBINDUNG.md).
+[QWEN-ANBINDUNG.md](../tts-server/QWEN-ANBINDUNG.md).
 
 **Nachtrag vom 16.09.2026:** Die Qwen-Anbindung ist inzwischen im lokalen Code
 implementiert, einschließlich einer auf Benutzerwunsch mitgelieferten HTTP-Brücke
 für das geprüfte CLI-Script. Aktueller Vertrag, Konfiguration, Tests und offene
-Inbetriebnahme stehen in [QWEN-ANBINDUNG.md](QWEN-ANBINDUNG.md).
+Inbetriebnahme stehen in [QWEN-ANBINDUNG.md](../tts-server/QWEN-ANBINDUNG.md).
 `tts.provider` ist jetzt `qwen`; Serveradresse und Token müssen vor dem Betrieb
 gesetzt werden. Die folgenden Abschnitte dokumentieren den Stand **vor** dieser
 Erweiterung. Insbesondere Abschnitt 10 ist ein historischer Entwurf.

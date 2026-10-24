@@ -6,9 +6,10 @@ import { requestQwen } from './qwen-http.js';
 
 const CHUNK_PROGRESS = /^Chunk \d+\/\d+: \d+\/\d+ characters \(boundary: [^)]+\)$/;
 
-// Vertrag des mitgelieferten qwen_http_service.py, keine OpenAI-Kompatibilität.
+// Vertrag des separaten tts-server/qwen_http_service.py, keine OpenAI-Kompatibilität.
 export async function synthesizeQwen(text, file, c, signal, emit = () => {}, fetchImpl = requestQwen) {
   const { baseUrl, token } = settings.providerSettings(c);
+  const voiceId = process.env.WEBARCHIV_TTS_QWEN_VOICE?.trim() || null;
   if (!text.trim() || Buffer.byteLength(text, 'utf8') > 1_000_000) throw new Error('Markdown ist leer oder größer als 1 MB.');
   const id = randomUUID(), endpoint = `${baseUrl}/v1/jobs/${id}`;
   const headers = { Authorization: `Bearer ${token}` };
@@ -18,7 +19,12 @@ export async function synthesizeQwen(text, file, c, signal, emit = () => {}, fet
     const response = await fetchImpl(url, { ...options, redirect: 'error',
       headers: { ...headers, ...options.headers },
       signal: !independent && signal ? AbortSignal.any([signal, timeout]) : timeout });
-    if (!response.ok) { await response.body?.cancel(); throw new Error(`Qwen-Dienst HTTP ${response.status}.`); }
+    if (!response.ok) {
+      let detail;
+      try { detail = (await response.json()).error; }
+      catch { await response.body?.cancel?.(); }
+      throw new Error(detail || `Qwen-Dienst HTTP ${response.status}.`);
+    }
     return response;
   }
   try {
@@ -31,7 +37,7 @@ export async function synthesizeQwen(text, file, c, signal, emit = () => {}, fet
     if (!Number.isInteger(health.max_markdown_bytes) || Buffer.byteLength(text, 'utf8') > health.max_markdown_bytes) throw new Error('Markdown überschreitet das Serverlimit.');
     attempted = true;
     const started = await (await request(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ markdown: text }) })).json();
+      body: JSON.stringify({ markdown: text, ...(voiceId ? { voiceId } : {}) }) })).json();
     if (started.id !== id) throw new Error('Qwen-Auftrags-ID stimmt nicht überein.');
     for (;;) {
       signal?.throwIfAborted();

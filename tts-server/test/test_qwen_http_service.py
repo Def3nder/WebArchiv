@@ -1,7 +1,11 @@
 """Offline-Vertragstests mit simuliertem CLI-Generator; kein Modellimport."""
+import base64
+import hashlib
 import json
 import io
+import os
 import sys
+import wave
 from pathlib import Path
 import tempfile
 import threading
@@ -14,7 +18,7 @@ TTS_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TTS_ROOT))
 from qwen_chunk_worker import ChunkProgressRelay, generate_article
 from http.server import ThreadingHTTPServer
-from qwen_http_service import Jobs, handler, LEASE
+from qwen_http_service import GpuCoordinator, Jobs, VoiceCatalog, VoiceJobs, handler, LEASE
 
 
 class Contract(unittest.TestCase):
@@ -173,6 +177,97 @@ raise SystemExit(0)
             script.write_text("raise SystemExit(2)")
             with self.assertRaisesRegex(RuntimeError, "Exit 2"):
                 generate_article(script, Path(temp)/"config", Path(temp)/"input", Path(temp)/"output")
+
+    def test_original_runs_in_fresh_cli_process(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / "original.py"
+            config, source, output = [root / name for name in ["config.json", "input.md", "output.txt"]]
+            config.write_text("{}")
+            source.write_text("Hallo")
+            script.write_text('''import argparse, os
+from pathlib import Path
+p = argparse.ArgumentParser()
+for key in ["config", "input", "output"]: p.add_argument("--" + key, required=True)
+a = p.parse_args()
+Path(a.output).write_text(str(os.getpid()))
+''')
+            generate_article(script, config, source, output)
+            self.assertNotEqual(int(output.read_text()), os.getpid())
+
+    def test_selected_speaker_is_the_only_generator_override(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / "original.py"
+            config, source, output, speaker = [root / name for name in ["config.json", "input.md", "output.mp3", "Voice-1.7B.pt"]]
+            config.write_text("{}")
+            source.write_text("Hallo")
+            speaker.write_bytes(b"speaker")
+            script.write_text('''import argparse
+from pathlib import Path
+p=argparse.ArgumentParser()
+for key in ["config","input","output","speaker"]: p.add_argument("--"+key, required=True)
+a=p.parse_args()
+assert Path(a.speaker).name == "Voice-1.7B.pt"
+Path(a.output).write_bytes(b"ok")
+''')
+            generate_article(script, config, source, output, speaker)
+            self.assertEqual(output.read_bytes(), b"ok")
+
+
+class VoiceCatalogTests(unittest.TestCase):
+    def test_catalog_lists_only_active_17b_files_and_trashes_instead_of_deleting(self):
+        with tempfile.TemporaryDirectory(prefix=".test-voices-", dir=TTS_ROOT / "test") as temp:
+            root = Path(temp)
+            (root / "Mandy-1.7B.pt").write_bytes(b"voice")
+            (root / "Mandy-0.6B.pt").write_bytes(b"old")
+            (root / "Mandy.pt").write_bytes(b"fallback")
+            catalog = VoiceCatalog(root)
+            listed = catalog.list()
+            self.assertEqual([voice["id"] for voice in listed], ["Mandy"])
+            self.assertEqual(listed[0]["sha256"], hashlib.sha256(b"voice").hexdigest())
+            renamed = catalog.rename("Mandy", "Meine Stimme")
+            self.assertEqual(renamed["id"], "Meine-Stimme")
+            self.assertTrue((root / "Meine-Stimme-1.7B.pt").is_file())
+            catalog.trash("Meine-Stimme")
+            self.assertFalse((root / "Meine-Stimme-1.7B.pt").exists())
+            self.assertEqual(len(list((root / "trash").glob("*/Meine-Stimme-1.7B.pt"))), 1)
+
+    def test_voice_job_adds_17b_suffix_and_publishes_only_finished_embedding(self):
+        with tempfile.TemporaryDirectory(prefix=".test-voices-", dir=TTS_ROOT / "test") as temp:
+            root = Path(temp)
+            extract = root / "examples" / "extract_speaker.py"
+            extract.parent.mkdir()
+            extract.write_text("# simulated")
+            jobs = VoiceJobs(VoiceCatalog(root / "voices"), extract, GpuCoordinator())
+
+            def simulate_process(job, args, _timeout):
+                if args[0] == jobs.ffmpeg:
+                    with wave.open(str(args[-1]), "wb") as target:
+                        target.setnchannels(1)
+                        target.setsampwidth(2)
+                        target.setframerate(24000)
+                        target.writeframes((1000).to_bytes(2, "little", signed=True) * (4 * 24000))
+                else:
+                    Path(args[-1]).write_bytes(b"embedding" * 700)
+
+            jobs._process = simulate_process
+            job_id = str(uuid.uuid4())
+            started = jobs.start(job_id, "Meine Stimme", "audio/wav", base64.b64encode(b"input").decode())
+            self.assertEqual(started["name"], "Meine-Stimme")
+            for _ in range(100):
+                result = jobs.status(job_id)
+                if result["status"] != "running":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(result["status"], "succeeded")
+            self.assertEqual(result["voice"]["id"], "Meine-Stimme")
+            self.assertTrue((root / "voices" / "Meine-Stimme-1.7B.pt").is_file())
+            for _ in range(100):
+                if not list((root / "voices").glob(".webarchiv-voice-*")):
+                    break
+                time.sleep(0.01)
+            self.assertEqual(list((root / "voices").glob(".webarchiv-voice-*")), [])
 
 
 if __name__ == "__main__":

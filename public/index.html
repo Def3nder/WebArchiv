@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=144" />
+  <link rel="stylesheet" href="styles.css?v=146" />
 </head>
 <body>
 
@@ -60,6 +60,7 @@
           <button type="button" role="menuitem" class="header-menu-item" data-action="scrape" data-admin-only>Neue Beiträge scrapen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="log" data-admin-only>Scrape-Log anzeigen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job" data-admin-only>Audio-Auftrag anzeigen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="tts-settings" data-admin-only>TTS-Einstellungen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="new-infographic" data-admin-only>Neue Infografik</button>
           <button type="button" role="menuitem" class="header-menu-item duplicate-menu-item" data-action="duplicates" data-admin-only>Dubletten prüfen <span id="duplicate-menu-count" class="duplicate-menu-count" hidden></span></button>
           <hr class="header-menu-sep" data-admin-only>
@@ -482,6 +483,51 @@
     </form>
   </dialog>
 
+  <!-- Qwen-TTS-Einstellungen (serverweit, nur Admin) -->
+  <dialog id="tts-settings-dialog" class="account-dialog account-dialog-wide" aria-labelledby="tts-settings-title" tabindex="-1">
+    <div class="article-editor-heading">
+      <div><p class="article-editor-eyebrow">QWEN-TTS</p><h2 id="tts-settings-title">TTS-Einstellungen</h2></div>
+      <button type="button" id="tts-settings-close" class="detail-cat-pill" aria-label="TTS-Einstellungen schließen">✕</button>
+    </div>
+    <p id="tts-settings-status" class="tts-settings-status" role="status" aria-live="polite"></p>
+    <section class="tts-settings-section" aria-labelledby="tts-settings-active-title">
+      <h3 id="tts-settings-active-title">Stimme für alle TTS-Aufträge</h3>
+      <label class="login-label" for="tts-settings-voice">Verfügbare Stimme</label>
+      <select id="tts-settings-voice" class="settings-select"></select>
+      <p id="tts-settings-meta" class="account-hint"></p>
+      <div class="tts-buttons tts-settings-actions">
+        <button type="button" id="tts-settings-save" class="detail-cat-pill account-primary">Als aktive Stimme speichern</button>
+        <button type="button" id="tts-settings-refresh" class="detail-cat-pill">Liste aktualisieren</button>
+        <button type="button" id="tts-settings-preview" class="detail-cat-pill">Stimmprobe erzeugen</button>
+        <button type="button" id="tts-settings-rename" class="detail-cat-pill">Umbenennen</button>
+        <button type="button" id="tts-settings-trash" class="detail-cat-pill">In Papierkorb</button>
+      </div>
+      <audio id="tts-settings-preview-audio" class="tts-settings-audio" controls hidden></audio>
+    </section>
+    <section class="tts-settings-section" aria-labelledby="tts-settings-new-title">
+      <h3 id="tts-settings-new-title">Neue Stimme erzeugen</h3>
+      <label class="login-label" for="tts-settings-name">Name der Stimme</label>
+      <div class="tts-settings-name-row">
+        <input id="tts-settings-name" class="login-input" type="text" maxlength="80" autocomplete="off" placeholder="Meine Stimme" aria-describedby="tts-settings-name-hint">
+        <span aria-hidden="true">-1.7B.pt</span>
+      </div>
+      <p id="tts-settings-name-hint" class="account-hint">Das Backend ergänzt die Endung. Empfohlen sind 10–20 Sekunden klare Sprache ohne Musik oder Hintergrundgeräusche.</p>
+      <div class="tts-buttons tts-settings-actions">
+        <button type="button" id="tts-settings-record" class="detail-cat-pill">Aufnahme starten</button>
+        <button type="button" id="tts-settings-stop" class="detail-cat-pill" disabled>Aufnahme stoppen</button>
+        <label for="tts-settings-file" class="detail-cat-pill tts-settings-file-label">Audiodatei auswählen</label>
+        <input id="tts-settings-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm" hidden>
+        <span id="tts-settings-duration" class="tts-settings-duration"></span>
+      </div>
+      <audio id="tts-settings-recording-audio" class="tts-settings-audio" controls hidden></audio>
+      <div class="tts-buttons tts-settings-actions">
+        <button type="button" id="tts-settings-create" class="detail-cat-pill account-primary" disabled>Stimme erzeugen</button>
+        <button type="button" id="tts-settings-discard" class="detail-cat-pill" disabled>Aufnahme verwerfen</button>
+        <button type="button" id="tts-settings-cancel-job" class="detail-cat-pill" hidden>Erzeugung abbrechen</button>
+      </div>
+    </section>
+  </dialog>
+
   <!-- Einstellungen (pro Gerät) -->
   <dialog id="settings-dialog" class="account-dialog" aria-labelledby="settings-title" tabindex="-1">
     <form id="settings-form" novalidate>
@@ -649,11 +695,12 @@
   </dialog>
   <script src="user-admin.js?v=11"></script>
   <script src="settings.js?v=4"></script>
+  <script src="tts-settings.js?v=2"></script>
   <script src="session-state.js?v=9"></script>
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=115"></script>
+  <script src="app.js?v=116"></script>
   <script src="vendor/duplicate-diff.bundle.js?v=7"></script>
   <script src="duplicates.js?v=19"></script>
   <script src="audiobooks.js?v=24"></script>

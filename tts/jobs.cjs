@@ -4,7 +4,8 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { startTts } = require('./spawn_tts.cjs');
 
-function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, reindex, mediaUrl, start = startTts }) {
+function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, reindex, mediaUrl,
+  selectedVoice = async () => null, start = startTts }) {
   const jobs = new Map();
   let active = null;
   let stopping = false;
@@ -84,9 +85,12 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
         throw fail('Eine MP3 für diesen Artikel existiert bereits. Sie wird nicht überschrieben.');
       }
       if (stopping) throw fail('Server wird beendet.');
+      const qwenVoiceId = expectedProvider === 'qwen' ? await selectedVoice() : null;
       jobs.set(state.id, job);
+      state.voiceId = qwenVoiceId;
       state.status = 'running';
-      job.worker = start({ inputPath: input, outputPath: output, expectedProvider, onEvent: event => capture(state, event) });
+      job.worker = start({ inputPath: input, outputPath: output, expectedProvider, qwenVoiceId,
+        onEvent: event => capture(state, event) });
       job.completion = job.worker.completion.then(async result => {
         state.exitCode = 0;
         const stat = await fs.lstat(output);
@@ -147,7 +151,7 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
   };
 }
 
-function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./provider-config.cjs').providerInfo) {
+function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./provider-config.cjs').providerInfo, voices = null) {
   const route = handler => async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try { await handler(req, res); }
@@ -160,7 +164,63 @@ function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./pro
     const jobId = await jobs.launch(req.body?.articleId, req.session.user, selected.provider);
     res.status(202).json({ jobId });
   }));
-  app.get('/api/tts/provider', requireAdmin, route(async (_req, res) => res.json(await providerInfo())));
+  app.get('/api/tts/provider', requireAdmin, route(async (_req, res) => {
+    const info = await providerInfo();
+    if (voices) {
+      const voiceId = await voices.selectedVoice();
+      const qwen = info.providers.find(provider => provider.provider === 'qwen');
+      if (qwen) {
+        qwen.voiceId = voiceId;
+        if (voiceId) qwen.confirmation += ` Verwendete Stimme: ${voiceId}.`;
+        else qwen.confirmation += ' Verwendete Stimme: Standardstimme des Qwen-Servers.';
+      }
+    }
+    res.json(info);
+  }));
+  if (voices) {
+    app.get('/api/tts/settings', requireAdmin, route(async (_req, res) => res.json(await voices.getSettings())));
+    app.put('/api/tts/settings', requireAdmin, route(async (req, res) => {
+      res.json(await voices.select(req.body?.voiceId, req.session.user));
+    }));
+    app.post('/api/tts/voices', requireAdmin, route(async (req, res) => {
+      res.status(202).json(await voices.createVoice(req.body || {}));
+    }));
+    app.get('/api/tts/voices/jobs/:jobId', requireAdmin, route(async (req, res) => {
+      res.json(await voices.voiceJob(req.params.jobId));
+    }));
+    app.delete('/api/tts/voices/jobs/:jobId', requireAdmin, route(async (req, res) => {
+      res.json(await voices.cancelVoiceJob(req.params.jobId));
+    }));
+    app.patch('/api/tts/voices/:voiceId', requireAdmin, route(async (req, res) => {
+      res.json(await voices.renameVoice(req.params.voiceId, req.body?.name, req.session.user));
+    }));
+    app.delete('/api/tts/voices/:voiceId', requireAdmin, route(async (req, res) => {
+      res.json(await voices.trashVoice(req.params.voiceId));
+    }));
+    app.get('/api/tts/voices/:voiceId/preview-audio', requireAdmin, route(async (req, res) => {
+      const local = await voices.cachedPreviewAudio(req.params.voiceId);
+      res.type('audio/mpeg');
+      res.set('Content-Length', String(local.size));
+      res.set('ETag', `"sha256-${local.sha256}"`);
+      res.sendFile(local.file);
+    }));
+    app.post('/api/tts/voices-preview', requireAdmin, route(async (req, res) => {
+      res.status(202).json(await voices.startPreview(req.body?.voiceId));
+    }));
+    app.get('/api/tts/voices-preview/:jobId', requireAdmin, route(async (req, res) => {
+      res.json(await voices.previewStatus(req.params.jobId));
+    }));
+    app.delete('/api/tts/voices-preview/:jobId', requireAdmin, route(async (req, res) => {
+      res.json(await voices.cancelPreview(req.params.jobId));
+    }));
+    app.get('/api/tts/voices-preview/:jobId/audio', requireAdmin, route(async (req, res) => {
+      const local = await voices.previewAudio(req.params.jobId);
+      res.type('audio/mpeg');
+      res.set('Content-Length', String(local.size));
+      res.set('ETag', `"sha256-${local.sha256}"`);
+      res.sendFile(local.file);
+    }));
+  }
   app.get('/api/tts/latest', requireAdmin, route((req, res) => res.json({ jobId: jobs.latest(req.session.user) })));
   app.get('/api/tts/:jobId/status', requireAdmin, route((req, res) => res.json(jobs.status(req.params.jobId, req.session.user))));
   app.post('/api/tts/:jobId/cancel', requireAdmin, route((req, res) => {
