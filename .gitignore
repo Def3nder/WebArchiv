@@ -1,9 +1,12 @@
 # Media files #
 ###############
 /www/Infografiken/2*
+/www/Infografiken/trash
 /www/Joe Turan/2*
 /www/Joe Turan Facebook/2*
+/www/Joe Turan Facebook/duplicates
 /www/Joe Turan Gruppe/2*
+/www/Joe Turan Gruppe/duplicates
 /www/PDF/2*
 /www/Stefan Hiene/2*
 /www/Videos/2*
@@ -25,7 +28,11 @@ migrate-audio.log
 /epub-tool/node_modules/
 /tts/.cache/
 /tts/.test-*/
+/tts-server/.test-*/
+/tts-server/test/.test-*/
 /.npm-cache/
+__pycache__/
+*.pyc
 *.tts-lock
 .markdown-tts-*/
 
@@ -35,6 +42,8 @@ users.json
 audiobook-progress.json
 bookmarks.json
 duplicate-decisions.json
+tts-settings.json
+/tts-voice-previews/
 /scraper/cookies.txt
 /scraper/Abonenten-URL.txt
 

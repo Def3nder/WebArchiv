@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Dubletten-Werkzeug</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='5' width='17' height='21' rx='3' fill='%23c9a84c'/%3E%3Crect x='12' y='8' width='17' height='21' rx='3' fill='%23191714' stroke='%23c9a84c' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css?v=7">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="app-kicker">WebArchiv · Werkzeug</p>
+      <h1>Markdown-Dubletten</h1>
+      <p class="app-subtitle">Ordner A bleibt das Original. Bestätigte Dubletten aus Ordner B wandern mitsamt gleichnamigen Begleitdateien in den Ziel-Ordner.</p>
+    </div>
+  </header>
+
+  <p id="server-warning" class="server-warning" role="alert" hidden>Der laufende Server ist älter als diese Oberfläche – Einstellungen werden eventuell nicht gespeichert. Bitte den Server neu starten (<code>npm start</code>).</p>
+
+  <form id="setup" class="setup" autocomplete="off">
+    <div class="setup-folders">
+      <div id="originals-list" class="originals-list"></div>
+      <div class="setup-field setup-add">
+        <span></span>
+        <span><button type="button" id="add-original" class="duplicate-btn">+ Weiterer Original-Ordner</button></span>
+      </div>
+      <label class="setup-field">
+        <span class="setup-caption"><b class="side-badge side-b">B</b> Kandidaten</span>
+        <span class="setup-input"><span class="recent-wrap"><input type="text" name="folderB" spellcheck="false" placeholder="Ordner, aus dem Dubletten verschoben werden" data-recent="recentFolderB" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="recent-folderB"><span id="recent-folderB" class="recent-menu" role="listbox" aria-label="Zuletzt verwendete B-Ordner" hidden></span></span><button type="button" class="duplicate-btn" data-browse="folderB">Durchsuchen …</button></span>
+      </label>
+      <label class="setup-field">
+        <span class="setup-caption"><b class="side-badge side-target">→</b> Ziel-Ordner</span>
+        <span class="setup-input"><span class="recent-wrap"><input type="text" name="target" spellcheck="false" placeholder="Hierhin werden Dubletten aus B verschoben" data-recent="recentTargets" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="recent-target"><span id="recent-target" class="recent-menu" role="listbox" aria-label="Zuletzt verwendete Ziel-Ordner" hidden></span></span><button type="button" class="duplicate-btn" data-browse="target">Durchsuchen …</button></span>
+      </label>
+    </div>
+    <div class="setup-row">
+      <label class="setup-number">
+        <span class="setup-caption">Mindestwörter</span>
+        <input type="number" name="minimumTokens" min="10" step="1" inputmode="numeric">
+      </label>
+      <label class="setup-number">
+        <span class="setup-caption">Max. Datumsabstand (Tage)</span>
+        <input type="number" name="maxDateDistanceDays" min="1" step="1" inputmode="numeric">
+      </label>
+      <label class="setup-number" title="Findet auch umformulierte Texte mit anderem Titel. Kleiner = mehr Treffer, 100 = aus.">
+        <span class="setup-caption">Inhaltl. Ähnlichkeit ab (%)</span>
+        <input type="number" name="minContentSimilarity" min="20" max="100" step="5" inputmode="numeric">
+      </label>
+      <button type="submit" id="scan-button" class="duplicate-btn is-primary">Speichern &amp; scannen</button>
+      <p id="scan-info" class="scan-info" role="status" aria-live="polite"></p>
+    </div>
+  </form>
+
+  <div id="duplicate-chrome" class="duplicate-chrome">
+    <div id="duplicate-tabs" class="duplicate-tabs" role="tablist">
+      <button type="button" role="tab" data-duplicate-tab="pending" aria-selected="true">Offen <span data-duplicate-count="pending">0</span></button>
+      <button type="button" role="tab" data-duplicate-tab="ignored" aria-selected="false">Ignoriert <span data-duplicate-count="ignored">0</span></button>
+      <button type="button" role="tab" data-duplicate-tab="moved" aria-selected="false">Verschoben <span data-duplicate-count="moved">0</span></button>
+    </div>
+    <p id="duplicate-status" class="duplicate-status" role="status" aria-live="polite"></p>
+    <section id="duplicate-tools" class="duplicate-tools" aria-label="Treffer filtern und gesammelt verschieben" hidden>
+      <div class="duplicate-filters">
+        <label class="duplicate-filter duplicate-search-filter">
+          <span class="duplicate-filter-caption">Suche (alle Tabs)</span>
+          <input type="search" id="duplicate-search" class="duplicate-select-input" placeholder="Titel, Pfad oder Text">
+        </label>
+        <label class="duplicate-filter duplicate-pending-filter">
+          <span class="duplicate-filter-caption">Übereinstimmung</span>
+          <select id="duplicate-score-filter" class="duplicate-select-input">
+            <option value="all">Alle Grade</option>
+          </select>
+        </label>
+        <label class="duplicate-filter duplicate-pending-filter">
+          <span class="duplicate-filter-caption">Trefferart</span>
+          <select id="duplicate-method-filter" class="duplicate-select-input">
+            <option value="all">Alle Arten</option>
+            <option value="text">Wortgleich</option>
+            <option value="content">Inhaltlich ähnlich</option>
+          </select>
+        </label>      </div>
+      <div id="duplicate-selection-tools" class="duplicate-selection-tools">
+        <button type="button" id="duplicate-select-all" class="duplicate-btn">Alle sichtbaren auswählen</button>
+        <button type="button" id="duplicate-select-none" class="duplicate-btn">Auswahl aufheben</button>
+        <span id="duplicate-selection-count" class="duplicate-selection-count">0 ausgewählt</span>
+        <button type="button" id="duplicate-batch-move" class="duplicate-btn is-primary" disabled>Ausgewählte verschieben</button>
+      </div>
+    </section>
+  </div>
+
+  <main id="duplicate-content" class="duplicate-content"></main>
+
+  <dialog id="duplicate-detail-dialog" class="duplicate-detail-dialog" aria-label="Dublettenvergleich">
+    <div id="duplicate-detail-content" class="duplicate-detail-content"></div>
+  </dialog>
+
+  <dialog id="folder-dialog" class="folder-dialog" aria-labelledby="folder-dialog-title">
+    <div class="folder-dialog-head">
+      <h2 id="folder-dialog-title">Ordner wählen</h2>
+      <button type="button" class="icon-btn" data-folder-action="close" aria-label="Schließen">✕</button>
+    </div>
+    <div class="folder-roots" id="folder-roots"></div>
+    <div class="folder-path">
+      <button type="button" class="duplicate-btn" data-folder-action="up" id="folder-up">↑ Übergeordnet</button>
+      <input type="text" id="folder-path-input" spellcheck="false" aria-label="Pfad">
+      <button type="button" class="duplicate-btn" data-folder-action="go">Öffnen</button>
+    </div>
+    <ul id="folder-list" class="folder-list" aria-label="Unterordner"></ul>
+    <div class="folder-dialog-foot">
+      <span id="folder-info" class="folder-info"></span>
+      <button type="button" class="duplicate-btn" data-folder-action="close">Abbrechen</button>
+      <button type="button" class="duplicate-btn is-primary" data-folder-action="choose">Diesen Ordner wählen</button>
+    </div>
+  </dialog>
+
+  <dialog id="duplicate-image-viewer" class="duplicate-image-viewer" aria-labelledby="duplicate-image-viewer-title">
+    <div class="duplicate-image-viewer-bar">
+      <div>
+        <p id="duplicate-image-viewer-side" class="duplicate-image-viewer-side"></p>
+        <h2 id="duplicate-image-viewer-title"></h2>
+      </div>
+      <button type="button" id="duplicate-image-viewer-close" class="duplicate-image-viewer-close" aria-label="Bild schließen">✕</button>
+    </div>
+    <div class="duplicate-image-viewer-stage">
+      <button type="button" id="duplicate-image-viewer-prev" class="duplicate-image-viewer-nav" aria-label="Vorheriges Bild">‹</button>
+      <figure>
+        <img id="duplicate-image-viewer-image" alt="">
+        <figcaption id="duplicate-image-viewer-counter"></figcaption>
+      </figure>
+      <button type="button" id="duplicate-image-viewer-next" class="duplicate-image-viewer-nav" aria-label="Nächstes Bild">›</button>
+    </div>
+  </dialog>
+
+  <script src="vendor/diff.min.js"></script>
+  <script src="duplicate-diff.js?v=2"></script>
+  <script src="app.js?v=9"></script>
+</body>
+</html>

@@ -337,9 +337,19 @@ OpenAI **nicht** automatisch gewählt; eine möglicherweise kostenpflichtige
 OpenAI-Erzeugung erfordert eine bewusste Auswahl und Startbestätigung. Ein
 Healthcheck allein garantiert keine erfolgreiche Synthese.
 
-Nur der Server kontaktiert den gewählten Anbieter. Qwen erhält das vollständige
-Original-Markdown und liefert über den `webarchiv-qwen-v5`-Vertrag eine fertige
-MP3; Bereinigung, Aufteilung und Stimme bestimmt das Qwen-Originalskript.
+Die TTS-Anbindung läuft auf **zwei verschiedenen Geräten**:
+
+- Der **WebArchiv-Node.js-Server** betreibt `server.js`, Weboberfläche, Anmeldung,
+  Artikel- und Audioablage. Nur dieses Gerät wird vom Browser angesprochen.
+- Der davon getrennte **Qwen-TTS-Modellserver** betreibt den Python-HTTP-Dienst,
+  `generate_mp3_with_embedding.py`, `extract_speaker.py`, GPU, Modelle und den
+  Ordner `voices`. Auf ihm läuft nicht die WebArchiv-Anwendung.
+
+Nur der WebArchiv-Node.js-Server kontaktiert den gewählten Anbieter. Er sendet
+das vollständige Original-Markdown über das interne Netz an den Qwen-TTS-
+Modellserver. Dieser liefert über den `webarchiv-qwen-v5`-Vertrag eine fertige
+MP3 zurück; Bereinigung, Aufteilung und Stimme bestimmt das dortige
+Qwen-Originalskript.
 OpenAI verwendet die separate lokale Aufbereitung. Das Ergebnis wird ohne
 Überschreiben vorhandener Dateien unter `audio/<relativer www-Pfad>.mp3`
 veröffentlicht und danach indexiert. Ein fehlgeschlagener Reindex löscht die
@@ -347,10 +357,35 @@ fertige MP3 nicht und startet keine zweite Synthese. Es gibt nur einen aktiven
 WebArchiv-TTS-Auftrag; Schließen des Statusdialogs bricht ihn nicht ab. Aufträge
 liegen nur im Arbeitsspeicher und überstehen keinen Serverneustart.
 
-Die Anbindung liegt in `tts/` (eigenes Paket). Für die gesamte Anwendung mit TTS
-ist **Node.js 22 oder neuer** nötig; auf dem Server werden außerdem FFmpeg und
-FFprobe benötigt. Zugangsdaten bleiben serverseitig in `OPENAI_API_KEY` bzw.
-`QWEN_TTS_BASE_URL` und `QWEN_TTS_TOKEN`, nicht im Frontend oder Repository.
+Admins öffnen über das Kopfmenü **TTS-Einstellungen** die Stimmenverwaltung.
+Die dort ausgewählte Qwen-Stimme gilt global für alle danach gestarteten
+Qwen-TTS-Aufträge; laufende Aufträge behalten ihren beim Start übernommenen
+Stimmen-Snapshot. Der WebArchiv-Node.js-Server speichert nur die Stimmen-ID in
+`tts-settings.json`. Erzeugte Stimmproben speichert er als MP3 unter
+`tts-voice-previews/`, benannt nach dem SHA-256 der zugehörigen Voice-Datei.
+Die Probe wird nur angezeigt, solange der Qwen-Server denselben Datei-Hash
+meldet. Die `.pt`-Dateien und temporären Aufnahmen werden
+ausschließlich auf dem separaten Qwen-TTS-Modellserver im dort konfigurierten
+`voices`-Verzeichnis verarbeitet.
+
+Eine neue Stimme kann direkt im Browser aufgenommen oder als Audiodatei
+hochgeladen werden. Der Admin gibt nur den Namen ein; der Qwen-Dienst
+normalisiert ihn und ergänzt `-1.7B.pt`. Er wandelt die Aufnahme vorübergehend
+in Mono-WAV um, prüft Größe, Dauer und Signalpegel und ruft anschließend
+`examples/extract_speaker.py` für das 1.7B-Base-Modell auf. Temporäre
+Aufnahmen werden danach gelöscht. Zusätzlich stehen eine kurze Stimmprobe,
+Umbenennen und Verschieben nach `voices/trash` zur Verfügung. Die aktive
+Stimme kann nicht gelöscht werden. Aufnahmezugriff im Browser erfordert einen
+sicheren Kontext (HTTPS oder localhost).
+
+Die WebArchiv-Anbindung liegt in `tts/` (eigenes Node-Paket). Auf dem
+WebArchiv-Gerät sind **Node.js 22 oder neuer**, FFmpeg und FFprobe erforderlich.
+Der getrennte Qwen-TTS-Modellserver verwendet seine eigene Python-/CUDA-
+Umgebung und benötigt ebenfalls FFmpeg für neue Stimmen. `QWEN_TTS_BASE_URL`,
+`QWEN_TTS_TOKEN` und optional `OPENAI_API_KEY` gehören in die geschützte
+Dienstumgebung des WebArchiv-Servers; nur dasselbe Qwen-Token wird zusätzlich
+auf dem Modellserver gesetzt. Zugangsdaten gehören weder ins Frontend noch ins
+Repository.
 
 ---
 
@@ -576,6 +611,12 @@ Editor- oder Menülogik einbezogen.
 | `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/title/date),page,limit` |
 | `GET /api/audiobooks/*` | Auth + Autor | Hörbuch mit Tracks, Beschreibung, eigenem Fortschritt |
 | `GET /api/tts/provider` | Admin | Verfügbarkeit und Hinweise zu Qwen und OpenAI |
+| `GET`/`PUT /api/tts/settings` | Admin | Qwen-Stimmenkatalog lesen bzw. globale Stimme für neue Aufträge festlegen |
+| `POST /api/tts/voices` | Admin | Aufnahme/Upload zur Erzeugung einer 1.7B-Stimme an den Qwen-Dienst senden |
+| `GET`/`DELETE /api/tts/voices/jobs/*` | Admin | Erzeugungsstatus lesen bzw. laufende Stimmerzeugung abbrechen |
+| `PATCH`/`DELETE /api/tts/voices/*` | Admin | Stimme auf dem Qwen-Dienst umbenennen bzw. nach `voices/trash` verschieben |
+| `POST`/`GET`/`DELETE /api/tts/voices-preview*` | Admin | Kurze Stimmprobe erzeugen, auf dem WebArchiv speichern und Remote-Auftrag aufräumen |
+| `GET /api/tts/voices/:voiceId/preview-audio` | Admin | Bereits gespeicherte Stimmprobe nur bei weiterhin identischem Voice-SHA-256 ausliefern |
 | `POST /api/tts` | Admin + Artikelrecht | Bestätigten Auftrag mit `{articleId,provider}` starten |
 | `GET /api/tts/latest` · `GET /api/tts/:jobId/status` | Admin | Letzten Auftrag bzw. Status und Log lesen |
 | `POST /api/tts/:jobId/cancel` | Admin | Laufenden Auftrag ausdrücklich abbrechen |
@@ -701,18 +742,21 @@ scripts/make-favicons.js      favicon.ico + apple-touch-icon.png aus public/favi
 scripts/strip-infographic-categories.js  „Kategorien:“ aus Infografik-.md entfernen (--dry-run, Sicherung)
 prompts/*.txt                 Prompt-Bausteine fürs Copy-Menü (Zahl-Präfix = Reihenfolge)
 scraper/                      Eigenständiger Scraper; Tests unter scraper/test/
-tts/                          Text-zu-Sprache-Anbindung; Tests unter tts/test/
+tts/                          WebArchiv-seitige TTS-Module (Node.js); Tests unter tts/test/
+tts-server/                   Separater Qwen-TTS-Server (Python), Starthelfer, Doku und Tests
 www/<Autor>/<Jahr>/           Artikel-Markdown, Bilder, Videos, PDFs (Inhalte ignoriert)
 audio/<Autor>/<Jahr>/         Artikel-MP3s mit entsprechendem Dateistamm (ignoriert)
 audio/Hoerbuecher/<Buch>/     Tracks, Cover, eBook, abstract.md, extras/ (ignoriert)
 download/                     Arbeitsordner (ignored)
 users.json                    Nutzer/Rechte (ignored)
+tts-settings.json             Gewählte globale Qwen-Stimmen-ID (ignored)
+tts-voice-previews/           Hash-geprüfte lokale Stimmproben (ignored)
 public-directories.txt        Öffentliche Autoren für Gäste
 LXC-container node.js Setup.txt   Server-/Deployment-Doku
 ```
 
 Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
-`www/<Autor>/2*` (Jahresinhalte), `audio/`, `download/`, `users.json`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`,
+`www/<Autor>/2*` (Jahresinhalte), `audio/`, `download/`, `users.json`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`, `tts-settings.json`, `tts-voice-previews/`,
 `scraper/cookies.txt`, `scraper/Abonenten-URL.txt`, Logs.
 
 ---
@@ -722,6 +766,7 @@ Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
 ```bash
 npm install
 npm install --prefix tts  # nur für die lokale TTS-Anbindung; Node.js >= 22
+# Der separate Python-Dienst unter tts-server/ wird auf dem Qwen-Gerät eingerichtet.
 
 # Nutzer anlegen: Passwort-Hash erzeugen und in users.json eintragen
 node scripts/hash-passwords.js
@@ -735,7 +780,8 @@ node server.js            # bzw. npm start  →  http://localhost:3000
 
 Alle Testskripte liegen in `test/`-Unterordnern. Der gemeinsame Einstieg im
 Projektroot führt die Node-Tests aus `test/`, `scraper/test/`, `epub-tool/test/`
-und `tts/test/` sowie die Python-Tests unter `tts/test/` aus:
+und `tts/test/` sowie die Python-Tests des separaten Qwen-Dienstes unter
+`tts-server/test/` aus:
 
 ```bash
 npm test
@@ -764,6 +810,8 @@ npm test --prefix tts
 | `AUDIOBOOK_PROGRESS_FILE` | `./audiobook-progress.json` | Abweichender Pfad des Hörfortschritts |
 | `BOOKMARKS_FILE` | `./bookmarks.json` | Abweichender Pfad der Lesezeichen |
 | `DUPLICATES_FILE` | `./duplicate-decisions.json` | Abweichender Pfad der Dubletten-Entscheidungen |
+| `TTS_SETTINGS_FILE` | `./tts-settings.json` | Abweichender Pfad der globalen Qwen-Stimmenauswahl |
+| `TTS_VOICE_PREVIEW_DIR` | `./tts-voice-previews` | Ablage der lokalen, per Voice-SHA-256 validierten Stimmproben |
 | `PLAYWRIGHT_BROWSERS_PATH` | – | Chromium-Ablage für den Scraper (siehe Setup-Doku) |
 
 Scraper zusätzlich einrichten:
@@ -778,7 +826,10 @@ npx playwright install --with-deps chromium
 
 ## Deployment (Debian-LXC, Kurzfassung)
 
-- App unter `/opt/nodeapp`, Start via **systemd** (`nodeapp.service`), betrieben
+- Dieser Abschnitt beschreibt **Gerät A, den WebArchiv-Server**. Der separate
+  Qwen-TTS-Modellserver ist Gerät B und wird nach
+  [`tts-server/QWEN-ANBINDUNG.md`](tts-server/QWEN-ANBINDUNG.md) eingerichtet.
+- WebArchiv-App unter `/opt/nodeapp`, Start via **systemd** (`nodeapp.service`), betrieben
   als unprivilegierter User `ralf` (`User=ralf`/`Group=ralf`), damit erzeugte
   Dateien `ralf:ralf` gehören. Steuern nur mit `sudo systemctl …`.
 - `www/` liegt auf einer eingebundenen externen Disk.

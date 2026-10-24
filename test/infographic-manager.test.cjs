@@ -184,3 +184,13 @@ test('Manager-Aktionen und Upload lesen nur das betroffene Infografik-Jahr neu e
   assert.match(upload, /await refreshInfographicsForYear\(header\.date\.slice\(0, 4\)\)/);
   assert.doesNotMatch(upload, /await buildIndex\(\)/);
 });
+
+test('Escape schließt nur die oberste Ebene des Infografik-Managers und erhält den Artikel', async () => {
+  const manager = await fs.readFile(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
+  const html = await fs.readFile(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(manager, /function igmEscape\(\)[\s\S]*!\$igmPreview\.hidden[\s\S]*igmClosePreview\(\)[\s\S]*else igmClose\(\)/);
+  assert.match(manager, /document\.addEventListener\('keydown'[\s\S]*!\$igm\.open \|\| event\.key !== 'Escape'[\s\S]*event\.preventDefault\(\)[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)/);
+  assert.match(manager, /\$igm\.addEventListener\('cancel'[\s\S]*event\.preventDefault\(\)[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)/);
+  assert.match(manager, /igmState\.returnFocus = document\.activeElement[\s\S]*\$igm\.addEventListener\('close'[\s\S]*returnFocus\?\.isConnected[\s\S]*article-overlay/);
+  assert.match(html, /infographic-manager\.js\?v=2/);
+});

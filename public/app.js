@@ -3085,6 +3085,7 @@ $adminMenu.addEventListener('click', ev => {
   else if (action === 'log') showScrapeLog();
   else if (action === 'tts') runTts();
   else if (action === 'tts-job') showTtsJob();
+  else if (action === 'tts-settings') openTtsSettingsDialog();
   else if (action === 'new-infographic') openNewInfographic();
   else if (action === 'duplicates' && typeof openDuplicateReview === 'function') openDuplicateReview();
   else if (action === 'settings') openSettingsDialog();
@@ -3464,6 +3465,7 @@ const PULL_DIALOGS = [
   ['#infographic-new', '#infographic-new-cancel'],
   ['#password-dialog', '#password-cancel'],
   ['#settings-dialog', '#settings-form button[type="submit"]'],
+  ['#tts-settings-dialog', '#tts-settings-close'],
   ['#user-admin', '#user-admin-close'],
 ];
 for (const [panelSel, closeSel, fadeSel] of PULL_DIALOGS) {

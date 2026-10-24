@@ -8,6 +8,7 @@ const session = require('express-session');
 const sharp   = require('sharp');
 const { spawn } = require('child_process');
 const { createTtsJobs, installTtsRoutes } = require('./tts/jobs.cjs');
+const { createTtsVoiceSettings, MAX_AUDIO_BYTES: TTS_VOICE_MAX_BYTES } = require('./tts/voice-settings.cjs');
 const { createMarkdownEditor, installMarkdownRoutes } = require('./article-editor.cjs');
 const { createUserStore, installUserRoutes } = require('./user-store.cjs');
 const {
@@ -121,6 +122,8 @@ const audiobooks = createAudiobookLibrary({
   progress: audiobookProgress,
 });
 
+const ttsVoiceSettings = createTtsVoiceSettings();
+
 const markdownEditor = createMarkdownEditor({
   // Artikel liegen unter www/, die abstract.md der Hörbücher unter audio/.
   root: [WWW_DIR, AUDIO_DIR],
@@ -136,6 +139,7 @@ const ttsJobs = createTtsJobs({
   canAccessAuthor,
   busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || markdownEditor.running,
   reindex: buildIndex,
+  selectedVoice: ttsVoiceSettings.selectedVoice,
   mediaUrl: filename => audioFileUrl(path.relative(AUDIO_DIR, filename).split(path.sep).map(encodeURIComponent).join('/'), filename),
 });
 
@@ -1475,6 +1479,8 @@ app.use('/api/audiobook-extra-source', express.json({ limit: '2mb' }));
 app.use('/api/audiobook-extra-create', express.json({ limit: '2mb' }));
 // Neue Infografik: Bild base64 in JSON (bis 10 MB Bild → ~14 MB JSON).
 app.use('/api/new-infographic', express.json({ limit: Math.ceil(INFOGRAPHIC_MAX_BYTES * 1.4) + 2 * 1024 * 1024 }));
+// Kurze Mikrofonaufnahme als Base64-JSON; die eigentliche Voice-Datei entsteht nur auf dem Qwen-Server.
+app.use('/api/tts/voices', express.json({ limit: Math.ceil(TTS_VOICE_MAX_BYTES * 1.4) + 1024 * 1024 }));
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'webarchiv-dev-secret-change-in-prod',
@@ -2444,7 +2450,7 @@ app.get('/api/articles/*', attachUser, (req, res) => {
 
 // ─── Start ─────────────────────────────────────────────────────────────────
 
-installTtsRoutes(app, requireAdmin, ttsJobs);
+installTtsRoutes(app, requireAdmin, ttsJobs, undefined, ttsVoiceSettings);
 installMarkdownRoutes(app, requireAdmin, markdownEditor);
 installUserRoutes(app, {
   store: userStore, requireAuth, requireAdmin, getAuthors: () => meta.authors,

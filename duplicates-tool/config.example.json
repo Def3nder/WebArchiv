@@ -1,0 +1,13 @@
+{
+  "originals": [
+    "C:\\Pfad\\zu\\Originalen",
+    "C:\\Pfad\\zu\\weiteren\\Originalen"
+  ],
+  "folderB": "C:\\Pfad\\zu\\Kandidaten",
+  "target": "C:\\Pfad\\zu\\Dubletten",
+  "host": "127.0.0.1",
+  "port": 3100,
+  "minimumTokens": 35,
+  "maxDateDistanceDays": 730,
+  "minContentSimilarity": 45
+}

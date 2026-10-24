@@ -14,6 +14,7 @@ import { requestQwen } from '../qwen-http.js';
 import settings from '../provider-config.cjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const serverRoot = path.join(root, '..', 'tts-server');
 const config = await loadConfig();
 config.tts.provider = 'qwen';
 config.qwen = { base_url: 'http://qwen.invalid:8765', token_environment_variable: 'QWEN_OFFLINE_TEST_TOKEN' };
@@ -35,7 +36,8 @@ function server({ audio = 'MP3', status = 'succeeded', health = 'webarchiv-qwen-
     if (url.endsWith('/health')) return Response.json({ protocol: health, full_markdown: true,
       audio_format: 'mp3', chunk_progress: chunkProgress, max_markdown_bytes: 1_000_000 });
     if (options.method === 'PUT') {
-      assert.deepEqual(Object.keys(JSON.parse(options.body)), ['markdown']);
+      const body = JSON.parse(options.body);
+      assert.deepEqual(Object.keys(body).sort(), body.voiceId ? ['markdown', 'voiceId'] : ['markdown']);
       if (startError) throw new Error('Startantwort verloren');
       return Response.json({ id });
     }
@@ -79,6 +81,24 @@ test('Vollständiges Markdown in einem Request; neue Chunk-Starts genau einmal u
   await synthesizeQwen(markdown, path.join(dir, 'out.mp3'), config, undefined, (...event) => events.push(event), fetch);
   assert.deepEqual(bodies, [{ markdown }]);
   assert.deepEqual(events, [['synthesis', first], ['synthesis', second]]);
+}));
+
+test('Globale Qwen-Stimme wird pro Auftrag als Voice-ID mitgegeben', () => temporary(async dir => {
+  const previous = process.env.WEBARCHIV_TTS_QWEN_VOICE;
+  process.env.WEBARCHIV_TTS_QWEN_VOICE = 'Stefan-Hiene';
+  try {
+    const mock = server();
+    let body;
+    const fetch = (url, options) => {
+      if (options.method === 'PUT') body = JSON.parse(options.body);
+      return mock.fetch(url, options);
+    };
+    await synthesizeQwen('Hallo', path.join(dir, 'voice.mp3'), config, undefined, undefined, fetch);
+    assert.deepEqual(body, { markdown: 'Hallo', voiceId: 'Stefan-Hiene' });
+  } finally {
+    if (previous === undefined) delete process.env.WEBARCHIV_TTS_QWEN_VOICE;
+    else process.env.WEBARCHIV_TTS_QWEN_VOICE = previous;
+  }
 }));
 
 test('Qwen: inkompatibler Dienst startet nichts; Fehler/Verlust werden nicht wiederholt', () => temporary(async dir => {
@@ -269,7 +289,7 @@ Path(args.config+".input").write_bytes(Path(args.input).read_bytes())
 shutil.copyfile(args.config, args.output)
 `);
   const token = 'offline-test-token-with-at-least-32-characters';
-  const child = spawn('python', ['-B', path.join(root, 'qwen_http_service.py'), '--script', script, '--config', fixture, '--port', '0'], {
+  const child = spawn('python', ['-B', path.join(serverRoot, 'qwen_http_service.py'), '--script', script, '--config', fixture, '--port', '0'], {
     windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, QWEN_TTS_TOKEN: token } });
   const lines = createInterface({ input: child.stdout });
   const closed = once(child, 'close');
