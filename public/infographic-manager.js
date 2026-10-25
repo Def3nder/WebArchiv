@@ -33,9 +33,10 @@ function igmBusy(value) {
   $igm.querySelectorAll('button, input').forEach(control => {
     const move = control.dataset.igmMove;
     const row = control.closest('[data-igm-entry]');
-    const index = row ? igmState.items.findIndex(item => item.id === row.dataset.id) : -1;
+    const movable = igmState.items.filter(item => !item.fixed);
+    const index = row ? movable.findIndex(item => item.id === row.dataset.id) : -1;
     control.disabled = value || (move !== undefined && (index < 0
-      || index + Number(move) < 0 || index + Number(move) >= igmState.items.length));
+      || index + Number(move) < 0 || index + Number(move) >= movable.length));
   });
   $igm.setAttribute('aria-busy', String(value));
 }
@@ -49,17 +50,21 @@ function igmTrashIcon() {
 }
 
 function igmEntry(item, index, total) {
-  const label = 'Grafik ' + (index + 1);
-  return '<article class="bem-entry is-sortable igm-entry" data-igm-entry data-id="' + esc(item.id) + '">'
-    + '<button type="button" class="bem-drag-handle" draggable="true" data-igm-drag aria-label="' + label + ' verschieben" title="Ziehen, um die Reihenfolge zu ändern">⠿</button>'
+  const movable = igmState.items.filter(candidate => !candidate.fixed);
+  const movableIndex = movable.findIndex(candidate => candidate.id === item.id);
+  const label = item.fixed ? 'Artikelgrafik' : 'Grafik ' + (movableIndex + 1);
+  return '<article class="bem-entry igm-entry' + (item.fixed ? ' is-fixed' : ' is-sortable') + '" data-igm-entry data-id="' + esc(item.id) + '">'
+    + (item.fixed ? '' : '<button type="button" class="bem-drag-handle" draggable="true" data-igm-drag aria-label="' + label + ' verschieben" title="Ziehen, um die Reihenfolge zu ändern">⠿</button>')
     + '<button type="button" class="bem-entry-preview" data-igm-view aria-label="' + label + ' ansehen" title="Ansehen"><img src="' + esc(item.imageUrl) + '" alt="" loading="lazy"></button>'
-    + '<div class="bem-entry-main"><span class="bem-entry-title">' + label + '</span><span class="bem-entry-file">' + esc(item.filename) + '</span></div>'
-    + '<button type="button" class="bem-entry-more" data-igm-more aria-expanded="false" aria-label="Aktionen für ' + label + '" title="Weitere Aktionen">' + igmMoreIcon() + '</button>'
+    + '<div class="bem-entry-main"><span class="bem-entry-title">' + label + '</span><span class="bem-entry-file">' + esc(item.filename) + '</span>'
+    + '<label class="igm-instagram-toggle"><input type="checkbox" data-igm-instagram'
+    + (item.instagramPoster ? ' checked' : '') + '><span>Instagram-Poster</span></label></div>'
+    + (item.fixed ? '' : '<button type="button" class="bem-entry-more" data-igm-more aria-expanded="false" aria-label="Aktionen für ' + label + '" title="Weitere Aktionen">' + igmMoreIcon() + '</button>'
     + '<div class="bem-entry-actions">'
-    + '<button type="button" class="bem-mini bem-move" data-igm-move="-1" aria-label="' + label + ' nach oben"' + (index === 0 ? ' disabled' : '') + '>↑</button>'
-    + '<button type="button" class="bem-mini bem-move" data-igm-move="1" aria-label="' + label + ' nach unten"' + (index === total - 1 ? ' disabled' : '') + '>↓</button>'
+    + '<button type="button" class="bem-mini bem-move" data-igm-move="-1" aria-label="' + label + ' nach oben"' + (movableIndex === 0 ? ' disabled' : '') + '>↑</button>'
+    + '<button type="button" class="bem-mini bem-move" data-igm-move="1" aria-label="' + label + ' nach unten"' + (movableIndex === movable.length - 1 ? ' disabled' : '') + '>↓</button>'
     + '<button type="button" class="bem-mini is-danger bem-icon-btn" data-igm-trash aria-label="' + label + ' in den Papierkorb verschieben" title="In den Papierkorb">' + igmTrashIcon() + '</button>'
-    + '</div></article>';
+    + '</div>') + '</article>';
 }
 
 function igmRender() {
@@ -114,13 +119,14 @@ async function igmSave(body, workingText, successText) {
 }
 
 function igmOrder(ids, actionIndex = -1) {
-  if (ids.length < 2 || ids.every((id, index) => id === igmState.items[index]?.id)) return;
+  const movable = igmState.items.filter(item => !item.fixed);
+  if (ids.length < 2 || ids.every((id, index) => id === movable[index]?.id)) return;
   igmState.actionIndex = actionIndex;
   void igmSave({ action: 'order', ids }, 'Reihenfolge wird gespeichert …', 'Reihenfolge gespeichert.');
 }
 
 function igmMove(id, offset) {
-  const ids = igmState.items.map(item => item.id);
+  const ids = igmState.items.filter(item => !item.fixed).map(item => item.id);
   const index = ids.indexOf(id);
   const target = index + offset;
   if (index < 0 || target < 0 || target >= ids.length) return;
@@ -238,6 +244,17 @@ $igmList.addEventListener('click', event => {
   if (!row || igmState.busy) return;
   const item = igmState.items.find(candidate => candidate.id === row.dataset.id);
   if (!item) return;
+  const instagram = event.target.closest('[data-igm-instagram]');
+  if (instagram) {
+    igmState.actionIndex = -1;
+    const enabled = instagram.checked;
+    void igmSave(
+      { action: 'instagram-poster', id: item.id, enabled },
+      enabled ? 'Instagram-Poster wird markiert …' : 'Instagram-Markierung wird entfernt …',
+      enabled ? 'Als Instagram-Poster markiert.' : 'Instagram-Markierung entfernt.',
+    );
+    return;
+  }
   if (event.target.closest('[data-igm-more]')) {
     const wasOpen = row.classList.contains('is-actions-open');
     $igmList.querySelectorAll('.is-actions-open').forEach(entry => {
@@ -285,10 +302,11 @@ $igmList.addEventListener('dragover', event => {
 $igmList.addEventListener('drop', event => {
   const row = event.target.closest('[data-igm-entry]');
   const id = igmState.dragId;
-  if (!row || !id || row.dataset.id === id) { igmClearDrag(); return; }
+  const targetItem = igmState.items.find(item => item.id === row?.dataset.id);
+  if (!row || !id || row.dataset.id === id || targetItem?.fixed) { igmClearDrag(); return; }
   event.preventDefault();
   const after = row.classList.contains('is-drop-after');
-  const ids = igmState.items.map(item => item.id).filter(itemId => itemId !== id);
+  const ids = igmState.items.filter(item => !item.fixed).map(item => item.id).filter(itemId => itemId !== id);
   const target = ids.indexOf(row.dataset.id);
   ids.splice(target + (after ? 1 : 0), 0, id);
   igmClearDrag();

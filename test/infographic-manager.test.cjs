@@ -4,8 +4,24 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const {
   retitleInfographicMarkdown, moveInfographicFiles, reorderManagedInfographics,
-  replaceInfographicYearArticles, prepareLinkedArticles,
+  replaceInfographicYearArticles, prepareLinkedArticles, setInstagramPosterMetadata, parseArticle,
 } = require('../server.js');
+
+test('Instagram-Poster-Metadatum steht direkt nach Datum und nur im Ja-Fall', () => {
+  const original = '# Grafik\r\n\r\nDatum: 2026-10-25\r\n\r\nZusammenfassung: Text\r\n';
+  const marked = setInstagramPosterMetadata(original, true);
+  assert.equal(marked,
+    '# Grafik\r\n\r\nDatum: 2026-10-25\r\nInstagram-Poster: Ja\r\n\r\nZusammenfassung: Text\r\n');
+  assert.equal(parseArticle(marked, 'grafik.md').instagramPoster, true);
+  assert.equal(setInstagramPosterMetadata(marked, false), original);
+  assert.equal(parseArticle(original, 'grafik.md').instagramPoster, false);
+});
+
+test('Instagram-Poster-Markierung wird beim erneuten Aktivieren nicht dupliziert', () => {
+  const original = '# Grafik\nDatum: 2026-10-25\nInstagram-Poster: Ja\nInstagram-Poster: Nein\n';
+  const marked = setInstagramPosterMetadata(original, true);
+  assert.equal(marked, '# Grafik\nDatum: 2026-10-25\nInstagram-Poster: Ja\n');
+});
 
 async function fixture(run) {
   const dir = await fs.mkdtemp(path.join(__dirname, '.infographic-manager-test-'));
@@ -192,5 +208,17 @@ test('Escape schließt nur die oberste Ebene des Infografik-Managers und erhält
   assert.match(manager, /document\.addEventListener\('keydown'[\s\S]*!\$igm\.open \|\| event\.key !== 'Escape'[\s\S]*event\.preventDefault\(\)[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)/);
   assert.match(manager, /\$igm\.addEventListener\('cancel'[\s\S]*event\.preventDefault\(\)[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)/);
   assert.match(manager, /igmState\.returnFocus = document\.activeElement[\s\S]*\$igm\.addEventListener\('close'[\s\S]*returnFocus\?\.isConnected[\s\S]*article-overlay/);
-  assert.match(html, /infographic-manager\.js\?v=2/);
+  assert.match(html, /infographic-manager\.js\?v=3/);
+});
+
+test('Manager bietet pro Grafik eine sofort gespeicherte Instagram-Markierung an', async () => {
+  const manager = await fs.readFile(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
+  const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(manager, /data-igm-instagram/);
+  assert.match(manager, /action: 'instagram-poster', id: item\.id, enabled/);
+  assert.match(server, /Instagram-Poster: Ja/);
+  assert.match(server, /setManagedInfographicInstagramPoster/);
+  assert.match(server, /ownGraphic[\s\S]*article\.author === INFOGRAPHICS_AUTHOR[\s\S]*fixed: true/);
+  assert.match(manager, /item\.fixed \? 'Artikelgrafik'/);
+  assert.match(manager, /filter\(item => !item\.fixed\)/);
 });

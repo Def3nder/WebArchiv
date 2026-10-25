@@ -8,6 +8,7 @@ const state = {
   year: '',
   category: '',
   telegram: false,
+  instagramPosters: false,
   bookmarks: false,
   page: 1,
   limit: 24,
@@ -22,8 +23,10 @@ const state = {
 
 // Hörbücher sind kein Artikel-Autor: eigene Liste, eigene Detailansicht (audiobooks.js).
 const AUDIOBOOK_AUTHOR = 'Hörbücher';
+const INFOGRAPHICS_AUTHOR = 'Infografiken';
 const isAudiobookId = id => String(id || '').startsWith(AUDIOBOOK_AUTHOR + '/');
 const isBookMode = () => state.author === AUDIOBOOK_AUTHOR;
+const isInstagramPosterMode = () => state.author === INFOGRAPHICS_AUTHOR && state.instagramPosters;
 
 let authorHueMap = {};  // author name → hue (0..359), gesetzt in loadMeta()
 let audioEl = null;     // shared audio element
@@ -44,6 +47,8 @@ const APP_VIEW_HISTORY_STATE = { webarchivView: true };
 let layoutChangeGeneration = 0;
 let cardPreviewObserver = null;
 let cardPreviewFrame = 0;
+let responsiveDateObserver = null;
+let responsiveDateFrame = 0;
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
 const $app            = document.getElementById('app');
@@ -266,6 +271,7 @@ function hasActiveListFilter() {
     || state.year
     || state.category
     || state.telegram
+    || state.instagramPosters
     || state.bookmarks
   );
 }
@@ -571,7 +577,9 @@ function zoomImageCentered(nextScale) {
 
 // Vollansicht: bei einer Gruppe alle Bilder (Wischen/Pfeiltasten), sonst eines.
 // articleId gesetzt → Hash trägt „?bild=N“, damit der Link genau dieses Bild zeigt.
-const fsGallery = { urls: [], index: 0, articleId: null, bounded: false };
+const fsGallery = {
+  urls: [], index: 0, articleId: null, bounded: false, returnFocus: null, previousBodyOverflow: '',
+};
 
 function showFullscreenImage(index) {
   const count = fsGallery.urls.length;
@@ -590,18 +598,24 @@ function showFullscreenImage(index) {
     history.replaceState(APP_VIEW_HISTORY_STATE, '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
   }
 }
-function openGalleryFullscreen(urls, index = 0, articleId = null, bounded = false) {
+function openGalleryFullscreen(urls, index = 0, articleId = null, bounded = false, returnFocus = null) {
   if (!urls.length) return;
+  const fullscreen = document.getElementById('img-fullscreen');
+  if (fullscreen.hidden) fsGallery.previousBodyOverflow = document.body.style.overflow;
   fsGallery.urls = urls;
   fsGallery.articleId = articleId;
   fsGallery.bounded = bounded;
+  fsGallery.returnFocus = returnFocus;
   showFullscreenImage(Math.max(0, Math.min(urls.length - 1, index)));
-  document.getElementById('img-fullscreen').hidden = false;
+  document.body.style.overflow = 'hidden';
+  fullscreen.hidden = false;
+  fullscreen.focus({ preventScroll: true });
 }
 function openImageFullscreen(src) {
   openGalleryFullscreen([src]);
 }
 function closeImageFullscreen() {
+  const returnFocus = fsGallery.returnFocus;
   document.getElementById('img-fullscreen').hidden = true;
   resetImageZoom();
   if (fsGallery.articleId && location.hash.includes('?bild=')) {
@@ -609,6 +623,10 @@ function closeImageFullscreen() {
   }
   fsGallery.articleId = null;
   fsGallery.bounded = false;
+  fsGallery.returnFocus = null;
+  document.body.style.overflow = fsGallery.previousBodyOverflow;
+  fsGallery.previousBodyOverflow = '';
+  if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
 }
 // Nach dem letzten Bild weiter zum nächsten Artikel, vor dem ersten zum vorigen.
 function stepFullscreen(dir) {
@@ -659,8 +677,30 @@ async function navigateArticle(dir) {
 
 function setTelegram(on) {
   state.telegram = on;
-  $telegramBtn.classList.toggle('active', on);
-  $telegramBtn.setAttribute('aria-pressed', String(on));
+  syncTelegramInstagramButton();
+}
+
+function setInstagramPosterFilter(on) {
+  state.instagramPosters = on;
+  syncTelegramInstagramButton();
+}
+
+function syncTelegramInstagramButton() {
+  const instagramMode = state.author === INFOGRAPHICS_AUTHOR;
+  const active = instagramMode ? state.instagramPosters : state.telegram;
+  // SVGElement.hidden wird nicht von allen Browsern als reflektiertes HTML-Attribut
+  // unterstützt. Das Attribut direkt schalten, damit die CSS-Regel svg[hidden]
+  // zuverlässig zwischen Telegram- und Instagram-Symbol wechselt.
+  $telegramBtn.querySelector('[data-telegram-icon]')?.toggleAttribute('hidden', instagramMode);
+  $telegramBtn.querySelector('[data-instagram-icon]')?.toggleAttribute('hidden', !instagramMode);
+  $telegramBtn.classList.toggle('is-instagram', instagramMode);
+  $telegramBtn.classList.toggle('active', active);
+  $telegramBtn.setAttribute('aria-pressed', String(active));
+  $telegramBtn.title = instagramMode
+    ? (active ? 'Alle Infografiken anzeigen' : 'Nur Instagram-Poster anzeigen')
+    : (active ? 'Telegram-Artikel ausblenden' : 'Telegram-Artikel anzeigen');
+  $telegramBtn.setAttribute('aria-label', $telegramBtn.title);
+  document.body.classList.toggle('mode-instagram-posters', isInstagramPosterMode());
 }
 
 // Lesezeichen-Filter im Header: nur Artikel mit Lesezeichen (Autor/Jahr/Kategorie/Suche gelten weiter).
@@ -700,6 +740,23 @@ function formatDateShort(d) {
   if (!d) return '';
   const [y, m, day] = d.split('-');
   return day && m ? `${day}.${m}.${y}` : d;
+}
+
+function responsiveDateFormats(d) {
+  if (!d) return [''];
+  const [y, m] = d.split('-');
+  return [
+    formatDate(d),
+    formatDateShort(d),
+    m && y ? `${m}.${y}` : d,
+    y || d,
+  ].filter((value, index, values) => value && values.indexOf(value) === index);
+}
+
+function responsiveDateMarkup(d, className) {
+  const formats = responsiveDateFormats(d);
+  const full = formats[0] || '';
+  return `<span class="${esc(className)} responsive-date" data-date-formats="${esc(JSON.stringify(formats))}" aria-label="${esc(full)}">${esc(full)}</span>`;
 }
 
 function sanitizeForId(id) {
@@ -834,7 +891,7 @@ async function logout() {
   });
   Object.assign(state, {
     q: '', author: '', externalAudio: false, year: '', category: '', telegram: false,
-    bookmarks: false, page: 1, limit: 24, bookSort: 'recent',
+    instagramPosters: false, bookmarks: false, page: 1, limit: 24, bookSort: 'recent',
     gridCardWidths: { square: null, tall: null },
   });
   currentViewItemId = '';
@@ -843,6 +900,7 @@ async function logout() {
   $searchInput.value = '';
   $searchClear.classList.remove('visible');
   setTelegram(false);
+  setInstagramPosterFilter(false);
   setBookmarkFilter(false);
   setLayout('tall');
   $filterLimit.value = '24';
@@ -896,6 +954,7 @@ async function fetchArticles(params = {}) {
   if (params.year)     qs.set('year', params.year);
   if (params.category) qs.set('category', params.category);
   if (params.telegram) qs.set('telegram', '1');
+  if (params.instagramPosters) qs.set('instagram', '1');
   if (params.bookmarks) qs.set('bookmarks', '1');
   if (params.group)    qs.set('group', '1');
   qs.set('page',  params.page  || 1);
@@ -976,12 +1035,29 @@ function renderCard(article, idx) {
       <div class="card-body">
         <div class="card-meta">
           <span class="author-badge" style="--author-hue:${hue}">${esc(article.author.replace(/_/g,' '))}</span>
-          <span class="card-date"><span class="date-long">${esc(formatDate(article.date))}</span><span class="date-short">${esc(formatDateShort(article.date))}</span></span>
+          ${responsiveDateMarkup(article.date, 'card-date')}
           ${epNum}
         </div>
         <h2 class="card-title">${esc(article.title)}</h2>
         ${catPills ? `<div class="card-categories">${catPills}</div>` : ''}
         <p class="card-preview">${esc(article.preview || article.excerpt)}</p>
+      </div>
+    </article>`;
+}
+
+function renderInstagramPosterCard(poster, idx) {
+  const author = poster.posterAuthor || INFOGRAPHICS_AUTHOR;
+  const hue = authorHue(author);
+  const delay = Math.min(idx * 30, 300);
+  const date = formatDate(poster.date);
+  const label = ['Instagram-Poster', 'von ' + author, date].filter(Boolean).join(' ');
+  return `
+    <article class="card instagram-poster-card" data-id="${esc(poster.id)}" data-poster-index="${idx}"
+      style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(label)}">
+      <div class="instagram-poster-image">
+        <img src="${esc(poster.imageUrl)}" alt="" loading="lazy" onerror="handleImgError(this)" />
+        <span class="instagram-poster-badge instagram-poster-author" style="--author-hue:${hue}">${esc(author.replace(/_/g, ' '))}</span>
+        ${responsiveDateMarkup(poster.date, 'instagram-poster-badge instagram-poster-date')}
       </div>
     </article>`;
 }
@@ -1010,6 +1086,48 @@ function watchCardPreviews() {
     previews.forEach(preview => cardPreviewObserver.observe(preview));
   }
   updateCardPreviewTruncation();
+}
+
+function responsiveDateFits(date) {
+  if (date.classList.contains('instagram-poster-date')) {
+    return date.scrollWidth <= date.clientWidth + 1;
+  }
+  const meta = date.closest('.card-meta');
+  if (!meta) return date.scrollWidth <= date.clientWidth + 1;
+  const siblings = [...meta.children].filter(element => element !== date
+    && element.getClientRects().length && getComputedStyle(element).display !== 'none');
+  const style = getComputedStyle(meta);
+  const gap = parseFloat(style.columnGap || style.gap) || 0;
+  const available = meta.clientWidth
+    - siblings.reduce((sum, element) => sum + element.getBoundingClientRect().width, 0)
+    - gap * siblings.length;
+  return date.scrollWidth <= available + 1;
+}
+
+function updateResponsiveDates() {
+  if (responsiveDateFrame) cancelAnimationFrame(responsiveDateFrame);
+  responsiveDateFrame = requestAnimationFrame(() => {
+    responsiveDateFrame = 0;
+    $app.querySelectorAll('.responsive-date').forEach(date => {
+      let formats;
+      try { formats = JSON.parse(date.dataset.dateFormats || '[]'); }
+      catch { formats = []; }
+      for (const [index, format] of formats.entries()) {
+        date.textContent = format;
+        if (responsiveDateFits(date) || index === formats.length - 1) break;
+      }
+    });
+  });
+}
+
+function watchResponsiveDates() {
+  responsiveDateObserver?.disconnect();
+  const containers = [...$app.querySelectorAll('.card-meta, .instagram-poster-image')];
+  if (typeof ResizeObserver !== 'undefined') {
+    if (!responsiveDateObserver) responsiveDateObserver = new ResizeObserver(updateResponsiveDates);
+    containers.forEach(container => responsiveDateObserver.observe(container));
+  }
+  updateResponsiveDates();
 }
 
 // Bildbereich einer Kachel mit mehreren Bildern (Artikel + Infografiken):
@@ -1074,6 +1192,16 @@ function wireCardGallery(card) {
 }
 
 function renderGrid(items) {
+  if (isInstagramPosterMode()) {
+    if (!items.length) {
+      return `<div class="empty-state">
+        ${svgSearch()}
+        <h2>Keine Instagram-Poster gefunden</h2>
+        <p>Zu den gewählten Filtern sind keine markierten Poster vorhanden.</p>
+      </div>`;
+    }
+    return `<div class="article-grid instagram-poster-grid">${items.map(renderInstagramPosterCard).join('')}</div>`;
+  }
   if (!items.length && state.bookmarks) {
     const filtered = state.q || state.author || state.externalAudio || state.year || state.category;
     return `<div class="empty-state">
@@ -1153,6 +1281,7 @@ async function loadArticles() {
       year:     state.year,
       category: state.category,
       telegram: state.telegram,
+      instagramPosters: isInstagramPosterMode(),
       bookmarks: state.bookmarks,
       group:    groupMode(),
       page:     state.page,
@@ -1163,21 +1292,33 @@ async function loadArticles() {
     state.pages = data.pages;
     state.currentItems = data.items;
 
-    $count.textContent = `${data.total.toLocaleString('de-DE')} ${bookMode ? (data.total === 1 ? 'Hörbuch' : 'Hörbücher') : 'Artikel'}`;
+    const resultLabel = bookMode
+      ? (data.total === 1 ? 'Hörbuch' : 'Hörbücher')
+      : (isInstagramPosterMode() ? 'Poster' : 'Artikel');
+    $count.textContent = `${data.total.toLocaleString('de-DE')} ${resultLabel}`;
     $app.innerHTML = (bookMode ? renderBookGrid(data.items) : renderGrid(data.items)) + renderPagination(state.page, state.pages);
     applyGridColumns();
     watchCardPreviews();
+    watchResponsiveDates();
 
     // Attach card click handlers
     $app.querySelectorAll('.card').forEach(card => {
-      const handler = () => openArticle(card.dataset.id);
+      const posterIndex = card.dataset.posterIndex;
+      const handler = posterIndex === undefined
+        ? () => openArticle(card.dataset.id)
+        : () => openGalleryFullscreen(
+          state.currentItems.map(item => item.imageUrl).filter(Boolean),
+          Number(posterIndex), null, true, card,
+        );
       wireCardGallery(card);
       card.addEventListener('click', () => {
         // Ein Wischen durch die Bilder der Kachel öffnet den Artikel nicht.
         if (gridInteractionSuppressed() || Date.now() - (Number(card.dataset.swipedAt) || 0) < 500) return;
         handler();
       });
-      card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') handler(); });
+      card.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); }
+      });
     });
 
     // Attach pagination handlers
@@ -1924,6 +2065,8 @@ async function loadMeta() {
 function applySavedListState(saved) {
   if (!saved) return;
   Object.assign(state, saved.list);
+  // Der Instagram-Filter ist bewusst nur temporär und wird nie wiederhergestellt.
+  state.instagramPosters = false;
   $searchInput.value = state.q;
   $searchClear.classList.toggle('visible', !!state.q);
   setTelegram(state.telegram);
@@ -2042,13 +2185,16 @@ $searchClear.addEventListener('click', () => {
 // Hörbuch-Ansicht: Jahr/Kategorie ausblenden, Sortierung einblenden.
 function applyBookMode() {
   document.body.classList.toggle('mode-audiobooks', isBookMode());
+  syncTelegramInstagramButton();
   requestAnimationFrame(updateFilterLabelLayout);
 }
 
 $filterAuthor.addEventListener('change', async () => {
   restoringSessionView = true;
+  const previousAuthor = state.author;
   state.externalAudio = $filterAuthor.value === '__external_audio__';
   state.author = state.externalAudio ? '' : $filterAuthor.value;
+  if (previousAuthor !== state.author) setInstagramPosterFilter(false);
   if (state.author === 'Telegram') setTelegram(true);
   applyBookMode();
   state.page = 1;
@@ -2526,6 +2672,7 @@ window.addEventListener('resize', () => {
       setNavigationChromeOffset($navigationChrome.offsetHeight);
     }
     applyGridColumns();
+    updateResponsiveDates();
     updateFilterLabelLayout();
   }, 120);
 });
@@ -2561,7 +2708,8 @@ $filterLimit.addEventListener('change', async () => {
 });
 
 $telegramBtn.addEventListener('click', () => {
-  setTelegram(!state.telegram);
+  if (state.author === INFOGRAPHICS_AUTHOR) setInstagramPosterFilter(!state.instagramPosters);
+  else setTelegram(!state.telegram);
   state.page = 1;
   loadArticles();
 });
@@ -2597,8 +2745,10 @@ $resetFilters.addEventListener('click', () => {
   setLayout('tall');
   $filterLimit.value = '24';
   setTelegram(false);
+  setInstagramPosterFilter(false);
   setBookmarkFilter(false);
-  Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false, bookmarks:false, page:1, limit:24 });
+  Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false,
+    instagramPosters:false, bookmarks:false, page:1, limit:24 });
   [
     $filterAuthor,
     $filterYear,
@@ -3181,10 +3331,17 @@ document.addEventListener('keydown', e => {
   const dir = pageSwipeMath?.keyDirection(e) || 0;
   if (!dir) return;
 
+  // Poster können direkt aus der Kachelansicht vollflächig geöffnet werden.
+  // Dort blättern die Pfeiltasten zuerst durch die begrenzte Poster-Liste.
+  if (!$imgFullscreen.hidden) {
+    e.preventDefault();
+    stepFullscreen(dir);
+    return;
+  }
+
   if (!$overlay.hidden) {
     // In der Vollansicht erst durch die Bilder der Gruppe, danach zum Nachbarartikel.
-    if (!document.getElementById('img-fullscreen').hidden) stepFullscreen(dir);
-    else navigateArticle(dir);
+    navigateArticle(dir);
     return;
   }
 

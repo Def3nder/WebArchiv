@@ -411,9 +411,46 @@ body.mode-audiobooks .bookmark-btn { opacity: .35; pointer-events: none; }
   align-items: center;
 }
 .telegram-btn svg { width: 16px; height: 16px; stroke: currentColor; }
+.telegram-btn svg[hidden] { display: none; }
 .telegram-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
 .telegram-btn.active,
 .telegram-btn.active:hover { color: #229ED9; border-color: #229ED9; }
+.telegram-btn.is-instagram {
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+}
+.telegram-btn.is-instagram:hover { border-color: transparent; }
+.telegram-btn.is-instagram .instagram-filter-icon {
+  width: 28px;
+  height: 28px;
+  stroke: none;
+  opacity: 1;
+  transition: transform var(--transition);
+}
+.telegram-btn.is-instagram .instagram-icon-bg {
+  fill: var(--text-muted);
+  transition: fill var(--transition);
+}
+.telegram-btn.is-instagram .instagram-icon-camera {
+  fill: none;
+  stroke: var(--bg);
+  stroke-width: 1.65;
+}
+.telegram-btn.is-instagram .instagram-icon-dot { fill: var(--bg); }
+.telegram-btn.is-instagram:hover .instagram-filter-icon { transform: scale(1.05); }
+.telegram-btn.is-instagram:hover .instagram-icon-bg { fill: var(--accent); }
+.telegram-btn.is-instagram.active,
+.telegram-btn.is-instagram.active:hover { color: var(--text); border-color: transparent; }
+.telegram-btn.is-instagram.active .instagram-icon-bg { fill: url(#instagram-filter-gradient); }
+.telegram-btn.is-instagram.active .instagram-icon-camera { stroke: #fff; }
+.telegram-btn.is-instagram.active .instagram-icon-dot { fill: #fff; }
+.telegram-btn.is-instagram:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 @media (max-width: 600px) {
   .header-inner {
@@ -615,6 +652,72 @@ body.has-mini-player .pwa-update-notice { bottom: calc(82px + env(safe-area-inse
 .card[data-author="Infografiken"] .card-image img,
 .card-image.is-infographic img { object-position: top; }
 
+/* Gefilterte Instagram-Poster sind reine 9:16-Bildkacheln. Das Bild bleibt
+   vollständig sichtbar; nur Autor und Datum liegen als ruhige Badges darüber. */
+.instagram-poster-grid .instagram-poster-card,
+body.layout-tall .instagram-poster-grid .instagram-poster-card,
+body.layout-list .instagram-poster-grid .instagram-poster-card {
+  aspect-ratio: 9 / 16;
+  min-width: 0;
+  display: block;
+}
+body.layout-list .instagram-poster-grid {
+  grid-template-columns: repeat(var(--grid-columns, var(--grid-default-columns)), minmax(0, 1fr));
+  gap: 16px;
+}
+.instagram-poster-image {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface-2) 84%, #000 16%);
+}
+.instagram-poster-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transition: transform .35s ease;
+}
+.instagram-poster-card:hover .instagram-poster-image img { transform: scale(1.012); }
+.instagram-poster-badge {
+  position: absolute;
+  bottom: 10px;
+  z-index: 1;
+  max-width: calc(50% - 14px);
+  overflow: hidden;
+  padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 999px;
+  background: rgba(10,10,10,.72);
+  box-shadow: 0 2px 9px rgba(0,0,0,.24);
+  color: #f4f1e8;
+  font-size: .65rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(7px);
+}
+.instagram-poster-author {
+  left: 10px;
+  color: hsl(var(--author-hue, 45) 62% 75%);
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}
+.instagram-poster-date {
+  right: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: clip;
+}
+@media (max-width: 600px) {
+  body.layout-list .instagram-poster-grid { gap: 8px; }
+  .instagram-poster-badge { bottom: 7px; padding: 3px 6px; font-size: .58rem; }
+  .instagram-poster-author { left: 7px; }
+  .instagram-poster-date { right: 7px; }
+}
+
 /* Kachel mit mehreren Bildern (Artikel + Infografiken): Streifen, der per Maus-
    position (Desktop) oder Wischen (Touch) verschoben wird; Striche unten links. */
 .card-gallery { touch-action: pan-y; }
@@ -763,14 +866,15 @@ body[data-theme="light"] .author-badge {
 }
 
 .card-date {
+  max-width: 100%;
+  overflow: hidden;
   font-size: 0.7rem;
   color: var(--text-muted);
   font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.date-short { display: none; }
 @media (max-width: 600px) {
-  .date-long { display: none; }
-  .date-short { display: inline; white-space: nowrap; }
   .card-body { padding: 8px 8px 10px; gap: 5px; }
   /* Nur komprimieren, wenn Badge und Datum dadurch wirklich nebeneinander
      passen. In sehr schmalen Drei-Spalten-Kacheln bleibt der normale Umbruch. */
@@ -2497,6 +2601,25 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
 #infographic-manager:has(.bem-preview-pane:not([hidden])) .igm-toolbar,
 #infographic-manager:has(.bem-preview-pane:not([hidden])) .igm-hint { display: none; }
 #infographic-manager button:disabled { opacity: .5; cursor: default; }
+.igm-instagram-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: .74rem;
+  cursor: pointer;
+}
+.igm-instagram-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #d62976;
+  cursor: pointer;
+}
+.igm-instagram-toggle:has(input:checked) { color: var(--text); }
+.igm-instagram-toggle input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .bem-book { margin: -7px 0 0; color: var(--text-muted); font-family: var(--font-heading, Georgia, serif); font-size: 1.05rem; }
 .bem-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
 .bem-tabs button { display: flex; align-items: baseline; gap: 7px; margin-bottom: -1px; padding: 8px 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-muted); cursor: pointer; font: inherit; font-size: .85rem; }

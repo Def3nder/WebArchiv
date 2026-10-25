@@ -321,6 +321,7 @@ function parseArticle(content, filePath) {
 
   // Parse header section after Datum: collect episode, tags, summary until ****
   let episodeNum = null;
+  let instagramPoster = false;
   let tags = [];
   let summaryLines = [];
   let inSummary = false;
@@ -350,6 +351,12 @@ function parseArticle(content, filePath) {
     if (/^audioquickie:/i.test(clean)) {
       const m = clean.match(/\d+/);
       if (m) episodeNum = parseInt(m[0]);
+      lastMetaIdx = i;
+      continue;
+    }
+
+    if (/^instagram-poster:/i.test(clean)) {
+      instagramPoster = /^instagram-poster:\s*ja\s*$/i.test(clean);
       lastMetaIdx = i;
       continue;
     }
@@ -405,7 +412,7 @@ function parseArticle(content, filePath) {
   const title = titleLines.join(' ').trim()
     || path.basename(filePath, '.md').replace(/_/g, ' ').replace(/^\d{4}-\d{2}-\d{2}\s+/, '');
 
-  return { title, date, sourceUrl, summary, tags, episodeNum, categories: [], body };
+  return { title, date, sourceUrl, summary, tags, episodeNum, instagramPoster, categories: [], body };
 }
 
 function renderArticleBody(body) {
@@ -543,6 +550,7 @@ async function scanDir(dirPath, author, year, collector, { strict = false } = {}
         videoUrl: relVideo ? fileUrl(relVideo, videoPath) : null,
         pdfUrl:   relPdf   ? fileUrl(relPdf, pdfPath)     : null,
         episodeNum: parsed.episodeNum,
+        instagramPoster: parsed.instagramPoster,
         filePath: fullPath,
         // Intern (nicht in der API): eigenes Bild statt standard.jpg, eigener Text.
         ownImage: !!ownImgPath,
@@ -1177,9 +1185,17 @@ function managedInfographicContext(id, user) {
       throw duplicateFail(409, 'Eine Infografik hat zusätzliche oder unvollständige Dateien und kann nicht automatisch verwaltet werden.');
     }
     return { id: item.id, ordinal: item.infographicOrdinal, title: item.title,
-      imageUrl: item.imageUrl, files, mdPath: item.filePath };
+      imageUrl: item.imageUrl, instagramPoster: item.instagramPoster === true,
+      files, mdPath: item.filePath };
   });
-  return { article, dir, year, baseStem, bundles };
+  const ownGraphic = article.author === INFOGRAPHICS_AUTHOR && article.ownImage
+    ? {
+        id: article.id, ordinal: 0, title: article.title, imageUrl: article.imageUrl,
+        instagramPoster: article.instagramPoster === true, files: filesForInfographic(article),
+        mdPath: article.filePath, fixed: true,
+      }
+    : null;
+  return { article, dir, year, baseStem, bundles, items: ownGraphic ? [ownGraphic, ...bundles] : bundles };
 }
 
 function retitleInfographicMarkdown(content, oldOrdinal, newOrdinal) {
@@ -1201,6 +1217,28 @@ function retitleInfographicMarkdown(content, oldOrdinal, newOrdinal) {
   }
   appendOrdinalToMarkdownTitle(lines, newOrdinal);
   return lines.join(eol);
+}
+
+function setInstagramPosterMetadata(content, enabled) {
+  const eol = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+  const cleanMetadataLine = line => line.replace(/\*\*/g, '').replace(/^#+\s*/, '')
+    .replace(/^\*|\*$/g, '').replace(/^_+|_+$/g, '').trim();
+  const withoutMarker = lines.filter(line => !/^instagram-poster:/i.test(cleanMetadataLine(line)));
+  if (!enabled) return withoutMarker.join(eol);
+  const datumIdx = withoutMarker.findIndex((line, index) => index < 20
+    && /^datum:/i.test(cleanMetadataLine(line)));
+  if (datumIdx < 0) throw duplicateFail(409, 'Die Infografik hat keine Datum-Zeile.');
+  withoutMarker.splice(datumIdx + 1, 0, 'Instagram-Poster: Ja');
+  return withoutMarker.join(eol);
+}
+
+async function setManagedInfographicInstagramPoster(item, enabled) {
+  if (typeof enabled !== 'boolean') throw duplicateFail(400, 'Der Instagram-Poster-Wert ist ungültig.');
+  const original = await fs.promises.readFile(item.mdPath, 'utf8');
+  const updated = setInstagramPosterMetadata(original, enabled);
+  if (updated === original) return async () => {};
+  return moveInfographicFiles([{ source: item.mdPath, target: item.mdPath, content: updated }]);
 }
 
 // Alle Quellen erst in temporäre Namen verschieben, dann die Ziele belegen:
@@ -1828,10 +1866,11 @@ app.get('/api/infographic-manager/*', requireAdmin, (req, res) => {
     res.set('Cache-Control', 'no-store').json({
       articleId: context.article.id,
       title: context.article.title,
-      items: context.bundles.map(item => ({
+      items: context.items.map(item => ({
         id: item.id, title: item.title, ordinal: item.ordinal,
-        filename: path.basename(item.files.find(file => path.extname(file).toLowerCase() !== '.md')),
-        imageUrl: item.imageUrl,
+        filename: path.basename(item.files.find(file => ['.png', '.jpg', '.jpeg']
+          .includes(path.extname(file).toLowerCase())) || item.mdPath),
+        imageUrl: item.imageUrl, instagramPoster: item.instagramPoster, fixed: item.fixed === true,
       })),
     });
   } catch (error) {
@@ -1849,11 +1888,17 @@ app.post('/api/infographic-manager/*', requireAdmin, async (req, res) => {
   infographicWrites++;
   let undoOrder = null;
   let undoTrash = null;
+  let undoInstagramPoster = null;
   let trashFolder = null;
+  let context = null;
   try {
-    const context = managedInfographicContext(req.params[0], req.session.user);
+    context = managedInfographicContext(req.params[0], req.session.user);
     if (req.body?.action === 'order') {
       undoOrder = await reorderManagedInfographics(context, req.body.ids);
+    } else if (req.body?.action === 'instagram-poster') {
+      const item = context.items.find(candidate => candidate.id === req.body.id);
+      if (!item) throw duplicateFail(404, 'Infografik nicht gefunden.');
+      undoInstagramPoster = await setManagedInfographicInstagramPoster(item, req.body.enabled);
     } else if (req.body?.action === 'trash') {
       const item = context.bundles.find(bundle => bundle.id === req.body.id);
       if (!item) throw duplicateFail(404, 'Infografik nicht gefunden.');
@@ -1875,7 +1920,8 @@ app.post('/api/infographic-manager/*', requireAdmin, async (req, res) => {
     try {
       if (undoOrder) await undoOrder();
       if (undoTrash) await undoTrash();
-      if (undoOrder || undoTrash) await refreshInfographicsForYear(context.year);
+      if (undoInstagramPoster) await undoInstagramPoster();
+      if ((undoOrder || undoTrash || undoInstagramPoster) && context) await refreshInfographicsForYear(context.year);
       if (trashFolder) await fs.promises.rmdir(trashFolder).catch(() => {});
     } catch (failed) { rollbackError = failed; }
     res.status(error.status || 500).json({ error: rollbackError
@@ -2332,7 +2378,7 @@ app.post('/api/duplicates', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/articles', attachUser, (req, res) => {
-  const { q, author, year, category, page = '1', limit = '24', telegram, externalAudio } = req.query;
+  const { q, author, year, category, page = '1', limit = '24', telegram, externalAudio, instagram } = req.query;
   const user = req.user;
   const marks = bookmarks.idsFor(user.email);
   const onlyBookmarks = req.query.bookmarks === '1';
@@ -2363,6 +2409,8 @@ app.get('/api/articles', attachUser, (req, res) => {
     }
     filtered = filtered.filter(a => a.author === author);
   }
+  const instagramPosterMode = instagram === '1' && author === INFOGRAPHICS_AUTHOR;
+  if (instagramPosterMode) filtered = filtered.filter(a => a.instagramPoster && a.ownImage);
   if (year)     filtered = filtered.filter(a => a.year === year);
   if (category) filtered = filtered.filter(a => a.categories.includes(category));
   if (externalAudio === '1') {
@@ -2416,7 +2464,17 @@ app.get('/api/articles', attachUser, (req, res) => {
 
   const total = filtered.length;
   const items = filtered.slice((p - 1) * lim, p * lim)
-    .map(article => ({ ...exposeArticleForUser(article, user), bookmarked: marks.has(article.id) }));
+    .map(article => {
+      const exposed = { ...exposeArticleForUser(article, user), bookmarked: marks.has(article.id) };
+      if (!instagramPosterMode) return exposed;
+      const linkedArticle = visibleGroupAnchor(article, user);
+      return {
+        ...exposed,
+        posterAuthor: linkedArticle && linkedArticle.author !== INFOGRAPHICS_AUTHOR
+          ? linkedArticle.author
+          : INFOGRAPHICS_AUTHOR,
+      };
+    });
 
   res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
 });
@@ -2517,4 +2575,5 @@ module.exports = {
   infographicAttachmentStem, firstAvailableInfographicOrdinal,
   canUploadInfographic, conflictingInfographicBase, retitleInfographicMarkdown,
   moveInfographicFiles, reorderManagedInfographics,
+  setInstagramPosterMetadata, setManagedInfographicInstagramPoster,
 };

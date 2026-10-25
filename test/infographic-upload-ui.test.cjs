@@ -9,7 +9,7 @@ test('Artikel öffnen die Infografik-Verwaltung statt eines einzelnen Upload-Fel
   assert.match(app, /id="detail-infographic-btn" aria-label="Infografiken verwalten"/);
   assert.match(app, /window\.openInfographicManager\?\.\(article\)/);
   assert.match(html, /id="infographic-manager"[\s\S]*data-igm-add>Grafik hinzufügen[\s\S]*data-igm-list/);
-  assert.match(html, /infographic-manager\.js\?v=2/);
+  assert.match(html, /infographic-manager\.js\?v=3/);
 });
 
 test('Upload im Verwaltungsdialog aktualisiert Artikel und Grafikliste', () => {

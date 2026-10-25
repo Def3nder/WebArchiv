@@ -97,7 +97,7 @@ test('Autorfilter bietet alle konfigurierten Quellen zur Mehrfachauswahl auf jed
   assert.match(ui, /duplicateVisibleItems\(duplicateUi\.tab\)/);
   assert.match(ui, /duplicateSelectionTools\.hidden = !pending/);
   assert.match(css, /\.duplicate-filter-menu \.header-menu-dropdown \{/);
-  assert.match(html, /styles\.css\?v=150/);
+  assert.match(html, /styles\.css\?v=153/);
 });
 
 test('Suche grenzt beide Artikelseiten in allen Dublettentabs ein und kombiniert sich mit Filtern', () => {
