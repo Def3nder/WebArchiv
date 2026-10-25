@@ -131,6 +131,12 @@ function createTtsVoiceSettings({
       || remote.voices.some(voice => voice.id === saved.qwenVoiceId) };
   }
 
+  const serverSettings = () => json('/v1/settings');
+
+  const saveServerSettings = settings => json('/v1/settings', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings),
+  });
+
   async function select(voiceId, user) {
     voiceId = validateVoiceId(voiceId);
     const remote = await catalog();
@@ -252,6 +258,7 @@ function createTtsVoiceSettings({
   return {
     getSettings, select, selectedVoice, createVoice, voiceJob, cancelVoiceJob,
     renameVoice, trashVoice, startPreview, previewStatus, cancelPreview, previewAudio, cachedPreviewAudio,
+    serverSettings, saveServerSettings,
   };
 }
 

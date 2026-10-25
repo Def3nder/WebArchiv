@@ -268,6 +268,7 @@ test('Sämtliche Stimmen- und Einstellungsrouten sind adminpflichtig', async () 
   const jobs = { launch: async () => 'id', latest: () => null, status: () => ({}), cancel() {} };
   const voices = {
     selectedVoice: async () => null, getSettings: async () => ({}), select: async () => ({}),
+    serverSettings: async () => ({}), saveServerSettings: async () => ({}),
     createVoice: async () => ({}), voiceJob: async () => ({}), cancelVoiceJob: async () => ({}),
     renameVoice: async () => ({}), trashVoice: async () => ({}), startPreview: async () => ({}),
     previewStatus: async () => ({}), cancelPreview: async () => ({}), previewAudio: async () => ({}),
@@ -281,6 +282,7 @@ test('Sämtliche Stimmen- und Einstellungsrouten sind adminpflichtig', async () 
     const base = `http://127.0.0.1:${server.address().port}`;
     for (const [route, method] of [
       ['/api/tts/settings', 'GET'], ['/api/tts/settings', 'PUT'], ['/api/tts/voices', 'POST'],
+      ['/api/tts/server-settings', 'GET'], ['/api/tts/server-settings', 'PUT'],
       ['/api/tts/voices/jobs/00000000-0000-4000-8000-000000000000', 'GET'],
       ['/api/tts/voices/jobs/00000000-0000-4000-8000-000000000000', 'DELETE'],
       ['/api/tts/voices/Voice', 'PATCH'], ['/api/tts/voices/Voice', 'DELETE'],

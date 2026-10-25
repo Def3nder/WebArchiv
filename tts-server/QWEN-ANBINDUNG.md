@@ -75,15 +75,18 @@ teilt der Generator keinen Modell-, CUDA- oder Audiozustand mit dem
 HTTP-Protokoll-Worker:
 
 ```text
-python generate_mp3_with_embedding.py --config <Originalkonfiguration> --input <input.md> --output <output.mp3> [--speaker <voices/name-1.7B.pt>]
+python generate_mp3_with_embedding.py --config <qwen_http_service_config.json> --input <input.md> --output <output.mp3> [--speaker <voices/name-1.7B.pt>]
 ```
 
 Nur bei einer in WebArchiv gewählten Stimme wird `--speaker` ergänzt. Der Pfad
 wird ausschließlich aus dem serverseitigen Stimmenkatalog aufgelöst und nie
 vom Browser oder WebArchiv vorgegeben. Alle übrigen Optionen bleiben
-unverändert. Damit bestimmt die Originalkonfiguration Markdown-Bereinigung
+unverändert. Damit bestimmt die getrennte Servicekonfiguration Markdown-Bereinigung
 (`clear_markdown`), Sprache, Sprecher, Chunking-Modus/-Größen, Preroll,
 Kalibrierung, Warmup, Seed-Strategie, Pausen und MP3-Export/Bitrate.
+`qwen_http_service.py` legt diese Datei nicht an. Vor dem ersten Start muss die
+bereits vorhandene 1:1-Kopie von `config.json` als `qwen_http_service_config.json`
+neben der Originalkonfiguration liegen; die WebArchiv-UI liest und ändert nur diese Kopie.
 Auch die normalen Fehler- und Exit-Codes des Scripts werden berücksichtigt.
 Das Originalscript wird nicht verändert und es werden keine internen
 Synthesefunktionen mehr direkt aufgerufen.
@@ -137,7 +140,7 @@ das Originalscript verwendet seine bereits installierten Modell-/Audiopakete.
 export QWEN_TTS_TOKEN='<gemeinsames Geheimnis, mindestens 32 Zeichen>'
 /pfad/qwen-venv/bin/python /pfad/qwen_http_service.py \
   --script /pfad/faster-qwen3-tts/generate/generate_mp3_with_embedding.py \
-  --config /pfad/faster-qwen3-tts/generate/config.json \
+  --config /pfad/faster-qwen3-tts/generate/qwen_http_service_config.json \
   --voices-dir /pfad/faster-qwen3-tts/voices \
   --extract-script /pfad/faster-qwen3-tts/examples/extract_speaker.py \
   --voice-model Qwen/Qwen3-TTS-12Hz-1.7B-Base \

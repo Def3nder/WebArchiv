@@ -234,6 +234,12 @@ function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./pro
     app.put('/api/tts/settings', requireAdmin, route(async (req, res) => {
       res.json(await voices.select(req.body?.voiceId, req.session.user));
     }));
+    app.get('/api/tts/server-settings', requireAdmin, route(async (_req, res) => {
+      res.json(await voices.serverSettings());
+    }));
+    app.put('/api/tts/server-settings', requireAdmin, route(async (req, res) => {
+      res.json(await voices.saveServerSettings(req.body));
+    }));
     app.post('/api/tts/voices', requireAdmin, route(async (req, res) => {
       res.status(202).json(await voices.createVoice(req.body || {}));
     }));

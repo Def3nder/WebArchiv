@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=149" />
+  <link rel="stylesheet" href="styles.css?v=150" />
 </head>
 <body>
 
@@ -489,7 +489,6 @@
       <div><p class="article-editor-eyebrow">QWEN-TTS</p><h2 id="tts-settings-title">TTS-Einstellungen</h2></div>
       <button type="button" id="tts-settings-close" class="detail-cat-pill" aria-label="TTS-Einstellungen schließen">✕</button>
     </div>
-    <p id="tts-settings-status" class="tts-settings-status" role="status" aria-live="polite"></p>
     <section class="tts-settings-section" aria-labelledby="tts-settings-active-title">
       <h3 id="tts-settings-active-title">Stimme für alle TTS-Aufträge</h3>
       <label class="login-label" id="tts-settings-voice-label" for="tts-settings-voice">Verfügbare Stimme</label>
@@ -501,6 +500,7 @@
         <div id="tts-settings-voice-menu" class="header-menu-dropdown" role="menu" aria-label="Verfügbare Stimme auswählen" hidden></div>
       </div>
       <p id="tts-settings-meta" class="account-hint"></p>
+      <p id="tts-settings-status" class="tts-settings-status" role="status" aria-live="polite" hidden></p>
       <div class="tts-buttons tts-settings-actions">
         <button type="button" id="tts-settings-save" class="detail-cat-pill account-primary">Als aktive Stimme speichern</button>
         <button type="button" id="tts-settings-refresh" class="detail-cat-pill">Liste aktualisieren</button>
@@ -530,6 +530,55 @@
         <button type="button" id="tts-settings-create" class="detail-cat-pill account-primary" disabled>Stimme erzeugen</button>
         <button type="button" id="tts-settings-discard" class="detail-cat-pill" disabled>Aufnahme verwerfen</button>
         <button type="button" id="tts-settings-cancel-job" class="detail-cat-pill" hidden>Erzeugung abbrechen</button>
+      </div>
+    </section>
+    <section class="tts-settings-section tts-server-settings" aria-labelledby="tts-server-settings-title">
+      <div class="tts-server-settings-heading">
+        <div>
+          <h3 id="tts-server-settings-title">Qwen-TTS-Server-Einstellungen</h3>
+          <p class="account-hint">Die Werte gelten für neu gestartete TTS-Aufträge.</p>
+        </div>
+        <span class="tts-server-settings-file">qwen_http_service_config.json</span>
+      </div>
+
+      <fieldset class="tts-server-fieldset">
+        <legend class="login-label">Chunk-Länge in Zeichen</legend>
+        <div class="tts-chunk-values">
+          <label for="tts-server-min-chunk"><span>Minimum</span><input id="tts-server-min-chunk" class="login-input" type="number" min="50" max="2000" step="10" inputmode="numeric"></label>
+          <label for="tts-server-target-chunk"><span>Ziel</span><input id="tts-server-target-chunk" class="login-input" type="number" min="50" max="2000" step="10" inputmode="numeric"></label>
+          <label for="tts-server-max-chunk"><span>Maximum</span><input id="tts-server-max-chunk" class="login-input" type="number" min="50" max="2000" step="10" inputmode="numeric"></label>
+        </div>
+        <div id="tts-server-chunk-range" class="tts-chunk-range" aria-label="Chunk-Längen einstellen">
+          <input id="tts-server-min-chunk-range" type="range" min="50" max="2000" step="10" aria-label="Minimale Chunk-Länge">
+          <input id="tts-server-target-chunk-range" class="is-target" type="range" min="50" max="2000" step="10" aria-label="Angestrebte Chunk-Länge">
+          <input id="tts-server-max-chunk-range" type="range" min="50" max="2000" step="10" aria-label="Maximale Chunk-Länge">
+        </div>
+      </fieldset>
+
+      <fieldset class="tts-server-fieldset">
+        <legend class="login-label">Text-Preroll</legend>
+        <label class="tts-toggle-row" for="tts-server-preroll-enabled">
+          <input id="tts-server-preroll-enabled" type="checkbox"><span>Text-Preroll voranstellen</span>
+        </label>
+        <div id="tts-server-preroll-fields" class="tts-nested-settings">
+          <label class="tts-server-wide-field" for="tts-server-preroll-sentence"><span>Preroll-Text</span><textarea id="tts-server-preroll-sentence" class="login-input" rows="3" maxlength="2000" spellcheck="false"></textarea></label>
+          <label class="tts-toggle-row" for="tts-server-padding-enabled">
+            <input id="tts-server-padding-enabled" type="checkbox"><span>Chunk-Ende mit Padding ergänzen</span>
+          </label>
+          <div id="tts-server-padding-fields">
+            <label class="tts-server-wide-field" for="tts-server-padding-text"><span>Padding-Text</span><textarea id="tts-server-padding-text" class="login-input" rows="2" maxlength="2000" spellcheck="false"></textarea></label>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="tts-server-number-grid">
+        <label for="tts-server-preroll-pause"><span>Min. Preroll-Pause</span><span class="tts-server-input-unit"><input id="tts-server-preroll-pause" class="login-input" type="number" min="0" max="5000" step="10" inputmode="numeric"><small>ms</small></span></label>
+        <label for="tts-server-lead-in"><span>Lead-in</span><span class="tts-server-input-unit"><input id="tts-server-lead-in" class="login-input" type="number" min="0" max="5000" step="10" inputmode="numeric"><small>ms</small></span></label>
+        <label for="tts-server-silence-threshold"><span>Stille-Schwelle</span><span class="tts-server-input-unit"><input id="tts-server-silence-threshold" class="login-input" type="number" min="-100" max="0" step="0.5" inputmode="decimal"><small>dB</small></span></label>
+      </div>
+      <p id="tts-server-settings-status" class="tts-settings-status" role="status" aria-live="polite" hidden></p>
+      <div class="tts-buttons tts-settings-actions">
+        <button type="button" id="tts-server-settings-save" class="detail-cat-pill account-primary">Server-Einstellungen speichern</button>
       </div>
     </section>
   </dialog>
@@ -701,7 +750,7 @@
   </dialog>
   <script src="user-admin.js?v=11"></script>
   <script src="settings.js?v=4"></script>
-  <script src="tts-settings.js?v=3"></script>
+  <script src="tts-settings.js?v=4"></script>
   <script src="session-state.js?v=9"></script>
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>

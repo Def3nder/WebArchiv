@@ -17,13 +17,33 @@ test('Admin-Menü und nativer Dialog enthalten die vollständige Qwen-Stimmenver
   }
   assert.match(html, /-1\.7B\.pt/);
   assert.doesNotMatch(html, /Einwilligung|Zustimmung|consent/i);
-  assert.match(html, /tts-settings\.js\?v=3[\s\S]*app\.js\?v=118/);
-  assert.match(html, /styles\.css\?v=149/);
+  assert.match(html, /tts-settings\.js\?v=4[\s\S]*app\.js\?v=118/);
+  assert.match(html, /styles\.css\?v=150/);
   assert.match(css, /#tts-settings-meta\s*{[^}]*margin-top:\s*6px/);
   assert.match(html, /id="tts-settings-name"[^>]*aria-describedby="tts-settings-name-hint"/);
   assert.match(css, /#tts-settings-name-hint\s*{[^}]*margin-top:\s*6px/);
   assert.match(app, /action === 'tts-settings'[\s\S]*openTtsSettingsDialog/);
   assert.match(app, /\['#tts-settings-dialog', '#tts-settings-close'\]/);
+});
+
+test('Server-Einstellungen stehen unter den vorhandenen Bereichen und bilden alle Qwen-Werte ab', () => {
+  const html = read('public/index.html');
+  const source = read('public/tts-settings.js');
+  const css = read('public/styles.css');
+  assert.ok(html.indexOf('id="tts-server-settings-title"') > html.indexOf('id="tts-settings-new-title"'));
+  assert.doesNotMatch(html, /article-editor-heading[\s\S]{0,200}id="tts-settings-status"/);
+  for (const id of ['tts-server-min-chunk', 'tts-server-target-chunk', 'tts-server-max-chunk',
+    'tts-server-min-chunk-range', 'tts-server-target-chunk-range', 'tts-server-max-chunk-range',
+    'tts-server-preroll-enabled', 'tts-server-preroll-sentence', 'tts-server-padding-enabled',
+    'tts-server-padding-text', 'tts-server-preroll-pause', 'tts-server-lead-in',
+    'tts-server-silence-threshold', 'tts-server-settings-save']) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(html, /qwen_http_service_config\.json/);
+  assert.match(source, /request\('\/api\/tts\/server-settings'/);
+  assert.match(source, /text_preroll_sentence:[\s\S]*chunk_end_padding_text:[\s\S]*silence_threshold_db:/);
+  assert.match(source, /prerollFields\.hidden = !prerollEnabled\.checked/);
+  assert.match(css, /\.tts-chunk-range[\s\S]*--chunk-target/);
 });
 
 test('Die Stimmenauswahl verwendet das gemeinsame ARIA-Menü mit nativem Touch-Fallback', () => {

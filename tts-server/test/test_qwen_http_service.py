@@ -18,7 +18,8 @@ TTS_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TTS_ROOT))
 from qwen_chunk_worker import ChunkProgressRelay, generate_article
 from http.server import ThreadingHTTPServer
-from qwen_http_service import GpuCoordinator, Jobs, VoiceCatalog, VoiceJobs, handler, LEASE
+from qwen_http_service import (GpuCoordinator, Jobs, ServerSettings, VoiceCatalog, VoiceJobs,
+                               handler, LEASE)
 
 
 class Contract(unittest.TestCase):
@@ -39,8 +40,11 @@ for line in sys.stdin:
     Path(command["output"]).write_bytes(b"simulated-mp3")
     print(json.dumps({"type": "result", "id": command["id"], "seed": 124 if text == "drift" else 123}), flush=True)
 ''')
-        self.jobs = Jobs(script, script, worker=script)
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler(self.jobs, "test-token"))
+        self.config = Path(self.temp.name) / "qwen_http_service_config.json"
+        self.config.write_text("{}", encoding="utf-8")
+        self.settings = ServerSettings(self.config)
+        self.jobs = Jobs(script, self.config, worker=script)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler(self.jobs, "test-token", settings=self.settings))
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.url = f"http://127.0.0.1:{self.server.server_port}/v1/"
@@ -77,6 +81,7 @@ for line in sys.stdin:
         self.assertTrue(health["full_markdown"])
         self.assertEqual(health["audio_format"], "mp3")
         self.assertTrue(health["chunk_progress"])
+        self.assertTrue(health["server_settings"])
         job_id = str(uuid.uuid4())
         for _ in range(2):
             self.request("jobs/" + job_id, "PUT", {"text": "Hallo"})
@@ -84,6 +89,21 @@ for line in sys.stdin:
         self.assertEqual(self.request(f"jobs/{job_id}/audio"), b"simulated-mp3")
         self.request("jobs/" + job_id, "DELETE")
         self.assertFalse(self.jobs.jobs[job_id]["directory"].exists())
+
+    def test_server_settings_endpoint_updates_only_managed_values(self):
+        current = json.loads(self.request("settings"))
+        self.assertEqual(current["settings"]["target_chunk_chars"], 340)
+        changed = dict(current["settings"])
+        changed["target_chunk_chars"] = 360
+        changed["silence_threshold_db"] = -47.5
+        result = json.loads(self.request("settings", "PUT", changed))
+        self.assertEqual(result["settings"], changed)
+        self.assertEqual(json.loads(self.config.read_text(encoding="utf-8"))["target_chunk_chars"], 360)
+
+        changed["min_chunk_chars"] = 400
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request("settings", "PUT", changed)
+        self.assertEqual(error.exception.code, 400)
 
     def test_cancel_busy_and_late_start(self):
         job_id = str(uuid.uuid4())

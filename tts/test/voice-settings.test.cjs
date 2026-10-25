@@ -11,6 +11,12 @@ async function temporary(fn) {
 
 function mockQwen() {
   const calls = [];
+  let settings = {
+    target_chunk_chars: 340, min_chunk_chars: 220, max_chunk_chars: 520,
+    text_preroll_enabled: true, text_preroll_sentence: 'Der Tag kommt zu einem Ende.\n\n.',
+    append_chunk_end_padding: true, chunk_end_padding_text: '\n\n.',
+    text_preroll_min_pause_ms: 120, text_preroll_lead_in_ms: 30, silence_threshold_db: -50,
+  };
   const voices = [{ id: 'Sachbuch-Autor', name: 'Sachbuch-Autor', model: 'Qwen/Qwen3-TTS-12Hz-1.7B-Base',
     createdAt: '2026-01-01T00:00:00Z', sha256: 'a'.repeat(64) }];
   return {
@@ -19,6 +25,13 @@ function mockQwen() {
       calls.push({ url, options });
       if (url.endsWith('/v1/voices') && (!options.method || options.method === 'GET')) {
         return Response.json({ voices, model: voices[0].model, busy: false });
+      }
+      if (url.endsWith('/v1/settings') && (!options.method || options.method === 'GET')) {
+        return Response.json({ settings, busy: false });
+      }
+      if (url.endsWith('/v1/settings') && options.method === 'PUT') {
+        settings = JSON.parse(options.body);
+        return Response.json({ settings, busy: false });
       }
       if (url.includes('/v1/voice-jobs/') && options.method === 'PUT') {
         return Response.json({ id: url.split('/').at(-1), status: 'running', stage: 'queued' }, { status: 202 });
@@ -76,6 +89,18 @@ test('Voice-IDs erlauben Namen, aber niemals Pfade', () => {
   assert.throws(() => validateVoiceId('../voice'), /Ungültig/);
   assert.throws(() => validateVoiceId('voice/other'), /Ungültig/);
 });
+
+test('Qwen-Server-Einstellungen werden unverändert über die Admin-Brücke gereicht', () => temporary(async dir => {
+  const configFile = path.join(dir, 'config.json');
+  await fs.writeFile(configFile, JSON.stringify({ tts: { provider: 'qwen' }, qwen: { base_url: 'http://qwen.test', token_environment_variable: 'TOKEN' } }));
+  const mock = mockQwen();
+  const service = createTtsVoiceSettings({ configFile, env: { TOKEN: 'secret' }, request: mock.request });
+  const current = await service.serverSettings();
+  const changed = { ...current.settings, target_chunk_chars: 360, silence_threshold_db: -47.5 };
+  assert.deepEqual((await service.saveServerSettings(changed)).settings, changed);
+  const call = mock.calls.find(entry => entry.url.endsWith('/v1/settings') && entry.options.method === 'PUT');
+  assert.deepEqual(JSON.parse(call.options.body), changed);
+}));
 
 test('Stimmprobe wird auf dem WebArchiv gespeichert und nur bei identischem Voice-Hash angeboten', () => temporary(async dir => {
   const configFile = path.join(dir, 'config.json');

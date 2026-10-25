@@ -20,6 +20,28 @@
   const createButton = document.getElementById('tts-settings-create');
   const discardButton = document.getElementById('tts-settings-discard');
   const cancelJobButton = document.getElementById('tts-settings-cancel-job');
+  const serverStatus = document.getElementById('tts-server-settings-status');
+  const serverSaveButton = document.getElementById('tts-server-settings-save');
+  const chunkRange = document.getElementById('tts-server-chunk-range');
+  const chunkInputs = {
+    min: document.getElementById('tts-server-min-chunk'),
+    target: document.getElementById('tts-server-target-chunk'),
+    max: document.getElementById('tts-server-max-chunk'),
+  };
+  const chunkSliders = {
+    min: document.getElementById('tts-server-min-chunk-range'),
+    target: document.getElementById('tts-server-target-chunk-range'),
+    max: document.getElementById('tts-server-max-chunk-range'),
+  };
+  const prerollEnabled = document.getElementById('tts-server-preroll-enabled');
+  const prerollFields = document.getElementById('tts-server-preroll-fields');
+  const prerollSentence = document.getElementById('tts-server-preroll-sentence');
+  const paddingEnabled = document.getElementById('tts-server-padding-enabled');
+  const paddingFields = document.getElementById('tts-server-padding-fields');
+  const paddingText = document.getElementById('tts-server-padding-text');
+  const prerollPause = document.getElementById('tts-server-preroll-pause');
+  const leadIn = document.getElementById('tts-server-lead-in');
+  const silenceThreshold = document.getElementById('tts-server-silence-threshold');
 
   let data = null;
   let recording = null;
@@ -33,10 +55,18 @@
   let discardOnStop = false;
   let pollGeneration = 0;
   let previewJobId = null;
+  let serverSettingsLoaded = false;
 
   function message(text, error = false) {
     status.textContent = text;
     status.classList.toggle('is-error', error);
+    status.hidden = !text;
+  }
+
+  function serverMessage(text, error = false) {
+    serverStatus.textContent = text;
+    serverStatus.classList.toggle('is-error', error);
+    serverStatus.hidden = !text;
   }
 
   async function request(url, options = {}) {
@@ -126,8 +156,7 @@
       const wanted = preselect || data.qwenVoiceId;
       if (wanted && data.voices.some(voice => voice.id === wanted)) select.value = wanted;
       else if (data.voices.length) select.value = data.voices[0].id;
-      message(data.busy ? 'Der TTS-Server ist gerade mit einem Auftrag beschäftigt.'
-        : `${data.voices.length} Stimme${data.voices.length === 1 ? '' : 'n'} verfügbar.`);
+      message(data.busy ? 'Der TTS-Server ist gerade mit einem Auftrag beschäftigt.' : '');
       renderVoiceMeta();
       renderStoredPreview();
     } catch (error) {
@@ -137,6 +166,144 @@
     }
     syncVoiceMenu();
     updateButtons();
+  }
+
+  function toggleServerFields() {
+    prerollFields.hidden = !prerollEnabled.checked;
+    paddingFields.hidden = !prerollEnabled.checked || !paddingEnabled.checked;
+  }
+
+  function chunkValues() {
+    return Object.fromEntries(Object.entries(chunkInputs).map(([key, input]) => [key, Number(input.value)]));
+  }
+
+  function paintChunkRange() {
+    const values = chunkValues();
+    const minimum = Number(chunkSliders.min.min);
+    const maximum = Number(chunkSliders.min.max);
+    const percent = value => `${Math.max(0, Math.min(100, (value - minimum) / (maximum - minimum) * 100))}%`;
+    chunkRange.style.setProperty('--chunk-min', percent(values.min));
+    chunkRange.style.setProperty('--chunk-target', percent(values.target));
+    chunkRange.style.setProperty('--chunk-max', percent(values.max));
+  }
+
+  function setChunkValues(values) {
+    for (const key of ['min', 'target', 'max']) {
+      chunkInputs[key].value = String(values[key]);
+      chunkSliders[key].value = String(values[key]);
+    }
+    paintChunkRange();
+  }
+
+  function changeChunk(key, rawValue) {
+    const lower = Number(chunkSliders[key].min);
+    const upper = Number(chunkSliders[key].max);
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return updateServerButton();
+    const values = chunkValues();
+    values[key] = Math.round(Math.max(lower, Math.min(upper, value)));
+    if (key === 'min') {
+      values.target = Math.max(values.target, values.min);
+      values.max = Math.max(values.max, values.target);
+    } else if (key === 'target') {
+      values.min = Math.min(values.min, values.target);
+      values.max = Math.max(values.max, values.target);
+    } else {
+      values.target = Math.min(values.target, values.max);
+      values.min = Math.min(values.min, values.target);
+    }
+    setChunkValues(values);
+    updateServerButton();
+  }
+
+  function previewChunkInput(key) {
+    const input = chunkInputs[key];
+    if (input.value && input.checkValidity()) {
+      chunkSliders[key].value = input.value;
+      paintChunkRange();
+    }
+    updateServerButton();
+  }
+
+  function applyServerSettings(settings) {
+    setChunkValues({ min: settings.min_chunk_chars, target: settings.target_chunk_chars, max: settings.max_chunk_chars });
+    prerollEnabled.checked = settings.text_preroll_enabled;
+    prerollSentence.value = settings.text_preroll_sentence;
+    paddingEnabled.checked = settings.append_chunk_end_padding;
+    paddingText.value = settings.chunk_end_padding_text;
+    prerollPause.value = String(settings.text_preroll_min_pause_ms);
+    leadIn.value = String(settings.text_preroll_lead_in_ms);
+    silenceThreshold.value = String(settings.silence_threshold_db);
+    toggleServerFields();
+    serverSettingsLoaded = true;
+    updateServerButton();
+  }
+
+  function collectServerSettings() {
+    const chunks = chunkValues();
+    const pause = Number(prerollPause.value);
+    const lead = Number(leadIn.value);
+    const threshold = Number(silenceThreshold.value);
+    if (!Object.values(chunks).every(Number.isInteger)
+        || !chunkInputs.min.checkValidity() || !chunkInputs.target.checkValidity() || !chunkInputs.max.checkValidity()
+        || !(chunks.min <= chunks.target && chunks.target <= chunks.max)) {
+      throw new Error('Bitte gültige Chunk-Längen mit Minimum ≤ Ziel ≤ Maximum eingeben.');
+    }
+    if (!Number.isInteger(pause) || !Number.isInteger(lead)
+        || !prerollPause.checkValidity() || !leadIn.checkValidity() || !silenceThreshold.checkValidity()) {
+      throw new Error('Bitte gültige Werte für Pausen und Stille-Schwelle eingeben.');
+    }
+    if (prerollEnabled.checked && !prerollSentence.value.trim()) throw new Error('Bitte einen Preroll-Text eingeben.');
+    if (paddingEnabled.checked && !paddingText.value) throw new Error('Bitte einen Padding-Text eingeben.');
+    return {
+      target_chunk_chars: chunks.target,
+      min_chunk_chars: chunks.min,
+      max_chunk_chars: chunks.max,
+      text_preroll_enabled: prerollEnabled.checked,
+      text_preroll_sentence: prerollSentence.value,
+      append_chunk_end_padding: paddingEnabled.checked,
+      chunk_end_padding_text: paddingText.value,
+      text_preroll_min_pause_ms: pause,
+      text_preroll_lead_in_ms: lead,
+      silence_threshold_db: threshold,
+    };
+  }
+
+  function updateServerButton() {
+    if (!serverSettingsLoaded) return void (serverSaveButton.disabled = true);
+    try {
+      collectServerSettings();
+      serverSaveButton.disabled = false;
+    } catch { serverSaveButton.disabled = true; }
+  }
+
+  async function loadServerSettings() {
+    serverSettingsLoaded = false;
+    serverSaveButton.disabled = true;
+    serverMessage('Server-Einstellungen werden geladen …');
+    try {
+      const result = await request('/api/tts/server-settings');
+      applyServerSettings(result.settings);
+      serverMessage(result.busy ? 'Ein TTS-Auftrag läuft. Gespeicherte Änderungen gelten für den nächsten Auftrag.' : '');
+    } catch (error) { serverMessage(error.message, true); }
+  }
+
+  async function saveServerSettings() {
+    let settings;
+    try { settings = collectServerSettings(); }
+    catch (error) { return serverMessage(error.message, true); }
+    serverSaveButton.disabled = true;
+    serverMessage('Server-Einstellungen werden gespeichert …');
+    try {
+      const result = await request('/api/tts/server-settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings),
+      });
+      applyServerSettings(result.settings);
+      serverMessage('Server-Einstellungen gespeichert. Sie gelten für neu gestartete TTS-Aufträge.');
+    } catch (error) {
+      serverMessage(error.message, true);
+      updateServerButton();
+    }
   }
 
   function revokeRecording() {
@@ -359,7 +526,7 @@
   window.openTtsSettingsDialog = async function openTtsSettingsDialog() {
     if (!dialog.open) dialog.showModal();
     dialog.focus({ preventScroll: true });
-    await loadSettings();
+    await Promise.all([loadSettings(), loadServerSettings()]);
     const pending = sessionStorage.getItem('wa-tts-voice-job');
     if (pending) {
       cancelJobButton.hidden = false;
@@ -392,6 +559,17 @@
     try { await request(`/api/tts/voices/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
     catch (error) { message(error.message, true); }
   });
+  for (const key of ['min', 'target', 'max']) {
+    chunkSliders[key].addEventListener('input', () => changeChunk(key, chunkSliders[key].value));
+    chunkInputs[key].addEventListener('input', () => previewChunkInput(key));
+    chunkInputs[key].addEventListener('change', () => changeChunk(key, chunkInputs[key].value));
+  }
+  prerollEnabled.addEventListener('change', () => { toggleServerFields(); updateServerButton(); });
+  paddingEnabled.addEventListener('change', () => { toggleServerFields(); updateServerButton(); });
+  for (const input of [prerollSentence, paddingText, prerollPause, leadIn, silenceThreshold]) {
+    input.addEventListener('input', updateServerButton);
+  }
+  serverSaveButton.addEventListener('click', saveServerSettings);
   closeButton.addEventListener('click', close);
   dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
   dialog.addEventListener('click', event => {
@@ -401,4 +579,5 @@
   });
   dialog.addEventListener('close', () => document.getElementById('reindex-btn')?.focus());
   updateButtons();
+  updateServerButton();
 })();

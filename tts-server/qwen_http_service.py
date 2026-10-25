@@ -41,6 +41,92 @@ VOICE_MIME_EXTENSIONS = {
     "audio/x-wav": ".wav", "audio/mpeg": ".mp3", "audio/mp4": ".m4a",
     "audio/aac": ".aac", "application/octet-stream": ".bin",
 }
+SERVICE_CONFIG_NAME = "qwen_http_service_config.json"
+SERVER_SETTING_DEFAULTS = {
+    "target_chunk_chars": 340,
+    "min_chunk_chars": 220,
+    "max_chunk_chars": 520,
+    "text_preroll_enabled": True,
+    "text_preroll_sentence": "Der Tag kommt zu einem Ende.\n\n.",
+    "append_chunk_end_padding": True,
+    "chunk_end_padding_text": "\n\n.",
+    "text_preroll_min_pause_ms": 120,
+    "text_preroll_lead_in_ms": 30,
+    "silence_threshold_db": -50.0,
+}
+
+
+def _read_config(path):
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Die Qwen-Konfiguration muss ein JSON-Objekt sein")
+    return data
+
+
+def _atomic_json(path, data):
+    path = Path(path).resolve()
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}-", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as output:
+            json.dump(data, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            Path(temporary).unlink()
+        except FileNotFoundError:
+            pass
+
+
+def validate_server_settings(data):
+    if not isinstance(data, dict) or set(data) != set(SERVER_SETTING_DEFAULTS):
+        raise ValueError("Unvollständige Server-Einstellungen")
+    values = dict(data)
+    for key in ("min_chunk_chars", "target_chunk_chars", "max_chunk_chars"):
+        if type(values[key]) is not int or not 50 <= values[key] <= 2000:
+            raise ValueError("Chunk-Längen müssen ganze Zahlen zwischen 50 und 2000 sein")
+    if not values["min_chunk_chars"] <= values["target_chunk_chars"] <= values["max_chunk_chars"]:
+        raise ValueError("Chunk-Längen müssen Min ≤ Ziel ≤ Max erfüllen")
+    for key in ("text_preroll_enabled", "append_chunk_end_padding"):
+        if type(values[key]) is not bool:
+            raise ValueError("Schalter müssen boolesche Werte sein")
+    for key in ("text_preroll_sentence", "chunk_end_padding_text"):
+        if not isinstance(values[key], str) or len(values[key]) > 2000:
+            raise ValueError("Preroll- und Padding-Text dürfen höchstens 2000 Zeichen lang sein")
+    if values["text_preroll_enabled"] and not values["text_preroll_sentence"].strip():
+        raise ValueError("Für den Text-Preroll wird ein Satz benötigt")
+    if values["append_chunk_end_padding"] and not values["chunk_end_padding_text"]:
+        raise ValueError("Für das Chunk-Ende wird ein Padding-Text benötigt")
+    for key in ("text_preroll_min_pause_ms", "text_preroll_lead_in_ms"):
+        if type(values[key]) is not int or not 0 <= values[key] <= 5000:
+            raise ValueError("Pausenwerte müssen ganze Millisekunden zwischen 0 und 5000 sein")
+    threshold = values["silence_threshold_db"]
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not -100 <= threshold <= 0:
+        raise ValueError("Der Stille-Schwellenwert muss zwischen -100 und 0 dB liegen")
+    values["silence_threshold_db"] = float(threshold)
+    return values
+
+
+class ServerSettings:
+    def __init__(self, config):
+        self.config = Path(config).resolve()
+        self.lock = threading.RLock()
+
+    def get(self):
+        with self.lock:
+            config = _read_config(self.config)
+            values = {key: config.get(key, default) for key, default in SERVER_SETTING_DEFAULTS.items()}
+            return validate_server_settings(values)
+
+    def update(self, data):
+        values = validate_server_settings(data)
+        with self.lock:
+            config = _read_config(self.config)
+            config.update(values)
+            _atomic_json(self.config, config)
+        return values
 
 
 class GpuCoordinator:
@@ -560,7 +646,7 @@ class Jobs:
                 self.end_session(session_id)
 
 
-def handler(jobs, token, voices=None):
+def handler(jobs, token, voices=None, settings=None):
     class Handler(BaseHTTPRequestHandler):
         def setup(self):
             super().setup()
@@ -603,8 +689,21 @@ def handler(jobs, token, voices=None):
                                        "chunk_progress": True, "max_markdown_bytes": MAX_TEXT,
                                        "voice_catalog": voices is not None,
                                        "voice_creation": voices is not None,
+                                       "server_settings": settings is not None,
                                        "voice_model": voices.catalog.model if voices else None,
                                        "max_voice_upload_bytes": MAX_VOICE_BYTES if voices else None})
+            if settings and request_path == "/v1/settings":
+                try:
+                    if self.command == "GET":
+                        return self.json(200, {"settings": settings.get(), "busy": jobs.coordinator.busy})
+                    if self.command == "PUT":
+                        data = self.read_json(16384)
+                        return self.json(200, {"settings": settings.update(data), "busy": jobs.coordinator.busy})
+                    return self.json(405, {"error": "Methode nicht erlaubt"})
+                except OverflowError:
+                    return self.json(413, {"error": "Request ist zu groß."})
+                except (ValueError, UnicodeError) as error:
+                    return self.json(400, {"error": str(error)})
             if voices and self.command == "GET" and request_path == "/v1/voices":
                 return self.json(200, {"voices": voices.catalog.list(), "model": voices.catalog.model,
                                        "busy": jobs.coordinator.busy})
@@ -725,6 +824,8 @@ def main():
     parser.add_argument("--ffmpeg", default="ffmpeg")
     args = parser.parse_args()
     token = os.environ.get("QWEN_TTS_TOKEN", "").strip()
+    if args.config.name != SERVICE_CONFIG_NAME:
+        parser.error(f"--config muss auf die vorhandene {SERVICE_CONFIG_NAME} zeigen; config.json wird nicht verwendet.")
     if bool(args.voices_dir) != bool(args.extract_script):
         parser.error("--voices-dir und --extract-script müssen gemeinsam angegeben werden.")
     if (len(token) < 32 or not args.script.is_file() or not args.config.is_file()
@@ -740,8 +841,9 @@ def main():
             catalog, args.extract_script, coordinator, ffmpeg=args.ffmpeg,
             device=args.voice_device,
         )
+    settings = ServerSettings(args.config)
     jobs = Jobs(args.script, args.config, coordinator=coordinator, catalog=catalog)
-    server = ThreadingHTTPServer((args.host, args.port), handler(jobs, token, voice_jobs))
+    server = ThreadingHTTPServer((args.host, args.port), handler(jobs, token, voice_jobs, settings))
     print(json.dumps({"protocol": PROTOCOL, "port": server.server_port}), flush=True)
     stopped = threading.Event()
 
