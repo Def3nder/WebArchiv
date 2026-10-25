@@ -1646,7 +1646,11 @@ function renderDetail(article) {
       document.addEventListener('click', onOutside, true);
       document.addEventListener('keydown', onEsc, true);
       await buildMenu();
-      if (e.detail === 0 && !$copyMenu.hidden) $copyMenu.querySelector('button')?.focus();
+      requestAnimationFrame(() => {
+        if ($copyMenu.hidden) return;
+        keepFilterAriaMenuVisible($copyMenu);
+        if (e.detail === 0) $copyMenu.querySelector('button')?.focus();
+      });
     });
   }
 
@@ -2737,20 +2741,31 @@ async function runTts() {
     if (currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
     const provider = await chooseTtsProvider(article, info.providers);
     if (!provider || currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
-    openTtsModal();
-    document.getElementById('tts-article').textContent = article.title;
-    $ttsStatus.textContent = 'Audio-Auftrag wird gestartet …';
+    const startRequest = async replaceExisting => {
+      const response = await apiFetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: article.id, provider: provider.provider, replaceExisting }),
+      });
+      return { response, data: await response.json() };
+    };
     startUncertain = true;
-    const response = await apiFetch('/api/tts', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ articleId: article.id, provider: provider.provider }),
-    });
-    const data = await response.json();
+    let { response, data } = await startRequest(false);
+    if (response.status === 409 && data.code === 'audio_exists') {
+      startUncertain = false;
+      const replace = window.confirm('Für diesen Artikel ist bereits eine Audiodatei vorhanden. Soll sie durch eine neu erzeugte Version ersetzt werden? Die vorhandene Datei wird nach erfolgreicher Erzeugung in den Papierkorb verschoben.');
+      if (!replace) return;
+      if (currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
+      startUncertain = true;
+      ({ response, data } = await startRequest(true));
+    }
     if (!response.ok) {
       startUncertain = false;
       throw new Error(data.error || 'Audio-Auftrag konnte nicht gestartet werden.');
     }
     if (currentUser?.role !== 'admin') return;
+    openTtsModal();
+    document.getElementById('tts-article').textContent = article.title;
+    $ttsStatus.textContent = 'Audio-Auftrag wurde gestartet.';
     rememberTtsJob(data.jobId);
     ttsActive = true;
     if (!$ttsOverlay.hidden) watchTts(data.jobId);

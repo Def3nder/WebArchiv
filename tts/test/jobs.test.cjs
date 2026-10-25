@@ -34,7 +34,8 @@ test('Audio-Spiegelstruktur, MP3-Link und Schutz vorhandener Dateien ohne API-Au
     assert.equal(jobs.status(id, {}).status, 'succeeded');
     assert.equal(jobs.status(id, {}).audioUrl, url);
     await assert.rejects(fs.stat(filePath.replace(/\.md$/, '.mp3')), { code: 'ENOENT' });
-    await assert.rejects(jobs.launch(article.id, {}), /existiert bereits/);
+    await assert.rejects(jobs.launch(article.id, {}), error =>
+      error.status === 409 && error.apiCode === 'audio_exists' && /existiert bereits/.test(error.message));
     assert.equal(starts, 1);
     await fs.unlink(expected);
     await fs.writeFile(filePath.replace(/\.md$/, '.mp3'), 'alte MP3');
@@ -42,6 +43,95 @@ test('Audio-Spiegelstruktur, MP3-Link und Schutz vorhandener Dateien ohne API-Au
     assert.equal(starts, 1);
   } finally {
     // Ausschließlich das von diesem Test unter tts/ angelegte Verzeichnis löschen.
+    assert.ok(dir.startsWith(path.join(__dirname, '.test-audio-')));
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('Bestätigtes Ersetzen erzeugt zuerst neu und verschiebt alte Audio-Dateien in den Papierkorb', async () => {
+  const dir = await fs.mkdtemp(path.join(__dirname, '.test-audio-'));
+  try {
+    const root = path.join(dir, 'www'), audioRoot = path.join(dir, 'audio');
+    const relative = path.join('Autor', '2026', 'Text.md');
+    const filePath = path.join(root, relative);
+    const legacy = filePath.replace(/\.md$/, '.mp3');
+    const output = path.join(audioRoot, relative.replace(/\.md$/, '.mp3'));
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.mkdir(path.dirname(output), { recursive: true });
+    await fs.writeFile(filePath, 'Text');
+    await fs.writeFile(legacy, 'alt neben Artikel');
+    await fs.writeFile(output, 'alt im Audio-Ordner');
+    const article = { id: 'replace', author: 'Autor', title: 'Text', filePath, audioUrl: '/alt.mp3' };
+    let replacementPath;
+    const jobs = createTtsJobs({ root, audioRoot, getArticle: () => article,
+      canAccessAuthor: () => true, busy: () => false,
+      reindex: async () => { article.audioUrl = '/audio-files/Autor/2026/Text.mp3'; },
+      mediaUrl: () => '/audio-files/Autor/2026/Text.mp3',
+      start: options => {
+        replacementPath = options.outputPath;
+        assert.notEqual(replacementPath, output);
+        return { cancel() {}, completion: (async () => {
+          assert.equal(await fs.readFile(legacy, 'utf8'), 'alt neben Artikel');
+          assert.equal(await fs.readFile(output, 'utf8'), 'alt im Audio-Ordner');
+          await fs.writeFile(replacementPath, 'neue MP3', { flag: 'wx' });
+          return { outputPath: replacementPath, chunks: 1 };
+        })() };
+      },
+    });
+    await assert.rejects(jobs.launch(article.id, {}, 'qwen'), { apiCode: 'audio_exists' });
+    const id = await jobs.launch(article.id, {}, 'qwen', true);
+    while (!jobs.status(id, {}).done) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(jobs.status(id, {}).status, 'succeeded');
+    assert.equal(jobs.status(id, {}).replacedExisting, true);
+    assert.equal(await fs.readFile(output, 'utf8'), 'neue MP3');
+    await assert.rejects(fs.stat(legacy), { code: 'ENOENT' });
+    await assert.rejects(fs.stat(replacementPath), { code: 'ENOENT' });
+
+    const trashFiles = [];
+    async function walk(folder) {
+      for (const entry of await fs.readdir(folder, { withFileTypes: true })) {
+        const filename = path.join(folder, entry.name);
+        if (entry.isDirectory()) await walk(filename);
+        else trashFiles.push(filename);
+      }
+    }
+    await walk(path.join(audioRoot, 'Trash'));
+    assert.equal(trashFiles.length, 2);
+    assert.deepEqual((await Promise.all(trashFiles.map(file => fs.readFile(file, 'utf8')))).sort(),
+      ['alt im Audio-Ordner', 'alt neben Artikel'].sort());
+  } finally {
+    assert.ok(dir.startsWith(path.join(__dirname, '.test-audio-')));
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('Fehlgeschlagener Austausch behält das vorhandene Audio und entfernt die temporäre Datei', async () => {
+  const dir = await fs.mkdtemp(path.join(__dirname, '.test-audio-'));
+  try {
+    const root = path.join(dir, 'www'), audioRoot = path.join(dir, 'audio');
+    const filePath = path.join(root, 'Autor', 'Text.md');
+    const output = path.join(audioRoot, 'Autor', 'Text.mp3');
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.mkdir(path.dirname(output), { recursive: true });
+    await fs.writeFile(filePath, 'Text');
+    await fs.writeFile(output, 'unverändertes Original');
+    const article = { id: 'failed-replace', author: 'Autor', title: 'Text', filePath, audioUrl: '/alt.mp3' };
+    let temporary;
+    const jobs = createTtsJobs({ root, audioRoot, getArticle: () => article,
+      canAccessAuthor: () => true, busy: () => false, reindex: async () => {}, mediaUrl: () => '/neu.mp3',
+      start: options => {
+        temporary = options.outputPath;
+        return { cancel() {}, completion: fs.writeFile(temporary, 'unvollständig', { flag: 'wx' })
+          .then(() => { throw new Error('Synthese fehlgeschlagen'); }) };
+      },
+    });
+    const id = await jobs.launch(article.id, {}, 'qwen', true);
+    while (!jobs.status(id, {}).done) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(jobs.status(id, {}).status, 'failed');
+    assert.equal(await fs.readFile(output, 'utf8'), 'unverändertes Original');
+    await assert.rejects(fs.stat(temporary), { code: 'ENOENT' });
+    await assert.rejects(fs.stat(path.join(audioRoot, 'Trash')), { code: 'ENOENT' });
+  } finally {
     assert.ok(dir.startsWith(path.join(__dirname, '.test-audio-')));
     await fs.rm(dir, { recursive: true, force: true });
   }
@@ -118,8 +208,11 @@ test('Globale Qwen-Stimme wird beim Auftragsstart als Snapshot an den Worker üb
 test('Alle TTS-Routen sind adminpflichtig; Providerwechsel verhindert Start', async () => {
   const express = require('express');
   const app = express(); app.use(express.json());
-  let starts = 0, availableProvider = 'qwen', launchedProvider;
-  const jobs = { launch: async (_id, _user, provider) => { starts++; launchedProvider = provider; return 'id'; }, latest: () => null,
+  let starts = 0, availableProvider = 'qwen', launchedProvider, launchedReplace, existingConflict = false;
+  const jobs = { launch: async (_id, _user, provider, replaceExisting) => {
+    if (existingConflict) throw Object.assign(new Error('Audio vorhanden'), { status: 409, apiCode: 'audio_exists' });
+    starts++; launchedProvider = provider; launchedReplace = replaceExisting; return 'id';
+  }, latest: () => null,
     status: () => ({}), cancel() {} };
   installTtsRoutes(app, (req, res, next) => {
     if (req.get('x-test-admin') !== 'yes') return res.sendStatus(403);
@@ -141,10 +234,11 @@ test('Alle TTS-Routen sind adminpflichtig; Providerwechsel verhindert Start', as
     }
     assert.equal(starts, 1);
     assert.equal(launchedProvider, 'qwen');
+    assert.equal(launchedReplace, false);
     availableProvider = 'openai'; // Qwen wird nach Anzeige des Dialogs gestoppt.
-    const post = provider => fetch(base + '/api/tts', { method: 'POST',
+    const post = (provider, replaceExisting = false) => fetch(base + '/api/tts', { method: 'POST',
       headers: { 'x-test-admin': 'yes', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ articleId: 'a', provider }) });
+      body: JSON.stringify({ articleId: 'a', provider, replaceExisting }) });
     assert.equal((await post('qwen')).status, 409);
     assert.equal(starts, 1); // Keine stillschweigende kostenpflichtige Umschaltung.
     const info = await (await fetch(base + '/api/tts/provider', { headers: { 'x-test-admin': 'yes' } })).json();
@@ -159,6 +253,12 @@ test('Alle TTS-Routen sind adminpflichtig; Providerwechsel verhindert Start', as
     availableProvider = 'qwen'; // OpenAI-Schlüssel wurde entfernt.
     assert.equal((await post('openai')).status, 409);
     assert.equal(starts, 4);
+    assert.equal((await post('qwen', true)).status, 202);
+    assert.equal(launchedReplace, true);
+    existingConflict = true;
+    const conflict = await post('qwen');
+    assert.equal(conflict.status, 409);
+    assert.deepEqual(await conflict.json(), { error: 'Audio vorhanden', code: 'audio_exists' });
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 

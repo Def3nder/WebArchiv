@@ -57,6 +57,19 @@
     return data?.voices?.find(voice => voice.id === select.value) || null;
   }
 
+  function syncVoiceMenu() {
+    if (typeof syncFilterAriaMenu !== 'function') return;
+    syncFilterAriaMenu(select);
+    const root = typeof filterAriaRoot === 'function' ? filterAriaRoot(select) : null;
+    const trigger = root?.querySelector('.filter-menu-trigger');
+    if (trigger) trigger.disabled = select.options.length === 0;
+  }
+
+  function closeVoiceMenu() {
+    if (typeof filterAriaRoot !== 'function' || typeof closeFilterAriaMenu !== 'function') return;
+    closeFilterAriaMenu(filterAriaRoot(select));
+  }
+
   function renderVoiceMeta() {
     const voice = selectedVoice();
     if (!voice) {
@@ -122,6 +135,7 @@
       select.replaceChildren();
       message(error.message, true);
     }
+    syncVoiceMenu();
     updateButtons();
   }
 
@@ -334,6 +348,7 @@
 
   function close() {
     ++pollGeneration;
+    closeVoiceMenu();
     stopRecording(true);
     revokeRecording();
     if (previewJobId) request(`/api/tts/voices-preview/${encodeURIComponent(previewJobId)}`, { method: 'DELETE' }).catch(() => {});

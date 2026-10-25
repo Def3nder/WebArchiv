@@ -178,6 +178,33 @@ test('Bestätigung: Ablehnen startet nichts; Zustimmung übermittelt Provider', 
   }
 });
 
+test('Vorhandenes Artikel-Audio wird nur nach ausdrücklicher Bestätigung ersetzt', async () => {
+  const source = await fs.readFile(path.join(root, '../public/app.js'), 'utf8');
+  const start = source.indexOf('async function runTts() {');
+  const end = source.indexOf('\n}', start) + 2;
+  for (const accepted of [false, true]) {
+    const calls = [];
+    const context = vm.createContext({ selectedTtsArticle: { id: 'a', title: 'Titel' },
+      $overlay: { hidden: false }, currentUser: { role: 'admin' }, ttsStarting: false, ttsActive: false,
+      updateTtsActions() {}, openTtsModal() {}, $ttsStatus: {}, $ttsActivity: {}, $ttsOverlay: { hidden: true },
+      document: { getElementById: () => ({}) }, chooseTtsProvider: async (_article, providers) => providers[0],
+      rememberTtsJob() {}, window: { confirm: () => accepted },
+      apiFetch: async (url, options) => {
+        calls.push([url, options]);
+        if (url.endsWith('/provider')) return { ok: true, json: async () => ({ providers: [{ provider: 'qwen', available: true }] }) };
+        const request = JSON.parse(options.body);
+        return request.replaceExisting
+          ? { ok: true, status: 202, json: async () => ({ jobId: 'job' }) }
+          : { ok: false, status: 409, json: async () => ({ code: 'audio_exists', error: 'vorhanden' }) };
+      } });
+    await vm.runInContext(source.slice(start, end) + '\nrunTts()', context);
+    assert.equal(calls.length, accepted ? 3 : 2);
+    assert.equal(JSON.parse(calls[1][1].body).replaceExisting, false);
+    if (accepted) assert.equal(JSON.parse(calls[2][1].body).replaceExisting, true);
+    assert.equal(context.ttsStarting, false);
+  }
+});
+
 test('Anbieterdialog: explizite Auswahl, Kostenhinweis, gesperrte Anbieter und Abbrechen', async () => {
   const source = await fs.readFile(path.join(root, '../public/app.js'), 'utf8');
   const start = source.indexOf('function chooseTtsProvider(');

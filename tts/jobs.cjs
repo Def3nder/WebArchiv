@@ -9,7 +9,9 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
   const jobs = new Map();
   let active = null;
   let stopping = false;
-  const fail = (message, status = 409) => Object.assign(new Error(message), { status });
+  const fail = (message, status = 409, apiCode = null) => Object.assign(new Error(message), {
+    status, ...(apiCode ? { apiCode } : {}),
+  });
   function prune() {
     const finished = [...jobs.values()].filter(j => j.state.done);
     for (const j of finished) {
@@ -31,7 +33,7 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
     if (Number.isInteger(event.current)) state.current = event.current;
     if (Number.isInteger(event.total)) state.total = event.total;
   }
-  async function launch(articleId, user, expectedProvider) {
+  async function launch(articleId, user, expectedProvider, replaceExisting = false) {
     if (typeof articleId !== 'string' || !articleId) throw fail('Artikel-ID fehlt.', 400);
     const article = getArticle(articleId);
     if (!article) throw fail('Artikel nicht gefunden.', 404);
@@ -59,9 +61,8 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
       }
       const basename = path.basename(source, path.extname(source)) + '.mp3';
       const names = await fs.readdir(parent);
-      if (names.some(name => name.toLowerCase() === basename.toLowerCase())) {
-        throw fail('Eine MP3 für diesen Artikel existiert bereits. Sie wird nicht überschrieben.');
-      }
+      const legacyName = names.find(name => name.toLowerCase() === basename.toLowerCase());
+      const legacyOutput = legacyName ? path.join(parent, legacyName) : null;
       const relative = path.relative(path.resolve(root), source);
       if (relative.startsWith('..' + path.sep) || path.isAbsolute(relative) || relative === '..') {
         throw fail('Ungültiger Artikelpfad.', 403);
@@ -81,21 +82,64 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
         targetDir = next;
       }
       const output = path.join(targetDir, basename);
-      if ((await fs.readdir(targetDir)).some(name => name.toLowerCase() === basename.toLowerCase())) {
-        throw fail('Eine MP3 für diesen Artikel existiert bereits. Sie wird nicht überschrieben.');
+      const targetName = (await fs.readdir(targetDir)).find(name => name.toLowerCase() === basename.toLowerCase());
+      const existingOutput = targetName ? path.join(targetDir, targetName) : null;
+      const existingFiles = [legacyOutput, existingOutput].filter(Boolean);
+      if (existingFiles.length && replaceExisting !== true) {
+        throw fail('Für diesen Artikel existiert bereits eine Audiodatei.', 409, 'audio_exists');
       }
       if (stopping) throw fail('Server wird beendet.');
       const qwenVoiceId = expectedProvider === 'qwen' ? await selectedVoice() : null;
+      const replacementOutput = existingFiles.length
+        ? path.join(targetDir, `.${path.basename(basename, '.mp3')}.${randomUUID()}.replacement.mp3`)
+        : output;
       jobs.set(state.id, job);
       state.voiceId = qwenVoiceId;
+      state.replacedExisting = false;
       state.status = 'running';
-      job.worker = start({ inputPath: input, outputPath: output, expectedProvider, qwenVoiceId,
+      job.worker = start({ inputPath: input, outputPath: replacementOutput, expectedProvider, qwenVoiceId,
         onEvent: event => capture(state, event) });
       job.completion = job.worker.completion.then(async result => {
         state.exitCode = 0;
-        const stat = await fs.lstat(output);
-        if (path.resolve(result.outputPath) !== output || !stat.isFile() || stat.size === 0) {
+        const stat = await fs.lstat(replacementOutput);
+        if (path.resolve(result.outputPath) !== replacementOutput || !stat.isFile() || stat.size === 0) {
           throw fail('Der Worker hat keine gültige MP3-Datei erzeugt.', 500);
+        }
+        if (existingFiles.length) {
+          const audioArchive = await fs.realpath(audioRoot);
+          const trashRoot = path.join(audioArchive, 'Trash');
+          try { await fs.mkdir(trashRoot); }
+          catch (error) { if (error.code !== 'EEXIST') throw error; }
+          const trashStat = await fs.lstat(trashRoot);
+          if (!trashStat.isDirectory() || trashStat.isSymbolicLink() || await fs.realpath(trashRoot) !== trashRoot) {
+            throw fail('Ungültiger Audio-Papierkorb.', 403);
+          }
+          const batch = path.join(trashRoot,
+            `${new Date().toISOString().replace(/[:.]/g, '-')}_${randomUUID()}`);
+          await fs.mkdir(batch);
+          const moved = [];
+          try {
+            for (const sourceFile of existingFiles) {
+              const inAudio = sourceFile === audioArchive || sourceFile.startsWith(audioArchive + path.sep);
+              const origin = inAudio ? 'audio' : 'www';
+              const base = inAudio ? audioArchive : archive;
+              const relativeSource = path.relative(base, sourceFile);
+              if (relativeSource.startsWith('..' + path.sep) || path.isAbsolute(relativeSource) || relativeSource === '..') {
+                throw fail('Ungültiger Pfad der vorhandenen Audiodatei.', 403);
+              }
+              const trashFile = path.join(batch, origin, relativeSource);
+              await fs.mkdir(path.dirname(trashFile), { recursive: true });
+              await fs.rename(sourceFile, trashFile);
+              moved.push({ sourceFile, trashFile });
+            }
+            await fs.rename(replacementOutput, output);
+            state.replacedExisting = true;
+          } catch (error) {
+            for (const item of moved.reverse()) {
+              try { await fs.rename(item.trashFile, item.sourceFile); } catch {}
+            }
+            throw error;
+          }
         }
         state.audioUrl = mediaUrl(path.join(audioRoot, path.dirname(relative), basename));
         state.status = 'indexing';
@@ -106,7 +150,12 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
           state.indexError = 'MP3 wurde erzeugt, aber der Index konnte nicht aktualisiert werden. Bitte „Archiv neu einlesen“ ausführen. ' + error.message;
         }
         state.status = 'succeeded';
-      }).catch(error => {
+      }).catch(async error => {
+        if (replacementOutput !== output) {
+          try { await fs.unlink(replacementOutput); } catch (cleanupError) {
+            if (cleanupError.code !== 'ENOENT') capture(state, { type: 'warning', message: `Temporäre MP3 konnte nicht entfernt werden: ${cleanupError.message}` });
+          }
+        }
         state.status = error.cancelled ? 'cancelled' : 'failed';
         state.exitCode = error.exitCode ?? state.exitCode;
         state.error = error.cancelled ? 'Audio-Auftrag abgebrochen.' : error.message;
@@ -155,13 +204,16 @@ function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./pro
   const route = handler => async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try { await handler(req, res); }
-    catch (error) { res.status(error.status || 500).json({ error: error.message }); }
+    catch (error) {
+      res.status(error.status || 500).json({ error: error.message, ...(error.apiCode ? { code: error.apiCode } : {}) });
+    }
   };
   app.post('/api/tts', requireAdmin, route(async (req, res) => {
     const info = await providerInfo();
     const selected = info.providers.find(p => p.provider === req.body?.provider && p.available);
     if (!selected) return res.status(409).json({ error: 'Der gewählte TTS-Anbieter ist nicht verfügbar. Bitte „Audio erzeugen“ erneut aufrufen und einen verfügbaren Anbieter auswählen. Es wurde kein Auftrag gestartet.' });
-    const jobId = await jobs.launch(req.body?.articleId, req.session.user, selected.provider);
+    const jobId = await jobs.launch(req.body?.articleId, req.session.user, selected.provider,
+      req.body?.replaceExisting === true);
     res.status(202).json({ jobId });
   }));
   app.get('/api/tts/provider', requireAdmin, route(async (_req, res) => {

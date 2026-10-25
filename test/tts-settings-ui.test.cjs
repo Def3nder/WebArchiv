@@ -17,13 +17,27 @@ test('Admin-Menü und nativer Dialog enthalten die vollständige Qwen-Stimmenver
   }
   assert.match(html, /-1\.7B\.pt/);
   assert.doesNotMatch(html, /Einwilligung|Zustimmung|consent/i);
-  assert.match(html, /tts-settings\.js\?v=2[\s\S]*app\.js\?v=116/);
-  assert.match(html, /styles\.css\?v=146/);
+  assert.match(html, /tts-settings\.js\?v=3[\s\S]*app\.js\?v=118/);
+  assert.match(html, /styles\.css\?v=149/);
   assert.match(css, /#tts-settings-meta\s*{[^}]*margin-top:\s*6px/);
   assert.match(html, /id="tts-settings-name"[^>]*aria-describedby="tts-settings-name-hint"/);
   assert.match(css, /#tts-settings-name-hint\s*{[^}]*margin-top:\s*6px/);
   assert.match(app, /action === 'tts-settings'[\s\S]*openTtsSettingsDialog/);
   assert.match(app, /\['#tts-settings-dialog', '#tts-settings-close'\]/);
+});
+
+test('Die Stimmenauswahl verwendet das gemeinsame ARIA-Menü mit nativem Touch-Fallback', () => {
+  const html = read('public/index.html');
+  const source = read('public/tts-settings.js');
+  const css = read('public/styles.css');
+  assert.match(html, /id="tts-settings-voice" class="settings-select filter-select filter-menu-native"/);
+  assert.match(html, /class="header-menu filter-header-menu tts-settings-voice-menu" data-filter-aria-menu="tts-settings-voice"/);
+  assert.match(html, /aria-controls="tts-settings-voice-menu" aria-labelledby="tts-settings-voice-label tts-settings-voice-value"/);
+  assert.match(html, /id="tts-settings-voice-menu" class="header-menu-dropdown" role="menu"/);
+  assert.match(source, /function syncVoiceMenu\(\)[\s\S]*syncFilterAriaMenu\(select\)/);
+  assert.match(source, /syncVoiceMenu\(\);[\s\S]*updateButtons\(\)/);
+  assert.match(source, /function closeVoiceMenu\(\)[\s\S]*closeFilterAriaMenu\(filterAriaRoot\(select\)\)/);
+  assert.match(css, /\.tts-settings-voice-menu \.filter-menu-trigger \{[^}]*width:\s*100%/);
 });
 
 test('Browseraufnahme, Datei-Upload, globale Auswahl, Vorschau und Trash benutzen nur Admin-APIs', () => {

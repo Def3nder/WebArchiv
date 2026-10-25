@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=146" />
+  <link rel="stylesheet" href="styles.css?v=149" />
 </head>
 <body>
 
@@ -492,8 +492,14 @@
     <p id="tts-settings-status" class="tts-settings-status" role="status" aria-live="polite"></p>
     <section class="tts-settings-section" aria-labelledby="tts-settings-active-title">
       <h3 id="tts-settings-active-title">Stimme für alle TTS-Aufträge</h3>
-      <label class="login-label" for="tts-settings-voice">Verfügbare Stimme</label>
-      <select id="tts-settings-voice" class="settings-select"></select>
+      <label class="login-label" id="tts-settings-voice-label" for="tts-settings-voice">Verfügbare Stimme</label>
+      <select id="tts-settings-voice" class="settings-select filter-select filter-menu-native"></select>
+      <div class="header-menu filter-header-menu tts-settings-voice-menu" data-filter-aria-menu="tts-settings-voice">
+        <button type="button" class="settings-select filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="tts-settings-voice-menu" aria-labelledby="tts-settings-voice-label tts-settings-voice-value">
+          <span id="tts-settings-voice-value" data-filter-menu-value>Keine Stimme verfügbar</span>
+        </button>
+        <div id="tts-settings-voice-menu" class="header-menu-dropdown" role="menu" aria-label="Verfügbare Stimme auswählen" hidden></div>
+      </div>
       <p id="tts-settings-meta" class="account-hint"></p>
       <div class="tts-buttons tts-settings-actions">
         <button type="button" id="tts-settings-save" class="detail-cat-pill account-primary">Als aktive Stimme speichern</button>
@@ -695,12 +701,12 @@
   </dialog>
   <script src="user-admin.js?v=11"></script>
   <script src="settings.js?v=4"></script>
-  <script src="tts-settings.js?v=2"></script>
+  <script src="tts-settings.js?v=3"></script>
   <script src="session-state.js?v=9"></script>
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=116"></script>
+  <script src="app.js?v=118"></script>
   <script src="vendor/duplicate-diff.bundle.js?v=7"></script>
   <script src="duplicates.js?v=19"></script>
   <script src="audiobooks.js?v=24"></script>

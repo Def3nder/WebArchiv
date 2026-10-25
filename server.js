@@ -1582,6 +1582,8 @@ app.get('/audio-files/*', attachUser, (req, res) => {
   const relPath = req.params[0];
   // Das Hörbuch-Verzeichnis (z. B. „Hoerbuecher“) gehört zum Autor „Hörbücher“.
   const topDir  = relPath.split('/')[0];
+  // Ersetzte TTS-Dateien bleiben wiederherstellbar, dürfen aber nicht ausgeliefert werden.
+  if (topDir.toLowerCase() === 'trash') return res.status(404).end();
   const author  = topDir === audiobooks.directory ? AUDIOBOOK_AUTHOR : topDir;
   if (!canAccessAuthor(req.user, author)) {
     return res.status(403).json({ error: 'Access denied' });

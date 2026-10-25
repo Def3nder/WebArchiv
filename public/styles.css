@@ -1468,7 +1468,9 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
   top: calc(100% + 6px);
   right: 0;
   z-index: 50;
-  min-width: 200px;
+  min-width: min(200px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
   padding: 4px;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -1476,6 +1478,7 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
   box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
 }
 .copy-prompt-menu[hidden] { display: none; }
+.detail-copy-wrap > .copy-prompt-menu { width: max-content; }
 .copy-prompt-item {
   display: block;
   width: 100%;
@@ -1488,7 +1491,8 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
   font-family: inherit;
   font-size: 0.85rem;
   cursor: pointer;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   transition: color var(--transition), background var(--transition);
 }
 .copy-prompt-item:hover {
@@ -2386,7 +2390,7 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
   min-height: 42px;
   padding: 8px 36px 8px 12px;
   color: var(--text);
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   border: 1px solid var(--border-hi);
   border-radius: var(--radius);
   font-size: .88rem;
@@ -2402,6 +2406,12 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
   background: var(--surface, transparent); margin-top: 12px;
 }
 .tts-settings-section h3 { margin: 0 0 12px; font-family: var(--font-head); font-size: 1.05rem; }
+#tts-settings-voice { max-width: none; }
+.tts-settings-voice-menu { width: 100%; }
+.tts-settings-voice-menu .filter-menu-trigger { width: 100%; max-width: none; min-height: 42px; }
+.tts-settings-voice-menu .header-menu-dropdown {
+  width: 100%; min-width: 100%; max-width: 100%; max-height: min(320px, 45vh); overflow-y: auto;
+}
 #tts-settings-meta { margin-top: 6px; }
 .tts-settings-actions { flex-wrap: wrap; justify-content: flex-start; margin-top: 10px; }
 .tts-settings-name-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
