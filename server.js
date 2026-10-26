@@ -802,6 +802,12 @@ function visibleGroupAnchor(article, user, { hideTelegram = false } = {}) {
   return anchor;
 }
 
+// Eine Infografik-Kachel öffnet ihren Anker (auch einen ausgeblendeten Telegram-Artikel);
+// dessen Lesezeichen gilt deshalb auch für die Kachel.
+function isBookmarkedTile(item, user, marks) {
+  return marks.has(item.id) || marks.has(visibleGroupAnchor(item, user)?.id);
+}
+
 // Bilder einer Gruppe: eigenes Artikelfoto (kein standard.jpg), dann die
 // Infografiken in Reihenfolge. null, wenn der Nutzer keine Grafik der Gruppe sieht.
 function groupImagesFor(anchor, user) {
@@ -2845,13 +2851,13 @@ app.get('/api/articles', attachUser, (req, res) => {
       tiles.push(tile);
     }
     const items = tiles.slice((p - 1) * lim, p * lim)
-      .map(tile => ({ ...exposeGroupForUser(tile, user), bookmarked: marks.has(tile.id) }));
+      .map(tile => ({ ...exposeGroupForUser(tile, user), bookmarked: isBookmarkedTile(tile, user, marks) }));
     return res.json({ total, page: p, limit: lim, pages: Math.ceil(tiles.length / lim), items });
   }
 
   const total = filtered.length;
   const items = filtered.slice((p - 1) * lim, p * lim)
-    .map(article => ({ ...exposeArticleForUser(article, user), bookmarked: marks.has(article.id) }));
+    .map(article => ({ ...exposeArticleForUser(article, user), bookmarked: isBookmarkedTile(article, user, marks) }));
 
   res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
 });

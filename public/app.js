@@ -1753,10 +1753,11 @@ async function toggleBookmark(article, button) {
     }
     article.bookmarked = on;
     bookmarksChanged = true;
-    const item = state.currentItems.find(a => a.id === article.id);
-    if (item) item.bookmarked = on;
+    // Eine Infografik-Kachel öffnet ihren Anker: Kachel-ID ist dann requestedId.
+    const ids = new Set([article.id, article.requestedId].filter(Boolean));
+    state.currentItems.forEach(item => { if (ids.has(item.id)) item.bookmarked = on; });
     $app.querySelectorAll('.card').forEach(card => {
-      const mark = card.dataset.id === article.id && card.querySelector('.card-bookmark');
+      const mark = ids.has(card.dataset.id) && card.querySelector('.card-bookmark');
       if (mark) mark.hidden = !on;
     });
   } catch (err) {
