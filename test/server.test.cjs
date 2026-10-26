@@ -3,11 +3,39 @@ const assert = require('node:assert/strict');
 
 const {
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
-  replaceArticleIndexEntry,
+  replaceArticleIndexEntry, upsertArticleIndexEntries, infographicYearsFromMigrations,
+  parseScraperChangedFiles,
   buildInfographicMarkdown, infographicAttachmentStem, firstAvailableInfographicOrdinal,
   canUploadInfographic, conflictingInfographicBase,
   slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
 } = require('../server.js');
+
+test('Scraper-Manifest meldet gezielt geänderte Dateien und unterscheidet alte Scraper', () => {
+  assert.deepEqual(parseScraperChangedFiles([
+    'normale Ausgabe',
+    '@@WEBARCHIV_CHANGED_FILES@@["C:\\\\Archiv\\\\a.md","C:\\\\Archiv\\\\b.md"]',
+    '',
+  ].join('\n')), ['C:\\Archiv\\a.md', 'C:\\Archiv\\b.md']);
+  assert.deepEqual(parseScraperChangedFiles('@@WEBARCHIV_CHANGED_FILES@@[]\n'), []);
+  assert.equal(parseScraperChangedFiles('Scraper ohne Manifest'), null);
+  assert.equal(parseScraperChangedFiles('@@WEBARCHIV_CHANGED_FILES@@{"falsch":true}'), null);
+});
+
+test('Scraper-Teilindex ersetzt vorhandene Artikel und fügt neue hinzu', () => {
+  const first = { id: 'Autor/2025/Alt', title: 'Alt' };
+  const current = { id: 'Autor/2026/Aktuell', title: 'Vorher' };
+  const replacement = { ...current, title: 'Nachher' };
+  const added = { id: 'Autor/2026/Neu', title: 'Neu' };
+  assert.deepEqual(upsertArticleIndexEntries([first, current], [replacement, added]), [first, replacement, added]);
+});
+
+test('Dublettenmigration ermittelt alle betroffenen Infografik-Jahre', () => {
+  assert.deepEqual(infographicYearsFromMigrations([
+    { from: 'Infografiken/2025/alt.md', to: 'Infografiken/2026/neu.md' },
+    { from: null, to: 'Infografiken\\2026\\neu.png' },
+    { from: 'Facebook/2024/artikel.md', to: 'Facebook/2024/neu.md' },
+  ]), ['2025', '2026']);
+});
 
 test('Teilindex ersetzt genau den bearbeiteten Artikel und erhält alle übrigen Rohdaten', () => {
   const first = { id: 'Autor/2025/Alt', title: 'Alt' };

@@ -112,6 +112,7 @@ let fuseIndex = null;
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
 let scrapeState = { running: false, sources: null, exitCode: null, startedAt: null, done: true, error: null };
 let infographicWrites = 0;
+const SCRAPER_CHANGED_FILES_MARKER = '@@WEBARCHIV_CHANGED_FILES@@';
 
 // Hörbücher: je ein Ordner unter audio/Hoerbuecher/ (oder audio/Hörbücher/), eigener Index neben den Artikeln.
 const audiobookConfig = loadAudiobookConfig(CONFIG_FILE);
@@ -153,7 +154,7 @@ const ttsJobs = createTtsJobs({
   getArticle: id => articles.find(a => a.id === id),
   canAccessAuthor,
   busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || markdownEditor.running,
-  reindex: buildIndex,
+  reindex: refreshMarkdownIndex,
   selectedVoice: ttsVoiceSettings.selectedVoice,
   mediaUrl: filename => audioFileUrl(path.relative(AUDIO_DIR, filename).split(path.sep).map(encodeURIComponent).join('/'), filename),
 });
@@ -855,6 +856,89 @@ function replaceArticleIndexEntry(articleList, id, replacement) {
   const next = articleList.slice();
   next[index] = replacement;
   return next;
+}
+
+function upsertArticleIndexEntries(articleList, replacements) {
+  const next = articleList.slice();
+  const positions = new Map(next.map((article, index) => [article.id, index]));
+  for (const replacement of replacements) {
+    const index = positions.get(replacement.id);
+    if (index === undefined) {
+      positions.set(replacement.id, next.length);
+      next.push(replacement);
+    } else {
+      next[index] = replacement;
+    }
+  }
+  return uniqueArticles(next);
+}
+
+// Vom Scraper gemeldete Markdown-Dateien einzeln einlesen und anschließend
+// gemeinsam veröffentlichen. Ein gültiges leeres Manifest bedeutet, dass der
+// Scraper nichts geändert hat und gar kein Neuindex nötig ist.
+async function refreshScrapedMarkdownFiles(filenames) {
+  const uniqueFiles = [...new Set((filenames || []).map(filename => path.resolve(String(filename))))];
+  if (!uniqueFiles.length) return;
+  if (!sourceArticles.length) return buildIndex();
+
+  const t0 = Date.now();
+  reindexState = { running: true, processed: 0, articles: articles.length, done: false };
+  try {
+    const replacements = [];
+    for (const filename of uniqueFiles) {
+      if (path.extname(filename).toLowerCase() !== '.md' || !isPathInside(WWW_DIR, filename)) {
+        throw new Error('Der Scraper hat einen ungültigen Artikelpfad gemeldet.');
+      }
+      const relative = path.relative(WWW_DIR, filename);
+      const segments = relative.split(path.sep);
+      const author = segments.shift();
+      if (!author || !segments.length) throw new Error('Der Scraper-Artikel hat keinen gültigen Autorpfad.');
+      const relativeDir = path.dirname(segments.join(path.sep));
+      const year = relativeDir.split(path.sep).filter(segment => /^\d{4}$/.test(segment)).at(-1) || null;
+      const scanned = [];
+      await scanDir(path.dirname(filename), author, year, scanned, { strict: true, targetFile: filename });
+      const replacement = scanned.find(article => path.resolve(article.filePath) === filename);
+      if (!replacement) throw new Error(`Scraper-Artikel „${relative}“ konnte nicht eingelesen werden.`);
+      replacements.push(replacement);
+    }
+    publishArticleIndex(upsertArticleIndexEntries(sourceArticles, replacements));
+    reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
+    console.log(`✓ ${replacements.length} Scraper-Artikel gezielt neu eingelesen (${Date.now() - t0}ms)`);
+  } catch (error) {
+    reindexState = { ...reindexState, running: false, done: true, error: error.message };
+    throw error;
+  }
+}
+
+async function republishArticleIndex() {
+  if (!sourceArticles.length) return buildIndex();
+  const t0 = Date.now();
+  publishArticleIndex(sourceArticles);
+  console.log(`✓ Artikelverknüpfungen aus dem Speicher aktualisiert (${Date.now() - t0}ms)`);
+}
+
+function infographicYearsFromMigrations(migrations) {
+  const years = new Set();
+  for (const migration of migrations || []) {
+    for (const relativePath of [migration?.from, migration?.to]) {
+      if (!relativePath) continue;
+      const parts = String(relativePath).replace(/\\/g, '/').split('/');
+      if (parts[0] === INFOGRAPHICS_AUTHOR && /^\d{4}$/.test(parts[1] || '')) years.add(parts[1]);
+    }
+  }
+  return [...years];
+}
+
+function parseScraperChangedFiles(output) {
+  const markerLine = String(output || '').split(/\r?\n/)
+    .findLast(line => line.startsWith(SCRAPER_CHANGED_FILES_MARKER));
+  if (!markerLine) return null;
+  try {
+    const parsed = JSON.parse(markerLine.slice(SCRAPER_CHANGED_FILES_MARKER.length));
+    return Array.isArray(parsed) && parsed.every(filename => typeof filename === 'string') ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 // Nach einer Editor-Änderung nur die betroffene Markdown-Datei erneut von der
@@ -2354,7 +2438,7 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
       await fs.promises.unlink(mdPath).catch(() => {});
       throw err;
     }
-    await buildIndex();
+    await refreshInfographicsForYear(year);
     res.json({ ok: true, id: [INFOGRAPHICS_AUTHOR, year, stem].join('/') });
   } catch (err) {
     if (err.code === 'EEXIST') return res.status(409).json({ error: 'Eine Datei mit diesem Namen existiert bereits. Bitte erneut speichern.' });
@@ -2414,10 +2498,22 @@ app.post('/api/scrape', requireAdminAccess, (req, res) => {
     scrapeState = { ...scrapeState, running: false, done: true, exitCode: -1, error: err.message };
   });
   child.on('close', code => {
-    console.log(`Scrape beendet (exit ${code}) — Reindex …`);
+    const changedFiles = parseScraperChangedFiles(scrapeState.output);
+    if (scrapeState.output.includes(SCRAPER_CHANGED_FILES_MARKER)) {
+      scrapeState.output = scrapeState.output.split(/\r?\n/)
+        .filter(line => !line.startsWith(SCRAPER_CHANGED_FILES_MARKER)).join('\n');
+    }
+    console.log(`Scrape beendet (exit ${code}) — ${changedFiles === null ? 'vollständiger Sicherheits-Reindex' : `${changedFiles.length} geänderte Artikel`} …`);
     scrapeState = { ...scrapeState, running: false, done: true, exitCode: code };
-    // Auch bei Teil-Fehler (exit 1) reindexen: bereits gespeicherte Artikel aufnehmen.
-    if (!reindexState.running) buildIndex().catch(console.error);
+    // Auch bei Teil-Fehler (exit 1) bereits gespeicherte Artikel aufnehmen. Bei
+    // älteren Scraper-Versionen ohne Manifest bleibt der Voll-Reindex erhalten.
+    if (!reindexState.running) {
+      const refresh = changedFiles === null ? buildIndex() : refreshScrapedMarkdownFiles(changedFiles);
+      refresh.catch(error => {
+        console.error('Gezielter Scraper-Reindex fehlgeschlagen:', error);
+        if (changedFiles !== null && !reindexState.running) buildIndex().catch(console.error);
+      });
+    }
   });
 
   res.json({ started: true, sources: scrapeState.sources });
@@ -2567,7 +2663,7 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
       await bookmarks.replaceArticleIds(prepared.map(item => ({ oldId: item.facebookId, newId: item.blogId })));
     }
     const migrations = prepared.flatMap(item => item.migrations);
-    if (migrations.length) await buildIndex();
+    if (migrations.length) await refreshInfographicsForYears(infographicYearsFromMigrations(migrations));
     else refreshDuplicateState();
     return res.json({ ok: failed.length === 0, linked: prepared.length, failed, migrations });
   } catch (error) {
@@ -2618,7 +2714,7 @@ app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
       migrateImages: !!req.body?.migrateImages || action === 'migrate',
     });
     await bookmarks.replaceArticleId(facebookId, blogId);
-    if (result.migrations.length) await buildIndex();
+    if (result.migrations.length) await refreshInfographicsForYears(infographicYearsFromMigrations(result.migrations));
     else refreshDuplicateState();
     return res.json({ ok: true, migrations: result.migrations });
   } catch (error) {
@@ -2783,7 +2879,7 @@ installMarkdownRoutes(app, requireAdminAccess, markdownEditor);
 installUserRoutes(app, {
   store: userStore, requireAuth, requireAdmin: requireAdminAccess, getAuthors: () => meta.authors,
   onUserDeleted: email => Promise.all([audiobookProgress.removeUser(email), bookmarks.removeUser(email)]),
-  onAuthorPriorityChanged: buildIndex,
+  onAuthorPriorityChanged: republishArticleIndex,
 });
 installBookmarkRoutes(app, {
   store: bookmarks, requireAuth, getArticle: id => articleById.get(id), canAccessAuthor,
@@ -2837,7 +2933,8 @@ if (require.main === module) {
 
 module.exports = {
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
-  replaceInfographicYearArticles, replaceArticleIndexEntry, prepareLinkedArticles,
+  replaceInfographicYearArticles, replaceArticleIndexEntry, upsertArticleIndexEntries,
+  infographicYearsFromMigrations, parseScraperChangedFiles, prepareLinkedArticles,
   buildInfographicMarkdown, removeCategoryLines, slugify,
   normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
   computeAppShellVersion, serviceWorkerSource,

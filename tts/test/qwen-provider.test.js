@@ -305,7 +305,9 @@ test('Audio-Log formatiert ISO-Zeit in lokale Browserzeit mit vollen Sekunden', 
 
 test('Echter HTTP-Dienst und Original-CLI-Vertrag: Markdown rein, fertige MP3 unverändert zurück', () => temporary(async dir => {
   const fixture = path.join(dir, 'fixture.mp3');
+  const serviceConfig = path.join(dir, 'qwen_http_service_config.json');
   await runTool(config.audio.ffmpeg, ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'sine=duration=0.4', '-c:a', 'libmp3lame', fixture], undefined, 10);
+  await fs.writeFile(serviceConfig, '{}');
   const script = path.join(dir, 'fake.py');
   await fs.writeFile(script, `import argparse, shutil
 from pathlib import Path
@@ -313,10 +315,10 @@ parser = argparse.ArgumentParser()
 for name in ["config", "input", "output"]: parser.add_argument("--"+name, required=True)
 args = parser.parse_args()
 Path(args.config+".input").write_bytes(Path(args.input).read_bytes())
-shutil.copyfile(args.config, args.output)
+shutil.copyfile(${JSON.stringify(fixture)}, args.output)
 `);
   const token = 'offline-test-token-with-at-least-32-characters';
-  const child = spawn('python', ['-B', path.join(serverRoot, 'qwen_http_service.py'), '--script', script, '--config', fixture, '--port', '0'], {
+  const child = spawn('python', ['-B', path.join(serverRoot, 'qwen_http_service.py'), '--script', script, '--config', serviceConfig, '--port', '0'], {
     windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, QWEN_TTS_TOKEN: token } });
   const lines = createInterface({ input: child.stdout });
   const closed = once(child, 'close');
@@ -337,7 +339,7 @@ shutil.copyfile(args.config, args.output)
       globalThis.fetch = () => { throw new Error('Kein Undici für Qwen'); };
       await convert(source, output, c, { signal: controller.signal });
     } finally { globalThis.fetch = originalFetch; }
-    assert.deepEqual(await fs.readFile(fixture + '.input'), Buffer.from(markdown));
+    assert.deepEqual(await fs.readFile(serviceConfig + '.input'), Buffer.from(markdown));
     assert.deepEqual(await fs.readFile(output), await fs.readFile(fixture));
     assert.equal(stderr, '');
   } finally {

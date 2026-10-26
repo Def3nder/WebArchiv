@@ -6,5 +6,7 @@ cd /opt/nodeapp/scraper
 /usr/bin/node scrape_all.js >> /opt/nodeapp/scraper/cron-scrape.log 2>&1
 echo "$(date '+%F %T') Scraper exit $?" >> /opt/nodeapp/scraper/cron-scrape.log
 
-# Laufenden Server neu einlesen lassen, damit neue Artikel sofort erscheinen:
-sudo /usr/bin/systemctl restart nodeapp
+# Laufenden Server neu einlesen lassen, ohne Prozess, Sessions oder laufende
+# Verbindungen zu verwerfen. Der externe Cron-Lauf benötigt weiterhin einen
+# Voll-Reindex, weil sein Änderungsmanifest nicht über die Web-UI übertragen wird.
+sudo /usr/bin/systemctl kill -s HUP nodeapp

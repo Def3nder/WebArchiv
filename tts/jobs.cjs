@@ -144,7 +144,7 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
         state.audioUrl = mediaUrl(path.join(audioRoot, path.dirname(relative), basename));
         state.status = 'indexing';
         try {
-          await reindex();
+          await reindex({ id: articleId, filename: article.filePath });
           if (!getArticle(articleId)?.audioUrl) throw new Error('MP3 noch nicht im Artikelindex gefunden.');
         } catch (error) {
           state.indexError = 'MP3 wurde erzeugt, aber der Index konnte nicht aktualisiert werden. Bitte „Archiv neu einlesen“ ausführen. ' + error.message;

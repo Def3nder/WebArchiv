@@ -15,11 +15,12 @@ test('Audio-Spiegelstruktur, MP3-Link und Schutz vorhandener Dateien ohne API-Au
     await fs.writeFile(filePath, 'Testartikel');
     const article = { id: 'test', author: 'Autor', title: 'Grüße', filePath };
     let starts = 0;
+    let reindexContext = null;
     const expected = path.join(audioRoot, relative.replace(/\.md$/, '.mp3'));
     const url = '/audio-files/Autor/2026/Unterordner/Gr%C3%BC%C3%9Fe.mp3';
     const jobs = createTtsJobs({ root, audioRoot, getArticle: () => article,
       canAccessAuthor: () => true, busy: () => false,
-      reindex: async () => { article.audioUrl = url; },
+      reindex: async context => { reindexContext = context; article.audioUrl = url; },
       mediaUrl: filename => { assert.equal(filename, expected); return url; },
       start: ({ inputPath, outputPath }) => {
         starts++;
@@ -33,6 +34,7 @@ test('Audio-Spiegelstruktur, MP3-Link und Schutz vorhandener Dateien ohne API-Au
     while (!jobs.status(id, {}).done) await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(jobs.status(id, {}).status, 'succeeded');
     assert.equal(jobs.status(id, {}).audioUrl, url);
+    assert.deepEqual(reindexContext, { id: article.id, filename: filePath });
     await assert.rejects(fs.stat(filePath.replace(/\.md$/, '.mp3')), { code: 'ENOENT' });
     await assert.rejects(jobs.launch(article.id, {}), error =>
       error.status === 409 && error.apiCode === 'audio_exists' && /existiert bereits/.test(error.message));

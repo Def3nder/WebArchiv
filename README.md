@@ -414,6 +414,9 @@ veröffentlicht und danach indexiert. Ein fehlgeschlagener Reindex löscht die
 fertige MP3 nicht und startet keine zweite Synthese. Es gibt nur einen aktiven
 WebArchiv-TTS-Auftrag; Schließen des Statusdialogs bricht ihn nicht ab. Aufträge
 liegen nur im Arbeitsspeicher und überstehen keinen Serverneustart.
+Nach erfolgreicher Synthese liest der Server nur die Markdown-Datei des
+betroffenen Artikels samt ihrer Medienzuordnung neu ein; `www/` und die
+Hörbuchbibliothek werden dafür nicht vollständig gescannt.
 
 Admins öffnen über das Kopfmenü **TTS-Einstellungen** die Stimmenverwaltung.
 Die dort ausgewählte Qwen-Stimme gilt global für alle danach gestarteten
@@ -758,6 +761,16 @@ bereits im Speicher liegenden Artikeln neu abgeleitet. Andere Artikeldateien und
 die Hörbuchbibliothek werden nicht erneut gescannt. Bei einem bearbeiteten
 Hörbuch-`abstract.md` wird entsprechend nur das betroffene Buch aktualisiert.
 
+Auch weitere Schreibwege verwenden Teilaktualisierungen: TTS liest nur den
+betroffenen Artikel neu ein; neue, verwaltete oder durch die Dublettenverwaltung
+verschobene Infografiken lesen nur ihre betroffenen Jahrgänge; eine geänderte
+Autoren-Priorität berechnet Verknüpfungen und Suche ausschließlich aus dem
+Rohindex im Speicher neu. Ein aus der Web-UI gestarteter Scraper meldet seine
+geänderten Markdown-Dateien an den Elternprozess, der sie gemeinsam gezielt
+einliest. Fehlt dieses Änderungsmanifest (etwa bei einer älteren
+Scraper-Version) oder scheitert die Teilaktualisierung, folgt zur Sicherheit ein
+vollständiger Reindex.
+
 Wichtig: `scraper/scrape_all.js` triggert selbst **keinen** Reindex. Es schreibt
 nur neue Dateien. Den Reindex stößt entweder `server.js` nach einem Web-UI-Scrape
 an, oder ein CLI/Cron-Aufruf muss danach den laufenden Server per `SIGHUP`
@@ -784,8 +797,9 @@ Details/CLI: siehe `scraper/README.md`. Zwei Auslöse-Wege:
    (`POST /api/scrape`) und *Scrape-Log anzeigen* (`GET /api/scrape/log`). Beim
    Scrapen startet der Server `scrape_all.js` als Kindprozess, sammelt dessen
    Ausgabe in `scrapeState.output` und zeigt sie **live in einem Modal** an (endet
-   mit der Zusammenfassung `gespeichert=… bereits vorhanden=…`); danach wird
-   automatisch `buildIndex()` (Reindex) angestoßen. *Scrape-Log anzeigen* öffnet
+   mit der Zusammenfassung `gespeichert=… bereits vorhanden=…`); danach werden
+   nur die vom Scraper gemeldeten neuen oder durch ein nachgeladenes Bild
+   geänderten Artikel neu eingelesen. *Scrape-Log anzeigen* öffnet
    dasselbe Modal mit den letzten 100 Log-Zeilen, bereits ans untere Ende gescrollt.
 
 Beim CLI-/Cron-Aufruf führt `scrape_all.js` dagegen nur den Scrape aus; der
@@ -964,11 +978,12 @@ npx playwright install --with-deps chromium
 Empfohlener Wrapper für `/opt/nodeapp/scraper/run-scrape.sh` (als `ralf`, danach
 `chmod +x`):
 
-**Ist-Zustand des eingecheckten Skripts:** `scraper/run-scrape.sh` führt nach dem
-Scrape derzeit noch `sudo /usr/bin/systemctl restart nodeapp` aus. Das folgende
-Beispiel zeigt die schonendere, aber in dieser Datei noch **nicht umgesetzte**
-Umstellung auf `SIGHUP`. Vor dem Einsatz die tatsächlich installierte
-Produktionsdatei prüfen; ihr Stand ist hier nicht bestätigt.
+**Ist-Zustand des eingecheckten Skripts:** `scraper/run-scrape.sh` sendet nach
+dem Scrape per `systemctl kill -s HUP nodeapp` ein `SIGHUP`. Dadurch bleibt der
+Serverprozess samt Sessions bestehen. Der externe Cron-Lauf löst weiterhin
+einen vollständigen Reindex aus, weil sein Änderungsmanifest nicht über den
+Web-UI-Kindprozess an den Server übertragen wird. Vor dem Einsatz die
+tatsächlich installierte Produktionsdatei prüfen.
 
 ```bash
 #!/usr/bin/env bash
@@ -977,11 +992,8 @@ cd /opt/nodeapp/scraper
 /usr/bin/node scrape_all.js >> /opt/nodeapp/scraper/cron-scrape.log 2>&1
 echo "$(date '+%F %T') Scraper exit $?" >> /opt/nodeapp/scraper/cron-scrape.log
 
-# Reindex OHNE Neustart (Sessions bleiben erhalten): SIGHUP an den Node-Prozess.
-# Nicht "systemctl restart nodeapp" verwenden; der Restart kann laufende Requests
-# oder einen parallel gestarteten Reindex abbrechen.
-PID=$(systemctl show -p MainPID --value nodeapp)
-[ "${PID:-0}" -gt 0 ] && kill -HUP "$PID"
+# Reindex OHNE Neustart (Sessions bleiben erhalten):
+sudo /usr/bin/systemctl kill -s HUP nodeapp
 ```
 
 Crontab von `ralf` (`crontab -e`), täglich 04:30 **UTC** (nicht durchgehend

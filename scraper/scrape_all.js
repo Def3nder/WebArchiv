@@ -833,6 +833,7 @@ async function processBlogListingPage(page, context, source, processedUrls, skip
       }
 
       const [mdWritten, jpgWritten] = await saveBlogArticle(context, article, outputDir);
+      if (mdWritten || jpgWritten) skipState.changedFiles.add(path.resolve(mdPath));
       processedUrls.add(articleUrl);
       processedThisPage += 1;
       if (mdWritten) skipState.saved += 1;
@@ -856,12 +857,12 @@ async function processBlogListingPage(page, context, source, processedUrls, skip
   return processedThisPage;
 }
 
-async function scrapeBlog(browser, source) {
+async function scrapeBlog(browser, source, changedFiles) {
   const baseUrl = source.url;
   const outputDir = source.outputDir;
   await fs.promises.mkdir(outputDir, { recursive: true });
   const processedUrls = new Set();
-  const skipState = { count: 0, stop: false, saved: 0 };
+  const skipState = { count: 0, stop: false, saved: 0, changedFiles };
 
   const context = await browser.newContext();
   try {
@@ -908,7 +909,7 @@ async function extractTelegramDate(post) {
   return dt.slice(0, 10);
 }
 
-async function scrapeTelegram(browser, source) {
+async function scrapeTelegram(browser, source, changedFiles) {
   const channelUrl = source.url;
   const outputDir = source.outputDir;
   const displayName = postAuthorName("telegram", source.name);
@@ -996,6 +997,7 @@ async function scrapeTelegram(browser, source) {
         const postUrl = `https://t.me/s/${postId}`;
         const markdown = renderPostMarkdown(title, postUrl, dateStr, text);
         await fs.promises.writeFile(outPath, markdown, "utf-8");
+        changedFiles.add(path.resolve(outPath));
         logger.info(`[OK]   ${path.basename(outPath)}  ←  Post ${postId}`);
         saved += 1;
       }
@@ -1300,7 +1302,7 @@ async function fbExtractImageUrl(article) {
   return null;
 }
 
-async function scrapeFacebook(browser, source, cookiesFile) {
+async function scrapeFacebook(browser, source, cookiesFile, changedFiles) {
   const { url, outputDir } = source;
   const displayName = postAuthorName("facebook", source.name);
   const applyJoeFilters = displayName === CHANNEL_DISPLAY_NAME;
@@ -1474,6 +1476,7 @@ async function scrapeFacebook(browser, source, cookiesFile) {
         const source = permalink || url;
         const markdown = renderPostMarkdown(title, source, dateStr, text);
         await fs.promises.writeFile(outPath, markdown, "utf-8");
+        changedFiles.add(path.resolve(outPath));
         saved += 1;
         logger.info(`[OK]   ${path.basename(outPath)}${hasImg ? "  (+ Bild)" : ""}`);
       }
@@ -1511,6 +1514,7 @@ async function scrapeFacebook(browser, source, cookiesFile) {
 async function runAll(phases, opts) {
   const results = {};
   const failures = [];
+  const changedFiles = new Set();
 
   const browser = await chromium.launch({ headless: opts.headless });
   try {
@@ -1531,11 +1535,11 @@ async function runAll(phases, opts) {
         try {
           let sourceResult;
           if (phase === "blog") {
-            sourceResult = await scrapeBlog(browser, source);
+            sourceResult = await scrapeBlog(browser, source, changedFiles);
           } else if (phase === "facebook") {
-            sourceResult = await scrapeFacebook(browser, source, opts.cookies);
+            sourceResult = await scrapeFacebook(browser, source, opts.cookies, changedFiles);
           } else if (phase === "telegram") {
-            sourceResult = await scrapeTelegram(browser, source);
+            sourceResult = await scrapeTelegram(browser, source, changedFiles);
           }
           saved += sourceResult[0];
           skipped += sourceResult[1];
@@ -1566,7 +1570,7 @@ async function runAll(phases, opts) {
   }
   logger.info("=".repeat(70));
 
-  return failures.length ? 1 : 0;
+  return { code: failures.length ? 1 : 0, changedFiles: [...changedFiles] };
 }
 
 function parseArgs(argv) {
@@ -1635,7 +1639,10 @@ if (_isMain) {
   // letzten Zeilen (Zusammenfassung) abschneiden. exitCode setzen und den
   // Prozess natürlich auslaufen lassen -> stdout wird vollständig geleert.
   main(process.argv.slice(2))
-    .then((code) => { process.exitCode = code; })
+    .then(({ code, changedFiles }) => {
+      process.stdout.write(`@@WEBARCHIV_CHANGED_FILES@@${JSON.stringify(changedFiles)}\n`);
+      process.exitCode = code;
+    })
     .catch((exc) => {
       logger.error(`Unerwarteter Fehler: ${exc && exc.stack ? exc.stack : exc}`);
       process.exitCode = 1;

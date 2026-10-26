@@ -166,14 +166,14 @@ test('Dublettenfilter folgen den Beschriftungseinstellungen und der Kopf reagier
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.duplicate-content \{ padding: 8px; \}/);
 });
 
-test('Sammelverknüpfung indiziert höchstens einmal und reine Links gar nicht neu', () => {
+test('Sammelverknüpfung liest nur betroffene Infografik-Jahre und reine Links gar nicht neu ein', () => {
   const server = read('server.js');
   const batch = server.slice(server.indexOf("app.post('/api/duplicates/batch'"), server.indexOf("app.post('/api/duplicates',"));
   assert.match(batch, /for \(const item of items\)/);
   assert.match(batch, /duplicateStore\.setMany/);
   assert.match(batch, /replaceArticleIds/);
-  assert.match(batch, /if \(migrations\.length\) await buildIndex\(\);\s*else refreshDuplicateState\(\);/);
-  assert.equal((batch.match(/await buildIndex\(\)/g) || []).length, 1);
+  assert.match(batch, /if \(migrations\.length\) await refreshInfographicsForYears\(infographicYearsFromMigrations\(migrations\)\);\s*else refreshDuplicateState\(\);/);
+  assert.doesNotMatch(batch, /await buildIndex\(\)/);
 });
 
 test('Mobil wechselt nur Artikelkopf und Infografiken; der einspaltige Diff bleibt sichtbar', () => {
