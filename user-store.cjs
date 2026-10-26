@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const bcrypt = require('bcryptjs');
+const { tooManyAttemptsError } = require('./login-limiter.cjs');
 
 const BCRYPT_ROUNDS = 12;
 const MIN_PASSWORD = 8;
@@ -239,7 +240,7 @@ function createUserStore({ usersFile, publicFile, settingsFile = null, privateAu
       const next = checkPassword(input?.newPassword);
       const user = find(users, email);
       if (!user || !(await bcrypt.compare(current, user.passwordHash || DUMMY_HASH))) {
-        throw fail(400, 'Das aktuelle Kennwort ist nicht korrekt.');
+        throw Object.assign(fail(400, 'Das aktuelle Kennwort ist nicht korrekt.'), { wrongPassword: true });
       }
       if (next === current) throw fail(400, 'Das neue Kennwort muss sich vom bisherigen unterscheiden.');
       const passwordHash = await bcrypt.hash(next, BCRYPT_ROUNDS);
@@ -283,7 +284,9 @@ function createUserStore({ usersFile, publicFile, settingsFile = null, privateAu
   };
 }
 
-function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors, onUserDeleted, onAuthorPriorityChanged }) {
+function installUserRoutes(app, {
+  store, requireAuth, requireAdmin, getAuthors, onUserDeleted, onAuthorPriorityChanged, passwordLimiter = null,
+}) {
   const route = handler => async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
@@ -293,6 +296,7 @@ function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors, 
       res.json(await handler(req));
     } catch (error) {
       if (!error.status) console.error('Benutzerverwaltung:', error);
+      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
       res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Änderung konnte nicht gespeichert werden.' });
     }
   };
@@ -329,7 +333,17 @@ function installUserRoutes(app, { store, requireAuth, requireAdmin, getAuthors, 
     return result;
   }));
   app.post('/api/me/password', requireAuth, route(async req => {
-    const { sessionVersion } = await store.changeOwnPassword(actor(req), req.body);
+    // Die Prüfung des aktuellen Kennworts unterliegt derselben Begrenzung wie die Anmeldung.
+    const limit = passwordLimiter?.check(req.ip, actor(req));
+    if (limit && !limit.allowed) throw tooManyAttemptsError(limit);
+    let sessionVersion;
+    try {
+      ({ sessionVersion } = await store.changeOwnPassword(actor(req), req.body));
+    } catch (error) {
+      if (error.wrongPassword) passwordLimiter?.failure(req.ip, actor(req));
+      throw error;
+    }
+    passwordLimiter?.success(req.ip, actor(req));
     req.session.user = { ...store.sessionUser({ email: actor(req), sessionVersion }) };
     return { changed: true };
   }));

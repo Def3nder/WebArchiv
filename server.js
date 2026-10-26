@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { marked } = require('marked');
+const { renderSafeMarkdown, safeHttpUrl } = require('./html-sanitizer.cjs');
 const Fuse = require('fuse.js');
 const session = require('express-session');
 const sharp   = require('sharp');
@@ -16,15 +16,48 @@ const {
 } = require('./audiobooks.cjs');
 const { createBookmarkStore, installBookmarkRoutes } = require('./bookmarks.cjs');
 const { isPathInside, installMediaRoutes } = require('./media-files.cjs');
+const { createLoginLimiter, tooManyAttemptsError } = require('./login-limiter.cjs');
+const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./security-headers.cjs');
+
+// Kommagetrennte Adressen/Subnetze bzw. Express-Schlüsselwörter (loopback,
+// linklocal, uniquelocal). „true“ wird bewusst nicht unterstützt.
+function parseTrustProxy(value) {
+  const entries = String(value || TRUST_PROXY_DEFAULT).split(',').map(entry => entry.trim()).filter(Boolean);
+  if (entries.some(entry => /^(true|\*)$/i.test(entry))) {
+    throw new Error('TRUST_PROXY darf nicht „true“ sein; bitte die Adresse des Reverse Proxys angeben.');
+  }
+  return entries;
+}
+
+// In Produktion ist ein eigenes, ausreichend langes Secret Pflicht. Ohne Secret
+// würde jeder, der den öffentlichen Entwicklungswert kennt, Sitzungscookies
+// fälschen können. Skripte und Tests, die server.js nur laden, laufen weiter
+// (strict = false) und erhalten ein zufälliges Secret.
+const LEGACY_DEV_SECRET = 'webarchiv-dev-secret-change-in-prod';
+const MIN_SESSION_SECRET_LENGTH = 32;
+
+function resolveSessionSecret({ env = process.env, strict = false, log = console } = {}) {
+  const secret = env.SESSION_SECRET || '';
+  const usable = secret.length >= MIN_SESSION_SECRET_LENGTH && secret !== LEGACY_DEV_SECRET;
+  if (usable) return secret;
+  const problem = secret
+    ? `SESSION_SECRET ist zu kurz oder unsicher (mindestens ${MIN_SESSION_SECRET_LENGTH} Zeichen, z. B. „openssl rand -hex 32“).`
+    : 'SESSION_SECRET ist nicht gesetzt.';
+  if (strict && env.NODE_ENV === 'production') throw new Error(problem);
+  log.warn(`${problem} Es wird ein zufälliges Secret verwendet; Anmeldungen enden beim Neustart.`);
+  return crypto.randomBytes(32).toString('hex');
+}
 const {
   loadDuplicateConfig, buildDuplicateProfile, detectDuplicateCandidates,
   createDuplicateStore, decisionStillApplies,
 } = require('./duplicates.cjs');
 
 const app = express();
-// Hinter dem Reverse-Proxy (Caddy/HTTPS) X-Forwarded-Proto/Host respektieren,
-// damit absolute og:*-URLs (Link-Vorschau) korrekt https:// und Host tragen.
-app.set('trust proxy', true);
+// Hinter dem Reverse-Proxy (NPMplus/HTTPS) X-Forwarded-Proto/Host/For nur von
+// bekannten Proxy-Adressen übernehmen. Sonst könnte jeder Client über einen
+// gefälschten X-Forwarded-For-Header die Login-Begrenzung pro IP umgehen.
+const TRUST_PROXY_DEFAULT = 'loopback, 192.168.1.14';
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
@@ -135,7 +168,7 @@ const audiobooks = createAudiobookLibrary({
   audioRoot: AUDIO_DIR,
   directory: audiobookConfig.directory,
   excerpt: text => bodyExcerpt(text || ''),
-  renderMarkdown: text => marked.parse(text),
+  renderMarkdown: renderSafeMarkdown,
   progress: audiobookProgress,
 });
 
@@ -281,12 +314,13 @@ function autoCategorize(text) {
     .map(s => s.label);
 }
 
+// Nur http(s): Die Quelle wird im Artikel als anklickbarer Link angezeigt.
 function extractSourceUrl(clean) {
   const stripTrail = u => u.trim().replace(/[*_)\].,;\s]+$/, '');
   const md = clean.match(/\[[^\]]*\]\(([^)]+)\)/);
-  if (md) return stripTrail(md[1]);
+  if (md) return safeHttpUrl(stripTrail(md[1]));
   const bare = clean.match(/(https?:\/\/\S+)/);
-  if (bare) return stripTrail(bare[1]);
+  if (bare) return safeHttpUrl(stripTrail(bare[1]));
   return null;
 }
 
@@ -432,8 +466,9 @@ function parseArticle(content, filePath) {
   return { title, date, sourceUrl, summary, tags, episodeNum, instagramPoster, categories: [], body };
 }
 
+// Bereinigt (html-sanitizer.cjs): Der Body wird im Browser per innerHTML eingesetzt.
 function renderArticleBody(body) {
-  return marked.parse(body);
+  return renderSafeMarkdown(body);
 }
 
 // ─── File scanner ──────────────────────────────────────────────────────────
@@ -1796,6 +1831,8 @@ function attachUser(req, res, next) {
 
 // ─── API ───────────────────────────────────────────────────────────────────
 
+// CSP (zunächst Report-Only, siehe CSP_MODE) und weitere Sicherheits-Header für alle Antworten.
+app.use(createSecurityHeaders({ mode: process.env.CSP_MODE }));
 app.use('/api/article-markdown', express.json({ limit: '2mb' }));
 app.use('/api/audiobook-extra-source', express.json({ limit: '2mb' }));
 app.use('/api/audiobook-extra-create', express.json({ limit: '2mb' }));
@@ -1805,10 +1842,12 @@ app.use('/api/new-infographic', express.json({ limit: Math.ceil(INFOGRAPHIC_MAX_
 app.use('/api/tts/voices', express.json({ limit: Math.ceil(TTS_VOICE_MAX_BYTES * 1.4) + 1024 * 1024 }));
 app.use(express.json());
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'webarchiv-dev-secret-change-in-prod',
+  secret: resolveSessionSecret({ strict: require.main === module }),
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax' },
+  // secure: 'auto' setzt das Secure-Flag, sobald die Anfrage (über den
+  // vertrauenswürdigen Proxy) per HTTPS kam; lokal per HTTP bleibt es aus.
+  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax', secure: 'auto' },
 }));
 // Session-Nutzer bei jeder Anfrage frisch aus dem Nutzerbestand auflösen: geänderte
 // Rechte wirken sofort; gelöschte Nutzer oder neu vergebene Kennwörter beenden Sitzungen.
@@ -1822,7 +1861,7 @@ app.use((req, res, next) => {
 });
 
 // Solange eine Kennwortänderung aussteht, sind nur Anmelde-/Kennwortrouten erlaubt.
-const PASSWORD_PENDING_ALLOWED = new Set(['/api/me', '/api/me/password', '/api/login', '/api/logout']);
+const PASSWORD_PENDING_ALLOWED = new Set(['/api/me', '/api/me/password', '/api/login', '/api/logout', CSP_REPORT_PATH]);
 app.use((req, res, next) => {
   if (!req.session?.user?.mustChangePassword || PASSWORD_PENDING_ALLOWED.has(req.path)) return next();
   if (/^\/(api|files|audio-files)\//.test(req.path)) {
@@ -1830,6 +1869,8 @@ app.use((req, res, next) => {
   }
   next();
 });
+installCspReportRoute(app, express);
+
 // Der Worker cached selbst keine Dateien. Sein automatisch berechneter Inhalt ändert
 // sich aber bei jeder Änderung der App-Shell und löst damit den Update-Hinweis aus.
 app.get('/service-worker.js', (_req, res) => {
@@ -1884,12 +1925,27 @@ app.get('/api/me', (req, res) => {
   res.json(meView(getEffectiveUser(req)));
 });
 
+// Gemeinsam für Anmeldung und eigene Kennwortänderung: Fehlversuche zählen
+// pro Konto und pro IP (req.ip berücksichtigt nur vertrauenswürdige Proxys).
+const loginLimiter = createLoginLimiter();
+
+function sendTooManyAttempts(res, limit) {
+  const error = tooManyAttemptsError(limit);
+  res.set('Retry-After', String(error.retryAfter));
+  return res.status(error.status).json({ error: error.message });
+}
+
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body || {};
+  // Gesperrt wird vor bcrypt: spart Rechenzeit und verrät nicht, ob es das Konto gibt.
+  const limit = loginLimiter.check(req.ip, email);
+  if (!limit.allowed) return sendTooManyAttempts(res, limit);
   const auth = await userStore.authenticate(email, password);
   if (!auth) {
+    loginLimiter.failure(req.ip, email);
     return res.status(401).json({ error: 'Ungültige E-Mail oder Passwort' });
   }
+  loginLimiter.success(req.ip, email);
   // Neue Session-ID nach der Anmeldung (Schutz vor Session-Fixation).
   req.session.regenerate(err => {
     if (err) return res.status(500).json({ error: 'Anmeldung fehlgeschlagen.' });
@@ -1998,7 +2054,7 @@ app.get('/a/*', (req, res) => {
 </head>
 <body>
     <p>Weiterleitung … <a href="${escapeHtml(target)}">Zum Artikel</a></p>
-    <script>location.replace(${JSON.stringify(target)});</script>
+    <script nonce="${escapeHtml(res.locals.cspNonce)}">location.replace(${JSON.stringify(target)});</script>
 </body>
 </html>`);
 });
@@ -2835,6 +2891,7 @@ installTtsRoutes(app, requireAdminAccess, ttsJobs, undefined, ttsVoiceSettings);
 installMarkdownRoutes(app, requireAdminAccess, markdownEditor);
 installUserRoutes(app, {
   store: userStore, requireAuth, requireAdmin: requireAdminAccess, getAuthors: () => meta.authors,
+  passwordLimiter: loginLimiter,
   onUserDeleted: email => Promise.all([audiobookProgress.removeUser(email), bookmarks.removeUser(email)]),
   onAuthorPriorityChanged: republishArticleIndex,
 });
@@ -2889,6 +2946,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  app, resolveSessionSecret, parseTrustProxy, extractSourceUrl,
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
   articleDisplayAuthor,
   replaceInfographicYearArticles, replaceArticleIndexEntry, upsertArticleIndexEntries,

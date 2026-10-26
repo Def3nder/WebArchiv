@@ -1272,3 +1272,46 @@ eine Gegenprobe mit der alten Semantik lieferte die geheime Datei mit 200 aus), 
 `sudo systemctl restart nodeapp`; keine neuen Abhängigkeiten, keine neuen Umgebungsvariablen.
 Die übrigen Punkte des Sicherheitsplans (Secret-Pflicht, Login-Begrenzung, HTML-Bereinigung, CSP)
 folgen getrennt.
+
+## 20. Aktualisierung 26.10.2026 – Secret-Pflicht, Login-Begrenzung, HTML-Bereinigung, CSP
+
+Umsetzung des Sicherheitsplans nach den Entscheidungen des Benutzers: Reverse Proxy ist
+**NPMplus auf 192.168.1.14** (bereits produktiv, die frühere Angabe „Proxy später“ ist überholt),
+unbekannte Tags sichtbar machen, Google Fonts extern belassen, `sanitize-html` verwenden.
+
+- **Secret-Pflicht:** `resolveSessionSecret` in `server.js`. Mit `NODE_ENV=production` startet der
+  Server nur mit `SESSION_SECRET` ≥ 32 Zeichen (der alte Entwicklungswert zählt als unsicher).
+  Ohne Produktion bzw. beim bloßen Laden von `server.js` durch Tests/Skripte: zufälliges Secret mit
+  Warnung. Cookie zusätzlich `secure: 'auto'`.
+- **Proxy-Vertrauen:** `TRUST_PROXY` (Standard `loopback, 192.168.1.14`) statt `trust proxy = true`;
+  `true` wird abgelehnt. Grund: Sonst ließe sich `req.ip` per `X-Forwarded-For` fälschen.
+- **Login-Begrenzung:** `login-limiter.cjs`; 5 Fehlversuche pro Konto bzw. 30 pro IP in 15 Minuten →
+  15 Minuten `429` mit `Retry-After`, geprüft vor bcrypt. Gilt für `/api/login` und die Prüfung des
+  aktuellen Kennworts in `/api/me/password`. Nur im Arbeitsspeicher.
+- **HTML-Bereinigung:** `html-sanitizer.cjs` (`renderSafeMarkdown`) für Artikel, Dublettenvergleich,
+  Hörbuch-Abstract, eBook und Extras. Zwei Durchgänge, weil `exclusiveFilter` im Escape-Modus von
+  `sanitize-html` den vorangehenden Text des Elternelements verwirft. `Quelle:`-Links nur http(s)
+  (vorher war ein `javascript:`-Link möglich). Gegenprobe über alle 7.205 `.md` im lokalen Bestand:
+  keine sichtbare Abweichung. Korrektur zur Planung: Die Pseudo-Tags im eBook „Claude AI für Profis
+  2026“ sind im Markdown bereits maskiert und waren schon sichtbar.
+- **CSP:** `security-headers.cjs`; `CSP_MODE=report` (Standard), `enforce`, `off`. Skripte nur
+  `'self'` plus Nonce pro Antwort (Weiterleitung der Link-Vorschau `/a/*`), Inline-Styles erlaubt,
+  Google Fonts erlaubt, PDF.js unter `/vendor/pdfjs/` mit `'wasm-unsafe-eval'`. Meldungen an
+  `/api/csp-report` erscheinen begrenzt als „CSP-Verstoß: …“ im Dienstprotokoll. Zusätzlich
+  `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`. Die fünf `onerror`-Attribute
+  der Kachelbilder wurden durch `data-fallback` und einen Listener in der Capture-Phase ersetzt
+  (`app.js?v=133`, `audiobooks.js?v=25`).
+
+**Geprüft:** neue Tests `test/security.test.cjs` (17), gesamte Node-Suite 354/354; Browser lokal als
+Gast im Report-Only-Modus: Startseite, Artikel, PDF-Viewer, Video, Vollbild und Bild-Fallback ohne
+CSP-Meldung; ein absichtlich eingefügtes Inline-Skript wurde gemeldet. **Nicht geprüft:** Admin-
+Bereiche (Editor/CodeMirror, TTS-Aufnahme, Dubletten, neue Infografik) und echte Geräte; dafür ist
+die Report-Only-Phase in Produktion vorgesehen. `CSP_MODE=enforce` wurde nur in Tests geprüft.
+
+**Offen:** `npm audit` meldet bereits vorhandene Schwachstellen in `proxy-addr` (u. a. IP-Spoofing
+bei vertrauten Subnetzen), `body-parser`, `qs` und `sharp`; nicht Teil dieses Schritts.
+
+**Deployment:** siehe „Sicherheits-Umgebung“ in `LXC-container node.js Setup.txt`; Dateien
+`server.js`, `user-store.cjs`, `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`,
+`package.json`, `package-lock.json`, `public/app.js`, `public/audiobooks.js`, `public/index.html`;
+danach `npm ci --omit=dev` und Neustart.

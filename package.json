@@ -19,6 +19,7 @@
     "express-session": "^1.19.0",
     "fuse.js": "^7.3.0",
     "marked": "^9.1.6",
+    "sanitize-html": "^2.18.1",
     "sharp": "^0.35.3"
   },
   "devDependencies": {

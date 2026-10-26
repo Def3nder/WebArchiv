@@ -125,5 +125,12 @@ object in `app.js`.
 
 Target is a Proxmox/Debian LXC running the app under systemd (`/opt/nodeapp`), with the `www/`
 data on an external mounted disk. See `session-context.md` and `LXC-container node.js Setup.txt`
-for the full setup log (SSH keys, systemd unit, mount/permission notes). Set `SESSION_SECRET` in
-production — the default in `server.js` is a dev placeholder.
+for the full setup log (SSH keys, systemd unit, mount/permission notes). HTTPS terminates at the
+NPMplus reverse proxy (192.168.1.14). With `NODE_ENV=production` the server refuses to start without a
+`SESSION_SECRET` of at least 32 chars. `TRUST_PROXY` (default `loopback, 192.168.1.14`) limits which
+proxies may set `X-Forwarded-*`; `CSP_MODE` is `report` (default), `enforce` or `off`.
+
+**Security modules:** `login-limiter.cjs` (429 after repeated failed password checks on `/api/login`
+and `/api/me/password`), `html-sanitizer.cjs` (all markdown → HTML that reaches `innerHTML` must go
+through `renderSafeMarkdown`), `security-headers.cjs` (CSP; frontend must not use inline handlers like
+`onerror=` — use `img[data-fallback]` / event listeners; new inline scripts need the per-response nonce).

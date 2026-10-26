@@ -30,7 +30,7 @@ test('Artikel-Player zeigt Wiedergabe erst beim playing-Ereignis an', () => {
 });
 
 test('Cache-Buster liefert die korrigierte Player-Version aus', () => {
-  assert.match(html, /<script src="app\.js\?v=132"><\/script>/);
+  assert.match(html, /<script src="app\.js\?v=133"><\/script>/);
 });
 
 test('Der TTS-Papierkorb wird nicht über die Audio-Route ausgeliefert', () => {

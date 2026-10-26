@@ -12,7 +12,7 @@ Bereitstellung einer ressourcenschonenden, öffentlich erreichbaren Node.js-Anwe
 Internet
     │
     ▼
-Reverse Proxy (später)
+Reverse Proxy NPMplus (192.168.1.14, HTTPS)
     │
     ▼
 LXC Container (Debian 13)
@@ -365,16 +365,35 @@ apt install unattended-upgrades
 
 ### Reverse Proxy
 
-Später:
+Umgesetzt: NPMplus auf 192.168.1.14 übernimmt HTTPS, Zertifikate und Domain-Anbindung
+und leitet an den LXC (Port 3000) weiter. NPMplus muss `X-Forwarded-For` und
+`X-Forwarded-Proto` setzen (Standard). Die Option „Disable URI Sanitisation“ ist aktiv;
+der Server schützt seine Medienrouten unabhängig davon (siehe README, `media-files.cjs`).
 
-* Caddy
-* oder Nginx
+### Sicherheits-Umgebung (Stand 26.10.2026)
 
-für:
+Datei `/etc/nodeapp/webarchiv.env` (root, Modus 600) anlegen:
 
-* HTTPS
-* Zertifikate
-* Domain-Anbindung
+```bash
+sudo install -d -m 755 /etc/nodeapp
+sudo sh -c 'umask 077; printf "SESSION_SECRET=%s\nTRUST_PROXY=192.168.1.14\nCSP_MODE=report\n" "$(openssl rand -hex 32)" > /etc/nodeapp/webarchiv.env'
+```
+
+Per Drop-in einbinden (`sudo systemctl edit nodeapp`):
+
+```ini
+[Service]
+EnvironmentFile=/etc/nodeapp/webarchiv.env
+```
+
+Danach `sudo systemctl daemon-reload` und `sudo systemctl restart nodeapp`.
+
+* Mit `NODE_ENV=production` startet der Dienst ohne gültiges `SESSION_SECRET` (≥ 32 Zeichen) nicht.
+* Ein neues Secret meldet alle Nutzer einmalig ab.
+* `TRUST_PROXY` muss die Adresse von NPMplus enthalten; ändert sie sich, Datei anpassen.
+* CSP-Meldungen prüfen: `journalctl -u nodeapp --since "1 day ago" | grep "CSP-Verstoß"`.
+  Ohne Meldungen `CSP_MODE=enforce` setzen und den Dienst neu starten.
+* Empfehlung: Port 3000 im LXC nur für 192.168.1.14 freigeben.
 
 ---
 

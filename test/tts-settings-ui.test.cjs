@@ -17,7 +17,7 @@ test('Admin-Menü und nativer Dialog enthalten die vollständige Qwen-Stimmenver
   }
   assert.match(html, /-1\.7B\.pt/);
   assert.doesNotMatch(html, /Einwilligung|Zustimmung|consent/i);
-  assert.match(html, /tts-settings\.js\?v=4[\s\S]*app\.js\?v=132/);
+  assert.match(html, /tts-settings\.js\?v=4[\s\S]*app\.js\?v=133/);
   assert.match(html, /styles\.css\?v=158/);
   assert.match(css, /#tts-settings-meta\s*{[^}]*margin-top:\s*6px/);
   assert.match(html, /id="tts-settings-name"[^>]*aria-describedby="tts-settings-name-hint"/);

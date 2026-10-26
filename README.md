@@ -653,11 +653,31 @@ Editor- oder Menülogik einbezogen.
   gilt der neue Stand für Anmeldungen erst nach der nächsten Änderung über die
   Oberfläche oder einem Neustart. Der Dienstbenutzer braucht Schreibrecht auf
   `users.json`, `public-directories.txt`, `config.json` **und** das App-Verzeichnis.
-- **Sessions** via `express-session` (Cookie 7 Tage, `httpOnly`, `sameSite=lax`);
-  Secret über `SESSION_SECRET` (Env) setzen. Nach dem Login wird die Session-ID
+- **Sessions** via `express-session` (Cookie 7 Tage, `httpOnly`, `sameSite=lax`,
+  `secure: 'auto'` = Secure-Flag bei HTTPS über den Proxy). Mit `NODE_ENV=production`
+  startet der Server nur mit einem `SESSION_SECRET` von mindestens 32 Zeichen; ohne
+  Produktion gibt es ein zufälliges Secret pro Prozess. Nach dem Login wird die Session-ID
   neu vergeben. Die Server-Sessions liegen im RAM: Ein Dienstneustart macht
   bestehende Logins ungültig, auch wenn die lokal gespeicherte Ansicht nach
   erneuter Anmeldung wiederhergestellt werden kann.
+- **Login-Begrenzung** (`login-limiter.cjs`): Nach 5 falschen Kennwörtern für ein Konto bzw.
+  30 Fehlversuchen von einer IP innerhalb von 15 Minuten antworten `/api/login` und
+  `/api/me/password` 15 Minuten lang mit `429` und `Retry-After`. Gesperrt wird vor der
+  bcrypt-Prüfung; die Zähler liegen im Arbeitsspeicher. Die IP stammt aus `req.ip`, das
+  `X-Forwarded-For` nur von den in `TRUST_PROXY` genannten Proxys übernimmt.
+- **HTML-Bereinigung** (`html-sanitizer.cjs`, `sanitize-html`): Artikel, Dublettenvergleich,
+  Hörbuch-Abstract, eBook-Text und Extras werden nach `marked` bereinigt. Skript- und
+  Einbettungselemente entfallen samt Inhalt, Event-Attribute und `javascript:`/`data:`-Links
+  werden entfernt; Sprungziele (`<a id>`), `sup`/`sub`, Tabellen, Code und Bilder bleiben.
+  Unbekannte Tags werden als Text angezeigt. `Quelle:`-Links werden nur als http(s) übernommen.
+- **Content-Security-Policy** (`security-headers.cjs`): Skripte nur aus eigenen Dateien
+  (plus Nonce für die Link-Vorschau), Styles inklusive Inline-Styles und Google Fonts,
+  Bilder/Medien zusätzlich `data:`/`blob:`; der PDF.js-Viewer erhält eine eigene Richtlinie
+  mit `'wasm-unsafe-eval'`. `CSP_MODE=report` (Standard) meldet Verstöße nur an
+  `/api/csp-report` (Dienstprotokoll „CSP-Verstoß: …“), `enforce` blockiert, `off` schaltet
+  nur die CSP ab. Zusätzlich `X-Content-Type-Options`, `Referrer-Policy`,
+  `Permissions-Policy` (Mikrofon nur für die eigene Seite). Keine Inline-Handler (`onerror=`
+  usw.) im Frontend verwenden; Bildfehler fängt ein Listener für `img[data-fallback]` ab.
 - **Admin-Oberfläche und Schreibschutz**: Die Quelldatei `public/index.html` enthält
   markierte Admin-Blöcke als Servervorlage. `renderIndexForSession()` entfernt sie für
   Gäste, normale Nutzer und Admins mit noch ausstehendem Pflicht-Kennwortwechsel vollständig;
@@ -742,7 +762,7 @@ Editor- oder Menülogik einbezogen.
 ignorieren den `#`-Teil. Daher liefert `/a/<id>` serverseitig OG-Tags und leitet
 echte Besucher per Meta-Refresh/JS in die SPA (`#/article/<id>`). Der Server
 respektiert `X-Forwarded-Proto/Host` (`trust proxy`) für korrekte absolute URLs
-hinter dem Reverse Proxy.
+hinter dem Reverse Proxy, allerdings nur von den in `TRUST_PROXY` genannten Adressen.
 
 ---
 
@@ -831,6 +851,9 @@ audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, 
 article-editor.cjs            Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown
 bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
 media-files.cjs               Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)
+login-limiter.cjs             Begrenzung fehlgeschlagener Anmeldungen/Kennwortprüfungen
+html-sanitizer.cjs            Markdown → bereinigtes HTML (sanitize-html)
+security-headers.cjs          CSP (Report-Only/Enforce), weitere Sicherheits-Header, /api/csp-report
 duplicates.cjs                Dublettenerkennung und persistente Entscheidungen
 config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp, diff
@@ -925,7 +948,9 @@ npm test --prefix tts
 | Variable | Default | Zweck |
 |---|---|---|
 | `PORT` | `3000` | HTTP-Port |
-| `SESSION_SECRET` | Dev-Fallback | Signatur der Session-Cookies (in Prod setzen!) |
+| `SESSION_SECRET` | zufällig pro Prozess | Signatur der Session-Cookies; bei `NODE_ENV=production` Pflicht (≥ 32 Zeichen, z. B. `openssl rand -hex 32`) |
+| `TRUST_PROXY` | `loopback, 192.168.1.14` | Kommagetrennte Adressen/Subnetze des Reverse Proxys (NPMplus); `true` wird abgelehnt |
+| `CSP_MODE` | `report` | `report` (nur melden), `enforce` (blockieren) oder `off` |
 | `USERS_FILE` | `./users.json` | Abweichender Pfad der Nutzerdatei (z. B. für Tests) |
 | `PUBLIC_DIRS_FILE` | `./public-directories.txt` | Abweichender Pfad der Liste öffentlicher Autoren |
 | `AUDIOBOOK_PROGRESS_FILE` | `./audiobook-progress.json` | Abweichender Pfad des Hörfortschritts |
@@ -954,8 +979,13 @@ npx playwright install --with-deps chromium
   als unprivilegierter User `ralf` (`User=ralf`/`Group=ralf`), damit erzeugte
   Dateien `ralf:ralf` gehören. Steuern nur mit `sudo systemctl …`.
 - `www/` liegt auf einer eingebundenen externen Disk.
-- Reverse Proxy (Caddy/Nginx) für HTTPS ist vorgesehen; der Server ist mit
-  `trust proxy` darauf vorbereitet.
+- HTTPS übernimmt der Reverse Proxy **NPMplus auf 192.168.1.14**. Nur dieser Adresse (und
+  Loopback) vertraut der Server bei `X-Forwarded-*`-Headern (`TRUST_PROXY`). Ändert sich die
+  Proxy-Adresse, `TRUST_PROXY` anpassen – sonst erkennt der Server kein HTTPS mehr und
+  Admin-Speichervorgänge scheitern an der Herkunftsprüfung.
+- Sicherheits-Umgebung in `/etc/nodeapp/webarchiv.env` (root, Modus 600), per systemd-Drop-in
+  `EnvironmentFile=/etc/nodeapp/webarchiv.env` eingebunden: `SESSION_SECRET`,
+  `TRUST_PROXY=192.168.1.14`, `CSP_MODE=report` (nach Prüfung `enforce`).
 - **Serverdienst steuern**:
   ```bash
   sudo systemctl restart nodeapp          # nach Codeänderungen neu starten

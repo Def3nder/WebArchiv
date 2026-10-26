@@ -1231,7 +1231,7 @@ function renderCard(article, idx) {
   const imageHtml = gallery
     ? renderCardGallery(article.images)
     : article.imageUrl
-    ? `<img src="${esc(article.imageUrl)}" alt="" loading="lazy" onerror="handleImgError(this)" />`
+    ? `<img src="${esc(article.imageUrl)}" alt="" loading="lazy" data-fallback />`
     : `<div class="card-image-placeholder">${svgImage()}</div>`;
 
   const audioBadge = article.audioUrl
@@ -1283,7 +1283,7 @@ function renderInstagramPosterCard(poster, idx) {
     <article class="card instagram-poster-card${classic ? ' classic-infographic-card' : ''}" data-id="${esc(poster.id)}" data-poster-index="${idx}"
       style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(label)}">
       <div class="instagram-poster-image">
-        <img src="${esc(poster.imageUrl)}" alt="" loading="lazy" onerror="handleImgError(this)" />
+        <img src="${esc(poster.imageUrl)}" alt="" loading="lazy" data-fallback />
         <span class="instagram-poster-badge instagram-poster-author" style="--author-hue:${hue}">${esc(author.replace(/_/g, ' '))}</span>
         ${responsiveDateMarkup(poster.date, 'instagram-poster-badge instagram-poster-date')}
       </div>
@@ -1301,7 +1301,7 @@ function renderInfographicReviewCard(poster, idx) {
       data-id="${esc(poster.id)}" data-poster-index="${idx}" style="animation-delay:${delay}ms">
       <button type="button" class="instagram-poster-image infographic-review-image"
         aria-label="${esc(poster.title || 'Infografik')} im Vollbild öffnen">
-        <img src="${esc(poster.imageUrl)}" alt="${esc(poster.title || 'Infografik')}" loading="lazy" onerror="handleImgError(this)" />
+        <img src="${esc(poster.imageUrl)}" alt="${esc(poster.title || 'Infografik')}" loading="lazy" data-fallback />
         <span class="instagram-poster-badge instagram-poster-author" style="--author-hue:${hue}">${esc(author.replace(/_/g, ' '))}</span>
         ${responsiveDateMarkup(poster.date, 'instagram-poster-badge instagram-poster-date')}
       </button>
@@ -1389,7 +1389,7 @@ function watchResponsiveDates() {
 function renderCardGallery(images) {
   const slides = images.map((image, i) => {
     const src = i === 0 ? `src="${esc(image.url)}"` : `data-src="${esc(image.url)}"`;
-    return `<div class="card-gallery-slide${image.kind === 'infographic' ? ' is-infographic' : ''}"><img ${src} alt="" loading="lazy" onerror="handleImgError(this)" /></div>`;
+    return `<div class="card-gallery-slide${image.kind === 'infographic' ? ' is-infographic' : ''}"><img ${src} alt="" loading="lazy" data-fallback /></div>`;
   }).join('');
   const dots = images.map((_, i) => `<span${i === 0 ? ' class="active"' : ''}></span>`).join('');
   return `<div class="card-gallery-track">${slides}</div><div class="card-gallery-dots" aria-hidden="true">${dots}</div>`;
@@ -4095,13 +4095,20 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') saveCurrentViewState();
 });
 
-// ── Global img error handler (avoids quote-nesting in onerror attr) ────────
+// ── Global img error handler ───────────────────────────────────────────────
+// Kachelbilder tragen data-fallback statt eines onerror-Attributs, weil die
+// Content-Security-Policy keine Inline-Handler zulässt. error-Ereignisse steigen
+// nicht auf; daher fängt ein Listener in der Capture-Phase sie am Dokument ab.
 function handleImgError(el) {
-  el.onerror = null;
+  el.removeAttribute('data-fallback');
   // Nur das Bild ersetzen; Badges und Lesezeichen der Kachel bleiben stehen.
   el.insertAdjacentHTML('afterend', `<div class="card-image-placeholder">${svgImage()}</div>`);
   el.remove();
 }
+document.addEventListener('error', event => {
+  const img = event.target;
+  if (img instanceof HTMLImageElement && img.hasAttribute('data-fallback')) handleImgError(img);
+}, true);
 
 // ── SVG icons ──────────────────────────────────────────────────────────────
 function svgImage(large = false) {

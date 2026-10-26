@@ -75,7 +75,7 @@ function bookProgressText(progress) {
 function renderBookCard(book, idx) {
   const delay = Math.min(idx * 30, 300);
   const imageHtml = book.imageUrl
-    ? `<img src="${esc(book.imageUrl)}" alt="" loading="lazy" onerror="handleImgError(this)" />`
+    ? `<img src="${esc(book.imageUrl)}" alt="" loading="lazy" data-fallback />`
     : `<div class="card-image-placeholder">${svgImage()}</div>`;
   const ebookOnly = !book.trackCount;   // reines eBook: kein Audio, nur Text
   const parts = book.trackCount === 1 ? '1 Teil' : `${book.trackCount} Teile`;
