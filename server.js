@@ -2577,11 +2577,14 @@ app.get('/api/articles', attachUser, (req, res) => {
   const items = filtered.slice((p - 1) * lim, p * lim)
     .map(article => {
       const exposed = { ...exposeArticleForUser(article, user), bookmarked: marks.has(article.id) };
-      if (!instagramPosterMode && !classicInfographicMode && !infographicReviewMode) return exposed;
+      // Der sichtbare Autor einer Infografik stammt immer vom verknüpften
+      // Hauptartikel. Die echte Autorenzuordnung bleibt für ACL und Routing
+      // unverändert; eigenständige Grafiken behalten „Infografiken“.
+      if (article.author !== INFOGRAPHICS_AUTHOR) return exposed;
       const linkedArticle = visibleGroupAnchor(article, user);
       return {
         ...exposed,
-        posterAuthor: linkedArticle && linkedArticle.author !== INFOGRAPHICS_AUTHOR
+        displayAuthor: linkedArticle && linkedArticle.author !== INFOGRAPHICS_AUTHOR
           ? linkedArticle.author
           : INFOGRAPHICS_AUTHOR,
       };

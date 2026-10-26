@@ -726,6 +726,7 @@ function syncTelegramInstagramButton() {
   const infographicMode = state.author === INFOGRAPHICS_AUTHOR;
   const classicMode = infographicMode && state.infographicFilter === 'classic';
   const active = infographicMode ? state.infographicFilter !== 'all' : state.telegram;
+  const disabled = infographicMode && currentLayout() === 'list';
   // SVGElement.hidden wird nicht von allen Browsern als reflektiertes HTML-Attribut
   // unterstützt. Das Attribut direkt schalten, damit die CSS-Regel svg[hidden]
   // zuverlässig zwischen Telegram- und Instagram-Symbol wechselt.
@@ -734,8 +735,11 @@ function syncTelegramInstagramButton() {
   $telegramBtn.querySelector('[data-infographic-icon]')?.toggleAttribute('hidden', !classicMode);
   $telegramBtn.classList.toggle('is-instagram', infographicMode);
   $telegramBtn.classList.toggle('active', active);
+  $telegramBtn.disabled = disabled;
   $telegramBtn.setAttribute('aria-pressed', String(active));
-  $telegramBtn.title = infographicMode
+  $telegramBtn.title = disabled
+    ? 'Infografikfilter ist nur in der Kachelansicht verfügbar'
+    : infographicMode
     ? ({
       all: 'Nur Instagram-Poster anzeigen',
       posters: 'Nur klassische Infografiken anzeigen',
@@ -1195,7 +1199,8 @@ async function saveInfographicReview() {
 
 // ── Rendering ──────────────────────────────────────────────────────────────
 function renderCard(article, idx) {
-  const hue = authorHue(article.author);
+  const author = article.displayAuthor || article.author;
+  const hue = authorHue(author);
   const cats = (article.categories || []).slice(0, 5);
   const delay = Math.min(idx * 30, 300);
 
@@ -1233,7 +1238,7 @@ function renderCard(article, idx) {
       </div>
       <div class="card-body">
         <div class="card-meta">
-          <span class="author-badge" style="--author-hue:${hue}">${esc(article.author.replace(/_/g,' '))}</span>
+          <span class="author-badge" style="--author-hue:${hue}">${esc(author.replace(/_/g,' '))}</span>
           ${responsiveDateMarkup(article.date, 'card-date')}
           ${epNum}
         </div>
@@ -1245,7 +1250,7 @@ function renderCard(article, idx) {
 }
 
 function renderInstagramPosterCard(poster, idx) {
-  const author = poster.posterAuthor || INFOGRAPHICS_AUTHOR;
+  const author = poster.displayAuthor || INFOGRAPHICS_AUTHOR;
   const hue = authorHue(author);
   const delay = Math.min(idx * 30, 300);
   const date = formatDate(poster.date);
@@ -1263,7 +1268,7 @@ function renderInstagramPosterCard(poster, idx) {
 }
 
 function renderInfographicReviewCard(poster, idx) {
-  const author = poster.posterAuthor || INFOGRAPHICS_AUTHOR;
+  const author = poster.displayAuthor || INFOGRAPHICS_AUTHOR;
   const hue = authorHue(author);
   const delay = Math.min(idx * 30, 300);
   const selected = infographicReviewValue(poster.id, poster.instagramPoster);
@@ -2714,6 +2719,7 @@ function setLayout(layout) {
     button.tabIndex = active ? 0 : -1;
   });
   applyGridColumns();
+  syncTelegramInstagramButton();
 }
 function currentLayout() {
   if (document.body.classList.contains('layout-list')) return 'list';
@@ -2731,6 +2737,12 @@ async function changeLayout(layout) {
   const generation = ++layoutChangeGeneration;
   const position = captureListPosition();
   const wasGrouped = groupMode();
+  const resetInfographicFilter = layout === 'list'
+    && state.author === INFOGRAPHICS_AUTHOR && state.infographicFilter !== 'all';
+  if (resetInfographicFilter) {
+    setInfographicFilter('all');
+    state.page = 1;
+  }
   setLayout(layout);
   restoringSessionView = true;
   try {
@@ -2740,7 +2752,7 @@ async function changeLayout(layout) {
       await new Promise(resolve => setTimeout(resolve, 25));
     }
     if (generation !== layoutChangeGeneration) return;
-    if (groupMode() !== wasGrouped) {
+    if (groupMode() !== wasGrouped || resetInfographicFilter) {
       await loadArticles();
       if (state.pages > 0 && state.page > state.pages) {
         state.page = state.pages;

@@ -470,6 +470,14 @@ body.mode-audiobooks .bookmark-btn { opacity: .35; pointer-events: none; }
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+.telegram-btn.is-instagram:disabled {
+  opacity: .34;
+  filter: grayscale(1);
+  cursor: not-allowed;
+}
+.telegram-btn.is-instagram:disabled:hover .instagram-filter-icon,
+.telegram-btn.is-instagram:disabled:hover .infographic-filter-icon { transform: none; }
+.telegram-btn.is-instagram:disabled:hover .instagram-icon-bg { fill: var(--text-muted); }
 
 @media (max-width: 600px) {
   .header-inner {

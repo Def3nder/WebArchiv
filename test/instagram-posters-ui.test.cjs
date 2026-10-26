@@ -31,7 +31,24 @@ test('Infografiken-Autor schaltet zyklisch zwischen allen, Postern und klassisch
   assert.match(html, /linearGradient id="infographic-filter-gradient"[\s\S]*#123e4a[\s\S]*#26756f[\s\S]*#63aaa0/);
   assert.match(server, /if \(instagramPosterMode\) filtered = filtered\.filter\(a => a\.instagramPoster && a\.ownImage\)/);
   assert.match(server, /if \(classicInfographicMode\) filtered = filtered\.filter\(a => !a\.instagramPoster && a\.ownImage\)/);
-  assert.match(server, /!instagramPosterMode && !classicInfographicMode && !infographicReviewMode/);
+  assert.match(server, /if \(article\.author !== INFOGRAPHICS_AUTHOR\) return exposed;/);
+});
+
+test('Jede Infografik zeigt den Autor ihres Hauptartikels, sonst Infografiken', () => {
+  assert.match(server, /if \(article\.author !== INFOGRAPHICS_AUTHOR\) return exposed;[\s\S]*visibleGroupAnchor\(article, user\)[\s\S]*displayAuthor:[\s\S]*linkedArticle\.author[\s\S]*INFOGRAPHICS_AUTHOR/);
+  assert.match(app, /function renderCard\(article, idx\) \{[\s\S]*const author = article\.displayAuthor \|\| article\.author;[\s\S]*authorHue\(author\)/);
+  assert.match(app, /function renderInstagramPosterCard\(poster, idx\) \{[\s\S]*const author = poster\.displayAuthor \|\| INFOGRAPHICS_AUTHOR/);
+  assert.match(app, /function renderInfographicReviewCard\(poster, idx\) \{[\s\S]*const author = poster\.displayAuthor \|\| INFOGRAPHICS_AUTHOR/);
+  assert.match(app, /class="author-badge"[^>]*>\$\{esc\(author\.replace\(\/_\/g,' '\)\)\}<\/span>/);
+});
+
+test('Listenansicht setzt den Infografikfilter zurück und deaktiviert den Symbolbutton', () => {
+  assert.match(app, /const disabled = infographicMode && currentLayout\(\) === 'list'/);
+  assert.match(app, /\$telegramBtn\.disabled = disabled/);
+  assert.match(app, /layout === 'list'[\s\S]*state\.author === INFOGRAPHICS_AUTHOR[\s\S]*state\.infographicFilter !== 'all'/);
+  assert.match(app, /if \(resetInfographicFilter\)[\s\S]*setInfographicFilter\('all'\);[\s\S]*state\.page = 1/);
+  assert.match(app, /groupMode\(\) !== wasGrouped \|\| resetInfographicFilter/);
+  assert.match(css, /\.telegram-btn\.is-instagram:disabled \{[\s\S]*opacity: \.34;[\s\S]*filter: grayscale\(1\);[\s\S]*cursor: not-allowed/);
 });
 
 test('Poster-Kacheln zeigen nur Bild, Autoren- und Datumsbadge im 9:16-Contain-Format', () => {
