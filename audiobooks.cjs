@@ -360,22 +360,32 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     return canAccess(user, book) ? book : null;
   }
 
-  function bookForMediaPath(relPath) {
-    let decoded = String(relPath || '').replace(/\\/g, '/');
-    try { decoded = decodeURIComponent(decoded); } catch { /* ungültig bleibt unverändert */ }
-    const parts = path.posix.normalize(decoded).split('/').filter(Boolean);
+  // URL-Pfade (z. B. aus imageUrl) sind kodiert; die Medienroute übergibt dagegen
+  // den von Express bereits dekodierten Pfad und darf ihn nicht ein zweites Mal
+  // dekodieren, sonst prüfte sie ein anderes Buch als das ausgelieferte.
+  function mediaPathParts(relPath, decoded) {
+    let value = String(relPath || '').replace(/\\/g, '/');
+    if (!decoded) {
+      try { value = decodeURIComponent(value); } catch { /* ungültig bleibt unverändert */ }
+    }
+    return path.posix.normalize(value).split('/').filter(Boolean);
+  }
+
+  function bookForParts(parts) {
     if (parts.length < 3 || parts[0] !== dirName) return null;
     return books.find(book => book.bookDir === parts[1]) || null;
   }
 
-  function canAccessMedia(user, relPath) {
-    let decoded = String(relPath || '').replace(/\\/g, '/');
-    try { decoded = decodeURIComponent(decoded); } catch { /* ungültig bleibt unverändert */ }
-    const parts = path.posix.normalize(decoded).split('/').filter(Boolean);
+  function bookForMediaPath(relPath, { decoded = false } = {}) {
+    return bookForParts(mediaPathParts(relPath, decoded));
+  }
+
+  function canAccessMedia(user, relPath, { decoded = false } = {}) {
+    const parts = mediaPathParts(relPath, decoded);
     if (parts[0] !== dirName) return false;
     // Standard-Cover liegen direkt im Hörbuch-Wurzelverzeichnis und gehören zu keinem Buch.
     if (parts.length === 2) return true;
-    return canAccess(user, bookForMediaPath(decoded));
+    return canAccess(user, bookForParts(parts));
   }
 
   // Bildpfad relativ zur eBook-Datei → Datei im Buchordner (Unterordner erlaubt, Groß-/Kleinschreibung

@@ -33,6 +33,8 @@ test('Server sperrt Detail-, Zusatz- und Medienzugriffe auf private Hörbücher'
   assert.match(server, /function canAccess\(user, book\)[\s\S]*?user\?\.role === 'admin' \|\| !progress\.isPrivate\(book\.id\)/);
   assert.match(server, /const accessibleBook = \(user, id\)[\s\S]*?library\.getForUser\(user, id\)/);
   const mainServer = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-  assert.match(mainServer, /!audiobooks\.canAccessMedia\(req\.user, relPath\)/);
+  const mediaRoutes = fs.readFileSync(path.join(ROOT, 'media-files.cjs'), 'utf8');
+  assert.match(mediaRoutes, /!audiobooks\.canAccessMedia\(req\.user, relPath, \{ decoded: true \}\)/);
+  assert.match(mainServer, /installMediaRoutes\(app, \{[\s\S]*?audiobooks, canAccessAuthor, attachUser/);
   assert.match(mainServer, /function publicShareItem\(id\)[\s\S]*?audiobooks\.getForUser\(null, id\)/);
 });

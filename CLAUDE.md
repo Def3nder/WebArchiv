@@ -89,8 +89,10 @@ object in `app.js`.
   with a whitelist always get the public authors in addition.
 - **Enforcement is per-author** via `canAccessAuthor`. It gates three layers that must stay
   consistent: the `/files/*` media handler, the `/api/articles` list (ACL pre-filter), and the
-  single-article route. `/files/*` also has path-traversal protection (resolved path must stay
-  under `www/`) — replicate that pattern for any new file-serving route. `prompts/*` uses the same
+  single-article route. `/files/*` and `/audio-files/*` live in `media-files.cjs`:
+  `resolveMediaRequest` rejects `.`/`..` segments (also when sent encoded) and the author ACL is
+  checked on that validated path — never check a raw first segment and resolve afterwards. Reuse
+  it for any new file-serving route. `prompts/*` uses the same
   `path.basename` + prefix-check guard.
 - **Audiobooks** (`audiobooks.cjs`, `public/audiobooks.js`): author `Hörbücher` lives under
   `audio/Hoerbuecher/<book>/` (ASCII dir name, mapped to author `Hörbücher`; tracks + cover + optional `abstract.md`), has its own index and

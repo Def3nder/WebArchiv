@@ -71,8 +71,10 @@ object in `app.js`.
   `public-directories`). If that list is empty, unauthenticated requests get 401.
 - **Enforcement is per-author** via `canAccessAuthor`. It gates three layers that must stay
   consistent: the `/files/*` media handler, the `/api/articles` list (ACL pre-filter), and the
-  single-article route. `/files/*` also has path-traversal protection (resolved path must stay
-  under `www/`) — replicate that pattern for any new file-serving route. `prompts/*` uses the same
+  single-article route. `/files/*` and `/audio-files/*` live in `media-files.cjs`:
+  `resolveMediaRequest` rejects `.`/`..` segments (also when sent encoded) and the author ACL is
+  checked on that validated path — never check a raw first segment and resolve afterwards. Reuse
+  it for any new file-serving route. `prompts/*` uses the same
   `path.basename` + prefix-check guard.
 - The `Telegram` author is special-cased: hidden from listings unless `?telegram=1` or explicitly
   filtered by `author=Telegram`.

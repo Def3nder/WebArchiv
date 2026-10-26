@@ -1244,3 +1244,31 @@ bestand 323 von 324 Node-Tests. Ausschließlich der sachfremde Qwen-E2E-Test „
 und Original-CLI-Vertrag“ überschritt auch bei isolierter Wiederholung sein festes
 15-Sekunden-Limit. Der dadurch nicht automatisch gestartete Python-Teil wurde separat ausgeführt
 und bestand vollständig mit 14 von 14 Tests.
+
+## 19. Aktualisierung 26.10.2026 – Pfad-Lücke in /files/* und /audio-files/* geschlossen
+
+**Befund:** Beide Medienrouten prüften den Autor am ersten, noch nicht aufgelösten Pfadsegment
+und lösten den Pfad erst danach auf. Express reicht `..` – auch kodiert als `%2e%2e`, `%2f` oder
+`%5c` – dekodiert an die Route weiter. Dadurch lieferte z. B.
+`/files/Videos/../Joe%20Turan/<Jahr>/<Datei>.jpg` einem Gast Dateien eines privaten Autors aus
+(geprüft wurde der öffentliche Autor „Videos“). Über `/audio-files/<öffentlicher Autor>/../Hoerbuecher/…`
+ließen sich ebenso Hörbücher einschließlich privater Bücher und die Papierkörbe erreichen. Der
+Reverse Proxy NPMplus (192.168.1.14) läuft mit „Disable URI Sanitisation“; er reicht solche Pfade
+unverändert durch. Die Lücke lag aber im Server und bestand unabhängig vom Proxy.
+
+**Lösung:** Neues Modul `media-files.cjs` mit `resolveMediaRequest` und `installMediaRoutes`.
+Segmente, die nur aus Punkten/Leerzeichen bestehen, leere Segmente, NUL und unter Windows `:`
+werden mit `400` abgewiesen. Autor, Infografik-Papierkorb, TTS-Papierkorb und private Hörbücher
+werden erst am geprüften Pfad bestimmt. `audiobooks.canAccessMedia(…, { decoded: true })`
+dekodiert den bereits von Express dekodierten Pfad nicht ein zweites Mal. `isPathInside` liegt
+jetzt ebenfalls in `media-files.cjs`.
+
+**Geprüft:** neue Tests `test/media-files.test.cjs` (echte HTTP-Anfragen mit unveränderten Pfaden;
+eine Gegenprobe mit der alten Semantik lieferte die geheime Datei mit 200 aus), gesamte Node-Suite
+337/337, lokaler Server mit echtem Archiv als Gast (Umgehungsvarianten 400, direkter Zugriff 403,
+öffentliche Bilder 200, Kachelansicht ohne Konsolenfehler). In Produktion nicht geprüft.
+
+**Deployment:** `server.js`, `audiobooks.cjs`, `media-files.cjs` (neu) kopieren und
+`sudo systemctl restart nodeapp`; keine neuen Abhängigkeiten, keine neuen Umgebungsvariablen.
+Die übrigen Punkte des Sicherheitsplans (Secret-Pflicht, Login-Begrenzung, HTML-Bereinigung, CSP)
+folgen getrennt.

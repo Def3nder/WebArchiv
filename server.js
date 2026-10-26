@@ -15,6 +15,7 @@ const {
   AUDIOBOOK_AUTHOR, createAudiobookLibrary, createProgressStore, loadAudiobookConfig, installAudiobookRoutes,
 } = require('./audiobooks.cjs');
 const { createBookmarkStore, installBookmarkRoutes } = require('./bookmarks.cjs');
+const { isPathInside, installMediaRoutes } = require('./media-files.cjs');
 const {
   loadDuplicateConfig, buildDuplicateProfile, detectDuplicateCandidates,
   createDuplicateStore, decisionStillApplies,
@@ -485,11 +486,6 @@ function audioFileUrl(relPath, absPath) {
   let v = '';
   try { v = '?v=' + Math.floor(fs.statSync(absPath).mtimeMs); } catch { /* Datei weg */ }
   return `/audio-files/${relPath}${v}`;
-}
-
-function isPathInside(root, target) {
-  const relative = path.relative(path.resolve(root), path.resolve(target));
-  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
 async function scanDir(dirPath, author, year, collector, { strict = false, targetFile = null } = {}) {
@@ -1907,47 +1903,12 @@ app.post('/api/logout', (req, res) => {
 });
 
 // ─── Authenticated file handler (replaces express.static for /files) ───────
+// Pfadprüfung, Autor-ACL und Papierkorb-Sperren: siehe media-files.cjs.
 
-app.get('/files/*', attachUser, (req, res) => {
-  const relPath = req.params[0];
-  const segments = relPath.split(/[\\/]/);
-  const author  = segments[0];
-  if (author === INFOGRAPHICS_AUTHOR && segments[1]?.toLowerCase() === 'trash') {
-    return res.status(404).end();
-  }
-  if (!canAccessAuthor(req.user, author)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-  const absPath = path.resolve(path.join(WWW_DIR, relPath));
-  if (!absPath.startsWith(WWW_DIR + path.sep)) {
-    return res.status(403).end();
-  }
-  const normalized = process.platform === 'win32' ? absPath.toLowerCase() : absPath;
-  const trashPath = process.platform === 'win32' ? INFOGRAPHIC_TRASH_DIR.toLowerCase() : INFOGRAPHIC_TRASH_DIR;
-  if (normalized === trashPath || normalized.startsWith(trashPath + path.sep)) return res.status(404).end();
-  res.sendFile(absPath, err => { if (err && !res.headersSent) res.status(404).end(); });
-});
-
-app.get('/audio-files/*', attachUser, (req, res) => {
-  const relPath = req.params[0];
-  // Das Hörbuch-Verzeichnis (z. B. „Hoerbuecher“) gehört zum Autor „Hörbücher“.
-  const topDir  = relPath.split('/')[0];
-  // Ersetzte TTS-Dateien bleiben wiederherstellbar, dürfen aber nicht ausgeliefert werden.
-  if (topDir.toLowerCase() === 'trash') return res.status(404).end();
-  const author  = topDir === audiobooks.directory ? AUDIOBOOK_AUTHOR : topDir;
-  if (!canAccessAuthor(req.user, author)) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-  if (topDir === audiobooks.directory && !audiobooks.canAccessMedia(req.user, relPath)) {
-    return res.status(404).end();
-  }
-  const absPath = path.resolve(path.join(AUDIO_DIR, relPath));
-  if (!absPath.startsWith(AUDIO_DIR + path.sep)) {
-    return res.status(403).end();
-  }
-  // Hörbuch-Tracks (.m4b/.m4a) kennt die MIME-Tabelle nicht; Browser brauchen audio/mp4.
-  if (/\.m4[ab]$/i.test(absPath)) res.type('audio/mp4');
-  res.sendFile(absPath, err => { if (err && !res.headersSent) res.status(404).end(); });
+installMediaRoutes(app, {
+  wwwDir: WWW_DIR, audioDir: AUDIO_DIR,
+  infographicsAuthor: INFOGRAPHICS_AUTHOR, audiobookAuthor: AUDIOBOOK_AUTHOR,
+  audiobooks, canAccessAuthor, attachUser,
 });
 
 // ─── Link-Vorschau (Open Graph) ────────────────────────────────────────────

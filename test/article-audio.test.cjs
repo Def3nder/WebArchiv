@@ -6,7 +6,7 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
-const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+const mediaRoutes = fs.readFileSync(path.join(ROOT, 'media-files.cjs'), 'utf8');
 
 test('Artikel-Audio fordert auf iOS eine dauerhafte Playback-Session an', () => {
   assert.match(app, /function prepareAudioPlaybackSession\(\)[\s\S]*?navigator\.audioSession\.type = 'playback'/);
@@ -34,6 +34,6 @@ test('Cache-Buster liefert die korrigierte Player-Version aus', () => {
 });
 
 test('Der TTS-Papierkorb wird nicht über die Audio-Route ausgeliefert', () => {
-  const audioRoute = server.slice(server.indexOf("app.get('/audio-files/*'"), server.indexOf('// ─── Link-Vorschau'));
+  const audioRoute = mediaRoutes.slice(mediaRoutes.indexOf("app.get('/audio-files/*'"));
   assert.match(audioRoute, /topDir\.toLowerCase\(\) === 'trash'[\s\S]*?status\(404\)/);
 });

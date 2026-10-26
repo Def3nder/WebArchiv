@@ -668,8 +668,10 @@ Editor- oder Menülogik einbezogen.
   geprüfte `X-CSRF-Token` der Sitzung. `apiFetch()` setzt dieses Token für schreibende
   Same-Origin-Aufrufe automatisch. Admin-GETs liefern keine Schreibberechtigung und das
   Token wird Nicht-Admins nie in die Seite eingebettet.
-- Datei-Auslieferung `/files/*` prüft die Autor-ACL (kein Zugriff auf fremde Autoren,
-  Path-Traversal-Schutz).
+- Datei-Auslieferung `/files/*` und `/audio-files/*` (`media-files.cjs`) prüft die Autor-ACL
+  am tatsächlich ausgelieferten Pfad: Pfade mit `.`/`..`-Segmenten – auch kodiert als `%2e%2e`,
+  `%2f` oder Backslash – werden mit `400` abgewiesen, bevor Autor und Papierkorb geprüft werden.
+  Der Schutz hängt nicht von der URI-Bereinigung des Reverse Proxys ab.
 
 ---
 
@@ -828,6 +830,7 @@ user-store.cjs                Nutzer, öffentliche Autoren & Autoren-Priorität:
 audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
 article-editor.cjs            Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown
 bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
+media-files.cjs               Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)
 duplicates.cjs                Dublettenerkennung und persistente Entscheidungen
 config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp, diff
