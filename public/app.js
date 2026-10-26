@@ -8,7 +8,7 @@ const state = {
   year: '',
   category: '',
   telegram: false,
-  instagramPosters: false,
+  infographicFilter: 'all',
   bookmarks: false,
   page: 1,
   limit: 24,
@@ -26,7 +26,18 @@ const AUDIOBOOK_AUTHOR = 'Hörbücher';
 const INFOGRAPHICS_AUTHOR = 'Infografiken';
 const isAudiobookId = id => String(id || '').startsWith(AUDIOBOOK_AUTHOR + '/');
 const isBookMode = () => state.author === AUDIOBOOK_AUTHOR;
-const isInstagramPosterMode = () => state.author === INFOGRAPHICS_AUTHOR && state.instagramPosters;
+const isInstagramPosterMode = () => state.author === INFOGRAPHICS_AUTHOR
+  && state.infographicFilter === 'posters';
+const isClassicInfographicMode = () => state.author === INFOGRAPHICS_AUTHOR
+  && state.infographicFilter === 'classic';
+const infographicReview = {
+  active: false,
+  saving: false,
+  baseline: new Map(),
+  changes: new Map(),
+  returnList: null,
+};
+const isInfographicReviewMode = () => infographicReview.active;
 
 let authorHueMap = {};  // author name → hue (0..359), gesetzt in loadMeta()
 let audioEl = null;     // shared audio element
@@ -60,6 +71,7 @@ const $filterYear     = document.getElementById('filter-year');
 const $filterCategory = document.getElementById('filter-category');
 const $filterLayout   = document.getElementById('filter-layout');
 const $filterLimit    = document.getElementById('filter-limit');
+const $infographicReviewSave = document.getElementById('infographic-review-save');
 const $resetFilters   = document.getElementById('reset-filters');
 const $filterBarInner = document.querySelector('.filter-bar-inner');
 const $navigationChrome = document.getElementById('navigation-chrome');
@@ -90,6 +102,8 @@ const $loginError     = document.getElementById('login-error');
 const $loginSubmit    = document.getElementById('login-submit');
 const $loginBtnText   = document.getElementById('login-btn-text');
 const $loginSpinner   = document.getElementById('login-spinner');
+const $fullscreenPosterToggle = document.getElementById('img-fullscreen-poster-toggle');
+const $fullscreenPosterCheckbox = document.getElementById('img-fullscreen-poster-checkbox');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function deviceStorage() {
@@ -271,7 +285,7 @@ function hasActiveListFilter() {
     || state.year
     || state.category
     || state.telegram
-    || state.instagramPosters
+    || state.infographicFilter !== 'all'
     || state.bookmarks
   );
 }
@@ -478,7 +492,7 @@ function snapshotSessionView() {
 function saveCurrentViewState() {
   clearTimeout(sessionViewSaveTimer);
   sessionViewSaveTimer = null;
-  if (!sessionViewStore || !currentUser || restoringSessionView) return;
+  if (!sessionViewStore || !currentUser || restoringSessionView || isInfographicReviewMode()) return;
   const snapshot = snapshotSessionView();
   sessionViewStore.save(deviceStorage(), currentUser, snapshot);
 }
@@ -579,6 +593,7 @@ function zoomImageCentered(nextScale) {
 // articleId gesetzt → Hash trägt „?bild=N“, damit der Link genau dieses Bild zeigt.
 const fsGallery = {
   urls: [], index: 0, articleId: null, bounded: false, returnFocus: null, previousBodyOverflow: '',
+  reviewIds: [],
 };
 
 function showFullscreenImage(index) {
@@ -593,12 +608,25 @@ function showFullscreenImage(index) {
   $counter.hidden = count < 2;
   $counter.textContent = `${index + 1} / ${count}`;
   document.getElementById('img-fullscreen-download').href = url;
+  const reviewId = fsGallery.reviewIds[index] || '';
+  const reviewVisible = isInfographicReviewMode() && !!reviewId;
+  $fullscreenPosterToggle.hidden = !reviewVisible;
+  $fs.classList.toggle('has-poster-review', reviewVisible);
+  if (reviewVisible) {
+    $fullscreenPosterCheckbox.dataset.reviewId = reviewId;
+    $fullscreenPosterCheckbox.checked = infographicReviewValue(reviewId);
+    $fullscreenPosterCheckbox.setAttribute('aria-label', $fullscreenPosterCheckbox.checked
+      ? 'Poster-Markierung entfernen'
+      : 'Als Poster markieren');
+  } else {
+    delete $fullscreenPosterCheckbox.dataset.reviewId;
+  }
   prepareImageFile(url);
   if (fsGallery.articleId && count > 1) {
     history.replaceState(APP_VIEW_HISTORY_STATE, '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
   }
 }
-function openGalleryFullscreen(urls, index = 0, articleId = null, bounded = false, returnFocus = null) {
+function openGalleryFullscreen(urls, index = 0, articleId = null, bounded = false, returnFocus = null, reviewIds = []) {
   if (!urls.length) return;
   const fullscreen = document.getElementById('img-fullscreen');
   if (fullscreen.hidden) fsGallery.previousBodyOverflow = document.body.style.overflow;
@@ -606,6 +634,7 @@ function openGalleryFullscreen(urls, index = 0, articleId = null, bounded = fals
   fsGallery.articleId = articleId;
   fsGallery.bounded = bounded;
   fsGallery.returnFocus = returnFocus;
+  fsGallery.reviewIds = reviewIds;
   showFullscreenImage(Math.max(0, Math.min(urls.length - 1, index)));
   document.body.style.overflow = 'hidden';
   fullscreen.hidden = false;
@@ -624,6 +653,9 @@ function closeImageFullscreen() {
   fsGallery.articleId = null;
   fsGallery.bounded = false;
   fsGallery.returnFocus = null;
+  fsGallery.reviewIds = [];
+  $fullscreenPosterToggle.hidden = true;
+  document.getElementById('img-fullscreen').classList.remove('has-poster-review');
   document.body.style.overflow = fsGallery.previousBodyOverflow;
   fsGallery.previousBodyOverflow = '';
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
@@ -680,27 +712,40 @@ function setTelegram(on) {
   syncTelegramInstagramButton();
 }
 
-function setInstagramPosterFilter(on) {
-  state.instagramPosters = on;
+function setInfographicFilter(mode = 'all') {
+  state.infographicFilter = ['posters', 'classic'].includes(mode) ? mode : 'all';
   syncTelegramInstagramButton();
 }
 
+function nextInfographicFilter() {
+  const order = ['all', 'posters', 'classic'];
+  return order[(order.indexOf(state.infographicFilter) + 1) % order.length];
+}
+
 function syncTelegramInstagramButton() {
-  const instagramMode = state.author === INFOGRAPHICS_AUTHOR;
-  const active = instagramMode ? state.instagramPosters : state.telegram;
+  const infographicMode = state.author === INFOGRAPHICS_AUTHOR;
+  const classicMode = infographicMode && state.infographicFilter === 'classic';
+  const active = infographicMode ? state.infographicFilter !== 'all' : state.telegram;
   // SVGElement.hidden wird nicht von allen Browsern als reflektiertes HTML-Attribut
   // unterstützt. Das Attribut direkt schalten, damit die CSS-Regel svg[hidden]
   // zuverlässig zwischen Telegram- und Instagram-Symbol wechselt.
-  $telegramBtn.querySelector('[data-telegram-icon]')?.toggleAttribute('hidden', instagramMode);
-  $telegramBtn.querySelector('[data-instagram-icon]')?.toggleAttribute('hidden', !instagramMode);
-  $telegramBtn.classList.toggle('is-instagram', instagramMode);
+  $telegramBtn.querySelector('[data-telegram-icon]')?.toggleAttribute('hidden', infographicMode);
+  $telegramBtn.querySelector('[data-instagram-icon]')?.toggleAttribute('hidden', !infographicMode || classicMode);
+  $telegramBtn.querySelector('[data-infographic-icon]')?.toggleAttribute('hidden', !classicMode);
+  $telegramBtn.classList.toggle('is-instagram', infographicMode);
   $telegramBtn.classList.toggle('active', active);
   $telegramBtn.setAttribute('aria-pressed', String(active));
-  $telegramBtn.title = instagramMode
-    ? (active ? 'Alle Infografiken anzeigen' : 'Nur Instagram-Poster anzeigen')
+  $telegramBtn.title = infographicMode
+    ? ({
+      all: 'Nur Instagram-Poster anzeigen',
+      posters: 'Nur klassische Infografiken anzeigen',
+      classic: 'Alle Infografiken anzeigen',
+    }[state.infographicFilter] || 'Alle Infografiken anzeigen')
     : (active ? 'Telegram-Artikel ausblenden' : 'Telegram-Artikel anzeigen');
   $telegramBtn.setAttribute('aria-label', $telegramBtn.title);
   document.body.classList.toggle('mode-instagram-posters', isInstagramPosterMode());
+  document.body.classList.toggle('mode-classic-infographics', isClassicInfographicMode());
+  document.body.classList.toggle('mode-infographic-review', isInfographicReviewMode());
 }
 
 // Lesezeichen-Filter im Header: nur Artikel mit Lesezeichen (Autor/Jahr/Kategorie/Suche gelten weiter).
@@ -790,6 +835,7 @@ function applyUserUI(user) {
   if (user?.role !== 'admin') clearTtsUI();
   const isGuest = !user || user.role === 'guest';
   const isAdmin = user?.role === 'admin';
+  if (!isAdmin && isInfographicReviewMode()) resetInfographicReviewState();
   if (typeof syncBookPrivateAccess === 'function') syncBookPrivateAccess(isAdmin);
   // Gäste bekommen immer die Vorgaben; die Filter-Beschriftungen sind für
   // angemeldete Nutzer lokal pro Nutzer und Gerät gespeichert (settings.js).
@@ -875,6 +921,7 @@ async function logout() {
   // Hörposition vor dem Abmelden sichern und Wiedergabe beenden.
   if (typeof bookPlayerClose === 'function') await bookPlayerClose();
   clearActiveViewForAccountSwitch();
+  resetInfographicReviewState();
   clearCurrentViewState(currentUser);
   pendingLoginDeepLink = null;
   history.replaceState(APP_VIEW_HISTORY_STATE, '', '#/');
@@ -891,7 +938,7 @@ async function logout() {
   });
   Object.assign(state, {
     q: '', author: '', externalAudio: false, year: '', category: '', telegram: false,
-    instagramPosters: false, bookmarks: false, page: 1, limit: 24, bookSort: 'recent',
+    infographicFilter: 'all', bookmarks: false, page: 1, limit: 24, bookSort: 'recent',
     gridCardWidths: { square: null, tall: null },
   });
   currentViewItemId = '';
@@ -900,7 +947,7 @@ async function logout() {
   $searchInput.value = '';
   $searchClear.classList.remove('visible');
   setTelegram(false);
-  setInstagramPosterFilter(false);
+  setInfographicFilter('all');
   setBookmarkFilter(false);
   setLayout('tall');
   $filterLimit.value = '24';
@@ -954,7 +1001,9 @@ async function fetchArticles(params = {}) {
   if (params.year)     qs.set('year', params.year);
   if (params.category) qs.set('category', params.category);
   if (params.telegram) qs.set('telegram', '1');
-  if (params.instagramPosters) qs.set('instagram', '1');
+  if (params.infographicFilter === 'posters') qs.set('infographic', 'poster');
+  else if (params.infographicFilter === 'classic') qs.set('infographic', 'classic');
+  if (params.infographicReview) qs.set('infographicReview', '1');
   if (params.bookmarks) qs.set('bookmarks', '1');
   if (params.group)    qs.set('group', '1');
   qs.set('page',  params.page  || 1);
@@ -992,6 +1041,156 @@ async function uploadInfographic(article, file) {
   try { data = await r.json(); } catch { /* ignore */ }
   if (!r.ok) throw new Error(data.error || 'Infografik konnte nicht gespeichert werden.');
   return data;
+}
+
+function infographicReviewValue(id, fallback = false) {
+  if (infographicReview.changes.has(id)) return infographicReview.changes.get(id);
+  if (infographicReview.baseline.has(id)) return infographicReview.baseline.get(id);
+  return fallback === true;
+}
+
+function rememberInfographicReviewItems(items) {
+  for (const item of items) {
+    if (!infographicReview.baseline.has(item.id)) {
+      infographicReview.baseline.set(item.id, item.instagramPoster === true);
+    }
+  }
+}
+
+function updateInfographicReviewSaveButton(message = '') {
+  const count = infographicReview.changes.size;
+  $infographicReviewSave.hidden = !isInfographicReviewMode();
+  $infographicReviewSave.disabled = infographicReview.saving;
+  $infographicReviewSave.textContent = message || (count ? `Speichern (${count})` : 'Abbrechen');
+}
+
+function syncInfographicReviewMark(id) {
+  const enabled = infographicReviewValue(id);
+  $app.querySelectorAll('[data-review-poster-id]').forEach(input => {
+    if (input.dataset.reviewPosterId !== id) return;
+    input.checked = enabled;
+    input.closest('.infographic-review-card')?.classList.toggle('is-poster', enabled);
+    input.setAttribute('aria-label', enabled ? 'Poster-Markierung entfernen' : 'Als Poster markieren');
+    input.closest('.poster-review-toggle')?.setAttribute('title', enabled
+      ? 'Poster-Markierung entfernen'
+      : 'Als Poster markieren');
+  });
+  if ($fullscreenPosterCheckbox.dataset.reviewId === id) {
+    $fullscreenPosterCheckbox.checked = enabled;
+    $fullscreenPosterCheckbox.setAttribute('aria-label', enabled
+      ? 'Poster-Markierung entfernen'
+      : 'Als Poster markieren');
+  }
+  updateInfographicReviewSaveButton();
+}
+
+function setInfographicReviewMark(id, enabled) {
+  if (!isInfographicReviewMode() || !infographicReview.baseline.has(id)) return;
+  if (enabled === infographicReview.baseline.get(id)) infographicReview.changes.delete(id);
+  else infographicReview.changes.set(id, enabled);
+  syncInfographicReviewMark(id);
+}
+
+function setInfographicReviewChrome() {
+  const active = isInfographicReviewMode();
+  document.body.classList.toggle('mode-infographic-review', active);
+  $filterAuthor.disabled = active;
+  const authorMenuTrigger = filterAriaRoot($filterAuthor)?.querySelector('.filter-menu-trigger');
+  if (authorMenuTrigger) authorMenuTrigger.disabled = active;
+  $filterLayout.querySelectorAll('button').forEach(button => { button.disabled = active; });
+  const menuItem = $adminMenu.querySelector('[data-action="review-infographics"]');
+  if (menuItem) menuItem.textContent = active ? 'Prüfmodus beenden' : 'Infografiken prüfen';
+  updateInfographicReviewSaveButton();
+  syncTelegramInstagramButton();
+}
+
+function resetInfographicReviewState() {
+  infographicReview.active = false;
+  infographicReview.saving = false;
+  infographicReview.baseline.clear();
+  infographicReview.changes.clear();
+  infographicReview.returnList = null;
+  setInfographicReviewChrome();
+}
+
+async function enterInfographicReview() {
+  if (currentUser?.role !== 'admin' || isInfographicReviewMode()) return;
+  const snapshot = snapshotSessionView();
+  infographicReview.returnList = {
+    ...snapshot.list,
+    listPosition: snapshot.view.listPosition,
+  };
+  infographicReview.baseline.clear();
+  infographicReview.changes.clear();
+  infographicReview.active = true;
+  Object.assign(state, {
+    q: '', author: INFOGRAPHICS_AUTHOR, externalAudio: false, year: '', category: '',
+    infographicFilter: 'all', bookmarks: false, page: 1,
+  });
+  $searchInput.value = '';
+  $searchClear.classList.remove('visible');
+  $filterAuthor.value = INFOGRAPHICS_AUTHOR;
+  $filterYear.value = '';
+  $filterCategory.value = '';
+  setInfographicFilter('all');
+  setBookmarkFilter(false);
+  setLayout('tall');
+  [$filterAuthor, $filterYear, $filterCategory].forEach(syncFilterAriaMenu);
+  applyBookMode();
+  setInfographicReviewChrome();
+  await loadArticles();
+  scrollToResults('auto');
+}
+
+async function leaveInfographicReview({ discard = false } = {}) {
+  if (!isInfographicReviewMode()) return true;
+  if (!discard && infographicReview.changes.size
+      && !confirm('Ungespeicherte Poster-Markierungen verwerfen und den Prüfmodus beenden?')) return false;
+  const previous = infographicReview.returnList;
+  resetInfographicReviewState();
+  if (!previous) return true;
+  Object.assign(state, previous, { infographicFilter: 'all' });
+  $searchInput.value = state.q;
+  $searchClear.classList.toggle('visible', !!state.q);
+  setTelegram(state.telegram);
+  setBookmarkFilter(state.bookmarks);
+  setLayout(previous.layout || 'tall');
+  $filterLimit.value = String(state.limit);
+  applySavedFilterControls();
+  syncFilterAriaMenu($filterLimit);
+  await loadArticles();
+  await restoreListPosition(previous.listPosition);
+  saveCurrentViewState();
+  return true;
+}
+
+async function saveInfographicReview() {
+  if (!isInfographicReviewMode() || infographicReview.saving || !infographicReview.changes.size) return;
+  const changes = [...infographicReview.changes].map(([id, enabled]) => ({
+    id,
+    enabled,
+    expected: infographicReview.baseline.get(id),
+  }));
+  infographicReview.saving = true;
+  updateInfographicReviewSaveButton('Speichert …');
+  try {
+    const response = await apiFetch('/api/infographic-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changes }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Poster-Markierungen konnten nicht gespeichert werden.');
+    for (const item of data.updated || []) infographicReview.baseline.set(item.id, item.instagramPoster === true);
+    infographicReview.changes.clear();
+    infographicReview.saving = false;
+    await leaveInfographicReview({ discard: true });
+  } catch (error) {
+    alert(error.message || 'Poster-Markierungen konnten nicht gespeichert werden.');
+  } finally {
+    infographicReview.saving = false;
+    if (isInfographicReviewMode()) updateInfographicReviewSaveButton();
+  }
 }
 
 // ── Rendering ──────────────────────────────────────────────────────────────
@@ -1050,15 +1249,41 @@ function renderInstagramPosterCard(poster, idx) {
   const hue = authorHue(author);
   const delay = Math.min(idx * 30, 300);
   const date = formatDate(poster.date);
-  const label = ['Instagram-Poster', 'von ' + author, date].filter(Boolean).join(' ');
+  const classic = isClassicInfographicMode();
+  const label = [classic ? 'Infografik' : 'Instagram-Poster', 'von ' + author, date].filter(Boolean).join(' ');
   return `
-    <article class="card instagram-poster-card" data-id="${esc(poster.id)}" data-poster-index="${idx}"
+    <article class="card instagram-poster-card${classic ? ' classic-infographic-card' : ''}" data-id="${esc(poster.id)}" data-poster-index="${idx}"
       style="animation-delay:${delay}ms" tabindex="0" role="button" aria-label="${esc(label)}">
       <div class="instagram-poster-image">
         <img src="${esc(poster.imageUrl)}" alt="" loading="lazy" onerror="handleImgError(this)" />
         <span class="instagram-poster-badge instagram-poster-author" style="--author-hue:${hue}">${esc(author.replace(/_/g, ' '))}</span>
         ${responsiveDateMarkup(poster.date, 'instagram-poster-badge instagram-poster-date')}
       </div>
+    </article>`;
+}
+
+function renderInfographicReviewCard(poster, idx) {
+  const author = poster.posterAuthor || INFOGRAPHICS_AUTHOR;
+  const hue = authorHue(author);
+  const delay = Math.min(idx * 30, 300);
+  const selected = infographicReviewValue(poster.id, poster.instagramPoster);
+  const actionLabel = selected ? 'Poster-Markierung entfernen' : 'Als Poster markieren';
+  return `
+    <article class="card instagram-poster-card infographic-review-card${selected ? ' is-poster' : ''}"
+      data-id="${esc(poster.id)}" data-poster-index="${idx}" style="animation-delay:${delay}ms">
+      <button type="button" class="instagram-poster-image infographic-review-image"
+        aria-label="${esc(poster.title || 'Infografik')} im Vollbild öffnen">
+        <img src="${esc(poster.imageUrl)}" alt="${esc(poster.title || 'Infografik')}" loading="lazy" onerror="handleImgError(this)" />
+        <span class="instagram-poster-badge instagram-poster-author" style="--author-hue:${hue}">${esc(author.replace(/_/g, ' '))}</span>
+        ${responsiveDateMarkup(poster.date, 'instagram-poster-badge instagram-poster-date')}
+      </button>
+      <label class="poster-review-toggle" title="${actionLabel}">
+        <input type="checkbox" data-review-poster-id="${esc(poster.id)}" aria-label="${actionLabel}"${selected ? ' checked' : ''} />
+        <span class="poster-review-check" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.4 3.4 7.6-8"/></svg>
+        </span>
+        <span class="visually-hidden">Poster</span>
+      </label>
     </article>`;
 }
 
@@ -1192,15 +1417,28 @@ function wireCardGallery(card) {
 }
 
 function renderGrid(items) {
-  if (isInstagramPosterMode()) {
+  if (isInfographicReviewMode()) {
     if (!items.length) {
       return `<div class="empty-state">
         ${svgSearch()}
-        <h2>Keine Instagram-Poster gefunden</h2>
-        <p>Zu den gewählten Filtern sind keine markierten Poster vorhanden.</p>
+        <h2>Keine Infografiken gefunden</h2>
+        <p>Zu den gewählten Filtern sind keine Grafiken vorhanden.</p>
       </div>`;
     }
-    return `<div class="article-grid instagram-poster-grid">${items.map(renderInstagramPosterCard).join('')}</div>`;
+    return `<div class="article-grid instagram-poster-grid infographic-review-grid">${items.map(renderInfographicReviewCard).join('')}</div>`;
+  }
+  if (isInstagramPosterMode() || isClassicInfographicMode()) {
+    const classic = isClassicInfographicMode();
+    if (!items.length) {
+      return `<div class="empty-state">
+        ${svgSearch()}
+        <h2>${classic ? 'Keine klassischen Infografiken' : 'Keine Instagram-Poster'} gefunden</h2>
+        <p>${classic
+          ? 'Zu den gewählten Filtern sind keine klassischen Infografiken vorhanden.'
+          : 'Zu den gewählten Filtern sind keine markierten Poster vorhanden.'}</p>
+      </div>`;
+    }
+    return `<div class="article-grid instagram-poster-grid${classic ? ' classic-infographic-grid' : ''}">${items.map(renderInstagramPosterCard).join('')}</div>`;
   }
   if (!items.length && state.bookmarks) {
     const filtered = state.q || state.author || state.externalAudio || state.year || state.category;
@@ -1281,7 +1519,8 @@ async function loadArticles() {
       year:     state.year,
       category: state.category,
       telegram: state.telegram,
-      instagramPosters: isInstagramPosterMode(),
+      infographicFilter: state.author === INFOGRAPHICS_AUTHOR ? state.infographicFilter : 'all',
+      infographicReview: isInfographicReviewMode(),
       bookmarks: state.bookmarks,
       group:    groupMode(),
       page:     state.page,
@@ -1291,10 +1530,15 @@ async function loadArticles() {
     state.total = data.total;
     state.pages = data.pages;
     state.currentItems = data.items;
+    if (isInfographicReviewMode()) rememberInfographicReviewItems(data.items);
 
     const resultLabel = bookMode
       ? (data.total === 1 ? 'Hörbuch' : 'Hörbücher')
-      : (isInstagramPosterMode() ? 'Poster' : 'Artikel');
+      : (isInfographicReviewMode()
+        ? (data.total === 1 ? 'Grafik' : 'Grafiken')
+        : (isInstagramPosterMode()
+          ? 'Poster'
+          : (isClassicInfographicMode() ? (data.total === 1 ? 'Infografik' : 'Infografiken') : 'Artikel')));
     $count.textContent = `${data.total.toLocaleString('de-DE')} ${resultLabel}`;
     $app.innerHTML = (bookMode ? renderBookGrid(data.items) : renderGrid(data.items)) + renderPagination(state.page, state.pages);
     applyGridColumns();
@@ -1304,6 +1548,18 @@ async function loadArticles() {
     // Attach card click handlers
     $app.querySelectorAll('.card').forEach(card => {
       const posterIndex = card.dataset.posterIndex;
+      if (card.classList.contains('infographic-review-card')) {
+        const openButton = card.querySelector('.infographic-review-image');
+        openButton?.addEventListener('click', () => openGalleryFullscreen(
+          state.currentItems.map(item => item.imageUrl),
+          Number(posterIndex), null, true, openButton,
+          state.currentItems.map(item => item.id),
+        ));
+        card.querySelector('[data-review-poster-id]')?.addEventListener('change', event => {
+          setInfographicReviewMark(event.currentTarget.dataset.reviewPosterId, event.currentTarget.checked);
+        });
+        return;
+      }
       const handler = posterIndex === undefined
         ? () => openArticle(card.dataset.id)
         : () => openGalleryFullscreen(
@@ -1329,7 +1585,7 @@ async function loadArticles() {
       });
     });
 
-    if (!restoringSessionView) scheduleCurrentViewSave();
+    if (!restoringSessionView && !isInfographicReviewMode()) scheduleCurrentViewSave();
 
   } catch (err) {
     $app.innerHTML = `<div class="empty-state"><p>Fehler beim Laden: ${esc(err.message)}</p></div>`;
@@ -2065,8 +2321,8 @@ async function loadMeta() {
 function applySavedListState(saved) {
   if (!saved) return;
   Object.assign(state, saved.list);
-  // Der Instagram-Filter ist bewusst nur temporär und wird nie wiederhergestellt.
-  state.instagramPosters = false;
+  // Der Infografik-Filter ist bewusst nur temporär und wird nie wiederhergestellt.
+  state.infographicFilter = 'all';
   $searchInput.value = state.q;
   $searchClear.classList.toggle('visible', !!state.q);
   setTelegram(state.telegram);
@@ -2194,7 +2450,7 @@ $filterAuthor.addEventListener('change', async () => {
   const previousAuthor = state.author;
   state.externalAudio = $filterAuthor.value === '__external_audio__';
   state.author = state.externalAudio ? '' : $filterAuthor.value;
-  if (previousAuthor !== state.author) setInstagramPosterFilter(false);
+  if (previousAuthor !== state.author) setInfographicFilter('all');
   if (state.author === 'Telegram') setTelegram(true);
   applyBookMode();
   state.page = 1;
@@ -2708,7 +2964,7 @@ $filterLimit.addEventListener('change', async () => {
 });
 
 $telegramBtn.addEventListener('click', () => {
-  if (state.author === INFOGRAPHICS_AUTHOR) setInstagramPosterFilter(!state.instagramPosters);
+  if (state.author === INFOGRAPHICS_AUTHOR) setInfographicFilter(nextInfographicFilter());
   else setTelegram(!state.telegram);
   state.page = 1;
   loadArticles();
@@ -2729,13 +2985,26 @@ $loginForm.addEventListener('submit', e => {
 });
 
 $logoutBtn.addEventListener('click', () => {
-  if (confirm('Wirklich abmelden?')) logout();
+  const message = isInfographicReviewMode() && infographicReview.changes.size
+    ? 'Wirklich abmelden? Ungespeicherte Poster-Markierungen werden verworfen.'
+    : 'Wirklich abmelden?';
+  if (confirm(message)) logout();
 });
 
 $loginBtn.addEventListener('click', () => showLogin());
 $loginClose?.addEventListener('click', () => hideLogin());
 
 $resetFilters.addEventListener('click', () => {
+  if (isInfographicReviewMode()) {
+    $searchInput.value = '';
+    $searchClear.classList.remove('visible');
+    $filterYear.value = '';
+    $filterCategory.value = '';
+    Object.assign(state, { q: '', year: '', category: '', page: 1 });
+    [$filterYear, $filterCategory].forEach(syncFilterAriaMenu);
+    loadArticles();
+    return;
+  }
   $searchInput.value = '';
   $searchClear.classList.remove('visible');
   $filterAuthor.value = '';
@@ -2745,10 +3014,10 @@ $resetFilters.addEventListener('click', () => {
   setLayout('tall');
   $filterLimit.value = '24';
   setTelegram(false);
-  setInstagramPosterFilter(false);
+  setInfographicFilter('all');
   setBookmarkFilter(false);
   Object.assign(state, { q:'', author:'', externalAudio:false, year:'', category:'', telegram:false,
-    instagramPosters:false, bookmarks:false, page:1, limit:24 });
+    infographicFilter:'all', bookmarks:false, page:1, limit:24 });
   [
     $filterAuthor,
     $filterYear,
@@ -3252,6 +3521,10 @@ $adminMenu.addEventListener('click', ev => {
   else if (action === 'tts-job') showTtsJob();
   else if (action === 'tts-settings') openTtsSettingsDialog();
   else if (action === 'new-infographic') openNewInfographic();
+  else if (action === 'review-infographics') {
+    if (isInfographicReviewMode()) void leaveInfographicReview();
+    else void enterInfographicReview();
+  }
   else if (action === 'duplicates' && typeof openDuplicateReview === 'function') openDuplicateReview();
   else if (action === 'settings') openSettingsDialog();
   else if (action === 'users') openUserAdmin();
@@ -3264,6 +3537,14 @@ document.getElementById('overlay-prev').addEventListener('click', () => navigate
 document.getElementById('overlay-next').addEventListener('click', () => navigateArticle(+1));
 const $imgFullscreen = document.getElementById('img-fullscreen');
 const $imgFullscreenImg = document.getElementById('img-fullscreen-img');
+$infographicReviewSave.addEventListener('click', () => {
+  if (infographicReview.changes.size) void saveInfographicReview();
+  else void leaveInfographicReview();
+});
+$fullscreenPosterCheckbox.addEventListener('change', event => {
+  const id = event.currentTarget.dataset.reviewId;
+  if (id) setInfographicReviewMark(id, event.currentTarget.checked);
+});
 $imgFullscreen.addEventListener('click', e => {
   if (e.target === $imgFullscreen) closeImageFullscreen();
 });
@@ -3319,6 +3600,12 @@ window.addEventListener('resize', () => {
   applyImageZoom();
 });
 
+window.addEventListener('beforeunload', event => {
+  if (!isInfographicReviewMode() || !infographicReview.changes.size) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (!document.getElementById('img-fullscreen').hidden) { closeImageFullscreen(); return; }
@@ -3328,6 +3615,25 @@ document.addEventListener('keydown', e => {
     if (!$loginOverlay.hidden && currentUser) { hideLogin(); return; }
     return;
   }
+
+  // Im Prüfmodus schaltet die Leertaste die Poster-Markierung des aktuell
+  // gezeigten Bildes. Hat die Checkbox selbst den Fokus, bleibt ihre native
+  // Tastaturbedienung zuständig, damit die Markierung nicht doppelt wechselt.
+  if ((e.key === ' ' || e.code === 'Space') && !$imgFullscreen.hidden
+      && isInfographicReviewMode() && !$fullscreenPosterToggle.hidden) {
+    if (e.target === $fullscreenPosterCheckbox) return;
+    const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
+    const interactive = target?.closest(
+      'input, textarea, select, button, a, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
+    );
+    if (interactive) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    const id = $fullscreenPosterCheckbox.dataset.reviewId;
+    if (id) setInfographicReviewMark(id, !$fullscreenPosterCheckbox.checked);
+    return;
+  }
+
   const dir = pageSwipeMath?.keyDirection(e) || 0;
   if (!dir) return;
 
@@ -3351,7 +3657,9 @@ document.addEventListener('keydown', e => {
   const interactive = target?.closest(
     'input, textarea, select, button, a, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
   );
-  if (currentLayout() === 'list' || interactive || !$loginOverlay.hidden
+  const reviewCheckbox = isInfographicReviewMode()
+    && interactive?.matches('[data-review-poster-id]');
+  if (currentLayout() === 'list' || (interactive && !reviewCheckbox) || !$loginOverlay.hidden
       || !$scrapeOverlay.hidden || !$ttsOverlay.hidden || document.querySelector('dialog[open]')) return;
 
   const targetPage = state.page + dir;

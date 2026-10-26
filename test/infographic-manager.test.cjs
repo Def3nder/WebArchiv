@@ -7,11 +7,11 @@ const {
   replaceInfographicYearArticles, prepareLinkedArticles, setInstagramPosterMetadata, parseArticle,
 } = require('../server.js');
 
-test('Instagram-Poster-Metadatum steht direkt nach Datum und nur im Ja-Fall', () => {
+test('Instagram-Poster-Metadatum steht als eigener Absatz nach Datum und nur im Ja-Fall', () => {
   const original = '# Grafik\r\n\r\nDatum: 2026-10-25\r\n\r\nZusammenfassung: Text\r\n';
   const marked = setInstagramPosterMetadata(original, true);
   assert.equal(marked,
-    '# Grafik\r\n\r\nDatum: 2026-10-25\r\nInstagram-Poster: Ja\r\n\r\nZusammenfassung: Text\r\n');
+    '# Grafik\r\n\r\nDatum: 2026-10-25\r\n\r\nInstagram-Poster: Ja\r\n\r\nZusammenfassung: Text\r\n');
   assert.equal(parseArticle(marked, 'grafik.md').instagramPoster, true);
   assert.equal(setInstagramPosterMetadata(marked, false), original);
   assert.equal(parseArticle(original, 'grafik.md').instagramPoster, false);
@@ -20,7 +20,7 @@ test('Instagram-Poster-Metadatum steht direkt nach Datum und nur im Ja-Fall', ()
 test('Instagram-Poster-Markierung wird beim erneuten Aktivieren nicht dupliziert', () => {
   const original = '# Grafik\nDatum: 2026-10-25\nInstagram-Poster: Ja\nInstagram-Poster: Nein\n';
   const marked = setInstagramPosterMetadata(original, true);
-  assert.equal(marked, '# Grafik\nDatum: 2026-10-25\nInstagram-Poster: Ja\n');
+  assert.equal(marked, '# Grafik\nDatum: 2026-10-25\n\nInstagram-Poster: Ja\n');
 });
 
 async function fixture(run) {
@@ -199,6 +199,26 @@ test('Manager-Aktionen und Upload lesen nur das betroffene Infografik-Jahr neu e
   assert.doesNotMatch(manager, /await buildIndex\(\)/);
   assert.match(upload, /await refreshInfographicsForYear\(header\.date\.slice\(0, 4\)\)/);
   assert.doesNotMatch(upload, /await buildIndex\(\)/);
+});
+
+test('Prüfmodus speichert atomar und veröffentlicht alle betroffenen Jahre nur einmal', async () => {
+  const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const batch = server.slice(
+    server.indexOf("app.post('/api/infographic-review'"),
+    server.indexOf("'/api/infographics/*'"),
+  );
+  assert.match(batch, /prepareInfographicPosterBatch\(req\.body\?\.changes\)/);
+  assert.match(batch, /moveInfographicFiles\(batch\.mappings\)/);
+  assert.match(batch, /refreshInfographicsForYears\(years\)/);
+  assert.doesNotMatch(batch, /buildIndex\(/);
+
+  const refresh = server.slice(
+    server.indexOf('async function refreshInfographicsForYears'),
+    server.indexOf('async function rebuildIndex'),
+  );
+  assert.match(refresh, /for \(const year of uniqueYears\)/);
+  assert.match(refresh, /nextSourceArticles = replaceInfographicYearArticles/);
+  assert.equal((refresh.match(/publishArticleIndex\(/g) || []).length, 1);
 });
 
 test('Escape schließt nur die oberste Ebene des Infografik-Managers und erhält den Artikel', async () => {

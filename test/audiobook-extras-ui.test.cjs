@@ -85,7 +85,7 @@ test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dial
   assert.match(styles, /\.bem-markdown-field \.markdown-live-editor \{[^}]*min-height: 0; height: 100%;/);
   assert.match(styles, /#book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-toolbar, #book-extras-manager:has\(\.bem-editor:not\(\[hidden\]\)\) \.bem-tabs \{ display: none; \}/);
   assert.match(styles, /\.bem-status:empty \{ display: none; \}/);
-  assert.match(html, /styles\.css\?v=153/);
+  assert.match(html, /styles\.css\?v=154/);
 });
 
 test('Datei-Icons öffnen Markdown-, Extra-Bild- und Textbild-Vorschauen im Verwaltungsdialog', () => {
@@ -156,7 +156,7 @@ test('Escape und Herunterziehen schließen zuerst nur den Markdown-Editor', () =
   assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(!\$bemEditor\.hidden\) \{[\s\S]*?bemCloseEditor\(\);[\s\S]*?return;[\s\S]*?\$bem\.close\(\)/);
   assert.match(app, /\['#book-extras-manager', '#book-extras-manager \[data-bem-close\]'\]/);
   assert.match(app, /onClose: \(\) => closeBtn\.click\(\)/);
-  assert.match(html, /app\.js\?v=122/);
+  assert.match(html, /app\.js\?v=123/);
 });
 
 test('Escape und Herunterziehen schließen zuerst nur die Dateivorschau', () => {

@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=153" />
+  <link rel="stylesheet" href="styles.css?v=157" />
 </head>
 <body>
 
@@ -54,12 +54,24 @@
           <defs>
             <radialGradient id="instagram-filter-gradient" cx="0" cy="0" r="1" gradientTransform="translate(5 23) rotate(-48) scale(28 27)" gradientUnits="userSpaceOnUse">
               <stop stop-color="#ffd600"/><stop offset=".24" stop-color="#ff7a00"/><stop offset=".52" stop-color="#ff0169"/><stop offset=".78" stop-color="#d300c5"/><stop offset="1" stop-color="#7638fa"/>
-            </linearGradient>
+            </radialGradient>
           </defs>
           <rect class="instagram-icon-bg" x="1" y="1" width="22" height="22" rx="6"/>
           <rect class="instagram-icon-camera" x="6.3" y="6.3" width="11.4" height="11.4" rx="3.4"/>
           <circle class="instagram-icon-camera" cx="12" cy="12" r="2.7"/>
           <circle class="instagram-icon-dot" cx="16.25" cy="7.75" r="1"/>
+        </svg>
+        <svg data-infographic-icon class="infographic-filter-icon" viewBox="0 0 24 24" aria-hidden="true" hidden>
+          <defs>
+            <linearGradient id="infographic-filter-gradient" x1="3" y1="22" x2="21" y2="2" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#123e4a"/><stop offset=".58" stop-color="#26756f"/><stop offset="1" stop-color="#63aaa0"/>
+            </linearGradient>
+          </defs>
+          <rect x="1" y="1" width="22" height="22" rx="6" fill="url(#infographic-filter-gradient)"/>
+          <rect x="5.4" y="4.7" width="13.2" height="14.6" rx="2.1" fill="none" stroke="#f7f1df" stroke-width="1.35"/>
+          <path d="M8 16.7v-3.1M10.6 16.7v-5.2M13.2 16.7v-4" fill="none" stroke="#f7f1df" stroke-width="1.55" stroke-linecap="round"/>
+          <path d="M14.1 7.1a3 3 0 1 0 3 3h-3Z" fill="none" stroke="#f7f1df" stroke-width="1.25" stroke-linejoin="round"/>
+          <path d="M15.1 6.2v2.9H18a3 3 0 0 0-2.9-2.9Z" fill="#d6b45a"/>
         </svg>
       </button>
       <div class="header-menu">
@@ -73,6 +85,7 @@
           <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job" data-admin-only>Audio-Auftrag anzeigen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="tts-settings" data-admin-only>TTS-Einstellungen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="new-infographic" data-admin-only>Neue Infografik</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="review-infographics" data-admin-only>Infografiken prüfen</button>
           <button type="button" role="menuitem" class="header-menu-item duplicate-menu-item" data-action="duplicates" data-admin-only>Dubletten prüfen <span id="duplicate-menu-count" class="duplicate-menu-count" hidden></span></button>
           <hr class="header-menu-sep" data-admin-only>
           <button type="button" role="menuitem" class="header-menu-item" data-action="settings">Einstellungen</button>
@@ -181,6 +194,7 @@
           <div id="filter-limit-menu" class="header-menu-dropdown" role="menu" hidden></div>
         </div>
       </div>
+      <button id="infographic-review-save" class="infographic-review-save" type="button" hidden>Speichern</button>
       <button id="reset-filters" class="reset-btn" title="Filter zurücksetzen" hidden>Reset</button>
     </div>
   </div>
@@ -240,6 +254,13 @@
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen" class="img-fullscreen" role="dialog" aria-modal="true" aria-label="Bildvollansicht" tabindex="-1" hidden>
     <img id="img-fullscreen-img" src="" alt="" />
+    <label id="img-fullscreen-poster-toggle" class="poster-review-toggle poster-review-toggle-fullscreen" hidden>
+      <input id="img-fullscreen-poster-checkbox" type="checkbox" />
+      <span class="poster-review-check" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.4 3.4 7.6-8"/></svg>
+      </span>
+      <span class="poster-review-toggle-text">Poster</span>
+    </label>
     <a id="img-fullscreen-download" class="img-fullscreen-download" href="" download aria-label="Bild herunterladen" title="Bild herunterladen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0l-4-4m4 4l4-4"/><rect x="4" y="18" width="16" height="2" rx="1"/></svg>
     </a>
@@ -766,7 +787,7 @@
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=122"></script>
+  <script src="app.js?v=129"></script>
   <script src="vendor/duplicate-diff.bundle.js?v=7"></script>
   <script src="duplicates.js?v=19"></script>
   <script src="audiobooks.js?v=24"></script>

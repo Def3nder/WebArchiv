@@ -132,7 +132,7 @@ test('Listen-Zeilenhöhe lässt sich per Geste und Strg+Mausrad ändern', () => 
 test('Die Listenansicht zeigt das Datum nach dem Autor', () => {
   const css = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
   const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
-  assert.match(app, /class="author-badge"[\s\S]*class="card-date"/);
+  assert.match(app, /class="author-badge"[\s\S]*responsiveDateMarkup\(article\.date, 'card-date'\)/);
   assert.doesNotMatch(css, /body\.layout-list \.card-date,\s*body\.layout-list \.episode-num/);
 });
 

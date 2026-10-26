@@ -824,24 +824,38 @@ function publishArticleIndex(nextSourceArticles) {
   refreshDuplicateState();
 }
 
-async function refreshInfographicsForYear(year) {
-  if (!/^\d{4}$/.test(year)) throw new Error('Ungültiges Infografik-Jahr.');
+async function refreshInfographicsForYears(years) {
+  const uniqueYears = [...new Set(years)];
+  if (!uniqueYears.length) return;
+  if (uniqueYears.some(year => !/^\d{4}$/.test(year))) throw new Error('Ungültiges Infografik-Jahr.');
   if (!sourceArticles.length) return buildIndex();
-  const yearDir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
   const t0 = Date.now();
   reindexState = { running: true, processed: 0, articles: 0, done: false };
   try {
-    const stat = await fs.promises.lstat(yearDir);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Infografik-Jahresverzeichnis ist ungültig.');
-    const scanned = [];
-    await scanDir(yearDir, INFOGRAPHICS_AUTHOR, year, scanned, { strict: true });
-    publishArticleIndex(replaceInfographicYearArticles(sourceArticles, year, scanned));
+    let nextSourceArticles = sourceArticles;
+    let scannedCount = 0;
+    for (const year of uniqueYears) {
+      const yearDir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
+      const stat = await fs.promises.lstat(yearDir);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Infografik-Jahresverzeichnis ist ungültig.');
+      const scanned = [];
+      await scanDir(yearDir, INFOGRAPHICS_AUTHOR, year, scanned, { strict: true });
+      nextSourceArticles = replaceInfographicYearArticles(nextSourceArticles, year, scanned);
+      scannedCount += scanned.length;
+    }
+    // Mehrere geänderte Jahrgänge gemeinsam veröffentlichen: Leser sehen so
+    // entweder vollständig den alten oder vollständig den neuen Indexstand.
+    publishArticleIndex(nextSourceArticles);
     reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-    console.log(`✓ Infografiken ${year} neu eingelesen (${scanned.length} Einträge, ${Date.now() - t0}ms)`);
+    console.log(`✓ Infografiken ${uniqueYears.join(', ')} neu eingelesen (${scannedCount} Einträge, ${Date.now() - t0}ms)`);
   } catch (error) {
     reindexState = { ...reindexState, running: false, done: true, error: error.message };
     throw error;
   }
+}
+
+async function refreshInfographicsForYear(year) {
+  return refreshInfographicsForYears([year]);
 }
 
 async function rebuildIndex() {
@@ -1224,12 +1238,25 @@ function setInstagramPosterMetadata(content, enabled) {
   const lines = content.split(/\r?\n/);
   const cleanMetadataLine = line => line.replace(/\*\*/g, '').replace(/^#+\s*/, '')
     .replace(/^\*|\*$/g, '').replace(/^_+|_+$/g, '').trim();
+  const hadMarker = lines.some(line => /^instagram-poster:/i.test(cleanMetadataLine(line)));
+  if (!enabled && !hadMarker) return content;
   const withoutMarker = lines.filter(line => !/^instagram-poster:/i.test(cleanMetadataLine(line)));
-  if (!enabled) return withoutMarker.join(eol);
   const datumIdx = withoutMarker.findIndex((line, index) => index < 20
     && /^datum:/i.test(cleanMetadataLine(line)));
-  if (datumIdx < 0) throw duplicateFail(409, 'Die Infografik hat keine Datum-Zeile.');
-  withoutMarker.splice(datumIdx + 1, 0, 'Instagram-Poster: Ja');
+  if (datumIdx < 0) {
+    if (enabled) throw duplicateFail(409, 'Die Infografik hat keine Datum-Zeile.');
+    return withoutMarker.join(eol);
+  }
+
+  // Der Marker ist ein eigener Markdown-Absatz. Vorhandene Leerzeilen direkt
+  // nach dem Datum werden dabei vereinheitlicht, damit Aktivieren und Entfernen
+  // keine immer größeren Lücken erzeugt.
+  let nextContentIdx = datumIdx + 1;
+  while (nextContentIdx < withoutMarker.length && !withoutMarker[nextContentIdx].trim()) {
+    nextContentIdx++;
+  }
+  withoutMarker.splice(datumIdx + 1, nextContentIdx - datumIdx - 1,
+    ...(enabled ? ['', 'Instagram-Poster: Ja', ''] : ['']));
   return withoutMarker.join(eol);
 }
 
@@ -1239,6 +1266,44 @@ async function setManagedInfographicInstagramPoster(item, enabled) {
   const updated = setInstagramPosterMetadata(original, enabled);
   if (updated === original) return async () => {};
   return moveInfographicFiles([{ source: item.mdPath, target: item.mdPath, content: updated }]);
+}
+
+async function prepareInfographicPosterBatch(changes) {
+  if (!Array.isArray(changes) || !changes.length || changes.length > 2000) {
+    throw duplicateFail(400, 'Bitte mindestens eine und höchstens 2000 Änderungen senden.');
+  }
+  const seen = new Set();
+  const mappings = [];
+  const years = new Set();
+  const updated = [];
+  const root = path.resolve(WWW_DIR, INFOGRAPHICS_AUTHOR) + path.sep;
+
+  for (const change of changes) {
+    const id = typeof change?.id === 'string' ? change.id : '';
+    if (!id || seen.has(id) || typeof change.enabled !== 'boolean'
+        || (change.expected !== undefined && typeof change.expected !== 'boolean')) {
+      throw duplicateFail(400, 'Eine Poster-Änderung ist ungültig oder doppelt enthalten.');
+    }
+    seen.add(id);
+    const article = articleById.get(id);
+    const mdPath = article?.filePath ? path.resolve(article.filePath) : '';
+    if (!article || article.author !== INFOGRAPHICS_AUTHOR || !article.ownImage
+        || !mdPath.startsWith(root) || path.extname(mdPath).toLowerCase() !== '.md') {
+      throw duplicateFail(404, 'Infografik nicht gefunden: ' + id);
+    }
+    const current = article.instagramPoster === true;
+    if (change.expected !== undefined && change.expected !== current) {
+      throw duplicateFail(409, 'Die Poster-Markierung wurde zwischenzeitlich geändert. Bitte die Ansicht neu laden.');
+    }
+    if (current === change.enabled) continue;
+    const original = await fs.promises.readFile(mdPath, 'utf8');
+    const content = setInstagramPosterMetadata(original, change.enabled);
+    mappings.push({ source: mdPath, target: mdPath, content });
+    years.add(article.year);
+    updated.push({ id, instagramPoster: change.enabled });
+  }
+
+  return { mappings, years: [...years], updated };
 }
 
 // Alle Quellen erst in temporäre Namen verschieben, dann die Ziele belegen:
@@ -1932,6 +1997,39 @@ app.post('/api/infographic-manager/*', requireAdmin, async (req, res) => {
   }
 });
 
+// Admin-Prüfmodus: Änderungen über beliebig viele Ergebnisseiten sammeln und
+// in einem atomaren Dateivorgang speichern. Anschließend werden ausschließlich
+// die tatsächlich betroffenen Infografik-Jahrgänge neu eingelesen.
+app.post('/api/infographic-review', requireAdmin, async (req, res) => {
+  if (req.get('sec-fetch-site') === 'cross-site') {
+    return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
+  }
+  if (ttsJobs.running || scrapeState.running || reindexState.running || infographicWrites || markdownEditor.running) {
+    return res.status(409).json({ error: 'Es läuft bereits ein Speicher- oder Indexauftrag.' });
+  }
+  infographicWrites++;
+  let undo = null;
+  let years = [];
+  try {
+    const batch = await prepareInfographicPosterBatch(req.body?.changes);
+    years = batch.years;
+    undo = await moveInfographicFiles(batch.mappings);
+    await refreshInfographicsForYears(years);
+    return res.json({ ok: true, updated: batch.updated });
+  } catch (error) {
+    let rollbackError = null;
+    try {
+      if (undo) await undo();
+      if (undo && years.length) await refreshInfographicsForYears(years);
+    } catch (failed) { rollbackError = failed; }
+    return res.status(error.status || 500).json({ error: rollbackError
+      ? (error.message + ' Wiederherstellung fehlgeschlagen: ' + rollbackError.message)
+      : (error.message || 'Poster-Markierungen konnten nicht gespeichert werden.') });
+  } finally {
+    infographicWrites--;
+  }
+});
+
 app.post(
   '/api/infographics/*',
   requireAdmin,
@@ -2378,8 +2476,15 @@ app.post('/api/duplicates', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/articles', attachUser, (req, res) => {
-  const { q, author, year, category, page = '1', limit = '24', telegram, externalAudio, instagram } = req.query;
+  const {
+    q, author, year, category, page = '1', limit = '24', telegram, externalAudio,
+    instagram, infographic, infographicReview,
+  } = req.query;
   const user = req.user;
+  const infographicReviewMode = infographicReview === '1';
+  if (infographicReviewMode && user.role !== 'admin') {
+    return res.status(403).json({ error: 'Der Infografik-Prüfmodus ist nur für Administratoren verfügbar.' });
+  }
   const marks = bookmarks.idsFor(user.email);
   const onlyBookmarks = req.query.bookmarks === '1';
   let filtered = articles;
@@ -2409,8 +2514,14 @@ app.get('/api/articles', attachUser, (req, res) => {
     }
     filtered = filtered.filter(a => a.author === author);
   }
-  const instagramPosterMode = instagram === '1' && author === INFOGRAPHICS_AUTHOR;
+  const infographicFilter = author === INFOGRAPHICS_AUTHOR
+    ? (infographic === 'classic' ? 'classic' : ((infographic === 'poster' || instagram === '1') ? 'poster' : 'all'))
+    : 'all';
+  const instagramPosterMode = infographicFilter === 'poster';
+  const classicInfographicMode = infographicFilter === 'classic';
   if (instagramPosterMode) filtered = filtered.filter(a => a.instagramPoster && a.ownImage);
+  if (classicInfographicMode) filtered = filtered.filter(a => !a.instagramPoster && a.ownImage);
+  if (infographicReviewMode) filtered = filtered.filter(a => a.author === INFOGRAPHICS_AUTHOR && a.ownImage);
   if (year)     filtered = filtered.filter(a => a.year === year);
   if (category) filtered = filtered.filter(a => a.categories.includes(category));
   if (externalAudio === '1') {
@@ -2466,7 +2577,7 @@ app.get('/api/articles', attachUser, (req, res) => {
   const items = filtered.slice((p - 1) * lim, p * lim)
     .map(article => {
       const exposed = { ...exposeArticleForUser(article, user), bookmarked: marks.has(article.id) };
-      if (!instagramPosterMode) return exposed;
+      if (!instagramPosterMode && !classicInfographicMode && !infographicReviewMode) return exposed;
       const linkedArticle = visibleGroupAnchor(article, user);
       return {
         ...exposed,
