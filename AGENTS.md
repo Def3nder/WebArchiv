@@ -98,7 +98,7 @@ object in `app.js`.
 ## Deployment
 
 Target is a Proxmox/Debian LXC running the app under systemd (`/opt/nodeapp`), with the `www/`
-data on an external mounted disk. See `session-context.md` and `LXC-container node.js Setup.txt`
+data on an external mounted disk. See `session-context.md` and `LXC-container node.js Setup.md`
 for the full setup log (SSH keys, systemd unit, mount/permission notes). HTTPS terminates at the
 NPMplus reverse proxy (192.168.1.14). With `NODE_ENV=production` the server refuses to start without a
 `SESSION_SECRET` of at least 32 chars. `TRUST_PROXY` (default `loopback, 192.168.1.14`) limits which

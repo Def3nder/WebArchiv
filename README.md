@@ -10,7 +10,7 @@ lassen sich neue Artikel per integriertem Scraper (Blog/Facebook/Telegram)
 direkt aus dem Web-UI nachladen.
 
 Deployment-Ziel ist ein kleiner Proxmox-**LXC-Container (Debian)** hinter einem
-Reverse Proxy — die Details dazu stehen in `LXC-container node.js Setup.txt`.
+Reverse Proxy — die Details dazu stehen in `LXC-container node.js Setup.md`.
 
 ---
 
@@ -832,7 +832,7 @@ kann. Stattdessen den vorhandenen `SIGHUP`-Handler nutzen (siehe Cron-Beispiel
 unten).
 
 Voraussetzungen für den Scrape: installierte Playwright-Browser + System-Libs und
-gesetztes `PLAYWRIGHT_BROWSERS_PATH` (siehe `LXC-container node.js Setup.txt`).
+gesetztes `PLAYWRIGHT_BROWSERS_PATH` (siehe `LXC-container node.js Setup.md`).
 Die aktiven Quellen stehen in den Arrays `Blog`, `Facebook` und `Telegram` von
 `scraper/scraper-config.json` (jeweils `Name`, `URL`, `OutputPath`); mehrere
 Einträge je Quellentyp werden nacheinander verarbeitet. Facebook benötigt
@@ -896,7 +896,7 @@ users.json                    Nutzer/Rechte (ignored)
 tts-settings.json             Gewählte globale Qwen-Stimmen-ID (ignored)
 tts-voice-previews/           Hash-geprüfte lokale Stimmproben (ignored)
 public-directories.txt        Öffentliche Autoren für Gäste
-LXC-container node.js Setup.txt   Server-/Deployment-Doku
+LXC-container node.js Setup.md   Server-/Deployment-Doku
 ```
 
 Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
@@ -1045,4 +1045,4 @@ trotzdem gespeichert und werden indexiert. Nur bestimmte Quellen: Flags anhänge
 
 Alle Schritte, Fehlerbilder und Befehle (systemd, Rechte, Playwright-Systemlibs,
 `SIGHUP`-Reindex, cron, CRLF-Stolperfalle) stehen ausführlich in
-**`LXC-container node.js Setup.txt`**.
+**`LXC-container node.js Setup.md`**.

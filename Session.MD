@@ -933,7 +933,7 @@ G3 enthält nach der Analyse mehrere abgebrochene Runden; die Umsetzung ist in G
 
 - **D1:** [session-context.md](session-context.md) – Aufbauphase bis 04.06.2026, Architektur, frühe Features und Ideen. Historische Commitverweise: `26f12fb` (Prompt-Menü/Bildansicht), `aafb032` (Text-/Datumssuche), `b61fb25` (Medien-Cachebuster).
 - **D2:** [README.md](README.md) – Betrieb, API, Scraper und Reindex; einzelne Strukturangaben sind älter.
-- **D3:** [LXC-container node.js Setup.txt](<LXC-container node.js Setup.txt>) – Infrastruktur, SSH, Mountprobleme, systemd, Playwright, Cron und CRLF-Erfahrungen; enthält Vorschläge neben umgesetzten Schritten.
+- **D3:** [LXC-container node.js Setup.md](<LXC-container node.js Setup.md>) – Infrastruktur, SSH, Mountprobleme, systemd, Playwright, Cron und CRLF-Erfahrungen; enthält Vorschläge neben umgesetzten Schritten.
 - **D4:** [scraper/README.md](scraper/README.md) – Scraperkonfiguration, CLI und gewünschte Synchronität mit BlogDownloader.
 - **D5:** [tts/UEBERGABE-TTS.md](tts/UEBERGABE-TTS.md) – ursprüngliche Integration und spätere Nachträge; historische Abschnitte beachten.
 - **D6:** [tts-server/QWEN-ANBINDUNG.md](tts-server/QWEN-ANBINDUNG.md) – v4-Protokoll, Originalscript und Prüfungen; Aussage zur fehlenden Vorauswahl durch G14 ersetzt.
@@ -1311,7 +1311,7 @@ die Report-Only-Phase in Produktion vorgesehen. `CSP_MODE=enforce` wurde nur in 
 **Offen:** `npm audit` meldet bereits vorhandene Schwachstellen in `proxy-addr` (u. a. IP-Spoofing
 bei vertrauten Subnetzen), `body-parser`, `qs` und `sharp`; nicht Teil dieses Schritts.
 
-**Deployment:** siehe „Sicherheits-Umgebung“ in `LXC-container node.js Setup.txt`; Dateien
+**Deployment:** siehe „Sicherheits-Umgebung“ in `LXC-container node.js Setup.md`; Dateien
 `server.js`, `user-store.cjs`, `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`,
 `package.json`, `package-lock.json`, `public/app.js`, `public/audiobooks.js`, `public/index.html`;
 danach `npm ci --omit=dev` und Neustart.
