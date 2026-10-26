@@ -3,10 +3,26 @@ const assert = require('node:assert/strict');
 
 const {
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
+  replaceArticleIndexEntry,
   buildInfographicMarkdown, infographicAttachmentStem, firstAvailableInfographicOrdinal,
   canUploadInfographic, conflictingInfographicBase,
   slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
 } = require('../server.js');
+
+test('Teilindex ersetzt genau den bearbeiteten Artikel und erhält alle übrigen Rohdaten', () => {
+  const first = { id: 'Autor/2025/Alt', title: 'Alt' };
+  const current = { id: 'Autor/2026/Aktuell', title: 'Vorher' };
+  const last = { id: 'Infografiken/2026/Grafik', title: 'Grafik' };
+  const replacement = { ...current, title: 'Nachher', date: '2026-10-26' };
+
+  const result = replaceArticleIndexEntry([first, current, last], current.id, replacement);
+
+  assert.deepEqual(result, [first, replacement, last]);
+  assert.strictEqual(result[0], first);
+  assert.strictEqual(result[2], last);
+  assert.throws(() => replaceArticleIndexEntry([first], current.id, replacement), /fehlt im Rohindex/);
+  assert.throws(() => replaceArticleIndexEntry([current], current.id, first), /unerwarteten ID/);
+});
 
 test('liest URL und Prompt aus einer Prompt-Datei getrennt', () => {
   const definition = parsePromptDefinition([

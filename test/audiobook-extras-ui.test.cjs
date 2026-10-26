@@ -66,7 +66,7 @@ test('Sichtbare Extras lassen sich per Drag-and-drop und Tastatur-Schaltern sort
   assert.match(manager, /bemRequest\('order', \{ method: 'POST'/);
   assert.match(server, /app\.post\('\/api\/audiobook-extra-order\/\*'/);
   assert.match(editorEntry, /import '\.\/audiobook-extras-manager\.js'/);
-  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=16/);
+  assert.match(html, /vendor\/article-editor\.bundle\.js\?v=17/);
 });
 
 test('Markdown-Editor nutzt die gemeinsame Live-Vorschau im gesamten Extras-Dialog', () => {

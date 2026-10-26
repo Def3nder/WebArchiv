@@ -750,6 +750,14 @@ Videos, PDFs und MP3s nach der oben beschriebenen Suchreihenfolge in `www/` und
 Neustart — offene Sessions bleiben erhalten). Da der Index im Speicher liegt,
 werden **neu hinzugefügte Dateien erst nach einem Reindex sichtbar**.
 
+Eine bestehende Markdown-Datei über **Artikel editieren** zu speichern ist davon
+ausgenommen: Der Server liest nur diese Datei samt Medienzuordnung ihres
+Verzeichnisses neu ein und ersetzt ihren Eintrag im vorhandenen Rohindex. Danach
+werden Infografik-Verknüpfungen, Metadaten, Duplikatstatus und Fuse-Suche aus den
+bereits im Speicher liegenden Artikeln neu abgeleitet. Andere Artikeldateien und
+die Hörbuchbibliothek werden nicht erneut gescannt. Bei einem bearbeiteten
+Hörbuch-`abstract.md` wird entsprechend nur das betroffene Buch aktualisiert.
+
 Wichtig: `scraper/scrape_all.js` triggert selbst **keinen** Reindex. Es schreibt
 nur neue Dateien. Den Reindex stößt entweder `server.js` nach einem Web-UI-Scrape
 an, oder ein CLI/Cron-Aufruf muss danach den laufenden Server per `SIGHUP`

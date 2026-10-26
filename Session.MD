@@ -568,6 +568,7 @@ Ein CDN-Laden wurde besprochen, dann ausdrücklich ein anderer Weg gewählt: Der
 - Mit Scrape, Reindex, Infografik-Schreiben und TTS koordinieren; unvollständige Dateien oder konkurrierende Schreibvorgänge vermeiden.
 - Ungespeicherte Änderungen beim Schließen/Verlassen schützen. Pfeiltasten im Editor dürfen keine Artikelnavigation auslösen; veraltete asynchrone Antworten dürfen keinen neueren Dialogzustand überschreiben.
 - Nach Speichern Index, Detailansicht, Liste und Filter aktualisieren. Dateiname/Artikel-ID bleiben stabil; Jahresordner werden nicht durch Datumsänderung umbenannt.
+- **Teilaktualisierung (26.10.2026):** Nach dem Speichern wird nicht mehr das gesamte `www/` samt Hörbuchbibliothek gescannt. Der Server liest nur die bearbeitete Markdown-Datei neu ein, ersetzt genau diesen Eintrag im unverknüpften Rohindex und leitet Verknüpfungen, Metadaten, Suche und Duplikatstatus aus dem vorhandenen In-Memory-Bestand neu ab. Für `abstract.md` wird nur das betroffene Hörbuch aktualisiert. Der manuelle Reindex, Serverstart, Scrape und `SIGHUP` bleiben vollständige Scans.
 - „Datei gespeichert, Aktualisierung fehlgeschlagen“ muss von einem gescheiterten Schreibvorgang unterschieden werden.
 
 Zur Einführung mussten sechs Laufzeitdateien auf den Server: `server.js`, `article-editor.cjs`, `public/app.js`, `public/article-editor.js`, `public/index.html`, `public/styles.css`. Keine neuen npm-Abhängigkeiten. `test/article-editor.test.cjs` und `graft/` sind Entwicklungsbestandteile. Damals wurden neun automatisierte Tests sowie Browserprüfungen für Speichern, Abbrechen, Konflikte und mobiles Layout als erfolgreich protokolliert.
@@ -1065,8 +1066,10 @@ kombinieren, weil sonst mitten im Text und am Kachelende zwei Kürzungszeichen e
 Artikel und Abstracts werden beim Speichern serverseitig versionsgeprüft und atomar ersetzt. Wurde
 die Quelldatei zwischen Laden und Speichern extern geändert, ist `409 Conflict` zurückzugeben, statt
 die fremde Änderung zu überschreiben. BOM, vorhandene CRLF-Zeilenenden und Dateirechte bleiben
-erhalten. Nach erfolgreichem Speichern wird neu indiziert; schlägt nur der Reindex fehl, bleibt die
-gespeicherte Datei erhalten und die Oberfläche weist auf den notwendigen Reindex hin.
+erhalten. Nach erfolgreichem Speichern wird gezielt nur die bearbeitete Artikeldatei beziehungsweise
+das betroffene Hörbuch neu eingelesen; die abhängigen In-Memory-Indizes werden daraus aktualisiert.
+Schlägt diese Aktualisierung fehl, bleibt die gespeicherte Datei erhalten und die Oberfläche weist
+auf den notwendigen vollständigen Reindex hin.
 
 Die normale Web-Sitzung liegt weiterhin im Arbeitsspeicher des Node-Prozesses. Ein Serverneustart
 macht deshalb bestehende Browser- beziehungsweise PWA-Sitzungen ungültig. Gemeinsame API-Aufrufe

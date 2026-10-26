@@ -145,7 +145,7 @@ const markdownEditor = createMarkdownEditor({
   getArticle: id => articles.find(a => a.id === id) || audiobooks.get(id),
   canAccessAuthor,
   busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || ttsJobs.running,
-  reindex: buildIndex,
+  reindex: refreshMarkdownIndex,
 });
 const ttsJobs = createTtsJobs({
   root: WWW_DIR,
@@ -486,7 +486,12 @@ function audioFileUrl(relPath, absPath) {
   return `/audio-files/${relPath}${v}`;
 }
 
-async function scanDir(dirPath, author, year, collector, { strict = false } = {}) {
+function isPathInside(root, target) {
+  const relative = path.relative(path.resolve(root), path.resolve(target));
+  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+async function scanDir(dirPath, author, year, collector, { strict = false, targetFile = null } = {}) {
   let entries;
   try {
     entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
@@ -495,18 +500,21 @@ async function scanDir(dirPath, author, year, collector, { strict = false } = {}
     return;
   }
   const filesByLowerName = indexFilesByLowerName(entries);
+  const resolvedTarget = targetFile ? path.resolve(targetFile) : null;
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
+      if (resolvedTarget && !isPathInside(fullPath, resolvedTarget)) continue;
       // Gelöschte Infografiken bleiben als Dateien erhalten, gehören aber nie
       // wieder in den Artikelindex oder in eine Bildgruppe.
       if (author === INFOGRAPHICS_AUTHOR && fullPath === INFOGRAPHIC_TRASH_DIR) continue;
       const nextYear = /^\d{4}$/.test(entry.name) ? entry.name : year;
-      await scanDir(fullPath, author, nextYear, collector, { strict });
+      await scanDir(fullPath, author, nextYear, collector, { strict, targetFile: resolvedTarget });
       continue;
     }
     if (!entry.name.endsWith('.md')) continue;
+    if (resolvedTarget && path.resolve(fullPath) !== resolvedTarget) continue;
 
     const basename = entry.name.slice(0, -3);
     const relDir = path.relative(path.join(WWW_DIR, author), dirPath);
@@ -576,6 +584,7 @@ async function scanDir(dirPath, author, year, collector, { strict = false } = {}
       });
       reindexState.processed++;
     } catch (err) {
+      if (resolvedTarget) throw err;
       // skip unparseable files silently
     }
   }
@@ -837,6 +846,56 @@ function publishArticleIndex(nextSourceArticles) {
   meta = nextMeta;
   fuseIndex = nextFuseIndex;
   refreshDuplicateState();
+}
+
+function replaceArticleIndexEntry(articleList, id, replacement) {
+  const index = articleList.findIndex(article => article.id === id);
+  if (index < 0) throw new Error(`Artikel „${id}“ fehlt im Rohindex.`);
+  if (!replacement || replacement.id !== id) throw new Error(`Artikel „${id}“ wurde unter einer unerwarteten ID eingelesen.`);
+  const next = articleList.slice();
+  next[index] = replacement;
+  return next;
+}
+
+// Nach einer Editor-Änderung nur die betroffene Markdown-Datei erneut von der
+// Platte lesen. Verknüpfungen, Metadaten, Suche und Duplikatstatus werden danach
+// aus dem vorhandenen Rohindex im Speicher neu abgeleitet; andere Dateien und
+// die Hörbuchbibliothek werden nicht erneut gescannt.
+async function refreshMarkdownIndex({ id, filename } = {}) {
+  if (!id || !filename) return buildIndex();
+
+  const t0 = Date.now();
+  reindexState = { running: true, processed: 0, articles: articles.length, done: false };
+  try {
+    if (isPathInside(AUDIO_DIR, filename)) {
+      await audiobooks.refresh(id);
+      reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
+      console.log(`✓ Hörbuch „${id}“ gezielt aktualisiert (${Date.now() - t0}ms)`);
+      return;
+    }
+    if (!isPathInside(WWW_DIR, filename)) throw new Error('Der bearbeitete Artikel liegt außerhalb des Archivs.');
+    if (!sourceArticles.length) return buildIndex();
+
+    const current = sourceArticles.find(article => article.id === id);
+    if (!current) return buildIndex();
+    if (path.resolve(current.filePath) !== path.resolve(filename)) {
+      throw new Error(`Artikel „${id}“ verweist auf einen unerwarteten Dateipfad.`);
+    }
+
+    const authorRoot = path.join(WWW_DIR, current.author);
+    const relativeDir = path.relative(authorRoot, path.dirname(filename));
+    const year = relativeDir.split(path.sep).filter(segment => /^\d{4}$/.test(segment)).at(-1) || null;
+    const scanned = [];
+    await scanDir(path.dirname(filename), current.author, year, scanned, { strict: true, targetFile: filename });
+    const replacement = scanned.find(article => article.id === id);
+    publishArticleIndex(replaceArticleIndexEntry(sourceArticles, id, replacement));
+
+    reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
+    console.log(`✓ Artikel „${id}“ gezielt neu eingelesen (${Date.now() - t0}ms)`);
+  } catch (error) {
+    reindexState = { ...reindexState, running: false, done: true, error: error.message };
+    throw error;
+  }
 }
 
 async function refreshInfographicsForYears(years) {
@@ -2778,7 +2837,7 @@ if (require.main === module) {
 
 module.exports = {
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
-  replaceInfographicYearArticles, prepareLinkedArticles,
+  replaceInfographicYearArticles, replaceArticleIndexEntry, prepareLinkedArticles,
   buildInfographicMarkdown, removeCategoryLines, slugify,
   normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
   computeAppShellVersion, serviceWorkerSource,

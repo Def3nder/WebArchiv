@@ -17,10 +17,11 @@ async function fixture(t, options = {}) {
   t.after(() => fs.rm(base, { recursive: true, force: true }));
   const article = { id: 'Autor/2026/Prüfung', author: 'Autor', filePath };
   let indexes = 0;
+  const reindexes = [];
   const editor = createMarkdownEditor({ root, getArticle: id => id === article.id ? article : null,
     canAccessAuthor: (user, author) => user.allowedAuthors === null || user.allowedAuthors.includes(author),
-    busy: () => false, reindex: async () => { indexes++; }, ...options });
-  return { editor, root, filePath, article, indexes: () => indexes };
+    busy: () => false, reindex: async context => { indexes++; reindexes.push(context); }, ...options });
+  return { editor, root, filePath, article, indexes: () => indexes, reindexes: () => reindexes };
 }
 test('Originaldatei, Unicode, Metadaten, BOM und CRLF bleiben erhalten; Reindex folgt', async t => {
   const f = await fixture(t);
@@ -32,6 +33,7 @@ test('Originaldatei, Unicode, Metadaten, BOM und CRLF bleiben erhalten; Reindex 
   assert.equal(await fs.readFile(f.filePath, 'utf8'), original.replace('Ein **Text**', 'Geänderter **Text**'));
   assert.equal(result.version, (await f.editor.read(f.article.id, admin)).version);
   assert.equal(f.indexes(), 1);
+  assert.deepEqual(f.reindexes(), [{ id: f.article.id, filename: f.filePath }]);
   assert.deepEqual(await fs.readdir(f.root), ['artikel.md']);
 });
 test('Gast, Benutzer, fremder Autor und unbekannte ID werden abgewiesen', async t => {

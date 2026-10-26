@@ -7,17 +7,23 @@ const ROOT = path.join(__dirname, '..');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
 const CSS = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
 const EDITOR = fs.readFileSync(path.join(ROOT, 'public', 'article-editor.js'), 'utf8');
+const EDITOR_BUNDLE = fs.readFileSync(path.join(ROOT, 'public', 'vendor', 'article-editor.bundle.js'), 'utf8');
 const PREVIEW = fs.readFileSync(path.join(ROOT, 'public', 'markdown-live-preview.js'), 'utf8');
 
 test('Artikeleditor verwendet die lokale Markdown-Live-Vorschau', () => {
   assert.doesNotMatch(HTML, /<textarea id="article-editor-text"/);
   assert.match(HTML, /<div id="article-editor-text"/);
-  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=16/);
+  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=17/);
   assert.match(EDITOR, /createMarkdownInput/);
   assert.match(EDITOR, /markdownInput\.getValue\(\)/);
   assert.match(EDITOR, /markdownInput\.setValue\(result\.markdown\)/);
   assert.match(EDITOR, /insideEditor && event\.key !== 'Escape'/);
   assert.match(EDITOR, /\$editorText\.addEventListener\('keydown'/);
+});
+
+test('ausgelieferter Artikeleditor sendet Admin-Schreibzugriffe über apiFetch', () => {
+  assert.match(EDITOR, /apiFetch\(`\/api\/article-markdown/);
+  assert.match(EDITOR_BUNDLE, /apiFetch\(`\/api\/article-markdown/);
 });
 
 test('Live-Vorschau deckt Inline-, Block- und GFM-Elemente ab', () => {

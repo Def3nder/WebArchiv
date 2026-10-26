@@ -67,7 +67,7 @@ function createMarkdownEditor({ root, getArticle, canAccessAuthor, busy, reindex
       await io.rename(temp, filename);
       temp = null;
       const result = { saved: true, version: versionOf(markdown) };
-      try { await reindex(); }
+      try { await reindex({ id, filename }); }
       catch { result.warning = 'Die Datei wurde gespeichert, aber der Index konnte nicht aktualisiert werden. Bitte das Archiv neu indizieren.'; }
       return result;
     } finally {

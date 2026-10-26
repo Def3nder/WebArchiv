@@ -96,6 +96,20 @@ test('Bibliothek: natürliche Sortierung, Cover, Fallbacks, leere Ordner übersp
   assert.equal(library.list({ email: 'a@b.de' }).items[0].hasExtras, undefined);
 });
 
+test('gezielter Hörbuch-Refresh liest nur das geänderte Buch neu ein', async t => {
+  const { root, library } = await fixture(t);
+  const id = `${AUDIOBOOK_AUTHOR}/Karin Kuschik - 50 Fragen`;
+  const untouched = library.books.find(book => book.id !== id);
+  await fs.writeFile(path.join(root, 'Karin Kuschik - 50 Fragen', 'abstract.md'),
+    'Titel: 50 neue Fragen\nAutor: Karin Kuschik\nDatum: 26.10.2026\nInhalt:\nNeuer Text.\n');
+
+  await library.refresh(id);
+
+  assert.equal(library.get(id).title, '50 neue Fragen');
+  assert.equal(library.get(id).date, '2026-10-26');
+  assert.strictEqual(library.books.find(book => book.id === untouched.id), untouched);
+});
+
 test('Extras werden nach dem Indexaufbau dynamisch gefunden und gelesen', async t => {
   const { root, library } = await fixture(t);
   const book = library.books.find(item => item.title === 'Kommt Zusammen!');

@@ -238,6 +238,21 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     };
   }
 
+  function publishBooks(next) {
+    books = next.sort((a, b) => collator.compare(a.title, b.title));
+    fuse = new Fuse(books, {
+      keys: [
+        { name: 'title', weight: 3 },
+        { name: 'bookAuthor', weight: 2 },
+        { name: 'excerpt', weight: 0.8 },
+      ],
+      threshold: 0.35,
+      ignoreLocation: true,
+      minMatchCharLength: 2,
+    });
+    return books;
+  }
+
   async function rebuild() {
     textCache.clear();
     dirName = resolveAudiobookDirectory(audioRoot, directory);
@@ -260,18 +275,17 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
         console.warn(`Hörbuch „${entry.name}“ übersprungen:`, err.message);
       }
     }
-    books = next.sort((a, b) => collator.compare(a.title, b.title));
-    fuse = new Fuse(books, {
-      keys: [
-        { name: 'title', weight: 3 },
-        { name: 'bookAuthor', weight: 2 },
-        { name: 'excerpt', weight: 0.8 },
-      ],
-      threshold: 0.35,
-      ignoreLocation: true,
-      minMatchCharLength: 2,
-    });
-    return books;
+    return publishBooks(next);
+  }
+
+  async function refresh(id) {
+    const current = books.find(book => book.id === id);
+    if (!current || !root) return rebuild();
+    textCache.delete(id);
+    const replacement = await scanBook(current.bookDir);
+    const next = books.filter(book => book.id !== id);
+    if (replacement) next.push(replacement);
+    return publishBooks(next);
   }
 
   function progressSummary(user, book) {
@@ -810,6 +824,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
 
   return {
     rebuild,
+    refresh,
     list,
     detail,
     ebookText,
