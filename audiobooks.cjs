@@ -1007,16 +1007,19 @@ function loadAudiobookConfig(file) {
 // ─── Routen ────────────────────────────────────────────────────────────────
 
 function installAudiobookRoutes(app, {
-  library, progress, config, requireAuth, requireAdmin = requireAuth, canAccessAuthor, busy = () => false,
+  library, progress, config, requireAuth, requireAdmin = requireAuth, canAccessAuthor,
+  // Zentrale Archiv-Sperre des Servers (archive-lock.cjs): wirft 409, wenn
+  // bereits ein anderer Schreib- oder Indexauftrag läuft.
+  exclusive = (_label, task) => task(),
 }) {
   const route = (handler, admin = false) => async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
       if (!canAccessAuthor(req.session.user, AUDIOBOOK_AUTHOR)) throw fail(403, 'Kein Zugriff auf Hörbücher.');
       if (admin && req.session.user?.role !== 'admin') throw fail(403, 'Nur Administratoren dürfen diese Funktion verwenden.');
-      if (admin && req.method !== 'GET' && busy()) throw fail(409, 'Es läuft bereits ein Speicher- oder Indexauftrag. Bitte später erneut versuchen.');
       if (req.method !== 'GET' && req.get('sec-fetch-site') === 'cross-site') throw fail(403, 'Änderungen sind nur aus dem Archiv erlaubt.');
-      res.json(await handler(req, req.session.user));
+      const run = () => handler(req, req.session.user);
+      res.json(await (admin && req.method !== 'GET' ? exclusive('Hörbuch-Verwaltung', run) : run()));
     } catch (error) {
       if (!error.status) console.error('Hörbücher:', error);
       res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Anfrage ist fehlgeschlagen.' });

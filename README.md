@@ -793,6 +793,13 @@ einliest. Fehlt dieses Änderungsmanifest (etwa bei einer älteren
 Scraper-Version) oder scheitert die Teilaktualisierung, folgt zur Sicherheit ein
 vollständiger Reindex.
 
+**Gleichzeitige Aufträge** (`archive-lock.cjs`): Index-Neuaufbau, Scraper-Lauf, Artikel speichern,
+Audio-Erzeugung, Infografik- und Dublettenänderungen sowie die Hörbuch-Verwaltung schließen sich
+gegenseitig aus. Ein zweiter Auftrag wird mit `409` und dem Namen des laufenden Auftrags abgewiesen
+(„Es läuft bereits: Audio-Erzeugung. Bitte später erneut versuchen.“). Ein `SIGHUP` während eines
+laufenden Auftrags wird mit einer Protokollzeile übersprungen. Teil-Reindexe, die ein Auftrag selbst
+auslöst, gehören zu diesem Auftrag und blockieren ihn nicht.
+
 Wichtig: `scraper/scrape_all.js` triggert selbst **keinen** Reindex. Es schreibt
 nur neue Dateien. Den Reindex stößt entweder `server.js` nach einem Web-UI-Scrape
 an, oder ein CLI/Cron-Aufruf muss danach den laufenden Server per `SIGHUP`
@@ -854,6 +861,7 @@ media-files.cjs               Geschützte Medienrouten /files/* und /audio-files
 login-limiter.cjs             Begrenzung fehlgeschlagener Anmeldungen/Kennwortprüfungen
 html-sanitizer.cjs            Markdown → bereinigtes HTML (sanitize-html)
 security-headers.cjs          CSP (Report-Only/Enforce), weitere Sicherheits-Header, /api/csp-report
+archive-lock.cjs              Zentrale Sperre für Schreib- und Indexaufträge (409 mit laufendem Auftrag)
 duplicates.cjs                Dublettenerkennung und persistente Entscheidungen
 config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten; ignored,
                               Vorlage example-config.json)

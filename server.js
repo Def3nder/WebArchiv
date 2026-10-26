@@ -18,6 +18,7 @@ const { createBookmarkStore, installBookmarkRoutes } = require('./bookmarks.cjs'
 const { isPathInside, installMediaRoutes } = require('./media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./login-limiter.cjs');
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./security-headers.cjs');
+const { createArchiveLock } = require('./archive-lock.cjs');
 
 // Kommagetrennte Adressen/Subnetze bzw. Express-Schlüsselwörter (loopback,
 // linklocal, uniquelocal). „true“ wird bewusst nicht unterstützt.
@@ -145,7 +146,9 @@ let meta = { authors: [], years: [], categories: [] };
 let fuseIndex = null;
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
 let scrapeState = { running: false, sources: null, exitCode: null, startedAt: null, done: true, error: null };
-let infographicWrites = 0;
+// Zentrale Sperre für Schreib- und Indexaufträge (archive-lock.cjs); die
+// Aufträge mit eigenem Zustand werden unten nach ihrer Erzeugung registriert.
+const archiveLock = createArchiveLock();
 const SCRAPER_CHANGED_FILES_MARKER = '@@WEBARCHIV_CHANGED_FILES@@';
 
 // Hörbücher: je ein Ordner unter audio/Hoerbuecher/ (oder audio/Hörbücher/), eigener Index neben den Artikeln.
@@ -179,7 +182,7 @@ const markdownEditor = createMarkdownEditor({
   root: [WWW_DIR, AUDIO_DIR],
   getArticle: id => articles.find(a => a.id === id) || audiobooks.get(id),
   canAccessAuthor,
-  busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || ttsJobs.running,
+  busy: () => archiveLock.busy,
   reindex: refreshMarkdownIndex,
 });
 const ttsJobs = createTtsJobs({
@@ -187,11 +190,21 @@ const ttsJobs = createTtsJobs({
   audioRoot: AUDIO_DIR,
   getArticle: id => articles.find(a => a.id === id),
   canAccessAuthor,
-  busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || markdownEditor.running,
+  busy: () => archiveLock.busy,
   reindex: refreshMarkdownIndex,
   selectedVoice: ttsVoiceSettings.selectedVoice,
   mediaUrl: filename => audioFileUrl(path.relative(AUDIO_DIR, filename).split(path.sep).map(encodeURIComponent).join('/'), filename),
 });
+// Editor und TTS prüfen archiveLock.busy und setzen danach synchron ihren eigenen
+// Zustand; ihr eigener Eintrag ist zum Prüfzeitpunkt daher noch nicht aktiv.
+archiveLock.register('Index-Neuaufbau', () => reindexState.running);
+archiveLock.register('Scraper-Lauf', () => scrapeState.running);
+archiveLock.register('Artikel speichern', () => markdownEditor.running);
+archiveLock.register('Audio-Erzeugung', () => ttsJobs.running);
+
+function sendArchiveBusy(res, extra = {}) {
+  return res.status(409).json({ ...extra, error: archiveLock.conflictError().message });
+}
 
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
@@ -2188,14 +2201,19 @@ app.get('/api/prompts/:file', attachUser, (req, res) => {
 });
 
 app.post('/api/reindex', requireAdminAccess, (req, res) => {
-  if (ttsJobs.running || scrapeState.running || infographicWrites || markdownEditor.running) return res.status(409).json({ started: false, error: 'Es läuft bereits ein Audio-, Scrape- oder Speicherauftrag.' });
   if (reindexState.running) return res.json({ started: false, reason: 'already running' });
+  if (archiveLock.busy) return sendArchiveBusy(res, { started: false });
+  // rebuildIndex setzt reindexState.running synchron und belegt damit die Sperre.
   buildIndex().catch(console.error);
   res.json({ started: true });
 });
 
 app.get('/api/infographic-manager/*', requireAdminAccess, (req, res) => {
-  if (infographicWrites) return res.status(409).json({ error: 'Infografiken werden gerade geändert. Bitte gleich erneut öffnen.' });
+  // Nur während exklusiver Dateiänderungen (z. B. Umbenennen) nicht lesen;
+  // ein laufender Scrape oder eine Audio-Erzeugung stört das Öffnen nicht.
+  if (archiveLock.holder) {
+    return res.status(409).json({ error: `Es läuft gerade: ${archiveLock.holder}. Bitte gleich erneut öffnen.` });
+  }
   try {
     const context = managedInfographicContext(req.params[0], req.session.user);
     res.set('Cache-Control', 'no-store').json({
@@ -2217,10 +2235,8 @@ app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
   if (req.get('sec-fetch-site') === 'cross-site') {
     return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
   }
-  if (ttsJobs.running || scrapeState.running || reindexState.running || infographicWrites || markdownEditor.running) {
-    return res.status(409).json({ error: 'Es läuft bereits ein Speicher- oder Indexauftrag.' });
-  }
-  infographicWrites++;
+  const release = archiveLock.tryAcquire('Infografiken ändern');
+  if (!release) return sendArchiveBusy(res);
   let undoOrder = null;
   let undoTrash = null;
   let undoInstagramPoster = null;
@@ -2263,7 +2279,7 @@ app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
       ? (error.message + ' Wiederherstellung fehlgeschlagen: ' + rollbackError.message)
       : (error.message || 'Infografiken konnten nicht geändert werden.') });
   } finally {
-    infographicWrites--;
+    release();
   }
 });
 
@@ -2274,10 +2290,8 @@ app.post('/api/infographic-review', requireAdminAccess, async (req, res) => {
   if (req.get('sec-fetch-site') === 'cross-site') {
     return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
   }
-  if (ttsJobs.running || scrapeState.running || reindexState.running || infographicWrites || markdownEditor.running) {
-    return res.status(409).json({ error: 'Es läuft bereits ein Speicher- oder Indexauftrag.' });
-  }
-  infographicWrites++;
+  const release = archiveLock.tryAcquire('Infografik-Prüfung speichern');
+  if (!release) return sendArchiveBusy(res);
   let undo = null;
   let years = [];
   try {
@@ -2296,7 +2310,7 @@ app.post('/api/infographic-review', requireAdminAccess, async (req, res) => {
       ? (error.message + ' Wiederherstellung fehlgeschlagen: ' + rollbackError.message)
       : (error.message || 'Poster-Markierungen konnten nicht gespeichert werden.') });
   } finally {
-    infographicWrites--;
+    release();
   }
 });
 
@@ -2308,9 +2322,7 @@ app.post(
     if (req.get('sec-fetch-site') === 'cross-site') {
       return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
     }
-    if (ttsJobs.running || scrapeState.running || reindexState.running || infographicWrites || markdownEditor.running) {
-      return res.status(409).json({ error: 'Es läuft bereits ein Speicher- oder Indexauftrag.' });
-    }
+    if (archiveLock.busy) return sendArchiveBusy(res);
     const id = req.params[0];
     const requested = articleById.get(id);
     if (!requested) return res.status(404).json({ error: 'Artikel nicht gefunden.' });
@@ -2328,7 +2340,9 @@ app.post(
       return res.status(400).json({ error: 'Keine Bilddatei empfangen.' });
     }
 
-    infographicWrites++;
+    // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
+    const release = archiveLock.tryAcquire('Infografik hochladen');
+    if (!release) return sendArchiveBusy(res);
     try {
     let originalContent;
     try {
@@ -2373,7 +2387,7 @@ app.post(
       }
       res.status(500).json({ error: err.message || 'Infografik konnte nicht gespeichert werden.' });
     }
-    } finally { infographicWrites--; }
+    } finally { release(); }
   }
 );
 
@@ -2433,9 +2447,7 @@ function detectImageType(buffer) {
 
 app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
   if (req.get('sec-fetch-site') === 'cross-site') return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
-  if (reindexState.running || scrapeState.running || ttsJobs.running || markdownEditor.running || infographicWrites) {
-    return res.status(409).json({ error: 'Es läuft bereits ein Reindex-, Scrape-, Audio- oder Speicherauftrag. Bitte gleich erneut speichern.' });
-  }
+  if (archiveLock.busy) return sendArchiveBusy(res);
   const categories = Array.isArray(req.body?.categories) ? req.body.categories.map(String) : [];
   const markdown = normalizeNewInfographicMarkdown(req.body?.markdown, categories);
   const header = validateInfographicHeader(markdown);
@@ -2460,7 +2472,9 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
   const mdPath = path.join(dir, stem + '.md');
   const imagePath = path.join(dir, stem + imageExt);
 
-  infographicWrites++;
+  // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
+  const release = archiveLock.tryAcquire('Neue Infografik speichern');
+  if (!release) return sendArchiveBusy(res);
   try {
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(mdPath, markdown, { flag: 'wx' });
@@ -2475,7 +2489,7 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
   } catch (err) {
     if (err.code === 'EEXIST') return res.status(409).json({ error: 'Eine Datei mit diesem Namen existiert bereits. Bitte erneut speichern.' });
     res.status(500).json({ error: err.message || 'Infografik konnte nicht gespeichert werden.' });
-  } finally { infographicWrites--; }
+  } finally { release(); }
 });
 
 // ─── Scrape (Admin): externen Scraper starten, danach automatisch reindexen ──
@@ -2487,9 +2501,10 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
 app.get('/api/scrape/status', requireAuth, (_req, res) => res.json(scrapeState));
 
 app.post('/api/scrape', requireAdminAccess, (req, res) => {
-  if (ttsJobs.running || infographicWrites || markdownEditor.running) return res.status(409).json({ started: false, error: 'Es läuft bereits ein Audio- oder Speicherauftrag.' });
   if (scrapeState.running) return res.json({ started: false, reason: 'already running' });
   if (reindexState.running) return res.json({ started: false, reason: 'reindex running' });
+  if (archiveLock.busy) return sendArchiveBusy(res, { started: false });
+  // scrapeState.running wird unten synchron gesetzt und belegt damit die Sperre.
 
   // Optionale Quellenauswahl: { sources: ["blog","facebook","telegram"] }.
   // Ohne Angabe laufen alle drei (Reihenfolge bestimmt der Scraper selbst).
@@ -2644,9 +2659,7 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
   if (req.get('sec-fetch-site') === 'cross-site') {
     return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
   }
-  if (reindexState.running || scrapeState.running || infographicWrites || markdownEditor.running || ttsJobs.running) {
-    return res.status(409).json({ error: 'Es läuft bereits ein anderer Archiv- oder Speicherauftrag.' });
-  }
+  if (archiveLock.busy) return sendArchiveBusy(res);
   const rawItems = req.body?.items;
   if (!Array.isArray(rawItems) || !rawItems.length || rawItems.length > 500) {
     return res.status(400).json({ error: 'Bitte 1 bis 500 Dublettenpaare auswählen.' });
@@ -2668,7 +2681,9 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
     return res.status(error.status || 400).json({ error: error.message });
   }
 
-  infographicWrites++;
+  // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
+  const release = archiveLock.tryAcquire('Dubletten-Sammelaktion');
+  if (!release) return sendArchiveBusy(res);
   const prepared = [];
   const failed = [];
   try {
@@ -2702,7 +2717,7 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
     if (!error.status) console.error('Dubletten-Sammelaktion:', error);
     return res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Sammelaktion ist fehlgeschlagen.' });
   } finally {
-    infographicWrites--;
+    release();
   }
 });
 
@@ -2711,13 +2726,11 @@ app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
   if (req.get('sec-fetch-site') === 'cross-site') {
     return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
   }
-  if (reindexState.running || scrapeState.running || infographicWrites || markdownEditor.running || ttsJobs.running) {
-    return res.status(409).json({ error: 'Es läuft bereits ein anderer Archiv- oder Speicherauftrag.' });
-  }
+  const release = archiveLock.tryAcquire('Dublettenaktion');
+  if (!release) return sendArchiveBusy(res);
   const action = String(req.body?.action || '');
   const blogId = String(req.body?.blogId || '');
   const facebookId = String(req.body?.facebookId || '');
-  infographicWrites++;
   try {
     if (action === 'reset') {
       await duplicateStore.remove(blogId, facebookId);
@@ -2753,7 +2766,7 @@ app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
     if (!error.status) console.error('Dublettenverwaltung:', error);
     return res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Dublettenaktion ist fehlgeschlagen.' });
   } finally {
-    infographicWrites--;
+    release();
   }
 });
 
@@ -2907,7 +2920,7 @@ installBookmarkRoutes(app, {
 installAudiobookRoutes(app, {
   library: audiobooks, progress: audiobookProgress, config: audiobookConfig,
   requireAuth, requireAdmin: requireAdminAccess, canAccessAuthor,
-  busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || markdownEditor.running || ttsJobs.running,
+  exclusive: (label, task) => archiveLock.run(label, task),
 });
 
 app.use((err, _req, res, next) => {
@@ -2933,7 +2946,11 @@ if (require.main === module) {
   //   kill -HUP "$(systemctl show -p MainPID --value nodeapp)"
   process.on('SIGHUP', () => {
     console.log('SIGHUP empfangen → Reindex');
-    if (!reindexState.running && !scrapeState.running && !ttsJobs.running && !infographicWrites && !markdownEditor.running) buildIndex().catch(console.error);
+    if (archiveLock.busy) {
+      console.warn(`SIGHUP-Reindex übersprungen: Es läuft bereits ${archiveLock.current}.`);
+      return;
+    }
+    buildIndex().catch(console.error);
   });
 
   buildIndex().catch(console.error);

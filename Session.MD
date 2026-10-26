@@ -1329,3 +1329,30 @@ Standardwerte, `public-directories.txt` → keine öffentlichen Autoren (Archiv 
 **Deployment:** Die beiden Dateien beim Kopieren nach `/opt/nodeapp` grundsätzlich auslassen; die
 Fassungen auf dem Server sind maßgeblich. Wer per `git pull` aktualisiert, sollte sie vorher sichern,
 weil Git sie beim Entfernen aus dem Index im Arbeitsverzeichnis löscht.
+
+## 22. Aktualisierung 26.10.2026 – Zentrale Sperre für Schreib- und Indexaufträge
+
+Die rund 16 von Hand geschriebenen Busy-Prüfungen in `server.js`
+(`reindexState.running || scrapeState.running || infographicWrites || …`) sind durch das Modul
+`archive-lock.cjs` ersetzt. Der Zähler `infographicWrites`, der zuletzt auch für Dubletten als
+allgemeine Sperre diente, entfällt.
+
+- **Registrierte Aufträge** mit eigenem Zustand: Index-Neuaufbau, Scraper-Lauf, Artikel speichern,
+  Audio-Erzeugung. Editor und TTS behalten ihre Schnittstelle (`busy`, `running`) und erhalten
+  `busy: () => archiveLock.busy`.
+- **Exklusive Halter** über `tryAcquire`: Infografiken ändern, Infografik-Prüfung speichern,
+  Infografik hochladen, Neue Infografik speichern, Dubletten-Sammelaktion, Dublettenaktion;
+  Hörbuch-Verwaltung über `exclusive` in `installAudiobookRoutes`. Die Hörbuch-Verwaltung war
+  vorher nur geprüft, aber selbst nicht sichtbar für andere Aufträge.
+- **Meldung** bei Konflikt: 409 „Es läuft bereits: <Auftrag>. Bitte später erneut versuchen.“
+- **Verhalten bleibt sonst gleich:** `/api/reindex` und `/api/scrape` antworten bei bereits laufendem
+  Reindex bzw. Scrape weiterhin mit `started: false` und `reason`. Das Öffnen der
+  Infografik-Verwaltung wird nur während eines exklusiven Halters abgewiesen, nicht während Scrape
+  oder Audio-Erzeugung. `SIGHUP` protokolliert jetzt, warum der Reindex übersprungen wird.
+
+**Geprüft:** `test/archive-lock.test.cjs` (5 Tests, u. a. Hörbuch-Route mit belegter Sperre),
+gesamte Node-Suite 359/359, lokaler Serverstart mit vollständigem Index. Gleichzeitige Aufträge im
+echten Betrieb nicht manuell ausgelöst.
+
+**Deployment:** `server.js`, `audiobooks.cjs`, `archive-lock.cjs` (neu) kopieren und den Dienst neu
+starten; keine neuen Abhängigkeiten.

@@ -107,6 +107,13 @@ NPMplus reverse proxy (192.168.1.14). With `NODE_ENV=production` the server refu
 `SESSION_SECRET` of at least 32 chars. `TRUST_PROXY` (default `loopback, 192.168.1.14`) limits which
 proxies may set `X-Forwarded-*`; `CSP_MODE` is `report` (default), `enforce` or `off`.
 
+**Concurrent jobs:** all archive writes and index rebuilds go through the single lock in
+`archive-lock.cjs` (`archiveLock` in `server.js`). Jobs with their own state (reindex, scrape, editor,
+TTS) are `register`ed once; new write routes use `archiveLock.tryAcquire(label)` + `release()` in
+`finally` (or `archiveLock.run`) and answer conflicts with `sendArchiveBusy(res)` — never add new
+hand-written `x.running || y.running` checks. Internal partial reindexes triggered by the lock holder
+do not acquire again.
+
 **Security modules:** `login-limiter.cjs` (429 after repeated failed password checks on `/api/login`
 and `/api/me/password`), `html-sanitizer.cjs` (all markdown → HTML that reaches `innerHTML` must go
 through `renderSafeMarkdown`), `security-headers.cjs` (CSP; frontend must not use inline handlers like
