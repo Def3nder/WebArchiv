@@ -1,6 +1,6 @@
 # WebArchiv – gesammeltes Projektwissen und Sitzungsprotokoll
 
-Stand: **27.09.2026**. Zusammengeführt aus den zugänglichen Projektgesprächen und den vorhandenen Projektdokumenten; wichtige spätere Entscheidungen mit dem lokalen Code abgeglichen.
+Stand: **26.10.2026**. Zusammengeführt aus den zugänglichen Projektgesprächen und den vorhandenen Projektdokumenten; wichtige spätere Entscheidungen mit dem lokalen Code abgeglichen.
 
 ## Umfang und Leseregel
 
@@ -1090,3 +1090,121 @@ Die UI-Verträge dieser Bereiche werden insbesondere durch
 zusätzlich die reinen Markdown-Befehlstests und die vollständige Suite mit `npm test` relevant.
 Dokumentationsänderungen allein erfordern keinen Bundle- oder Anwendungsbuild; sie werden mindestens
 mit `git diff --check` geprüft.
+
+## 17. Aktualisierung 26.10.2026 – Infografik-Poster, Prüfmodus und Qwen-Einstellungen
+
+Dieser Abschnitt ergänzt den bisherigen Projektstand um die jüngsten Entscheidungen zu
+Infografiken, dem administrativen Prüfablauf, der sichtbaren Autorableitung und der
+Qwen-TTS-Konfiguration. Bei Widersprüchen zu älteren Infografik- oder TTS-Abschnitten gelten die
+nachfolgenden Regeln.
+
+### Poster-Klassifizierung pro Grafik
+
+Jede Grafik besitzt weiterhin eine eigene `.md`-Datei. Nur im Ja-Fall wird die Klassifizierung als
+eigener Markdown-Absatz direkt nach dem Datum gespeichert:
+
+```text
+Datum: 2026-10-25
+
+Instagram-Poster: Ja
+```
+
+Fehlt diese Zeile, ist die Grafik eine klassische Infografik. Der Infografik-Manager in der
+Artikeldetailansicht zeigt deshalb pro Grafikzeile eine eigene *Instagram-Poster*-Checkbox; ein
+Artikel kann beliebige klassische Infografiken und Poster mischen. Eine Änderung aktualisiert nur
+den betroffenen Infografik-Jahrgang im In-Memory-Index. Der Hauptartikel zeigt weiterhin
+unverändert alle zugeordneten Grafiken.
+
+Das Korrekturskript `scripts/fix-instagram-poster-spacing.js` fügt bei älteren Dateien die fehlende
+Leerzeile zwischen Datum und Marker ein. Ohne Parameter läuft es als Vorschau. `--write` legt eine
+Sicherung unter `download/` an und schreibt atomar; `--root` erlaubt einen abweichenden
+Infografikpfad.
+
+### Filter und bildbasierte Kacheln beim Autor Infografiken
+
+Der frühere Telegram-Button schaltet beim Autor `Infografiken` in der Kachelansicht zyklisch durch
+drei flüchtige Zustände:
+
+1. alle Infografiken, dargestellt durch das entfärbte Instagram-Symbol;
+2. nur Poster, dargestellt durch das originale farbige Instagram-SVG;
+3. nur klassische Infografiken, dargestellt durch ein eigenständiges türkis-goldenes
+   Infografik-SVG.
+
+Beim Verlassen und erneuten Aufrufen wird der Filter auf *alle* zurückgesetzt. In der Listenansicht
+ist der Symbolbutton ausgegraut, nicht bedienbar und ein aktiver Filter wird ebenfalls auf *alle*
+zurückgesetzt. Die Ergebnisanzahl verwendet im Poster-Modus die Bezeichnung „Poster“.
+
+Poster und klassische Infografiken verwenden identische bildbasierte 9:16-Kacheln mit
+`object-fit: contain`. Titel, Vorschautext und Audio-/Video-/PDF-Badges werden nicht angezeigt.
+Unten links steht der Autor, unten rechts das Datum aus der Grafik-`.md`. Reicht die Breite nicht,
+wird das Datum stufenweise von der ausgeschriebenen Form auf `TT.MM.JJJJ`, `MM.JJJJ` und `JJJJ`
+verkürzt.
+
+Ein Klick auf eine gefilterte Kachel öffnet unmittelbar die Vollbildgrafik. Cursor-Tasten und
+Wischgesten wechseln innerhalb der aktuell sichtbaren Grafikliste; sichtbare Pfeilbuttons gibt es
+nicht. Die normale Hauptartikelansicht bleibt davon unberührt und zeigt weiterhin alle
+zugeordneten Grafiken.
+
+### Sichtbarer Autor von Infografiken
+
+Der sichtbare Autor wird für jede Infografik und in allen Ansichten über die Gruppenverknüpfung vom
+zugänglichen Hauptartikel abgeleitet. Die API liefert dafür `displayAuthor`. Nur eine eigenständige
+Infografik ohne zugänglichen Hauptartikel zeigt als Autor „Infografiken“. Das interne
+`article.author` bleibt weiterhin `Infografiken`, damit ACL-Prüfung, Filter, Routing und Dateipfade
+unverändert funktionieren.
+
+### Admin-Prüfmodus „Infografiken prüfen“
+
+Das Admin-Menü öffnet eine eigene Prüfansicht für alle Infografiken. Jede Grafik erscheint als
+9:16-Kachel mit großer Checkbox-Touchfläche oben rechts. Ein Klick auf die Checkbox ändert die
+Poster-Markierung; ein Klick auf das Bild öffnet die Vollbildansicht. Dort ist dieselbe Checkbox
+verfügbar und kann mit der Leertaste umgeschaltet werden. Cursor-Navigation funktioniert auch
+direkt, nachdem eine Checkbox den Fokus erhalten hat.
+
+Änderungen bleiben über Ergebnisseiten und die Seitengrößen 12, 24, 48 und 96 erhalten. Solange
+nichts geändert wurde, heißt der Aktionsbutton *Abbrechen*. Andernfalls lautet er *Speichern (N)*.
+Erfolgreiches Speichern beendet den Prüfmodus.
+
+`POST /api/infographic-review` prüft den erwarteten Ausgangswert, schreibt die betroffenen
+`.md`-Dateien als gemeinsamen Dateivorgang und liest ausschließlich die tatsächlich betroffenen
+Infografik-Jahrgänge neu ein. Ein vollständiger Archiv-Reindex findet nicht statt. Bei einem
+Fehler wird der Dateivorgang zurückgerollt.
+
+### TTS-Einstellungen und Qwen-Konfiguration
+
+Der überflüssige Verfügbarkeitstext im oberen Bereich des TTS-Dialogs wurde entfernt. Die
+Stimmenauswahl nutzt dasselbe ARIA-Aktionsmenü wie die übrigen Desktopfilter; auf Touch-Geräten
+bleibt das native `<select>` erhalten.
+
+Unter den vorhandenen Bereichen für Stimmenauswahl und Stimmerzeugung folgt der Bereich
+*Qwen-TTS-Server-Einstellungen*. Beim Öffnen lädt WebArchiv die Werte live über
+`GET /api/tts/server-settings`; Speichern erfolgt über `PUT /api/tts/server-settings` und den
+Qwen-Endpunkt `/v1/settings`. Leere Felder zusammen mit HTTP 404 bedeuten, dass auf dem
+Modellserver noch eine ältere Dienstversion ohne diesen Endpunkt läuft.
+
+Konfigurierbar sind:
+
+- `min_chunk_chars`, `target_chunk_chars` und `max_chunk_chars` über kleine Zahlenfelder sowie
+  einen gemeinsamen Drei-Punkt-Slider;
+- `text_preroll_enabled` und bei Aktivierung `text_preroll_sentence`;
+- `append_chunk_end_padding` und bei Aktivierung `chunk_end_padding_text`;
+- `text_preroll_min_pause_ms`, `text_preroll_lead_in_ms` und `silence_threshold_db`.
+
+Der Qwen-Dienst verändert nicht die ursprüngliche `config.json`. Beim Start muss ihm die bereits
+vorhandene `qwen_http_service_config.json` mit `--config` übergeben werden; er erzeugt sie nicht.
+Lesen, atomisches Schreiben und jeder Aufruf von `generate_mp3_with_embedding.py --config ...`
+verwenden denselben absoluten Pfad. Weil `start_qwen_tts_service.cmd` ausschließlich absolute
+Pfade enthält, kann die Datei auch nach `C:\Tools\Scripts` kopiert und von dort gestartet werden.
+
+### Weitere UI-Korrekturen und Betriebsstand
+
+- Das Copy-Menü ist grundsätzlich rechts am Copy-Button ausgerichtet, bleibt bei ausreichender
+  Breite einzeilig und wird an schmalen Viewports vollständig innerhalb des Fensters gehalten.
+- Aktuelle Frontend-Cache-Buster: `styles.css?v=158`, `app.js?v=131`.
+- Änderungen an `server.js` oder am Qwen-Python-Dienst benötigen einen Neustart des jeweiligen
+  Dienstes. Frontendänderungen werden nach normalem Neuladen durch die Cache-Buster übernommen.
+- Die gezielten Infografik-, Server- und angrenzenden UI-Tests liefen zuletzt mit 90/90 erfolgreich;
+  `node --check` für `server.js` und `public/app.js` war fehlerfrei.
+- Der vollständige `npm test`-Lauf ist in der eingeschränkten Windows-Sandbox weiterhin nicht
+  grün: Lokale Socket-Verbindungen, Hardlinks und atomare Schreibtests werden dort teilweise mit
+  `EACCES`/`EPERM` blockiert; daneben bestehen unabhängige Bestands-/Fixture-Abweichungen.

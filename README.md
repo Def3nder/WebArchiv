@@ -211,6 +211,60 @@ des betroffenen Jahres erneut von der Festplatte. Artikel anderer Autoren und
 andere Infografik-Jahre bleiben im Speicher; Zuordnungen und Suche werden aus
 diesen Daten neu berechnet. Ein manueller Reindex bleibt ein vollständiger Scan.
 
+**Klassische Infografiken und Poster:** Jede einzelne Grafik wird über ihre
+eigene `.md`-Datei klassifiziert. Nur im Ja-Fall steht direkt nach dem Datum,
+durch eine Leerzeile als eigener Markdown-Absatz getrennt:
+
+```text
+Datum: 2026-10-25
+
+Instagram-Poster: Ja
+```
+
+Fehlt die Zeile, ist die Grafik eine klassische Infografik. Der
+Infografik-Manager zeigt deshalb in jeder Zeile eine eigene
+*Instagram-Poster*-Checkbox und aktualisiert nach einer Änderung nur den
+betroffenen Infografik-Jahrgang im In-Memory-Index. Der Hauptartikel zeigt
+weiterhin unverändert alle zugeordneten Grafiken.
+
+Beim Autor **Infografiken** schaltet der Symbolbutton in der Kachelansicht
+zyklisch zwischen allen Grafiken, nur Postern und nur klassischen
+Infografiken. Poster verwenden das originale farbige Instagram-Symbol;
+klassische Infografiken ein eigenständiges türkis-goldenes Infografik-Symbol.
+Der Filter ist flüchtig und wird beim Verlassen beziehungsweise erneuten
+Aufrufen zurückgesetzt. In der Listenansicht ist der Button ausgegraut und
+nicht bedienbar. Beide gefilterten Ansichten verwenden dieselben
+9:16-Kacheln (`object-fit: contain`) ohne Titel, Vorschautext oder Medienbadges.
+Unten stehen nur Autor und Datum als Badges. Das Datum stammt aus der
+Grafik-`.md` und verkürzt sich bei Platzmangel stufenweise von der
+ausgeschriebenen Form auf `TT.MM.JJJJ`, `MM.JJJJ` und schließlich `JJJJ`.
+
+Der sichtbare Autor einer Infografik wird in **allen** Ansichten vom
+verknüpften Hauptartikel übernommen. Nur eigenständige Infografiken ohne
+zugänglichen Hauptartikel zeigen „Infografiken“. Die interne Zuordnung zum
+Autorordner `Infografiken` bleibt für Dateipfade, Filter und Zugriffsprüfung
+unverändert. Ein Klick auf eine gefilterte Kachel öffnet direkt die
+Vollbildgrafik. Zwischen den sichtbaren Grafiken wird mit Cursor-Tasten oder
+Wischgeste gewechselt; sichtbare Pfeilbuttons gibt es nicht.
+
+**Infografiken prüfen** (Admin-Menü): Der Prüfmodus zeigt alle Grafiken als
+9:16-Kacheln mit großer Checkbox-Touchfläche oben rechts. Ein Klick auf die
+Checkbox ändert die Poster-Markierung, ein Klick auf das Bild öffnet die
+Vollbildansicht. Dort steht dieselbe Checkbox bereit; die Leertaste schaltet
+sie um, Cursor-Tasten blättern weiter. Änderungen bleiben über alle Seiten und
+Seitengrößen (12/24/48/96) erhalten. Ohne Änderung heißt der Aktionsbutton
+*Abbrechen*, andernfalls *Speichern (N)*. Speichern schreibt alle geänderten
+`.md`-Dateien gemeinsam, liest ausschließlich die betroffenen Jahrgänge neu
+ein und beendet anschließend den Prüfmodus. Das Korrekturskript für ältere
+Dateien ohne Leerzeile läuft standardmäßig nur als Vorschau:
+
+```bash
+node scripts/fix-instagram-poster-spacing.js
+node scripts/fix-instagram-poster-spacing.js --write
+# optional für eine andere Ablage:
+node scripts/fix-instagram-poster-spacing.js --root /pfad/zu/www/Infografiken --write
+```
+
 **Bestehende Dateinamen umstellen:** Vorher ein Backup von `www/Infografiken/`
 anlegen und zunächst `node scripts/migrate-infographic-names.js` als Vorschau
 ausführen. Die Ausgabe listet zuerst noch nicht migrierte, zugeordnete Grafiken: 1.1 mit
@@ -368,6 +422,27 @@ meldet. Die `.pt`-Dateien und temporären Aufnahmen werden
 ausschließlich auf dem separaten Qwen-TTS-Modellserver im dort konfigurierten
 `voices`-Verzeichnis verarbeitet.
 
+Der Dialog verwendet für die Stimmenauswahl dasselbe ARIA-Aktionsmenü wie die
+übrigen Desktop-Filter (mit nativem `<select>` auf Touch-Geräten). Unter den
+beiden vorhandenen Stimmenbereichen folgt **Qwen-TTS-Server-Einstellungen**.
+Beim Öffnen lädt WebArchiv die Werte live über
+`GET /api/tts/server-settings` vom Modellserver; leere Felder oder HTTP 404
+bedeuten daher, dass dort noch ein älterer Dienst ohne `/v1/settings` läuft.
+Konfigurierbar sind `min_chunk_chars`, `target_chunk_chars` und
+`max_chunk_chars` über drei kleine Zahlenfelder und einen gemeinsamen Slider,
+außerdem Text-Preroll samt Satz, optionales Chunk-End-Padding samt Text,
+minimale Preroll-Pause, Lead-in und Stille-Schwelle.
+`PUT /api/tts/server-settings` validiert die Werte serverseitig und speichert sie
+atomar; sie gelten für neu gestartete Aufträge.
+
+Der Qwen-Dienst verändert **nicht** die ursprüngliche `config.json`. Er verlangt
+beim Start eine bereits vorhandene `qwen_http_service_config.json`, liest und
+schreibt ausschließlich diese Datei und reicht denselben absoluten Pfad beim
+Aufruf von `generate_mp3_with_embedding.py` als `--config` weiter. Die Datei
+wird beim Start nicht erzeugt. Weil `start_qwen_tts_service.cmd` absolute Pfade
+verwendet, darf die `.cmd` beispielsweise nach `C:\Tools\Scripts` kopiert und
+von dort gestartet werden; entscheidend sind die darin eingetragenen Pfade.
+
 Eine neue Stimme kann direkt im Browser aufgenommen oder als Audiodatei
 hochgeladen werden. Der Admin gibt nur den Namen ein; der Qwen-Dienst
 normalisiert ihn und ergänzt `-1.7B.pt`. Er wandelt die Aufnahme vorübergehend
@@ -403,6 +478,10 @@ Repository.
   ihre Breite getrennt nach Inhalt; das Menü ragt nicht über den Fensterrand. Pfeiltasten,
   Pos1/Ende, Escape und Außenklick werden unterstützt. Auf Touch-Geräten bleiben die nativen
   `<select>`-Elemente aktiv.
+  Das Copy-Menü verwendet denselben ARIA-Menütyp, richtet sich grundsätzlich
+  rechts am Copy-Button aus und hält Einträge einzeilig, solange die verfügbare
+  Fensterbreite dies zulässt. Bei schmalen Viewports wird die Position so
+  begrenzt, dass das Menü vollständig sichtbar bleibt.
   Paginierung server-seitig. Auf Touch-Geräten wechselt eine horizontale Einfinger-Geste
   in allen drei Ansichten zur nächsten oder vorherigen Seite: Sie beginnt außerhalb
   der äußersten 30 px und wirft die aktuelle Seite bis in die 30-px-Zone links bzw.
@@ -592,11 +671,12 @@ Editor- oder Menülogik einbezogen.
 | `DELETE /api/users/:email` | Admin | Nutzer löschen |
 | `PUT /api/public-authors` | Admin | Öffentliche Autoren setzen `{authors:[…]}` |
 | `GET /api/meta` | Soft | Autoren/Jahre/Kategorien (ACL-gefiltert) |
-| `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen; `bookmarks=1` nur Artikel mit Lesezeichen; jeder Eintrag trägt `bookmarked` |
+| `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `infographic=poster\|classic` filtert beim Autor Infografiken, `infographicReview=1` liefert den Admin-Prüfmodus; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen; `bookmarks=1` nur Artikel mit Lesezeichen; Infografiken tragen den abgeleiteten `displayAuthor` |
 | `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml`, `images` und `bookmarked`; eine gruppierte Infografik liefert ihre Gruppe (`requestedId`) |
 | `GET /api/infographic-manager/*` | Admin + Artikelrecht | Verwaltbare, eigene Artikel-Infografiken in Reihenfolge |
 | `POST /api/infographic-manager/*` | Admin + Artikelrecht | `{action:"order",ids:[…]}` benennt Bild/Markdown um; `{action:"trash",id}` verschiebt ein Paar in den Papierkorb und nummeriert übrige Grafiken neu |
 | `POST /api/infographics/*` | Admin + Artikelrecht | Einzelne PNG-/JPG-Infografik zum Artikel hochladen |
+| `POST /api/infographic-review` | Admin | Mehrere Poster-Markierungen gemeinsam speichern und nur betroffene Infografik-Jahrgänge neu einlesen |
 | `PUT /api/bookmarks/*` · `DELETE /api/bookmarks/*` | Auth | Lesezeichen setzen (Artikel muss existieren, Autorenrecht) bzw. löschen |
 | `GET /api/duplicates` | Admin | Offene, verknüpfte und ignorierte Blog–Quellen-Paare samt konfigurierter Quellautoren |
 | `GET /api/duplicates/compare` | Admin | Volltextvergleich und Vorschau möglicher Infografikmigrationen |
@@ -607,6 +687,7 @@ Editor- oder Menülogik einbezogen.
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht); `?sq=256|512` liefert einen quadratischen Ausschnitt vom oberen Bildteil (Sperrbildschirm) |
 | `POST /api/new-infographic` | Admin | Neue Infografik `{markdown, image(base64)}` → `{id}` |
+| `GET/PUT /api/tts/server-settings` | Admin | Qwen-Serverwerte live lesen beziehungsweise in `qwen_http_service_config.json` speichern |
 | `GET /api/prompts` · `GET /api/prompts/:file` | Soft | Prompt-Textbausteine aus `prompts/` (Copy-Menü) |
 | `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/title/date),page,limit` |
 | `GET /api/audiobooks/*` | Auth + Autor | Hörbuch mit Tracks, Beschreibung, eigenem Fortschritt |
