@@ -37,7 +37,9 @@ test("behält einen nur ähnlichen ersten Absatz bei", () => {
 test("lädt alle konfigurierten Quellen aus scraper-config.json", () => {
   const config = loadScraperConfig();
   assert.deepEqual(config.blog.map((source) => source.name), ["Joe Turan"]);
-  assert.deepEqual(config.facebook.map((source) => source.name), ["Facebook", "Joe Turan Facebook"]);
+  assert.deepEqual(config.facebook.map((source) => source.name), [
+    "Facebook", "Joe Turan Facebook", "Joe Turan Gruppe",
+  ]);
   assert.deepEqual(config.telegram.map((source) => source.name), ["Telegram"]);
   assert.match(config.facebook[1].outputDir, /www[\\/]Joe Turan Facebook$/);
 });

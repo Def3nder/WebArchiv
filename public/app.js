@@ -610,15 +610,15 @@ function showFullscreenImage(index) {
   document.getElementById('img-fullscreen-download').href = url;
   const reviewId = fsGallery.reviewIds[index] || '';
   const reviewVisible = isInfographicReviewMode() && !!reviewId;
-  $fullscreenPosterToggle.hidden = !reviewVisible;
+  if ($fullscreenPosterToggle) $fullscreenPosterToggle.hidden = !reviewVisible;
   $fs.classList.toggle('has-poster-review', reviewVisible);
-  if (reviewVisible) {
+  if (reviewVisible && $fullscreenPosterCheckbox) {
     $fullscreenPosterCheckbox.dataset.reviewId = reviewId;
     $fullscreenPosterCheckbox.checked = infographicReviewValue(reviewId);
     $fullscreenPosterCheckbox.setAttribute('aria-label', $fullscreenPosterCheckbox.checked
       ? 'Poster-Markierung entfernen'
       : 'Als Poster markieren');
-  } else {
+  } else if ($fullscreenPosterCheckbox) {
     delete $fullscreenPosterCheckbox.dataset.reviewId;
   }
   prepareImageFile(url);
@@ -654,7 +654,7 @@ function closeImageFullscreen() {
   fsGallery.bounded = false;
   fsGallery.returnFocus = null;
   fsGallery.reviewIds = [];
-  $fullscreenPosterToggle.hidden = true;
+  if ($fullscreenPosterToggle) $fullscreenPosterToggle.hidden = true;
   document.getElementById('img-fullscreen').classList.remove('has-poster-review');
   document.body.style.overflow = fsGallery.previousBodyOverflow;
   fsGallery.previousBodyOverflow = '';
@@ -902,6 +902,13 @@ async function login(email, password) {
       $loginEmail.focus();
       return;
     }
+    // Die Admin-Shell wird ausschließlich serverseitig erzeugt. Eine neue
+    // Navigation ist daher Bestandteil der Anmeldung; der vorhandene Hash
+    // bleibt erhalten und wird anschließend wie gewohnt wiederhergestellt.
+    if (data.role === 'admin') {
+      location.reload();
+      return;
+    }
     // Die Gastansicht darf weder sichtbar bleiben noch ihren Hash als neuen
     // Deep-Link in die persönliche Sitzungsansicht hinübertragen.
     clearActiveViewForAccountSwitch();
@@ -922,6 +929,7 @@ async function login(email, password) {
 }
 
 async function logout() {
+  const wasAdmin = currentUser?.role === 'admin';
   // Hörposition vor dem Abmelden sichern und Wiedergabe beenden.
   if (typeof bookPlayerClose === 'function') await bookPlayerClose();
   clearActiveViewForAccountSwitch();
@@ -930,6 +938,10 @@ async function logout() {
   pendingLoginDeepLink = null;
   history.replaceState(APP_VIEW_HISTORY_STATE, '', '#/');
   try { await fetch('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
+  if (wasAdmin) {
+    location.reload();
+    return;
+  }
   // Auf Guest-User umstellen (oder null, falls keine Public-Autoren konfiguriert)
   try {
     const r = await fetch('/api/me');
@@ -974,15 +986,25 @@ async function logout() {
 
 // ── API calls ──────────────────────────────────────────────────────────────
 async function apiFetch(url, options) {
-  const r = await fetch(url, options);
+  const init = { ...(options || {}) };
+  const method = String(init.method || 'GET').toUpperCase();
+  const requestUrl = new URL(url, location.href);
+  const csrf = document.querySelector('meta[name="admin-csrf-token"]')?.content;
+  if (csrf && requestUrl.origin === location.origin && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    init.headers = { ...(init.headers || {}), 'X-CSRF-Token': csrf };
+  }
+  const r = await fetch(url, init);
   if (r.status === 401) {
     currentUser = null;
-    applyUserUI(null);
-    showLogin('Ihre Sitzung ist abgelaufen. Bitte erneut anmelden.');
+    location.reload();
     throw new Error('Session expired');
   }
   if (r.status === 403 && currentUser && currentUser.role !== 'guest') {
     const data = await r.clone().json().catch(() => null);
+    if (data?.error === 'Admin only') {
+      location.reload();
+      throw new Error('Admin session expired');
+    }
     if (data?.mustChangePassword) {
       currentUser = { ...currentUser, mustChangePassword: true };
       ensurePasswordChanged().then(ok => { if (ok) { loadMeta(); loadArticles(); } });
@@ -1062,6 +1084,7 @@ function rememberInfographicReviewItems(items) {
 }
 
 function updateInfographicReviewSaveButton(message = '') {
+  if (!$infographicReviewSave) return;
   const count = infographicReview.changes.size;
   $infographicReviewSave.hidden = !isInfographicReviewMode();
   $infographicReviewSave.disabled = infographicReview.saving;
@@ -1079,7 +1102,7 @@ function syncInfographicReviewMark(id) {
       ? 'Poster-Markierung entfernen'
       : 'Als Poster markieren');
   });
-  if ($fullscreenPosterCheckbox.dataset.reviewId === id) {
+  if ($fullscreenPosterCheckbox?.dataset.reviewId === id) {
     $fullscreenPosterCheckbox.checked = enabled;
     $fullscreenPosterCheckbox.setAttribute('aria-label', enabled
       ? 'Poster-Markierung entfernen'
@@ -3086,6 +3109,7 @@ function clearTtsUI() {
   ++ttsPollGeneration;
   rememberTtsJob(null);
   ttsActive = false;
+  if (!$ttsOverlay) return;
   $ttsOverlay.hidden = true;
   $ttsOutput.textContent = '';
   $ttsStatus.textContent = '';
@@ -3316,14 +3340,14 @@ async function watchTts(jobId) {
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
 }
-document.getElementById('tts-close').addEventListener('click', closeTtsModal);
-document.getElementById('tts-backdrop').addEventListener('click', closeTtsModal);
-document.getElementById('tts-refresh').addEventListener('click', showTtsJob);
-$ttsReindex.addEventListener('click', async () => {
+document.getElementById('tts-close')?.addEventListener('click', closeTtsModal);
+document.getElementById('tts-backdrop')?.addEventListener('click', closeTtsModal);
+document.getElementById('tts-refresh')?.addEventListener('click', showTtsJob);
+$ttsReindex?.addEventListener('click', async () => {
   await runReindex();
   if (ttsJobId && !$ttsOverlay.hidden) watchTts(ttsJobId);
 });
-$ttsCancel.addEventListener('click', async () => {
+$ttsCancel?.addEventListener('click', async () => {
   if (!ttsJobId || $ttsCancel.disabled) return;
   $ttsCancel.disabled = true;
   const generation = ttsPollGeneration;
@@ -3350,7 +3374,7 @@ document.addEventListener('click', event => {
   });
 });
 document.addEventListener('keydown', event => {
-  if ($ttsOverlay.hidden) return;
+  if (!$ttsOverlay || $ttsOverlay.hidden) return;
   // Keine Navigation oder Schließen des darunterliegenden Artikels.
   event.stopImmediatePropagation();
   if (event.key === 'Escape') { event.preventDefault(); closeTtsModal(); }
@@ -3406,10 +3430,10 @@ function closeScrapeModal() {
   $scrapeOverlay.hidden = true;
   document.body.style.overflow = '';
 }
-$scrapeClose.addEventListener('click', closeScrapeModal);
-$scrapeBackdrop.addEventListener('click', closeScrapeModal);
+$scrapeClose?.addEventListener('click', closeScrapeModal);
+$scrapeBackdrop?.addEventListener('click', closeScrapeModal);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !$scrapeOverlay.hidden) closeScrapeModal();
+  if (e.key === 'Escape' && $scrapeOverlay && !$scrapeOverlay.hidden) closeScrapeModal();
 });
 
 async function runScrape() {
@@ -3549,11 +3573,11 @@ document.getElementById('overlay-prev').addEventListener('click', () => navigate
 document.getElementById('overlay-next').addEventListener('click', () => navigateArticle(+1));
 const $imgFullscreen = document.getElementById('img-fullscreen');
 const $imgFullscreenImg = document.getElementById('img-fullscreen-img');
-$infographicReviewSave.addEventListener('click', () => {
+$infographicReviewSave?.addEventListener('click', () => {
   if (infographicReview.changes.size) void saveInfographicReview();
   else void leaveInfographicReview();
 });
-$fullscreenPosterCheckbox.addEventListener('change', event => {
+$fullscreenPosterCheckbox?.addEventListener('change', event => {
   const id = event.currentTarget.dataset.reviewId;
   if (id) setInfographicReviewMark(id, event.currentTarget.checked);
 });
@@ -3632,7 +3656,7 @@ document.addEventListener('keydown', e => {
   // gezeigten Bildes. Hat die Checkbox selbst den Fokus, bleibt ihre native
   // Tastaturbedienung zuständig, damit die Markierung nicht doppelt wechselt.
   if ((e.key === ' ' || e.code === 'Space') && !$imgFullscreen.hidden
-      && isInfographicReviewMode() && !$fullscreenPosterToggle.hidden) {
+      && isInfographicReviewMode() && $fullscreenPosterToggle && !$fullscreenPosterToggle.hidden) {
     if (e.target === $fullscreenPosterCheckbox) return;
     const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
     const interactive = target?.closest(
@@ -3672,7 +3696,8 @@ document.addEventListener('keydown', e => {
   const reviewCheckbox = isInfographicReviewMode()
     && interactive?.matches('[data-review-poster-id]');
   if (currentLayout() === 'list' || (interactive && !reviewCheckbox) || !$loginOverlay.hidden
-      || !$scrapeOverlay.hidden || !$ttsOverlay.hidden || document.querySelector('dialog[open]')) return;
+      || ($scrapeOverlay && !$scrapeOverlay.hidden) || ($ttsOverlay && !$ttsOverlay.hidden)
+      || document.querySelector('dialog[open]')) return;
 
   const targetPage = state.page + dir;
   if (targetPage < 1 || targetPage > state.pages) return;
@@ -3918,7 +3943,7 @@ new MutationObserver(syncModalPageScroll).observe(document.body, {
 });
 syncModalPageScroll();
 
-const dialogOpen = () => !!document.querySelector('dialog[open]') || !$ttsOverlay.hidden;
+const dialogOpen = () => !!document.querySelector('dialog[open]') || ($ttsOverlay && !$ttsOverlay.hidden);
 enablePullToClose({
   scroller: $overlayPanel,
   moving: $overlayPanel,

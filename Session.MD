@@ -1200,7 +1200,7 @@ Pfade enthält, kann die Datei auch nach `C:\Tools\Scripts` kopiert und von dort
 
 - Das Copy-Menü ist grundsätzlich rechts am Copy-Button ausgerichtet, bleibt bei ausreichender
   Breite einzeilig und wird an schmalen Viewports vollständig innerhalb des Fensters gehalten.
-- Aktuelle Frontend-Cache-Buster: `styles.css?v=158`, `app.js?v=131`.
+- Aktuelle Frontend-Cache-Buster: `styles.css?v=158`, `app.js?v=132`.
 - Änderungen an `server.js` oder am Qwen-Python-Dienst benötigen einen Neustart des jeweiligen
   Dienstes. Frontendänderungen werden nach normalem Neuladen durch die Cache-Buster übernommen.
 - Die gezielten Infografik-, Server- und angrenzenden UI-Tests liefen zuletzt mit 90/90 erfolgreich;
@@ -1208,3 +1208,33 @@ Pfade enthält, kann die Datei auch nach `C:\Tools\Scripts` kopiert und von dort
 - Der vollständige `npm test`-Lauf ist in der eingeschränkten Windows-Sandbox weiterhin nicht
   grün: Lokale Socket-Verbindungen, Hardlinks und atomare Schreibtests werden dort teilweise mit
   `EACCES`/`EPERM` blockiert; daneben bestehen unabhängige Bestands-/Fixture-Abweichungen.
+
+## 18. Aktualisierung 26.10.2026 – serverseitig geschützte Admin-Oberfläche
+
+`public/index.html` dient jetzt als Servervorlage. `server.js` beantwortet `/` und `/index.html`
+sitzungsabhängig und ohne Cache: Nur eine aktive Admin-Sitzung ohne ausstehenden
+Pflicht-Kennwortwechsel erhält Admin-Menüpunkte, Redaktionsdialoge, das CSRF-Metafeld und die
+Admin-Script-Tags. Gäste und normale Nutzer erhalten diese Elemente überhaupt nicht im DOM.
+Direkte Aufrufe der Admin-Skripte werden vor der statischen Dateiauslieferung abgefangen und ohne
+Admin-Sitzung mit `404` beantwortet. Das eigene Kennwort bleibt über das getrennte
+`public/password.js` für normale Nutzer verfügbar.
+
+Admin-Anmeldung und -Abmeldung laden die Seite neu, damit der Server die passende Shell liefert
+beziehungsweise vorhandene Admin-Elemente sicher entfernt. Läuft eine Admin-Sitzung während eines
+API-Aufrufs ab oder wird die Rolle entzogen, löst die zentrale Fetch-Behandlung ebenfalls einen
+Neuaufbau der Shell aus.
+
+Die frühere, über viele Routen verteilte Prüfung wurde durch `requireAdminAccess` ergänzt. Sie
+prüft für alle administrativen Endpunkte die aktuelle Rolle. Bei `POST`, `PUT`, `PATCH` und
+`DELETE` werden außerdem Cross-Site-Anfragen, eine abweichende `Origin` und ein fehlendes oder
+falsches sitzungsgebundenes `X-CSRF-Token` abgewiesen. `apiFetch()` ergänzt dieses Token zentral;
+auch Artikel-/Abstract-Editor, Infografikverwaltung, TTS, Benutzerverwaltung, Dubletten und die
+administrative Hörbuch-/Extras-Verwaltung laufen darüber.
+
+Der neue Vertrag ist in `test/admin-ui-security.test.cjs` abgedeckt. Zusätzlich liefen die 90
+gezielten Sicherheits-, Admin-Dialog-, Editor-, Dubletten-, TTS-, Hörbuch-Extras-, Infografik-
+und angrenzenden UI-Tests gemeinsam ohne Fehler. Ein vollständiger Lauf außerhalb der Sandbox
+bestand 323 von 324 Node-Tests. Ausschließlich der sachfremde Qwen-E2E-Test „Echter HTTP-Dienst
+und Original-CLI-Vertrag“ überschritt auch bei isolierter Wiederholung sein festes
+15-Sekunden-Limit. Der dadurch nicht automatisch gestartete Python-Teil wurde separat ausgeführt
+und bestand vollständig mit 14 von 14 Tests.

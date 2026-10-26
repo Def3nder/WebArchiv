@@ -156,7 +156,7 @@ test('Escape und Herunterziehen schließen zuerst nur den Markdown-Editor', () =
   assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(!\$bemEditor\.hidden\) \{[\s\S]*?bemCloseEditor\(\);[\s\S]*?return;[\s\S]*?\$bem\.close\(\)/);
   assert.match(app, /\['#book-extras-manager', '#book-extras-manager \[data-bem-close\]'\]/);
   assert.match(app, /onClose: \(\) => closeBtn\.click\(\)/);
-  assert.match(html, /app\.js\?v=131/);
+  assert.match(html, /app\.js\?v=132/);
 });
 
 test('Escape und Herunterziehen schließen zuerst nur die Dateivorschau', () => {

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WebArchiv</title>
   <meta name="description" content="WebArchiv — Lesearchiv für Artikel, Infografiken, Videos und PDFs." />
+  <!-- ADMIN_CSRF_META -->
   <meta property="og:site_name" content="WebArchiv" />
   <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
@@ -194,7 +195,7 @@
           <div id="filter-limit-menu" class="header-menu-dropdown" role="menu" hidden></div>
         </div>
       </div>
-      <button id="infographic-review-save" class="infographic-review-save" type="button" hidden>Speichern</button>
+      <button id="infographic-review-save" class="infographic-review-save" type="button" data-admin-only hidden>Speichern</button>
       <button id="reset-filters" class="reset-btn" title="Filter zurücksetzen" hidden>Reset</button>
     </div>
   </div>
@@ -254,6 +255,7 @@
   <!-- Image fullscreen overlay -->
   <div id="img-fullscreen" class="img-fullscreen" role="dialog" aria-modal="true" aria-label="Bildvollansicht" tabindex="-1" hidden>
     <img id="img-fullscreen-img" src="" alt="" />
+    <!-- ADMIN_ONLY_START -->
     <label id="img-fullscreen-poster-toggle" class="poster-review-toggle poster-review-toggle-fullscreen" hidden>
       <input id="img-fullscreen-poster-checkbox" type="checkbox" />
       <span class="poster-review-check" aria-hidden="true">
@@ -261,6 +263,7 @@
       </span>
       <span class="poster-review-toggle-text">Poster</span>
     </label>
+    <!-- ADMIN_ONLY_END -->
     <a id="img-fullscreen-download" class="img-fullscreen-download" href="" download aria-label="Bild herunterladen" title="Bild herunterladen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0l-4-4m4 4l4-4"/><rect x="4" y="18" width="16" height="2" rx="1"/></svg>
     </a>
@@ -307,6 +310,7 @@
     </div>
   </div>
 
+  <!-- ADMIN_ONLY_START -->
   <!-- Scrape-Ergebnis overlay (Admin, z-index 300) -->
   <div id="scrape-overlay" class="scrape-overlay" hidden>
     <div class="scrape-backdrop" id="scrape-backdrop"></div>
@@ -487,6 +491,7 @@
       <button type="button" id="infographic-new-save" class="detail-cat-pill" disabled>Speichern</button>
     </div>
   </dialog>
+  <!-- ADMIN_ONLY_END -->
   <!-- Eigenes Kennwort ändern (auch als Pflichtdialog nach der Anmeldung) -->
   <dialog id="password-dialog" class="account-dialog" aria-labelledby="password-title">
     <form id="password-form" novalidate>
@@ -515,6 +520,7 @@
     </form>
   </dialog>
 
+  <!-- ADMIN_ONLY_START -->
   <!-- Qwen-TTS-Einstellungen (serverweit, nur Admin) -->
   <dialog id="tts-settings-dialog" class="account-dialog account-dialog-wide" aria-labelledby="tts-settings-title" tabindex="-1">
     <div class="article-editor-heading">
@@ -614,6 +620,7 @@
       </div>
     </section>
   </dialog>
+  <!-- ADMIN_ONLY_END -->
 
   <!-- Einstellungen (pro Gerät) -->
   <dialog id="settings-dialog" class="account-dialog" aria-labelledby="settings-title" tabindex="-1">
@@ -664,6 +671,7 @@
     </form>
   </dialog>
 
+  <!-- ADMIN_ONLY_START -->
   <!-- Benutzerverwaltung (Admin) -->
   <dialog id="user-admin" class="account-dialog account-dialog-wide" aria-labelledby="user-admin-title">
     <div class="article-editor-heading">
@@ -780,20 +788,22 @@
       <button type="button" id="duplicate-image-viewer-next" class="duplicate-image-viewer-nav" aria-label="Nächste Infografik">›</button>
     </div>
   </dialog>
-  <script src="user-admin.js?v=11"></script>
+  <!-- ADMIN_ONLY_END -->
+  <script src="password.js?v=1" data-non-admin-asset></script>
   <script src="settings.js?v=4"></script>
-  <script src="tts-settings.js?v=4"></script>
+  <script src="user-admin.js?v=12" data-admin-asset></script>
+  <script src="tts-settings.js?v=4" data-admin-asset></script>
   <script src="session-state.js?v=9"></script>
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=131"></script>
-  <script src="vendor/duplicate-diff.bundle.js?v=7"></script>
-  <script src="duplicates.js?v=19"></script>
+  <script src="app.js?v=132"></script>
+  <script src="vendor/duplicate-diff.bundle.js?v=7" data-admin-asset></script>
+  <script src="duplicates.js?v=19" data-admin-asset></script>
   <script src="audiobooks.js?v=24"></script>
   <script src="book-reader.js?v=14"></script>
-  <script src="vendor/article-editor.bundle.js?v=16"></script>
-  <script src="infographic-new.js?v=2"></script>
-  <script src="infographic-manager.js?v=3"></script>
+  <script src="vendor/article-editor.bundle.js?v=16" data-admin-asset></script>
+  <script src="infographic-new.js?v=2" data-admin-asset></script>
+  <script src="infographic-manager.js?v=3" data-admin-asset></script>
 </body>
 </html>

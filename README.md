@@ -17,7 +17,7 @@ Reverse Proxy — die Details dazu stehen in `LXC-container node.js Setup.txt`.
 ## Architektur
 
 ```
-Browser (SPA: public/index.html + app.js + styles.css)
+Browser (rollenabhängige SPA-Shell aus public/index.html + app.js + styles.css)
     │  fetch /api/*
     ▼
 Express-Server (server.js, CommonJS)
@@ -38,6 +38,10 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Video/PDF)
   Markdown-Editors bzw. der Dubletten-Diff-Anzeige müssen jedoch mit
   `npm run build:editor` bzw. `npm run build:duplicate-diff` gebündelt werden.
 - **Frontend**: statische SPA unter `public/` (kein Framework), Hash-Routing (`#/article/<id>`), Cache-Busting per `?v=N`.
+  `server.js` rendert `/` und `/index.html` dabei sitzungsabhängig: Admin-Menüpunkte,
+  Redaktionsdialoge und deren Script-Tags werden nur für eine bestätigte Admin-Sitzung
+  in die ausgelieferte HTML-Shell übernommen. Die betreffenden Script-URLs sind zusätzlich
+  vor `express.static` geschützt und liefern ohne Admin-Sitzung `404`.
   Die aktuelle Ansicht wird pro Benutzer auf dem Gerät gespeichert: Suche, Filter, Seite, Layout,
   Listenposition sowie geöffneter Artikel bzw. Hörbuch-/eBook-Reader werden nach einem vollständigen
   Browser- oder PWA-Neustart wiederhergestellt. Ein neu aufgerufener Artikel-Link hat Vorrang;
@@ -651,6 +655,16 @@ Editor- oder Menülogik einbezogen.
   neu vergeben. Die Server-Sessions liegen im RAM: Ein Dienstneustart macht
   bestehende Logins ungültig, auch wenn die lokal gespeicherte Ansicht nach
   erneuter Anmeldung wiederhergestellt werden kann.
+- **Admin-Oberfläche und Schreibschutz**: Die Quelldatei `public/index.html` enthält
+  markierte Admin-Blöcke als Servervorlage. `renderIndexForSession()` entfernt sie für
+  Gäste, normale Nutzer und Admins mit noch ausstehendem Pflicht-Kennwortwechsel vollständig;
+  die rollenabhängige Antwort trägt `Cache-Control: private, no-store` und `Vary: Cookie`.
+  Nach Admin-Anmeldung und -Abmeldung lädt der Browser die Shell neu. Alle Admin-Routen
+  verwenden zentral `requireAdminAccess`: Lesende Aufrufe brauchen die aktuelle Admin-Rolle,
+  schreibende zusätzlich eine zulässige Herkunft und das konstante, zeitvergleichssicher
+  geprüfte `X-CSRF-Token` der Sitzung. `apiFetch()` setzt dieses Token für schreibende
+  Same-Origin-Aufrufe automatisch. Admin-GETs liefern keine Schreibberechtigung und das
+  Token wird Nicht-Admins nie in die Seite eingebettet.
 - Datei-Auslieferung `/files/*` prüft die Autor-ACL (kein Zugriff auf fremde Autoren,
   Path-Traversal-Schutz).
 
@@ -797,7 +811,7 @@ config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hör
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp, diff
 test/                         Tests der Hauptanwendung
 public/
-├── index.html                SPA-Markup (Header, Overlays: Artikel, Login, Scrape)
+├── index.html                SPA-Servervorlage mit markierten Admin-Bereichen
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
 ├── duplicates.js             Admin-Prüfung und Verknüpfung von Blog-/Quellen-Dubletten
 ├── article-editor.js         Dialoglogik für Artikel- und Abstract-Markdown
@@ -805,7 +819,8 @@ public/
 ├── markdown-commands.mjs     Reine Markdown-Transformationen der Toolbar
 ├── markdown-editors.js       Einstiegspunkt des gebündelten Editors
 ├── audiobook-extras-manager.js  Extras-/Textbildverwaltung und Extras-Markdown-Editor
-├── user-admin.js             Kennwort ändern, Benutzer- und Autorenverwaltung
+├── password.js               Eigenes Kennwort für Gast-/Nutzer-Shell ändern
+├── user-admin.js             Admin-Shell: Kennwort, Benutzer- und Autorenverwaltung
 ├── settings.js               Anzeige-Einstellungen (inkl. Filter-Beschriftungen pro Nutzer/Gerät)
 ├── session-state.js          Lokaler Sitzungsstand pro Benutzer (Ansicht, Navigation, Scrollposition)
 ├── pwa-update.js             Erkennt neue App-Versionen und bietet kontrolliertes Aktualisieren an

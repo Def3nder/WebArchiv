@@ -26,6 +26,7 @@ const app = express();
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
 const WWW_DIR = path.join(__dirname, 'www');
 const AUDIO_DIR = path.join(__dirname, 'audio');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
@@ -33,6 +34,20 @@ const INFOGRAPHICS_AUTHOR = 'Infografiken';
 const INFOGRAPHIC_TRASH_DIR = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR, 'trash');
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const PWA_SHELL_EXTENSIONS = new Set(['.css', '.html', '.ico', '.js', '.json', '.png', '.svg']);
+const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const ADMIN_ASSET_PATHS = new Set([
+  '/user-admin.js',
+  '/tts-settings.js',
+  '/duplicates.js',
+  '/infographic-new.js',
+  '/infographic-manager.js',
+  '/article-editor.js',
+  '/audiobook-extras-manager.js',
+  '/markdown-editors.js',
+  '/duplicate-diff.js',
+  '/vendor/duplicate-diff.bundle.js',
+  '/vendor/article-editor.bundle.js',
+]);
 
 function computeAppShellVersion(publicDir = PUBLIC_DIR) {
   const hash = crypto.createHash('sha256');
@@ -1560,6 +1575,62 @@ function requireAdmin(req, res, next) {
   res.status(403).json({ error: 'Admin only' });
 }
 
+function isAdminUiSession(req) {
+  return req.session?.user?.role === 'admin' && !req.session.user.mustChangePassword;
+}
+
+function adminCsrfToken(req) {
+  if (!req.session.adminCsrfToken) req.session.adminCsrfToken = crypto.randomBytes(32).toString('hex');
+  return req.session.adminCsrfToken;
+}
+
+function sameStringSecret(actual, expected) {
+  if (typeof actual !== 'string' || typeof expected !== 'string') return false;
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length
+    && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+// Einheitlicher Schutz für sämtliche Admin-Endpunkte. Lesende Aufrufe benötigen
+// nur die Admin-Rolle; schreibende Aufrufe zusätzlich dieselbe Herkunft und das
+// pro Sitzung in die Admin-Seite eingebettete CSRF-Token.
+function requireAdminAccess(req, res, next) {
+  return requireAdmin(req, res, () => {
+    if (SAFE_HTTP_METHODS.has(req.method)) return next();
+    if (req.get('sec-fetch-site') === 'cross-site') {
+      return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
+    }
+    const origin = req.get('origin');
+    const expectedOrigin = `${req.protocol}://${req.get('host')}`;
+    if (origin && origin !== expectedOrigin) {
+      return res.status(403).json({ error: 'Ungültige Anfrageherkunft.' });
+    }
+    if (!sameStringSecret(req.get('x-csrf-token'), req.session.adminCsrfToken)) {
+      return res.status(403).json({ error: 'Ungültiges oder fehlendes Sicherheitstoken.' });
+    }
+    next();
+  });
+}
+
+function renderIndexForSession(req) {
+  let html = fs.readFileSync(INDEX_FILE, 'utf8');
+  const isAdmin = isAdminUiSession(req);
+  html = html.replace('<!-- ADMIN_CSRF_META -->', isAdmin
+    ? `<meta name="admin-csrf-token" content="${adminCsrfToken(req)}">`
+    : '');
+  if (isAdmin) {
+    return html.split(/\r?\n/)
+      .filter(line => !line.includes('data-non-admin-asset'))
+      .join('\n');
+  }
+  html = html.replace(/<!-- ADMIN_ONLY_START -->[\s\S]*?<!-- ADMIN_ONLY_END -->/g, '');
+  html = html.split(/\r?\n/)
+    .filter(line => !line.includes('data-admin-only') && !line.includes('data-admin-asset'))
+    .join('\n');
+  return html;
+}
+
 function getEffectiveUser(req) {
   if (req.session?.user) return req.session.user;
   return { email: null, role: 'guest', allowedAuthors: userStore.publicAuthors };
@@ -1621,9 +1692,33 @@ app.get('/service-worker.js', (_req, res) => {
   res.type('application/javascript').send(serviceWorkerSource(computeAppShellVersion()));
 });
 
+// Die HTML-Shell ist rollenabhängig und darf weder im Browser-Cache noch in
+// einem Shared Cache landen. Ohne bestätigte Admin-Sitzung fehlen Admin-Menüs,
+// Redaktionsdialoge und deren Script-Tags vollständig in der Antwort.
+app.get(['/', '/index.html'], (req, res) => {
+  res.set({
+    'Cache-Control': 'private, no-store, max-age=0',
+    Pragma: 'no-cache',
+    Vary: 'Cookie',
+  });
+  res.type('html').send(renderIndexForSession(req));
+});
+
+// Admin-spezifische Browser-Module liegen aus Gründen der bestehenden
+// Build-Struktur weiterhin unter public/, werden aber vor express.static
+// abgefangen und ohne aktive Admin-Sitzung nicht ausgeliefert.
+for (const assetPath of ADMIN_ASSET_PATHS) {
+  app.get(assetPath, (req, res) => {
+    if (!isAdminUiSession(req)) return res.status(404).end();
+    res.set('Cache-Control', 'private, no-store');
+    res.sendFile(path.join(PUBLIC_DIR, assetPath));
+  });
+}
+
 // index.html immer beim Server nachfragen (sonst hält v. a. Safari eine alte Seite
 // mit alten ?v=-Verweisen); JS/CSS werden über ?v= in index.html aktualisiert.
 app.use(express.static(PUBLIC_DIR, {
+  index: false,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
   },
@@ -1917,14 +2012,14 @@ app.get('/api/prompts/:file', attachUser, (req, res) => {
   }
 });
 
-app.post('/api/reindex', requireAdmin, (req, res) => {
+app.post('/api/reindex', requireAdminAccess, (req, res) => {
   if (ttsJobs.running || scrapeState.running || infographicWrites || markdownEditor.running) return res.status(409).json({ started: false, error: 'Es läuft bereits ein Audio-, Scrape- oder Speicherauftrag.' });
   if (reindexState.running) return res.json({ started: false, reason: 'already running' });
   buildIndex().catch(console.error);
   res.json({ started: true });
 });
 
-app.get('/api/infographic-manager/*', requireAdmin, (req, res) => {
+app.get('/api/infographic-manager/*', requireAdminAccess, (req, res) => {
   if (infographicWrites) return res.status(409).json({ error: 'Infografiken werden gerade geändert. Bitte gleich erneut öffnen.' });
   try {
     const context = managedInfographicContext(req.params[0], req.session.user);
@@ -1943,7 +2038,7 @@ app.get('/api/infographic-manager/*', requireAdmin, (req, res) => {
   }
 });
 
-app.post('/api/infographic-manager/*', requireAdmin, async (req, res) => {
+app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
   if (req.get('sec-fetch-site') === 'cross-site') {
     return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
   }
@@ -2000,7 +2095,7 @@ app.post('/api/infographic-manager/*', requireAdmin, async (req, res) => {
 // Admin-Prüfmodus: Änderungen über beliebig viele Ergebnisseiten sammeln und
 // in einem atomaren Dateivorgang speichern. Anschließend werden ausschließlich
 // die tatsächlich betroffenen Infografik-Jahrgänge neu eingelesen.
-app.post('/api/infographic-review', requireAdmin, async (req, res) => {
+app.post('/api/infographic-review', requireAdminAccess, async (req, res) => {
   if (req.get('sec-fetch-site') === 'cross-site') {
     return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
   }
@@ -2032,7 +2127,7 @@ app.post('/api/infographic-review', requireAdmin, async (req, res) => {
 
 app.post(
   '/api/infographics/*',
-  requireAdmin,
+  requireAdminAccess,
   express.raw({ type: ['image/png', 'image/jpeg'], limit: INFOGRAPHIC_MAX_BYTES }),
   async (req, res) => {
     if (req.get('sec-fetch-site') === 'cross-site') {
@@ -2161,7 +2256,7 @@ function detectImageType(buffer) {
   return null;
 }
 
-app.post('/api/new-infographic', requireAdmin, async (req, res) => {
+app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
   if (req.get('sec-fetch-site') === 'cross-site') return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
   if (reindexState.running || scrapeState.running || ttsJobs.running || markdownEditor.running || infographicWrites) {
     return res.status(409).json({ error: 'Es läuft bereits ein Reindex-, Scrape-, Audio- oder Speicherauftrag. Bitte gleich erneut speichern.' });
@@ -2216,7 +2311,7 @@ app.post('/api/new-infographic', requireAdmin, async (req, res) => {
 
 app.get('/api/scrape/status', requireAuth, (_req, res) => res.json(scrapeState));
 
-app.post('/api/scrape', requireAdmin, (req, res) => {
+app.post('/api/scrape', requireAdminAccess, (req, res) => {
   if (ttsJobs.running || infographicWrites || markdownEditor.running) return res.status(409).json({ started: false, error: 'Es läuft bereits ein Audio- oder Speicherauftrag.' });
   if (scrapeState.running) return res.json({ started: false, reason: 'already running' });
   if (reindexState.running) return res.json({ started: false, reason: 'reindex running' });
@@ -2270,7 +2365,7 @@ app.post('/api/scrape', requireAdmin, (req, res) => {
 });
 
 // Letzte 100 Zeilen des Scraper-Logs (für die "Scrape-Log anzeigen"-Ansicht).
-app.get('/api/scrape/log', requireAdmin, (_req, res) => {
+app.get('/api/scrape/log', requireAdminAccess, (_req, res) => {
   const logPath = path.join(__dirname, 'scraper', 'scrape_all.log');
   try {
     const stat = fs.statSync(logPath);
@@ -2321,7 +2416,7 @@ async function linkDuplicatePair({ blogId, facebookId, userEmail, migrateImages 
   return { blogId, facebookId, migrations: migrationResult.migrations, decision, rollback: migrationResult.rollback };
 }
 
-app.get('/api/duplicates', requireAdmin, (_req, res) => {
+app.get('/api/duplicates', requireAdminAccess, (_req, res) => {
   res.set('Cache-Control', 'no-store');
   const decisions = duplicateStore.all();
   const pending = duplicateCandidates.map(candidate => ({
@@ -2339,7 +2434,7 @@ app.get('/api/duplicates', requireAdmin, (_req, res) => {
   res.json({ pending, linked, ignored, config: duplicateConfig });
 });
 
-app.get('/api/duplicates/compare', requireAdmin, (req, res) => {
+app.get('/api/duplicates/compare', requireAdminAccess, (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const { blog, facebook } = duplicatePair(String(req.query.blogId || ''), String(req.query.facebookId || ''));
@@ -2357,7 +2452,7 @@ app.get('/api/duplicates/compare', requireAdmin, (req, res) => {
   }
 });
 
-app.post('/api/duplicates/batch', requireAdmin, async (req, res) => {
+app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   if (req.get('sec-fetch-site') === 'cross-site') {
     return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
@@ -2424,7 +2519,7 @@ app.post('/api/duplicates/batch', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/duplicates', requireAdmin, async (req, res) => {
+app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   if (req.get('sec-fetch-site') === 'cross-site') {
     return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
@@ -2624,10 +2719,10 @@ app.get('/api/articles/*', attachUser, (req, res) => {
 
 // ─── Start ─────────────────────────────────────────────────────────────────
 
-installTtsRoutes(app, requireAdmin, ttsJobs, undefined, ttsVoiceSettings);
-installMarkdownRoutes(app, requireAdmin, markdownEditor);
+installTtsRoutes(app, requireAdminAccess, ttsJobs, undefined, ttsVoiceSettings);
+installMarkdownRoutes(app, requireAdminAccess, markdownEditor);
 installUserRoutes(app, {
-  store: userStore, requireAuth, requireAdmin, getAuthors: () => meta.authors,
+  store: userStore, requireAuth, requireAdmin: requireAdminAccess, getAuthors: () => meta.authors,
   onUserDeleted: email => Promise.all([audiobookProgress.removeUser(email), bookmarks.removeUser(email)]),
   onAuthorPriorityChanged: buildIndex,
 });
@@ -2635,7 +2730,8 @@ installBookmarkRoutes(app, {
   store: bookmarks, requireAuth, getArticle: id => articleById.get(id), canAccessAuthor,
 });
 installAudiobookRoutes(app, {
-  library: audiobooks, progress: audiobookProgress, config: audiobookConfig, requireAuth, canAccessAuthor,
+  library: audiobooks, progress: audiobookProgress, config: audiobookConfig,
+  requireAuth, requireAdmin: requireAdminAccess, canAccessAuthor,
   busy: () => reindexState.running || scrapeState.running || infographicWrites > 0 || markdownEditor.running || ttsJobs.running,
 });
 
@@ -2686,6 +2782,7 @@ module.exports = {
   buildInfographicMarkdown, removeCategoryLines, slugify,
   normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
   computeAppShellVersion, serviceWorkerSource,
+  renderIndexForSession, requireAdminAccess,
   infographicAttachmentStem, firstAvailableInfographicOrdinal,
   canUploadInfographic, conflictingInfographicBase, retitleInfographicMarkdown,
   moveInfographicFiles, reorderManagedInfographics,

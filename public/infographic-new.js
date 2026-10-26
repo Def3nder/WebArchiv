@@ -107,7 +107,7 @@ async function saveNewInfographic() {
   let created = null;
   try {
     const image = await readFileBase64(infoNewState.file);
-    const response = await fetch('/api/new-infographic', {
+    const response = await apiFetch('/api/new-infographic', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ markdown: $infoNewText.value, image, categories: infoNewCheckedCategories() }),

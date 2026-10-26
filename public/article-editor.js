@@ -29,7 +29,7 @@ function leaveArticleEditor() {
 }
 async function editorRequest(options) {
   const id = articleEditorState.id.split('/').map(encodeURIComponent).join('/');
-  const response = await fetch(`/api/article-markdown/${id}`, { cache: 'no-store', ...options });
+  const response = await apiFetch(`/api/article-markdown/${id}`, { cache: 'no-store', ...options });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Die Anfrage ist fehlgeschlagen.');
   return result;

@@ -111,8 +111,8 @@ test('Poster-Markierung ist auch in der Vollbildansicht verfügbar', () => {
   assert.match(html, /id="img-fullscreen-poster-toggle"/);
   assert.match(html, /id="img-fullscreen-poster-checkbox"/);
   assert.match(app, /fsGallery\.reviewIds\[index\]/);
-  assert.match(app, /\$fullscreenPosterCheckbox\.addEventListener\('change'/);
-  assert.match(app, /\(e\.key === ' ' \|\| e\.code === 'Space'\)[\s\S]*isInfographicReviewMode\(\)[\s\S]*!\$fullscreenPosterToggle\.hidden/);
+  assert.match(app, /\$fullscreenPosterCheckbox\?\.addEventListener\('change'/);
+  assert.match(app, /\(e\.key === ' ' \|\| e\.code === 'Space'\)[\s\S]*isInfographicReviewMode\(\)[\s\S]*\$fullscreenPosterToggle && !\$fullscreenPosterToggle\.hidden/);
   assert.match(app, /if \(e\.target === \$fullscreenPosterCheckbox\) return;[\s\S]*setInfographicReviewMark\(id, !\$fullscreenPosterCheckbox\.checked\)/);
   assert.match(app, /e\.preventDefault\(\);[\s\S]*if \(e\.repeat\) return;/);
   assert.match(app, /beforeunload[\s\S]*infographicReview\.changes\.size/);

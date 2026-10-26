@@ -981,7 +981,9 @@ function loadAudiobookConfig(file) {
 
 // ─── Routen ────────────────────────────────────────────────────────────────
 
-function installAudiobookRoutes(app, { library, progress, config, requireAuth, canAccessAuthor, busy = () => false }) {
+function installAudiobookRoutes(app, {
+  library, progress, config, requireAuth, requireAdmin = requireAuth, canAccessAuthor, busy = () => false,
+}) {
   const route = (handler, admin = false) => async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
@@ -1013,7 +1015,7 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
     const text = await library.ebookText(book);
     return { ...text, position: progress.getText(user.email, book.id, text.format) };
   }));
-  app.put('/api/audiobook-private/*', requireAuth, route(async (req, user) => {
+  app.put('/api/audiobook-private/*', requireAdmin, route(async (req, user) => {
     const book = accessibleBook(user, req.params[0]);
     return progress.setPrivate(book.id, req.body?.private);
   }, true));
@@ -1025,25 +1027,25 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
     const book = accessibleBook(user, req.params[0]);
     return library.extras(book);
   }));
-  app.get('/api/audiobook-extra-manage/*', requireAuth, route(async (req, user) => {
+  app.get('/api/audiobook-extra-manage/*', requireAdmin, route(async (req, user) => {
     const book = accessibleBook(user, req.params[0]);
     return library.extrasManagement(book);
   }, true));
-  app.get('/api/audiobook-extra-source/*', requireAuth, route(async (req, user) => {
+  app.get('/api/audiobook-extra-source/*', requireAdmin, route(async (req, user) => {
     const book = accessibleBook(user, req.params[0]);
     return library.extraMarkdownSource(book, String(req.query.file || ''));
   }, true));
-  app.put('/api/audiobook-extra-source/*', requireAuth, route(async (req, user) => {
+  app.put('/api/audiobook-extra-source/*', requireAdmin, route(async (req, user) => {
     const book = accessibleBook(user, req.params[0]);
     return library.saveExtraMarkdown(book, String(req.query.file || ''), req.body);
   }, true));
-  app.post('/api/audiobook-extra-create/*', requireAuth, route(async (req, user) => {
+  app.post('/api/audiobook-extra-create/*', requireAdmin, route(async (req, user) => {
     const book = accessibleBook(user, req.params[0]);
     return library.createExtraMarkdown(book, req.body);
   }, true));
   app.post(
     '/api/audiobook-extra-upload/*',
-    requireAuth,
+    requireAdmin,
     express.raw({ type: 'application/octet-stream', limit: EXTRA_IMAGE_MAX_BYTES }),
     route(async (req, user) => {
       const book = accessibleBook(user, req.params[0]);
@@ -1054,15 +1056,15 @@ function installAudiobookRoutes(app, { library, progress, config, requireAuth, c
       }, req.body);
     }, true),
   );
-  app.patch('/api/audiobook-extra-entry/*', requireAuth, route(async (req, user) => {
+  app.patch('/api/audiobook-extra-entry/*', requireAdmin, route(async (req, user) => {
     const book = accessibleBook(user, req.params[0]);
     return library.renameExtraEntry(book, req.body);
   }, true));
-  app.post('/api/audiobook-extra-order/*', requireAuth, route(async (req, user) => {
+  app.post('/api/audiobook-extra-order/*', requireAdmin, route(async (req, user) => {
     const book = accessibleBook(user, req.params[0]);
     return library.reorderExtras(book, req.body);
   }, true));
-  app.delete('/api/audiobook-extra-entry/*', requireAuth, route(async (req, user) => {
+  app.delete('/api/audiobook-extra-entry/*', requireAdmin, route(async (req, user) => {
     const book = accessibleBook(user, req.params[0]);
     return library.deleteExtraEntry(book, req.body);
   }, true));
