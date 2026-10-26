@@ -1154,7 +1154,10 @@ Der sichtbare Autor wird für jede Infografik und in allen Ansichten über die G
 zugänglichen Hauptartikel abgeleitet. Die API liefert dafür `displayAuthor`. Nur eine eigenständige
 Infografik ohne zugänglichen Hauptartikel zeigt als Autor „Infografiken“. Das interne
 `article.author` bleibt weiterhin `Infografiken`, damit ACL-Prüfung, Filter, Routing und Dateipfade
-unverändert funktionieren.
+unverändert funktionieren. **Korrektur vom 26.10.2026:** Die Ableitung erfolgt nun zentral in
+`exposeArticleForUser` und gilt dadurch auch für eine einzeln dargestellte Infografik, deren
+Telegram-Hauptartikel in der normalen Kachelliste ausgeblendet ist. Ihr Badge zeigt trotzdem
+„Telegram“; beim Öffnen bleibt derselbe Hauptartikel maßgeblich.
 
 ### Admin-Prüfmodus „Infografiken prüfen“
 

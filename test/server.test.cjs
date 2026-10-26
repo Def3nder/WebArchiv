@@ -3,12 +3,21 @@ const assert = require('node:assert/strict');
 
 const {
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
+  articleDisplayAuthor,
   replaceArticleIndexEntry, upsertArticleIndexEntries, infographicYearsFromMigrations,
   parseScraperChangedFiles,
   buildInfographicMarkdown, infographicAttachmentStem, firstAvailableInfographicOrdinal,
   canUploadInfographic, conflictingInfographicBase,
   slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
 } = require('../server.js');
+
+test('Infografik-Badges übernehmen immer den Autor des Hauptartikels', () => {
+  const infographic = { author: 'Infografiken' };
+  assert.equal(articleDisplayAuthor(infographic, { author: 'Telegram' }), 'Telegram');
+  assert.equal(articleDisplayAuthor(infographic, { author: 'Joe Turan' }), 'Joe Turan');
+  assert.equal(articleDisplayAuthor(infographic), 'Infografiken');
+  assert.equal(articleDisplayAuthor({ author: 'Facebook' }, { author: 'Telegram' }), 'Facebook');
+});
 
 test('Scraper-Manifest meldet gezielt geänderte Dateien und unterscheidet alte Scraper', () => {
   assert.deepEqual(parseScraperChangedFiles([

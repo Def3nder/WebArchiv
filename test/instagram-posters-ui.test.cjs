@@ -35,7 +35,9 @@ test('Infografiken-Autor schaltet zyklisch zwischen allen, Postern und klassisch
 });
 
 test('Jede Infografik zeigt den Autor ihres Hauptartikels, sonst Infografiken', () => {
-  assert.match(server, /if \(article\.author !== INFOGRAPHICS_AUTHOR\) return exposed;[\s\S]*visibleGroupAnchor\(article, user\)[\s\S]*displayAuthor:[\s\S]*linkedArticle\.author[\s\S]*INFOGRAPHICS_AUTHOR/);
+  assert.match(server, /function exposeArticleForUser\(article, user\)[\s\S]*if \(article\.author !== INFOGRAPHICS_AUTHOR\) return exposed;[\s\S]*displayAuthor: articleDisplayAuthor\(article, visibleGroupAnchor\(article, user\)\)/);
+  assert.match(server, /function articleDisplayAuthor\(article, linkedArticle = null\)[\s\S]*linkedArticle\?\.author \|\| INFOGRAPHICS_AUTHOR/);
+  assert.match(server, /map\(tile => \(\{ \.\.\.exposeGroupForUser\(tile, user\), bookmarked:/);
   assert.match(app, /function renderCard\(article, idx\) \{[\s\S]*const author = article\.displayAuthor \|\| article\.author;[\s\S]*authorHue\(author\)/);
   assert.match(app, /function renderInstagramPosterCard\(poster, idx\) \{[\s\S]*const author = poster\.displayAuthor \|\| INFOGRAPHICS_AUTHOR/);
   assert.match(app, /function renderInfographicReviewCard\(poster, idx\) \{[\s\S]*const author = poster\.displayAuthor \|\| INFOGRAPHICS_AUTHOR/);

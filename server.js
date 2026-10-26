@@ -716,16 +716,25 @@ function buildArticleSearchIndex(articleList) {
   });
 }
 
+function articleDisplayAuthor(article, linkedArticle = null) {
+  if (article?.author !== INFOGRAPHICS_AUTHOR) return article?.author || '';
+  return linkedArticle?.author || INFOGRAPHICS_AUTHOR;
+}
+
 // Nur interne Felder entfernen und geerbtes Audio ohne Recht am Ursprung verbergen.
 function exposeArticleForUser(article, user) {
   const {
     filePath, inheritedAudioAuthor, inheritedAudioArticleId,
     ownImage, hasBody, infographicBase, infographicOrdinal, duplicateProfile, ...rest
   } = article;
-  if (inheritedAudioAuthor && !canAccessAuthor(user, inheritedAudioAuthor)) {
-    return { ...rest, audioUrl: null, hasExternalAudio: false, episodeNum: null };
-  }
-  return rest;
+  const exposed = inheritedAudioAuthor && !canAccessAuthor(user, inheritedAudioAuthor)
+    ? { ...rest, audioUrl: null, hasExternalAudio: false, episodeNum: null }
+    : rest;
+  // Die echte Autorenzuordnung bleibt für ACL und Routing unverändert. Für die
+  // Anzeige übernimmt jede verknüpfte Infografik jedoch den Autor ihres
+  // sichtbaren Hauptartikels – auch wenn Telegram in der Liste ausgeblendet ist.
+  if (article.author !== INFOGRAPHICS_AUTHOR) return exposed;
+  return { ...exposed, displayAuthor: articleDisplayAuthor(article, visibleGroupAnchor(article, user)) };
 }
 
 function refreshDuplicateState() {
@@ -2825,20 +2834,7 @@ app.get('/api/articles', attachUser, (req, res) => {
 
   const total = filtered.length;
   const items = filtered.slice((p - 1) * lim, p * lim)
-    .map(article => {
-      const exposed = { ...exposeArticleForUser(article, user), bookmarked: marks.has(article.id) };
-      // Der sichtbare Autor einer Infografik stammt immer vom verknüpften
-      // Hauptartikel. Die echte Autorenzuordnung bleibt für ACL und Routing
-      // unverändert; eigenständige Grafiken behalten „Infografiken“.
-      if (article.author !== INFOGRAPHICS_AUTHOR) return exposed;
-      const linkedArticle = visibleGroupAnchor(article, user);
-      return {
-        ...exposed,
-        displayAuthor: linkedArticle && linkedArticle.author !== INFOGRAPHICS_AUTHOR
-          ? linkedArticle.author
-          : INFOGRAPHICS_AUTHOR,
-      };
-    });
+    .map(article => ({ ...exposeArticleForUser(article, user), bookmarked: marks.has(article.id) }));
 
   res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
 });
@@ -2933,6 +2929,7 @@ if (require.main === module) {
 
 module.exports = {
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
+  articleDisplayAuthor,
   replaceInfographicYearArticles, replaceArticleIndexEntry, upsertArticleIndexEntries,
   infographicYearsFromMigrations, parseScraperChangedFiles, prepareLinkedArticles,
   buildInfographicMarkdown, removeCategoryLines, slugify,
