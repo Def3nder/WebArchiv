@@ -46,6 +46,10 @@ tts-settings.json
 /tts-voice-previews/
 /scraper/cookies.txt
 /scraper/Abonenten-URL.txt
+# Zur Laufzeit beschrieben (Autoren-Priorität, öffentliche Autoren); Vorlagen:
+# example-config.json, example-public-directories.txt
+/config.json
+/public-directories.txt
 
 # temporary files #
 ###################

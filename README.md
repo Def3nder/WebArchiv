@@ -855,7 +855,8 @@ login-limiter.cjs             Begrenzung fehlgeschlagener Anmeldungen/Kennwortpr
 html-sanitizer.cjs            Markdown → bereinigtes HTML (sanitize-html)
 security-headers.cjs          CSP (Report-Only/Enforce), weitere Sicherheits-Header, /api/csp-report
 duplicates.cjs                Dublettenerkennung und persistente Entscheidungen
-config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten)
+config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten; ignored,
+                              Vorlage example-config.json)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp, diff
 test/                         Tests der Hauptanwendung
 public/
@@ -895,12 +896,12 @@ download/                     Arbeitsordner (ignored)
 users.json                    Nutzer/Rechte (ignored)
 tts-settings.json             Gewählte globale Qwen-Stimmen-ID (ignored)
 tts-voice-previews/           Hash-geprüfte lokale Stimmproben (ignored)
-public-directories.txt        Öffentliche Autoren für Gäste
+public-directories.txt        Öffentliche Autoren für Gäste (ignored, Vorlage example-public-directories.txt)
 LXC-container node.js Setup.md   Server-/Deployment-Doku
 ```
 
 Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
-`www/<Autor>/2*` (Jahresinhalte), `audio/`, `download/`, `users.json`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`, `tts-settings.json`, `tts-voice-previews/`,
+`www/<Autor>/2*` (Jahresinhalte), `audio/`, `download/`, `users.json`, `config.json`, `public-directories.txt`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`, `tts-settings.json`, `tts-voice-previews/`,
 `scraper/cookies.txt`, `scraper/Abonenten-URL.txt`, Logs.
 
 ---
@@ -915,7 +916,10 @@ npm install --prefix tts  # nur für die lokale TTS-Anbindung; Node.js >= 22
 # Nutzer anlegen: Passwort-Hash erzeugen und in users.json eintragen
 node scripts/hash-passwords.js
 
-# optional öffentliche Autoren für Gäste festlegen (public-directories.txt)
+# Einstellungen und öffentliche Autoren aus den Vorlagen übernehmen und anpassen
+# (beide Dateien schreibt die App zur Laufzeit; sie sind nicht eingecheckt)
+cp example-config.json config.json
+cp example-public-directories.txt public-directories.txt
 
 node server.js            # bzw. npm start  →  http://localhost:3000
 ```

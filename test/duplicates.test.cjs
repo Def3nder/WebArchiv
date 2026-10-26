@@ -41,7 +41,8 @@ test('Telegram und nicht konfigurierte Facebook-Autoren bleiben unberücksichtig
 });
 
 test('Facebook und Coaching sind konfigurierte Quellen, Telegram bleibt ausgeschlossen', () => {
-  const config = loadDuplicateConfig(path.join(__dirname, '..', 'config.json'));
+  // config.json ist nicht eingecheckt; die Vorlage enthält dieselbe Dubletten-Konfiguration.
+  const config = loadDuplicateConfig(path.join(__dirname, '..', 'example-config.json'));
   assert.deepEqual(config.facebookAuthors, ['Facebook', 'Coaching']);
   const body = 'Ein ausreichend langer identischer Beispieltext über das Leben und die innere Entwicklung. '.repeat(10);
   const blog = article(config.blogAuthor, 'Joe Turan/2026/a', 'Titel', body);

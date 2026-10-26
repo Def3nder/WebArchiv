@@ -73,6 +73,9 @@ object in `app.js`.
 
 ## Auth & access control
 
+- **Runtime files are gitignored:** `config.json` (author priority, duplicates, audiobook skips) and
+  `public-directories.txt` are written by the app; templates are `example-config.json` and
+  `example-public-directories.txt` — never re-add the real files to git.
 - **Users** live in `users.json` (gitignored). Copy `example-users.json` → `users.json`, set
   plaintext `password` fields, run `node scripts/hash-passwords.js` to replace them with bcrypt
   `passwordHash`. Each user has `role` (`admin`/`user`), `allowedAuthors` (`null` = all authors,

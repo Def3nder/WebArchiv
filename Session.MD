@@ -169,7 +169,7 @@ Technik:
 - Session speichert nur E-Mail und `sessionVersion`; eine Middleware in `server.js` löst Rolle/Rechte bei jeder Anfrage neu auf. Rechteänderungen wirken sofort; gelöschte Nutzer verlieren die Sitzung; neues Kennwort erhöht `sessionVersion` und beendet die übrigen Sitzungen (die eigene bleibt). Alte Sitzungen ohne `sessionVersion` bleiben gültig.
 - `mustChangePassword` wird **serverseitig** durchgesetzt: bis zur Änderung antworten `/api/*`, `/files/*`, `/audio-files/*` mit 403 (`mustChangePassword: true`); erlaubt bleiben `/api/me`, `/api/me/password`, `/api/login`, `/api/logout`. Die Oberfläche zeigt einen nicht schließbaren Dialog mit „Abmelden“ als einziger Alternative.
 - Schutzregeln: eigene Rolle nicht änderbar, eigener Zugang nicht löschbar, letzter Admin nicht herabstufbar/löschbar, E-Mail eindeutig (ohne Groß-/Kleinschreibung) und nachträglich nicht änderbar, Cross-Site-Schreibanfragen abgewiesen, Session-ID wird nach dem Login neu vergeben, unbekannte E-Mails werden gegen einen Dummy-Hash geprüft.
-- Deployment: Der Dienstbenutzer `ralf` braucht Schreibrecht auf `users.json`, `public-directories.txt` und `/opt/nodeapp` (für die temporäre Datei); `users.json` sinnvollerweise `600`. Nach dem Einspielen Dienst neu starten. Hinweis: `public-directories.txt` ist im Git eingecheckt; beim Code-Deployment die produktive Fassung nicht versehentlich überschreiben.
+- Deployment: Der Dienstbenutzer `ralf` braucht Schreibrecht auf `users.json`, `public-directories.txt` und `/opt/nodeapp` (für die temporäre Datei); `users.json` sinnvollerweise `600`. Nach dem Einspielen Dienst neu starten. Hinweis (historisch): `public-directories.txt` war damals eingecheckt; seit 26.10.2026 sind sie und `config.json` nicht mehr in Git (siehe Abschnitt 21).
 - Für Tests lassen sich die Dateipfade über `USERS_FILE` und `PUBLIC_DIRS_FILE` umlenken.
 - Geprüft am 25.09.2026: 10 neue Tests in `test/user-store.test.cjs` (zusammen mit Parser- und Editortests 21/21 bestanden) sowie Browserprüfung mit Testdateien: Menü je Rolle, Nutzer bearbeiten/anlegen/löschen, Kennwort neu vergeben, Pflichtdialog (Escape gesperrt, Fehlermeldungen, Serversperre 403, Freigabe nach Änderung), Öffentlicher Zugang inklusive sofortiger Wirkung für Gäste. Die echte `users.json` wurde dabei nicht verwendet.
 
@@ -1315,3 +1315,17 @@ bei vertrauten Subnetzen), `body-parser`, `qs` und `sharp`; nicht Teil dieses Sc
 `server.js`, `user-store.cjs`, `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`,
 `package.json`, `package-lock.json`, `public/app.js`, `public/audiobooks.js`, `public/index.html`;
 danach `npm ci --omit=dev` und Neustart.
+
+## 21. Aktualisierung 26.10.2026 – config.json und public-directories.txt nicht mehr in Git
+
+Beide Dateien werden zur Laufzeit von der Benutzer- bzw. Autorenverwaltung geschrieben. Sie waren
+eingecheckt, sodass ein Code-Deployment die produktiven Fassungen überschreiben konnte. Jetzt:
+Vorlagen `example-config.json` und `example-public-directories.txt` (Stand der lokalen Dateien vom
+26.10.2026) im Repository, die echten Dateien in `.gitignore` (`/config.json`,
+`/public-directories.txt`, nur im Projektroot). Fehlende Dateien sind unkritisch: `config.json` →
+Standardwerte, `public-directories.txt` → keine öffentlichen Autoren (Archiv nur mit Anmeldung).
+`test/duplicates.test.cjs` liest die Dubletten-Konfiguration aus der Vorlage.
+
+**Deployment:** Die beiden Dateien beim Kopieren nach `/opt/nodeapp` grundsätzlich auslassen; die
+Fassungen auf dem Server sind maßgeblich. Wer per `git pull` aktualisiert, sollte sie vorher sichern,
+weil Git sie beim Entfernen aus dem Index im Arbeitsverzeichnis löscht.
