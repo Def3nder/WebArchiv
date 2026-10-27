@@ -171,8 +171,10 @@ Zusammenfassung: kurzer Teaser …            ← optional (bis zum Trenner)
   unmittelbar folgenden Metadaten mit der ersten normalen Textzeile. Spätere
   `Quelle:`-Zeilen im Artikeltext bleiben Inhalt. Der Body wird mit `marked`
   zu HTML gerendert; Blogartikel benötigen keinen künstlichen Trenner.
-- **Auto-Kategorien**: `autoCategorize()` ordnet aus Titel+Zusammenfassung+Body
-  über eine feste Stichwort-Taxonomie bis zu 5 Kategorien zu (für Filter/Facetten).
+- **Auto-Kategorien**: `autoCategorize()` (`lib/taxonomy.cjs`) ordnet aus Titel, Zusammenfassung
+  und Body höchstens 3 Kategorien zu (für Filter/Facetten): gewichtete Suchwörter, verglichen mit
+  ganzen Wörtern, Titeltreffer zählen dreifach, mit Mindestschwelle; ohne deutliches Signal bleibt
+  ein Artikel ohne Kategorie.
   Das Feld `Kategorien:` bleibt davon getrennt als reine Anzeige-Tags.
 
 ### Infografiken und Gruppen
@@ -336,7 +338,7 @@ Danach Reindex, die neue Infografik öffnet sich.
 
 **Kategorien-Zeile und Filter:** Steht in `Kategorien:` ein Name der festen
 Filter-Kategorien (z. B. „Achtsamkeit“), zählt er für Filter und Suche immer – vor den
-automatisch erkannten, höchstens fünf. Andere Einträge bleiben reine Anzeige-Tags.
+automatisch erkannten, höchstens drei. Andere Einträge bleiben reine Anzeige-Tags.
 
 ### Hörbücher (`audio/Hoerbuecher/`)
 
@@ -869,7 +871,8 @@ bereits vorhandenen Artikeln pro Quelle stoppt der Scraper diese Quelle.
 
 ```
 server.js                     Express-App: Zustand (Index, Stores, Sperre) und Routen
-lib/article-parser.cjs        Markdown-Artikel parsen, Datums-/Textsuche zerlegen, Taxonomie/Kategorien
+lib/article-parser.cjs        Markdown-Artikel parsen, Datums-/Textsuche zerlegen
+lib/taxonomy.cjs              Filter-Kategorien: gewichtete Suchwörter, autoCategorize, mergeCategories
 lib/infographics.cjs          Infografik-Zuordnung und -Gruppen, Benennung, Kopfbearbeitung, Dateien verschieben
 lib/archive-files.cjs         Verzeichnis-Cache, Medien neben Artikeln finden, Datei-URLs, sichere Pfade
 lib/article-index.cjs         Fuse-Suchindex, Listen-Helfer für Teil-Reindexe, Scraper-Manifest

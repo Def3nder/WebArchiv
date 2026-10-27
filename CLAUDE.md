@@ -64,9 +64,11 @@ New pure helpers belong in `lib/`, not in `server.js`. The index works in three 
    slash formats or the filename prefix. When changing the article format, `parseArticle` and the
    `prompts/` templates (which instruct the LLM that generates articles) must stay in sync.
 
-3. **Auto-categorization (`autoCategorize` + `TAXONOMY`).** Each article is tagged with up to 5
-   `categories` by keyword-counting against the hardcoded German `TAXONOMY` list. These drive the
-   category filter and search. Note the distinction: `categories` = unified taxonomy labels used
+3. **Auto-categorization (`lib/taxonomy.cjs`: `autoCategorize` + `TAXONOMY`).** Each article gets at most 3
+   `categories` from weighted keywords matched against whole words (`stem` = word start, `=word` = exact,
+   `*stem` = inside compounds, phrases with spaces); title hits count triple, a category needs a minimum
+   score (grows with text length) and ≥35 % of the strongest one. Never add short or ambiguous substrings
+   ("ehe", "würde", "sucht") as prefix keys. These drive the category filter and search. Note the distinction: `categories` = unified taxonomy labels used
    for filtering; `tags` = the raw `Kategorien:` field, display-only.
 
 **Infographic groups (`linkInfographics`).** Infographics (`www/Infografiken/`) are linked to their article by year +

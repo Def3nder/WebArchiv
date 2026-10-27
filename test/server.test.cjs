@@ -323,5 +323,5 @@ test('Angehakte Kategorien werden beim Speichern eingefügt bzw. ergänzt', () =
 
 test('Filter-Kategorien aus der Kategorien-Zeile zählen zuerst', () => {
   assert.deepEqual(mergeCategories(['Mut', 'Achtsamkeit'], ['Psychologie', 'Achtsamkeit']), ['Achtsamkeit', 'Psychologie']);
-  assert.deepEqual(mergeCategories(['Gesundheit'], ['A', 'B', 'C', 'D', 'E']), ['Gesundheit', 'A', 'B', 'C', 'D']);
+  assert.deepEqual(mergeCategories(['Gesundheit'], ['A', 'B', 'C', 'D', 'E']), ['Gesundheit', 'A', 'B']);
 });

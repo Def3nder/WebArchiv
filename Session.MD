@@ -1537,3 +1537,43 @@ Vollbild-Checkbox, Leertaste und `beforeunload`.
   - `public/vendor/article-editor.bundle.js`
   - `server.js`
 - Danach den Dienst neu starten.
+
+## 28. Aktualisierung 27.10.2026 – Neue automatische Kategorisierung
+
+**Befund:** Die alte `autoCategorize` zählte Teilstrings. Ausgewertet wurden 2.736 Artikel von Joe Turan,
+Facebook und Telegram:
+- `ehe` traf 9.629-mal, davon nur 116-mal das Wort „Ehe“ (sonst gehen, sehen, geschehen …).
+- `system` traf in 2.144 Fällen „Nervensystem“ (→ Gesellschaft), `würde` fast nur den Konjunktiv,
+  `sucht` mindestens 815-mal versucht/Sehnsucht.
+- Folge: „Beziehungen“ stand bei 92 % aller Artikel, 71 % hatten fünf Kategorien.
+
+**Neu: `lib/taxonomy.cjs`** (`article-parser.cjs` reicht nur weiter):
+- Gewichtete Suchwörter je Kategorie, verglichen mit ganzen Wörtern: `stamm` = Wortanfang, `=wort` =
+  genau dieses Wort, `*stamm` = auch in Komposita, Wortfolgen mit Leerzeichen.
+- Allgemeine und mehrdeutige Wörter sind gestrichen, Themenwörter aus den Texten ergänzt (Narzissmus,
+  Bindungsstil, Perimenopause, Polarität, Propaganda …).
+- Treffer im Titel zählen dreifach.
+- Höchstens 3 Kategorien; jede braucht eine Mindestpunktzahl (wächst mit der Textlänge) und mindestens
+  35 % der stärksten. Ohne deutliches Signal bleibt ein Artikel ohne Kategorie (Rückfall: die stärkste
+  ab 1,5 Punkten).
+- Die zwölf Kategorien selbst sind unverändert, ebenso `Kategorien:`-Zeilen (zählen zuerst).
+- Doppelt so schnell wie vorher (0,5 statt 1,0 s für die 2.736 Artikel), Wort-Treffer werden zwischengespeichert.
+
+**Geprüft gegen von Hand zugeordnete Stichproben:**
+
+| | Präzision | Vollständigkeit | F1 | erste Kategorie richtig |
+|---|---|---|---|---|
+| alt (120 Artikel) | 30 % | 74 % | 43 | 54/120 |
+| neu (120 Artikel) | 63 % | 65 % | 64 | 91/120 |
+| alt, Kontrolle (30 neue Artikel) | 32 % | 72 % | 44 | 19/30 |
+| neu, Kontrolle | 70 % | 54 % | 61 | 23/30 |
+
+Verteilung neu (drei Autoren): Beziehungen 36 %, Psychologie 29 %, Persönlichkeit 27 % … Selbsterkenntnis
+2 %; 47 Artikel ohne Kategorie, Ø 1,8 Kategorien. Node-Suite 391/391 (neu: `test/taxonomy.test.cjs`).
+
+**Hinweis:** Andere Autoren profitieren mit, sind aber nicht gezielt abgestimmt. Bei Stefan Hiene (20 %)
+und eigenständigen Infografiken bleiben mehr Einträge ohne Kategorie.
+
+**Deployment:**
+- Kopieren: `lib/taxonomy.cjs` (neu), `lib/article-parser.cjs`, `server.js`.
+- Danach den Dienst neu starten. Der Index wird beim Start neu aufgebaut; Artikeldateien bleiben unverändert.

@@ -251,9 +251,9 @@ async function scanDir(dirPath, author, year, collector, {
       const relPdf   = pdfPath   ? path.relative(WWW_DIR, pdfPath).replace(/\\/g, '/')   : null;
 
       // categories = unified taxonomy labels (for filtering); tags = raw Kategorien field (display only)
-      const searchText = parsed.title + ' ' + (parsed.summary || '') + ' ' + parsed.body;
       const tags = (parsed.tags || []).slice(0, 10);
-      const categories = mergeCategories(tags, autoCategorize(searchText));
+      // Der Titel zählt bei der Kategorisierung stärker als der übrige Text.
+      const categories = mergeCategories(tags, autoCategorize((parsed.summary || '') + ' ' + parsed.body, parsed.title));
 
       const excerpt = parsed.summary
         ? parsed.summary.slice(0, 320)
