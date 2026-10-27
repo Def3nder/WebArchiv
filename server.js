@@ -20,10 +20,11 @@ const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PA
 const { createArchiveLock } = require('./archive-lock.cjs');
 // Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
 const { httpError, isCrossSite } = require('./lib/http-errors.cjs');
-const { computeAppShellVersion, serviceWorkerSource } = require('./lib/app-shell.cjs');
+const { computeAppShellVersion, createAppShellVersion, cachedTextFile, serviceWorkerSource } = require('./lib/app-shell.cjs');
+const { createArticleBodyCache } = require('./lib/article-body-cache.cjs');
 const {
   parseArticleSearchQuery, bodyExcerpt, mergeCategories, autoCategorize,
-  extractSourceUrl, parseArticle, renderArticleBody,
+  extractSourceUrl, parseArticle,
 } = require('./lib/article-parser.cjs');
 const { createDirectoryCache, findSibling, fileUrl, audioFileUrl, resolveUnder } = require('./lib/archive-files.cjs');
 const {
@@ -79,6 +80,8 @@ app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
+// Gerenderte Artikeltexte für Detailansicht und Dubletten-Vergleich.
+const articleBodies = createArticleBodyCache();
 const WWW_DIR = path.join(__dirname, 'www');
 const AUDIO_DIR = path.join(__dirname, 'audio');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
@@ -1000,22 +1003,24 @@ function requireAdminAccess(req, res, next) {
   });
 }
 
-function renderIndexForSession(req) {
-  let html = fs.readFileSync(INDEX_FILE, 'utf8');
-  const isAdmin = isAdminUiSession(req);
-  html = html.replace('<!-- ADMIN_CSRF_META -->', isAdmin
-    ? `<meta name="admin-csrf-token" content="${adminCsrfToken(req)}">`
-    : '');
-  if (isAdmin) {
-    return html.split(/\r?\n/)
-      .filter(line => !line.includes('data-non-admin-asset'))
-      .join('\n');
-  }
-  html = html.replace(/<!-- ADMIN_ONLY_START -->[\s\S]*?<!-- ADMIN_ONLY_END -->/g, '');
-  html = html.split(/\r?\n/)
+// Beide Shell-Varianten werden nur neu gebaut, wenn sich index.html ändert;
+// pro Anfrage kommt lediglich das sitzungsgebundene CSRF-Token hinzu.
+const indexShells = cachedTextFile(INDEX_FILE, html => ({
+  admin: html.split(/\r?\n/)
+    .filter(line => !line.includes('data-non-admin-asset'))
+    .join('\n'),
+  standard: html.replace(/<!-- ADMIN_ONLY_START -->[\s\S]*?<!-- ADMIN_ONLY_END -->/g, '')
+    .split(/\r?\n/)
     .filter(line => !line.includes('data-admin-only') && !line.includes('data-admin-asset'))
-    .join('\n');
-  return html;
+    .join('\n')
+    .replace('<!-- ADMIN_CSRF_META -->', ''),
+}));
+
+function renderIndexForSession(req) {
+  const shells = indexShells();
+  if (!isAdminUiSession(req)) return shells.standard;
+  return shells.admin.replace('<!-- ADMIN_CSRF_META -->',
+    `<meta name="admin-csrf-token" content="${adminCsrfToken(req)}">`);
 }
 
 function getEffectiveUser(req) {
@@ -1077,12 +1082,13 @@ installCspReportRoute(app, express);
 
 // Der Worker cached selbst keine Dateien. Sein automatisch berechneter Inhalt ändert
 // sich aber bei jeder Änderung der App-Shell und löst damit den Update-Hinweis aus.
+const appShellVersion = createAppShellVersion();
 app.get('/service-worker.js', (_req, res) => {
   res.set({
     'Cache-Control': 'no-cache, no-store, must-revalidate',
     'Service-Worker-Allowed': '/',
   });
-  res.type('application/javascript').send(serviceWorkerSource(computeAppShellVersion()));
+  res.type('application/javascript').send(serviceWorkerSource(appShellVersion()));
 });
 
 // Die HTML-Shell ist rollenabhängig und darf weder im Browser-Cache noch in
@@ -1757,19 +1763,17 @@ app.get('/api/duplicates', requireAdminAccess, (_req, res) => {
   res.json({ pending, linked, ignored, config: duplicateConfig });
 });
 
-app.get('/api/duplicates/compare', requireAdminAccess, (req, res) => {
+app.get('/api/duplicates/compare', requireAdminAccess, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const { blog, facebook } = duplicatePair(String(req.query.blogId || ''), String(req.query.facebookId || ''));
-    const read = article => {
-      const parsed = parseArticle(fs.readFileSync(article.filePath, 'utf8'), article.filePath);
-      return { ...duplicateArticleView(article), bodyHtml: renderArticleBody(parsed.body), summary: parsed.summary || '' };
-    };
+    const read = async article => ({ ...duplicateArticleView(article), ...await articleBodies.get(article.filePath) });
     let migration = [];
     let migrationUnavailable = '';
     try { migration = publicMigrationPlan(planDuplicateMigration(blog, facebook)); }
     catch (error) { migrationUnavailable = error.message; }
-    res.json({ blog: read(blog), facebook: read(facebook), migration, migrationUnavailable });
+    const [blogView, facebookView] = await Promise.all([read(blog), read(facebook)]);
+    res.json({ blog: blogView, facebook: facebookView, migration, migrationUnavailable });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.status ? error.message : 'Der Vergleich konnte nicht geladen werden.' });
   }
@@ -1997,7 +2001,7 @@ app.get('/api/articles', attachUser, (req, res) => {
   res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
 });
 
-app.get('/api/articles/*', attachUser, (req, res) => {
+app.get('/api/articles/*', attachUser, async (req, res) => {
   const id = req.params[0];
   const requested = articleById.get(id);
   if (!requested) return res.status(404).json({ error: 'Not found' });
@@ -2012,9 +2016,7 @@ app.get('/api/articles/*', attachUser, (req, res) => {
   const article = anchor || visibleRequested;
 
   try {
-    const content = fs.readFileSync(article.filePath, 'utf8');
-    const parsed = parseArticle(content, article.filePath);
-    const bodyHtml = renderArticleBody(parsed.body);
+    const { bodyHtml } = await articleBodies.get(article.filePath);
     const rest = exposeGroupForUser(article, req.user);
     res.json({
       ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article),
@@ -2022,7 +2024,10 @@ app.get('/api/articles/*', attachUser, (req, res) => {
       ...((anchor || canonical) ? { requestedId: id } : {}),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Datei inzwischen entfernt: bis zum nächsten Reindex wie „nicht gefunden“ behandeln.
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Not found' });
+    console.error(`Artikel ${id}:`, err);
+    res.status(500).json({ error: 'Der Artikel konnte nicht geladen werden.' });
   }
 });
 

@@ -876,7 +876,8 @@ lib/taxonomy.cjs              Filter-Kategorien: gewichtete Suchwörter, autoCat
 lib/infographics.cjs          Infografik-Zuordnung und -Gruppen, Benennung, Kopfbearbeitung, Dateien verschieben
 lib/archive-files.cjs         Verzeichnis-Cache, Medien neben Artikeln finden, Datei-URLs, sichere Pfade
 lib/article-index.cjs         Fuse-Suchindex, Listen-Helfer für Teil-Reindexe, Scraper-Manifest
-lib/app-shell.cjs             Versionssignatur der App und Update-Service-Worker
+lib/app-shell.cjs             Versionssignatur der App, Update-Service-Worker, Datei-Caches (index.html, Version)
+lib/article-body-cache.cjs    Gerenderte Artikeltexte (Detail, Dubletten-Vergleich), neu nur nach Dateiänderung
 lib/http-errors.cjs           httpError(status, message), jsonRoute (gemeinsamer JSON-Routen-Rahmen), isCrossSite
 lib/atomic-file.cjs           Atomares Schreiben (async/sync, JSON) und createJsonFile für die JSON-Speicher
 user-store.cjs                Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen

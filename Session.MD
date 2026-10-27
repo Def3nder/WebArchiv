@@ -1577,3 +1577,29 @@ und eigenständigen Infografiken bleiben mehr Einträge ohne Kategorie.
 **Deployment:**
 - Kopieren: `lib/taxonomy.cjs` (neu), `lib/article-parser.cjs`, `server.js`.
 - Danach den Dienst neu starten. Der Index wird beim Start neu aufgebaut; Artikeldateien bleiben unverändert.
+
+## 29. Aktualisierung 27.10.2026 – Zwischenspeicher für Shell, Service Worker und Artikeltext
+
+Alle drei Caches erkennen Änderungen an Größe und Änderungszeit der Dateien. Frontend-Änderungen wirken
+also weiterhin ohne Neustart, und gespeicherte Artikel erscheinen sofort.
+
+- **`index.html`:** `renderIndexForSession` las und filterte die Datei bei jeder Anfrage synchron.
+  Jetzt baut `cachedTextFile` (`lib/app-shell.cjs`) die Admin- und die Standard-Shell nur nach einer
+  Änderung neu; pro Anfrage kommt nur das CSRF-Token hinzu. 0,19 → 0,01 ms.
+- **`/service-worker.js`:** `createAppShellVersion` hasht die Shell-Dateien nur neu, wenn sich Name,
+  Größe oder Änderungszeit einer Datei geändert haben; sonst genügt je Datei ein `stat`. 1,8 → 0,3 ms.
+- **Artikel-Detail und Dubletten-Vergleich:** `lib/article-body-cache.cjs` hält den bereinigten
+  HTML-Text der zuletzt geöffneten 300 Artikel vor (LRU). Neu gelesen und gerendert wird nur nach einer
+  Dateiänderung, etwa durch Editor, Dublettenmigration oder Scraper. Für einen 31-KB-Artikel 2,9 → 0,03 ms.
+  Die Route liest jetzt asynchron, blockiert also den Server nicht mehr.
+- Nebenbei: Fehlt die Datei eines Artikels, antwortet das Detail mit 404 statt 500. Unerwartete Fehler
+  gehen ins Log, die Antwort zeigt keinen Dateipfad mehr.
+
+**Geprüft:**
+- Node-Suite 395/395, neu: `test/response-caches.test.cjs` (Invalidierung, Verdrängung, Bereinigung).
+- Serverstart mit Abruf von Shell, Service Worker und Detail sowie 404 bei unbekannter ID.
+- Im Browser: Artikel öffnen, keine Konsolenfehler.
+
+**Deployment:**
+- Kopieren: `server.js`, `lib/app-shell.cjs`, `lib/article-body-cache.cjs` (neu).
+- Danach den Dienst neu starten.

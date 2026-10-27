@@ -40,7 +40,9 @@ stores, sessions, lock) and the routes; pure logic lives in `lib/` and can be re
 and tests without starting the server: `article-parser.cjs` (`parseArticle`, date/search parsing,
 taxonomy), `infographics.cjs` (`linkInfographics`, naming, header editing, `moveInfographicFiles`),
 `archive-files.cjs` (directory cache, `findSibling`, file URLs, `resolveUnder`), `article-index.cjs`
-(Fuse index, list helpers for partial reindex, scraper manifest), `app-shell.cjs` (PWA version),
+(Fuse index, list helpers for partial reindex, scraper manifest), `app-shell.cjs` (PWA version, stat-based
+file caches for `index.html` and the service-worker version), `article-body-cache.cjs` (rendered article
+bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categories),
 `http-errors.cjs` (`httpError`, `jsonRoute`, `isCrossSite`), `atomic-file.cjs` (`writeFileAtomic`,
 `writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`). Never `require('./server.js')` from scripts — import from `lib/`.
 Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors);
