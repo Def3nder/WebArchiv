@@ -47,7 +47,8 @@ taxonomy), `infographics.cjs` (`linkInfographics`, naming, header editing, `move
 file caches for `index.html` and the service-worker version), `article-body-cache.cjs` (rendered article
 bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categories), `session-file-store.cjs`
 (sessions survive restarts in `sessions.json`, gitignored; only when `server.js` runs as main module),
-`http-errors.cjs` (`httpError`, `jsonRoute`, `isCrossSite`), `atomic-file.cjs` (`writeFileAtomic`,
+`http-errors.cjs` (`httpError`, `jsonRoute`, `isCrossSite`, `sendApiError` — API errors are
+`{ error: <German message>, code? }`; the frontend reacts only to `code`, never to message text), `atomic-file.cjs` (`writeFileAtomic`,
 `writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`). Never `require('./server.js')` from scripts — import from `lib/`.
 Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors);
 every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).

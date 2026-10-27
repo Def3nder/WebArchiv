@@ -879,18 +879,19 @@ async function apiFetch(url, options) {
   if (r.status === 401) {
     currentUser = null;
     location.reload();
-    throw new Error('Session expired');
+    throw Object.assign(new Error('Die Sitzung ist abgelaufen.'), { code: 'session_expired' });
   }
   if (r.status === 403 && currentUser && currentUser.role !== 'guest') {
     const data = await r.clone().json().catch(() => null);
-    if (data?.error === 'Admin only') {
+    // Abgelaufene Admin-Rechte erkennt der feste Code, nicht der Meldungstext.
+    if (data?.code === 'admin_required') {
       location.reload();
-      throw new Error('Admin session expired');
+      throw Object.assign(new Error('Die Admin-Sitzung ist abgelaufen.'), { code: 'session_expired' });
     }
-    if (data?.mustChangePassword) {
+    if (data?.code === 'password_change_required') {
       currentUser = { ...currentUser, mustChangePassword: true };
       ensurePasswordChanged().then(ok => { if (ok) { loadMeta(); loadArticles(); } });
-      throw new Error('Password change required');
+      throw Object.assign(new Error('Bitte zuerst ein neues Kennwort festlegen.'), { code: 'password_change_required' });
     }
   }
   return r;
@@ -924,7 +925,7 @@ async function fetchArticle(id) {
   const base = isAudiobookId(id) ? '/api/audiobooks/' : '/api/articles/';
   const r = await apiFetch(base + String(id).split('/').map(encodeURIComponent).join('/'));
   if (!r.ok) {
-    const err = new Error('Not found');
+    const err = new Error('Nicht gefunden.');
     err.status = r.status;
     throw err;
   }
@@ -1468,7 +1469,7 @@ async function toggleBookmark(article, button) {
     });
   } catch (err) {
     showBookmarkState(button, !on);
-    if (err.message !== 'Session expired') alert(err.message);
+    if (err.code !== 'session_expired') alert(err.message);
   } finally {
     delete button.dataset.busy;
   }

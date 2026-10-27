@@ -19,7 +19,7 @@ const { createLoginLimiter, tooManyAttemptsError } = require('./login-limiter.cj
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./security-headers.cjs');
 const { createArchiveLock } = require('./archive-lock.cjs');
 // Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
-const { httpError, isCrossSite } = require('./lib/http-errors.cjs');
+const { httpError, isCrossSite, sendApiError } = require('./lib/http-errors.cjs');
 const { computeAppShellVersion, createAppShellVersion, createVersionedIndex, serviceWorkerSource } = require('./lib/app-shell.cjs');
 const { createArticleBodyCache } = require('./lib/article-body-cache.cjs');
 const { FileSessionStore } = require('./lib/session-file-store.cjs');
@@ -944,12 +944,12 @@ async function migrateDuplicateInfographics(blog, facebook) {
 
 function requireAuth(req, res, next) {
   if (req.session?.user) return next();
-  res.status(401).json({ error: 'Not authenticated' });
+  sendApiError(res, 'not_authenticated');
 }
 
 function requireAdmin(req, res, next) {
   if (req.session?.user?.role === 'admin') return next();
-  res.status(403).json({ error: 'Admin only' });
+  sendApiError(res, 'admin_required');
 }
 
 function isAdminUiSession(req) {
@@ -1021,7 +1021,7 @@ function getEffectiveUser(req) {
 function attachUser(req, res, next) {
   req.user = getEffectiveUser(req);
   if (req.user.role === 'guest' && userStore.publicAuthors.length === 0) {
-    return res.status(401).json({ error: 'Not authenticated' });
+    return sendApiError(res, 'not_authenticated');
   }
   next();
 }
@@ -1068,7 +1068,7 @@ const PASSWORD_PENDING_ALLOWED = new Set(['/api/me', '/api/me/password', '/api/l
 app.use((req, res, next) => {
   if (!req.session?.user?.mustChangePassword || PASSWORD_PENDING_ALLOWED.has(req.path)) return next();
   if (/^\/(api|files|audio-files)\//.test(req.path)) {
-    return res.status(403).json({ error: 'Bitte zuerst ein neues Kennwort festlegen.', mustChangePassword: true });
+    return sendApiError(res, 'password_change_required', { mustChangePassword: true });
   }
   next();
 });
@@ -1999,12 +1999,12 @@ app.get('/api/articles', attachUser, (req, res) => {
 app.get('/api/articles/*', attachUser, async (req, res) => {
   const id = req.params[0];
   const requested = articleById.get(id);
-  if (!requested) return res.status(404).json({ error: 'Not found' });
+  if (!requested) return sendApiError(res, 'not_found');
 
   const canonical = duplicateCanonicalFor(requested, req.user);
   const visibleRequested = canonical || requested;
   if (!canAccessAuthor(req.user, visibleRequested.author)) {
-    return res.status(403).json({ error: 'Access denied' });
+    return sendApiError(res, 'forbidden');
   }
   // Eine gruppierte Infografik öffnet ihre Gruppe; requestedId sagt, welches Bild gemeint war.
   const anchor = visibleGroupAnchor(visibleRequested, req.user);
@@ -2020,7 +2020,7 @@ app.get('/api/articles/*', attachUser, async (req, res) => {
     });
   } catch (err) {
     // Datei inzwischen entfernt: bis zum nächsten Reindex wie „nicht gefunden“ behandeln.
-    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Not found' });
+    if (err.code === 'ENOENT') return sendApiError(res, 'not_found');
     console.error(`Artikel ${id}:`, err);
     res.status(500).json({ error: 'Der Artikel konnte nicht geladen werden.' });
   }

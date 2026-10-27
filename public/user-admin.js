@@ -95,7 +95,7 @@ $pwForm.addEventListener('submit', async event => {
     finishPasswordDialog(true);
     if (!pwState.forced) showAccountNotice('Ihr Kennwort wurde geändert.');
   } catch (error) {
-    if (error.message === 'Session expired') finishPasswordDialog(false);
+    if (error.code === 'session_expired') finishPasswordDialog(false);
     else showPasswordError(error.message, $pwCurrent);
   } finally {
     pwState.busy = false;

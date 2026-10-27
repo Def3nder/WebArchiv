@@ -8,6 +8,7 @@
 
 const path = require('path');
 const { isPathInside } = require('./lib/archive-files.cjs');
+const { sendApiError } = require('./lib/http-errors.cjs');
 
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -51,7 +52,7 @@ function installMediaRoutes(app, {
       return res.status(404).end();
     }
     if (!canAccessAuthor(req.user, author)) {
-      return res.status(403).json({ error: 'Access denied' });
+      return sendApiError(res, 'forbidden');
     }
     sendMedia(res, media.absPath);
   });
@@ -67,7 +68,7 @@ function installMediaRoutes(app, {
     const isAudiobookDir = sameName(topDir, audiobooks.directory);
     const author = isAudiobookDir ? audiobookAuthor : topDir;
     if (!canAccessAuthor(req.user, author)) {
-      return res.status(403).json({ error: 'Access denied' });
+      return sendApiError(res, 'forbidden');
     }
     if (isAudiobookDir && !audiobooks.canAccessMedia(req.user, relPath, { decoded: true })) {
       return res.status(404).end();

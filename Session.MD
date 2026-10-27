@@ -1726,3 +1726,35 @@ also weiterhin ohne Neustart, und gespeicherte Artikel erscheinen sofort.
 - Kopieren: `audiobooks.cjs`, `audiobook-extras.cjs` (neu), `public/app.js`, `public/touch-gestures.js` (neu),
   `public/index.html`.
 - Danach den Dienst neu starten.
+
+## 34. Aktualisierung 27.10.2026 – Einheitliches API-Fehlerformat
+
+- **Format:** Jeder API-Fehler ist `{ error: <deutsche Meldung>, code?: <fester Code> }`. Die TTS-Routen nutzten
+  `code` schon (`audio_exists`).
+- **`sendApiError(res, code)`** (`lib/http-errors.cjs`) ersetzt die englischen Texte:
+
+  | Code | Status | Meldung | vorher |
+  |---|---|---|---|
+  | `not_authenticated` | 401 | „Nicht angemeldet.“ | `Not authenticated` |
+  | `admin_required` | 403 | „Nur für Administratoren.“ | `Admin only` |
+  | `password_change_required` | 403 | „Bitte zuerst ein neues Kennwort festlegen.“ | (deutsch, ohne Code) |
+  | `forbidden` | 403 | „Kein Zugriff.“ | `Access denied` |
+  | `not_found` | 404 | „Nicht gefunden.“ | `Not found` |
+
+- **Frontend:**
+  - `apiFetch` erkennt eine abgelaufene Admin-Sitzung und eine ausstehende Kennwortänderung jetzt am Code
+    statt am Text `'Admin only'`.
+  - Die vier Stellen, die `err.message === 'Session expired'` verglichen (`app.js`, `book-reader.js`,
+    `password.js`, `user-admin.js`, Extras-Verwaltung), prüfen jetzt `err.code === 'session_expired'`.
+  - Die geworfenen Meldungen sind deutsch. Das Editor-Bundle ist neu gebaut.
+- Interne Kennungen wie `reason: 'already running'` bei Reindex/Scrape bleiben; sie werden nie angezeigt.
+
+**Geprüft:**
+- Node-Suite 410/410, neu: Codes für 401/403 und eine Quellprüfung gegen Textvergleiche im Frontend.
+- Im Browser: Die Seite lädt normal; eine unbekannte Artikel-ID liefert `{ error: "Nicht gefunden.", code: "not_found" }`.
+
+**Deployment:**
+- Kopieren: `server.js`, `media-files.cjs`, `lib/http-errors.cjs`.
+- Aus `public/`: `app.js`, `book-reader.js`, `password.js`, `user-admin.js`, `audiobook-extras-manager.js`,
+  `vendor/article-editor.bundle.js`.
+- Danach den Dienst neu starten.

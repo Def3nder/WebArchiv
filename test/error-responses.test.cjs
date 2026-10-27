@@ -44,3 +44,26 @@ test('TTS-Routen geben bei unerwarteten Fehlern keine internen Meldungen weiter'
   assert.equal(known.status, 404);
   assert.deepEqual(await known.json(), { error: 'Auftrag nicht gefunden.' });
 });
+
+test('Anmelde- und Rechtefehler haben deutsche Meldungen und feste Codes', async t => {
+  const base = await listen(t, app);
+  const anonymous = await fetch(`${base}/api/bookmarks/x`, { method: 'PUT' });
+  assert.equal(anonymous.status, 401);
+  assert.deepEqual(await anonymous.json(), { error: 'Nicht angemeldet.', code: 'not_authenticated' });
+  const notAdmin = await fetch(`${base}/api/scrape/log`);
+  assert.equal(notAdmin.status, 403);
+  assert.deepEqual(await notAdmin.json(), { error: 'Nur für Administratoren.', code: 'admin_required' });
+});
+
+test('Die Oberfläche reagiert auf Fehlercodes, nicht auf Meldungstexte', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const publicDir = path.join(__dirname, '..', 'public');
+  const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(app, /data\?\.code === 'admin_required'/);
+  assert.match(app, /data\?\.code === 'password_change_required'/);
+  for (const file of ['app.js', 'book-reader.js', 'password.js', 'user-admin.js', 'audiobook-extras-manager.js']) {
+    const source = fs.readFileSync(path.join(publicDir, file), 'utf8');
+    assert.doesNotMatch(source, /'Session expired'|'Admin only'/, file);
+  }
+});

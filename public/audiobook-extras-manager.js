@@ -232,7 +232,7 @@ async function bemOpenPreview(entry, scope) {
     $bemPreviewBody.querySelector('.bem-text-preview').innerHTML = data.html;
     $bemPreviewBody.querySelector('.bem-text-preview-scroll').focus({ preventScroll: true });
   } catch (error) {
-    if (token !== bemState.previewToken || error.message === 'Session expired') return;
+    if (token !== bemState.previewToken || error.code === 'session_expired') return;
     $bemPreviewBody.innerHTML = `<p class="bem-preview-status is-error">${esc(error.message)}</p>`;
   }
 }

@@ -102,7 +102,7 @@ async function openBookReader(book, extra = null) {
       bookReader.loaded = true;
     }
   } catch (err) {
-    if (token !== bookReader.token || err.message === 'Session expired') return;
+    if (token !== bookReader.token || err.code === 'session_expired') return;
     body.innerHTML = '<p class="book-reader-status">' + esc(err.message) + '</p>';
   }
 }

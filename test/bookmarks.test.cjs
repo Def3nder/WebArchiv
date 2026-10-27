@@ -75,7 +75,7 @@ async function server(t, store, sessionUser) {
   app.use((req, _res, next) => { req.session = { user: sessionUser }; next(); });
   installBookmarkRoutes(app, {
     store,
-    requireAuth: (req, res, next) => (req.session.user ? next() : res.status(401).json({ error: 'Not authenticated' })),
+    requireAuth: (req, res, next) => (req.session.user ? next() : res.status(401).json({ error: 'Nicht angemeldet.', code: 'not_authenticated' })),
     getArticle: id => articles.get(id),
     canAccessAuthor: (user, author) => user.allowedAuthors === null || user.allowedAuthors.includes(author),
   });
