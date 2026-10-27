@@ -1,0 +1,4 @@
+# Shell-Skripte laufen auf dem Debian-LXC (Cron, systemd) und müssen auch in
+# der Windows-Arbeitskopie LF behalten. Mit CRLF bricht bash schon an der
+# Shebang-Zeile ab („env: 'bash\r': No such file or directory“).
+*.sh text eol=lf
