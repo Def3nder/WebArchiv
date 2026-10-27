@@ -1421,3 +1421,30 @@ TTS-Start und Scrape-Lauf (nur Anzeige).
 - **Tests:** `test/media-scan.test.cjs` (Cache, Namensauflösung, Symlinks/Ordner, Seitenparameter);
   Node-Suite 377/377.
 - **Deployment:** nur `server.js`, danach Dienst neu starten.
+
+## 25. Aktualisierung 27.10.2026 – Reine Logik aus server.js nach lib/
+
+`server.js` enthält nur noch Zustand (Index, Stores, Sitzungen, Sperre) und Routen; reine Logik ohne
+Serverzustand liegt in `lib/` (3.016 → 2.130 Zeilen in `server.js`):
+
+- `lib/article-parser.cjs` – `parseArticle`, Datums-/Textsuche, Auszug, Taxonomie und Kategorien,
+  `renderArticleBody` (bereinigt über `html-sanitizer.cjs`)
+- `lib/infographics.cjs` – `INFOGRAPHICS_AUTHOR`, Stamm-Auflösung, `linkInfographics`, Benennung und
+  Nummerierung, Kopf-/Titel-/Poster-Bearbeitung, `moveInfographicFiles`, `slugify`, Bildtyp
+- `lib/archive-files.cjs` – Verzeichnis-Cache, `findSibling`, `fileUrl`/`audioFileUrl`, `resolveUnder`
+- `lib/article-index.cjs` – Fuse-Suchindex, angezeigter Autor, Listen-Helfer der Teil-Reindexe,
+  Scraper-Änderungsmanifest
+- `lib/app-shell.cjs` – Versionssignatur und Update-Service-Worker
+- `lib/http-errors.cjs` – `httpError` (ersetzt das irreführend benannte `duplicateFail`)
+
+Die Funktionen wurden **unverändert** verschoben (41 Blöcke zeichengleich geprüft; einzige Änderung
+`duplicateFail` → `httpError`). `scripts/migrate-infographic-names.js` lädt nicht mehr `server.js`
+(vorher wurden dabei `users.json`, Stores und Sitzungen mit initialisiert), sondern nur `lib/`.
+`server.js` exportiert die bisherigen Namen weiter, Tests bleiben kompatibel.
+
+**Geprüft:** Node-Suite 377/377 (ein Test deckte einen vergessenen `duplicateFail`-Aufruf in
+`lib/infographics.cjs` auf, korrigiert); Index-Snapshot aller 7.080 Einträge vor/nach identisch;
+Vorschau von `migrate-infographic-names.js` vor/nach zeilengleich (545 Zeilen).
+
+**Deployment:** `server.js`, `scripts/migrate-infographic-names.js` und den neuen Ordner `lib/`
+(sechs Dateien) kopieren, danach Dienst neu starten. Keine neuen Abhängigkeiten.

@@ -31,7 +31,14 @@ server-side files are isolated under `tts-server/` and never run as part of `ser
 
 ## Architecture
 
-**Single backend file: `server.js`.** It does everything in three phases:
+**Backend: `server.js` + stateless modules in `lib/`.** `server.js` holds all module state (index,
+stores, sessions, lock) and the routes; pure logic lives in `lib/` and can be required by scripts
+and tests without starting the server: `article-parser.cjs` (`parseArticle`, date/search parsing,
+taxonomy), `infographics.cjs` (`linkInfographics`, naming, header editing, `moveInfographicFiles`),
+`archive-files.cjs` (directory cache, `findSibling`, file URLs, `resolveUnder`), `article-index.cjs`
+(Fuse index, list helpers for partial reindex, scraper manifest), `app-shell.cjs` (PWA version),
+`http-errors.cjs` (`httpError`). Never `require('./server.js')` from scripts — import from `lib/`.
+New pure helpers belong in `lib/`, not in `server.js`. The index works in three phases:
 
 1. **Index build (`buildIndex` → `scanDir` → `parseArticle`).** On startup (and on reindex) it
    recursively walks `www/`. Top-level dirs are *authors*; nested 4-digit dirs (`2018/`) are

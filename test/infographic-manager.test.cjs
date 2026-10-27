@@ -238,7 +238,9 @@ test('Manager bietet pro Grafik eine sofort gespeicherte Instagram-Markierung an
   const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(manager, /data-igm-instagram/);
   assert.match(manager, /action: 'instagram-poster', id: item\.id, enabled/);
-  assert.match(server, /Instagram-Poster: Ja/);
+  // Die Markdown-Bearbeitung liegt in lib/infographics.cjs, die Route in server.js.
+  const infographics = await fs.readFile(path.join(__dirname, '..', 'lib', 'infographics.cjs'), 'utf8');
+  assert.match(infographics, /Instagram-Poster: Ja/);
   assert.match(server, /setManagedInfographicInstagramPoster/);
   assert.match(server, /ownGraphic[\s\S]*article\.author === INFOGRAPHICS_AUTHOR[\s\S]*fixed: true/);
   assert.match(manager, /item\.fixed \? 'Artikelgrafik'/);

@@ -4,8 +4,10 @@
 // Ohne --apply werden ausschließlich die geplanten Änderungen angezeigt.
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { parseArticle, linkInfographics, infographicAttachmentStem,
-  retitleInfographicMarkdown, moveInfographicFiles } = require('../server.js');
+// Nur die reine Logik laden – server.js würde Nutzer, Stores und Sitzungen mit initialisieren.
+const { parseArticle } = require('../lib/article-parser.cjs');
+const { linkInfographics, infographicAttachmentStem,
+  retitleInfographicMarkdown, moveInfographicFiles } = require('../lib/infographics.cjs');
 
 const DEFAULT_WWW = path.join(__dirname, '..', 'www');
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);

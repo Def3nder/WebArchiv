@@ -868,7 +868,13 @@ bereits vorhandenen Artikeln pro Quelle stoppt der Scraper diese Quelle.
 ## Projektstruktur
 
 ```
-server.js                     Express-App (Routen, Index, Auth-Anbindung)
+server.js                     Express-App: Zustand (Index, Stores, Sperre) und Routen
+lib/article-parser.cjs        Markdown-Artikel parsen, Datums-/Textsuche zerlegen, Taxonomie/Kategorien
+lib/infographics.cjs          Infografik-Zuordnung und -Gruppen, Benennung, Kopfbearbeitung, Dateien verschieben
+lib/archive-files.cjs         Verzeichnis-Cache, Medien neben Artikeln finden, Datei-URLs, sichere Pfade
+lib/article-index.cjs         Fuse-Suchindex, Listen-Helfer für Teil-Reindexe, Scraper-Manifest
+lib/app-shell.cjs             Versionssignatur der App und Update-Service-Worker
+lib/http-errors.cjs           httpError(status, message)
 user-store.cjs                Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen
 audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
 article-editor.cjs            Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown

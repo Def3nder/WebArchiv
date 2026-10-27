@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { renderSafeMarkdown, safeHttpUrl } = require('./html-sanitizer.cjs');
-const Fuse = require('fuse.js');
 const session = require('express-session');
 const sharp   = require('sharp');
 const { spawn } = require('child_process');
@@ -19,6 +18,24 @@ const { isPathInside, installMediaRoutes } = require('./media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./login-limiter.cjs');
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./security-headers.cjs');
 const { createArchiveLock } = require('./archive-lock.cjs');
+// Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
+const { httpError } = require('./lib/http-errors.cjs');
+const { computeAppShellVersion, serviceWorkerSource } = require('./lib/app-shell.cjs');
+const {
+  parseArticleSearchQuery, bodyExcerpt, mergeCategories, autoCategorize,
+  extractSourceUrl, parseArticle, renderArticleBody,
+} = require('./lib/article-parser.cjs');
+const { createDirectoryCache, findSibling, fileUrl, audioFileUrl, resolveUnder } = require('./lib/archive-files.cjs');
+const {
+  INFOGRAPHICS_AUTHOR, linkInfographics, infographicYearsFromMigrations, imageExtensionFromContentType,
+  infographicStemExists, infographicAttachmentStem, validateInfographicHeader, removeCategoryLines,
+  buildInfographicMarkdown, retitleInfographicMarkdown, setInstagramPosterMetadata, moveInfographicFiles,
+  slugify, normalizeNewInfographicMarkdown, detectImageType,
+} = require('./lib/infographics.cjs');
+const {
+  buildArticleSearchIndex, articleDisplayAuthor, uniqueArticles, replaceInfographicYearArticles,
+  replaceArticleIndexEntry, upsertArticleIndexEntries, parseScraperChangedFiles, SCRAPER_CHANGED_FILES_MARKER,
+} = require('./lib/article-index.cjs');
 
 // Kommagetrennte Adressen/Subnetze bzw. Express-Schlüsselwörter (loopback,
 // linklocal, uniquelocal). „true“ wird bewusst nicht unterstützt.
@@ -65,10 +82,8 @@ const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
 const WWW_DIR = path.join(__dirname, 'www');
 const AUDIO_DIR = path.join(__dirname, 'audio');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
-const INFOGRAPHICS_AUTHOR = 'Infografiken';
 const INFOGRAPHIC_TRASH_DIR = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR, 'trash');
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
-const PWA_SHELL_EXTENSIONS = new Set(['.css', '.html', '.ico', '.js', '.json', '.png', '.svg']);
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const ADMIN_ASSET_PATHS = new Set([
   '/admin-tasks.js',
@@ -84,40 +99,6 @@ const ADMIN_ASSET_PATHS = new Set([
   '/vendor/duplicate-diff.bundle.js',
   '/vendor/article-editor.bundle.js',
 ]);
-
-function computeAppShellVersion(publicDir = PUBLIC_DIR) {
-  const hash = crypto.createHash('sha256');
-  const files = fs.readdirSync(publicDir, { withFileTypes: true })
-    .filter(entry => entry.isFile() && PWA_SHELL_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
-    .map(entry => entry.name)
-    .sort((a, b) => a.localeCompare(b, 'en'));
-
-  for (const file of files) {
-    hash.update(file);
-    hash.update('\0');
-    hash.update(fs.readFileSync(path.join(publicDir, file)));
-    hash.update('\0');
-  }
-  return hash.digest('hex').slice(0, 16);
-}
-
-function serviceWorkerSource(version) {
-  return `'use strict';
-const APP_VERSION = ${JSON.stringify(version)};
-
-self.addEventListener('install', () => {
-  // Aktualisierte Worker warten, bis der Benutzer im Hinweis zustimmt.
-});
-
-self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('message', event => {
-  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
-});
-`;
-}
 
 // ─── Users ─────────────────────────────────────────────────────────────────
 
@@ -150,7 +131,6 @@ let scrapeState = { running: false, sources: null, exitCode: null, startedAt: nu
 // Zentrale Sperre für Schreib- und Indexaufträge (archive-lock.cjs); die
 // Aufträge mit eigenem Zustand werden unten nach ihrer Erzeugung registriert.
 const archiveLock = createArchiveLock();
-const SCRAPER_CHANGED_FILES_MARKER = '@@WEBARCHIV_CHANGED_FILES@@';
 
 // Hörbücher: je ein Ordner unter audio/Hoerbuecher/ (oder audio/Hörbücher/), eigener Index neben den Artikeln.
 const audiobookConfig = loadAudiobookConfig(CONFIG_FILE);
@@ -209,346 +189,7 @@ function sendArchiveBusy(res, extra = {}) {
 
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
-function parseDateQuery(q) {
-  const s = (q || '').trim();
-  if (!s) return null;
-  // Voll: ISO yyyy-mm-dd
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return { kind: 'exact', value: s };
-  // Voll: deutsch dd.mm.yyyy
-  let m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if (m) return { kind: 'exact', value: `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` };
-  // Monat: ISO yyyy-mm
-  if (/^\d{4}-\d{2}$/.test(s)) return { kind: 'prefix', value: s };
-  // Monat: deutsch mm.yyyy
-  m = s.match(/^(\d{1,2})\.(\d{4})$/);
-  if (m) return { kind: 'prefix', value: `${m[2]}-${m[1].padStart(2,'0')}` };
-  // Jahr: yyyy
-  if (/^\d{4}$/.test(s)) return { kind: 'prefix', value: s };
-  return null;
-}
-
-function parseArticleSearchQuery(query, knownYears = []) {
-  const dateConstraints = [];
-  const textTokens = [];
-  const years = new Set(knownYears);
-  for (const token of String(query || '').trim().split(/\s+/).filter(Boolean)) {
-    const explicitEpisode = token.match(/^#(\d+)$/);
-    if (explicitEpisode) {
-      textTokens.push(explicitEpisode[1]);
-      continue;
-    }
-    const dateQuery = parseDateQuery(token);
-    // Nur tatsächlich vorhandene vierstellige Jahre als Datumsfilter behandeln.
-    // Andere Zahlen sind unter anderem Audioquickie-Nummern (z. B. 2961).
-    if (dateQuery && (!/^\d{4}$/.test(token) || years.has(token))) dateConstraints.push(dateQuery);
-    else textTokens.push(token);
-  }
-  return { dateConstraints, text: textTokens.join(' ').trim() };
-}
-
-function normalizeDate(raw) {
-  if (!raw) return '';
-  const s = String(raw).trim();
-  // ISO yyyy-mm-dd
-  const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  // German dd.mm.yyyy
-  const de = s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
-  if (de) return `${de[3]}-${de[2].padStart(2, '0')}-${de[1].padStart(2, '0')}`;
-  // Slash dd/mm/yyyy
-  const sl = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (sl) return `${sl[3]}-${sl[2].padStart(2, '0')}-${sl[1].padStart(2, '0')}`;
-  return '';
-}
-
-function extractDate(lines, filename) {
-  for (const line of lines.slice(0, 12)) {
-    const d = normalizeDate(line);
-    if (d) return d;
-  }
-  const fm = path.basename(filename).match(/^(\d{4}-\d{2}-\d{2})/);
-  return fm ? fm[1] : '';
-}
-
-function bodyExcerpt(text, maxLength = 320) {
-  const clean = text
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/\*\*/g, '')
-    .replace(/_/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  if (clean.length <= maxLength) return clean;
-  // An der letzten Wortgrenze kürzen, damit kein Wort mitten abbricht.
-  const cut = clean.slice(0, maxLength);
-  const space = cut.search(/\s\S*$/);
-  return (space > maxLength * 0.8 ? cut.slice(0, space) : cut).trimEnd() + ' …';
-}
-
-// ─── Auto-categorizer ──────────────────────────────────────────────────────
-
-const TAXONOMY = [
-  { label: 'Sexualität',       keys: ['sexualit', 'orgasmus', 'libido', 'erotik', 'tantra', 'lustempfind', 'intimität', 'begehren', 'penetration', 'yoni', 'becken', 'cunnilingus', 'analsex', 'masturbation', 'lust ', 'sexleben', 'sexuell', 'sexuelle', 'sexuellen'] },
-  { label: 'Beziehungen',      keys: ['beziehung', 'partner', 'liebe', 'bindung', 'ehe', 'trennung', 'vertrauen', 'nähe', 'intimität', 'begegnung', 'beziehungsangst', 'paartherapie', 'paardynamik', 'nähe und distanz', 'beziehungsmodell'] },
-  { label: 'Trauma & Heilung', keys: ['trauma', 'heilung', 'verletzung', 'kindheit', 'therapie', 'wunde', 'schmerz', 'vergangenheit', 'missbrauch', 'heilungsprozess', 'traumatisch', 'verwundbar'] },
-  { label: 'Psychologie',      keys: ['psychologie', 'dopamin', 'gehirn', 'neurobiologie', 'muster', 'konditionier', 'unbewusst', 'manipulation', 'narziss', 'bindungsangst', 'sucht', 'abhängig', 'mechanismus', 'verhaltens'] },
-  { label: 'Spiritualität',    keys: ['spiritualit', 'bewusstsein', 'meditation', 'seele', 'energie', 'erwachen', 'yoga', 'stille', 'präsenz', 'geist', 'göttlich', 'heilig', 'gebet', 'mystik', 'erleuchtung', 'bewusst sein'] },
-  { label: 'Persönlichkeit',   keys: ['selbstwert', 'authentizit', 'ego', 'identität', 'grenzen', 'selbstliebe', 'würde', 'selbstbild', 'selbstwahrnehmung', 'ich-sein', 'charakter', 'reife', 'integrität', 'selbstverantwortung'] },
-  { label: 'Gesundheit',       keys: ['gesundheit', 'hormon', 'stress', 'wohlbefinden', 'nervensystem', 'körpergefühl', 'schlaf', 'erschöpfung', 'burnout', 'ernährung', 'immunsystem', 'menstruation', 'zyklus'] },
-  { label: 'Philosophie',      keys: ['philosophie', 'wahrheit', 'freiheit', 'sinn', 'bedeutung', 'leere', 'gedanke', 'denken', 'erkenntnis', 'wissen', 'wirklichkeit', 'existenz', 'sein und haben'] },
-  { label: 'Männer & Frauen',  keys: ['männer', 'frauen', 'maskulin', 'feminin', 'gender', 'attraktion', 'maskulinität', 'feminität', 'geschlechter', 'männlichkeit', 'weiblichkeit', 'nice guy', 'toxisch'] },
-  { label: 'Achtsamkeit',      keys: ['achtsamkeit', 'mindfulness', 'präsenz', 'augenblick', 'gegenwart', 'atmung', 'entspannung', 'bewusste wahrnehmung', 'innehalten', 'entschleunig'] },
-  { label: 'Gesellschaft',     keys: ['gesellschaft', 'kultur', 'normen', 'herrschaft', 'autorität', 'kollektiv', 'sozial', 'politisch', 'anarchie', 'system', 'konventionen', 'tabu'] },
-  { label: 'Selbsterkenntnis', keys: ['selbsterkenntnis', 'beobachtung', 'wahrnehmung', 'reflexion', 'innenschau', 'selbstreflexion', 'erkennen', 'introspektion', 'bewusst werden', 'selbstbeobachtung'] },
-];
-
-const TAXONOMY_LABELS = new Set(TAXONOMY.map(bucket => bucket.label));
-
-// Filter-Kategorien: ausdrücklich in „Kategorien:“ genannte Taxonomie-Labels
-// zählen immer (zuerst), danach die automatisch erkannten; höchstens fünf.
-function mergeCategories(tags, autoCategories) {
-  const explicit = (tags || []).filter(tag => TAXONOMY_LABELS.has(tag));
-  return [...new Set([...explicit, ...autoCategories])].slice(0, 5);
-}
-
-function autoCategorize(text) {
-  const lower = text.toLowerCase();
-  const scores = TAXONOMY.map(bucket => {
-    const count = bucket.keys.reduce((n, k) => {
-      let pos = 0, hits = 0;
-      while ((pos = lower.indexOf(k, pos)) !== -1) { hits++; pos += k.length; }
-      return n + hits;
-    }, 0);
-    return { label: bucket.label, count };
-  });
-  return scores
-    .filter(s => s.count > 0)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5)
-    .map(s => s.label);
-}
-
-// Nur http(s): Die Quelle wird im Artikel als anklickbarer Link angezeigt.
-function extractSourceUrl(clean) {
-  const stripTrail = u => u.trim().replace(/[*_)\].,;\s]+$/, '');
-  const md = clean.match(/\[[^\]]*\]\(([^)]+)\)/);
-  if (md) return safeHttpUrl(stripTrail(md[1]));
-  const bare = clean.match(/(https?:\/\/\S+)/);
-  if (bare) return safeHttpUrl(stripTrail(bare[1]));
-  return null;
-}
-
-function parseArticle(content, filePath) {
-  const lines = content.split('\n');
-
-  // Find Datum line (case-insensitive, ignore **, *, _ wrappers)
-  let datumIdx = -1;
-  let date = '';
-  for (let i = 0; i < Math.min(lines.length, 20); i++) {
-    const clean = lines[i]
-      .replace(/\*\*/g, '')
-      .replace(/^#+\s*/, '')
-      .replace(/^\*|\*$/g, '')
-      .trim()
-      .replace(/^_+|_+$/g, '')
-      .trim();
-    if (/^datum:/i.test(clean)) {
-      datumIdx = i;
-      const raw = clean.replace(/^datum:\s*/i, '').trim();
-      date = normalizeDate(raw) || normalizeDate(lines[i]) || '';
-      break;
-    }
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    date = extractDate(lines, filePath);
-  }
-
-  // Title: non-empty lines before Datum, strip markdown markers
-  // Optional "Quelle: <URL>" line is extracted separately and excluded from title.
-  const titleLines = [];
-  let sourceUrl = null;
-  const limitIdx = datumIdx >= 0 ? datumIdx : Math.min(lines.length, 5);
-  for (let i = 0; i < limitIdx; i++) {
-    const s = lines[i]
-      .replace(/^#+\s*/, '')
-      .replace(/\*\*/g, '')
-      .replace(/^\*|\*$/g, '')
-      .replace(/^_+|_+$/g, '')
-      .replace(/[»«]/g, '')
-      .trim();
-    if (!s) continue;
-    if (/^quelle:/i.test(s)) {
-      if (!sourceUrl) sourceUrl = extractSourceUrl(s.replace(/^quelle:\s*/i, ''));
-      continue;
-    }
-    titleLines.push(s);
-  }
-
-  // Parse header section after Datum: collect episode, tags, summary until ****
-  let episodeNum = null;
-  let instagramPoster = false;
-  let tags = [];
-  let summaryLines = [];
-  let inSummary = false;
-  let lastMetaIdx = datumIdx >= 0 ? datumIdx : -1;
-  let bodyStartIdx = -1;
-
-  for (let i = (datumIdx >= 0 ? datumIdx + 1 : 0); i < lines.length; i++) {
-    const raw = lines[i];
-    const clean = raw.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim().replace(/^_+|_+$/g, '').trim();
-
-    // Separator: ends summary section; body follows after last separator
-    if (/^\*{4,}$|^-{4,}$/.test(raw.trim())) {
-      inSummary = false;
-      bodyStartIdx = i + 1;
-      continue;
-    }
-
-    // Collect summary lines until separator
-    if (inSummary) {
-      summaryLines.push(raw);
-      continue;
-    }
-
-    // Past the last separator — skip (body sliced after loop)
-    if (bodyStartIdx >= 0) continue;
-
-    if (/^audioquickie:/i.test(clean)) {
-      const m = clean.match(/\d+/);
-      if (m) episodeNum = parseInt(m[0]);
-      lastMetaIdx = i;
-      continue;
-    }
-
-    if (/^instagram-poster:/i.test(clean)) {
-      instagramPoster = /^instagram-poster:\s*ja\s*$/i.test(clean);
-      lastMetaIdx = i;
-      continue;
-    }
-
-    if (/^kategorien:/i.test(clean)) {
-      const val = clean.replace(/^kategorien:\s*/i, '');
-      tags = val ? val.split(/,\s*/).map(t => t.trim()).filter(Boolean) : [];
-      lastMetaIdx = i;
-      continue;
-    }
-
-    if (/^quelle:/i.test(clean)) {
-      if (!sourceUrl) sourceUrl = extractSourceUrl(clean.replace(/^quelle:\s*/i, ''));
-      lastMetaIdx = i;
-      continue;
-    }
-
-    if (/^zusammenfassung:/i.test(clean)) {
-      inSummary = true;
-      lastMetaIdx = i;
-      const rest = clean.replace(/^zusammenfassung:\s*/i, '').trim();
-      if (rest) summaryLines.push(rest);
-      continue;
-    }
-
-    // Ohne expliziten Trenner beginnt der Artikel mit der ersten normalen
-    // Textzeile nach Datum und optionalen Metadaten. Spätere Zeilen wie
-    // "Quelle:" gehören dann zum Inhalt und dürfen den Body nicht abschneiden.
-    if (datumIdx >= 0 && raw.trim()) {
-      bodyStartIdx = i;
-      break;
-    }
-  }
-
-  const summary = summaryLines.join('\n').trim() || null;
-
-  // Body: after last separator, or after last metadata line if no separator present
-  let bodyLines;
-  if (bodyStartIdx >= 0) {
-    bodyLines = lines.slice(bodyStartIdx);
-  } else {
-    let start = lastMetaIdx + 1;
-    while (start < lines.length && lines[start].trim() === '') start++;
-    bodyLines = lines.slice(start);
-  }
-
-  let body = bodyLines.join('\n').trim();
-  // Manche Quellen (z. B. Facebook, Telegram) trennen Kopf und Text mit einer
-  // einzelnen "---"-Zeile (3 Bindestriche). Da der Separator oben nur 4+ Zeichen
-  // erkennt, bliebe diese Zeile sonst am Body-Anfang stehen und erschiene als
-  // literales "---" in der Kachel sowie als zusätzliche <hr> unter dem Divider.
-  body = body.replace(/^(?:-{3,}|\*{3,}|_{3,})[ \t]*(?:\r?\n|$)/, '').trimStart();
-  const title = titleLines.join(' ').trim()
-    || path.basename(filePath, '.md').replace(/_/g, ' ').replace(/^\d{4}-\d{2}-\d{2}\s+/, '');
-
-  return { title, date, sourceUrl, summary, tags, episodeNum, instagramPoster, categories: [], body };
-}
-
-// Bereinigt (html-sanitizer.cjs): Der Body wird im Browser per innerHTML eingesetzt.
-function renderArticleBody(body) {
-  return renderSafeMarkdown(body);
-}
-
 // ─── File scanner ──────────────────────────────────────────────────────────
-
-// Dateinamen eines Verzeichnisses: exakt (Normalfall) und klein geschrieben.
-// Symlinks zählen mit, weil sie bisher über existsSync ebenfalls gefunden wurden.
-function directoryListing(entries) {
-  const exact = new Set();
-  const lower = new Map();
-  for (const entry of entries) {
-    if (!entry.isFile() && !entry.isSymbolicLink()) continue;
-    exact.add(entry.name);
-    const key = entry.name.toLowerCase();
-    if (!lower.has(key)) lower.set(key, entry.name);
-  }
-  return { exact, lower };
-}
-
-// Ein Scan liest jedes Verzeichnis höchstens einmal: den Artikelordner, den
-// parallelen Ordner unter audio/ und den Autorenordner (standard.jpg). Vorher
-// kostete jeder Artikel ohne lokale MP3 ein eigenes readdir des Audio-Ordners
-// plus mehrere existsSync – bei rund 7.000 Artikeln tausende Dateisystemaufrufe.
-function createDirectoryCache() {
-  const listings = new Map();
-  return {
-    seed(dir, entries) { listings.set(dir, directoryListing(entries)); },
-    get(dir) {
-      if (!listings.has(dir)) {
-        let listing = null; // Verzeichnis fehlt: keine Medien
-        try { listing = directoryListing(fs.readdirSync(dir, { withFileTypes: true })); } catch { /* fehlt */ }
-        listings.set(dir, listing);
-      }
-      return listings.get(dir);
-    },
-  };
-}
-
-function findSibling(dir, basename, exts, listing) {
-  if (!listing) return null;
-  // Normalfall: exakt gleichnamige Datei mit erwarteter Endung.
-  for (const ext of exts) {
-    if (listing.exact.has(basename + ext)) return path.join(dir, basename + ext);
-  }
-  // Auf dem Debian-Zielsystem ist das Dateisystem case-sensitive. Medien sollen
-  // trotzdem autorenunabhängig erkannt werden, wenn nur Groß-/Kleinschreibung
-  // von Basisname oder Endung abweicht (z. B. Artikel.md + artikel.MP3).
-  for (const ext of exts) {
-    const actualName = listing.lower.get((basename + ext).toLowerCase());
-    if (actualName) return path.join(dir, actualName);
-  }
-  return null;
-}
-
-// Cache-Busting: mtime der Datei als Versions-Query an die /files-URL hängen,
-// damit ein ausgetauschtes Bild (gleicher Name) im Browser neu geladen wird.
-function fileUrl(relPath, absPath) {
-  let v = '';
-  try { v = '?v=' + Math.floor(fs.statSync(absPath).mtimeMs); } catch { /* Datei weg */ }
-  return `/files/${relPath}${v}`;
-}
-
-function audioFileUrl(relPath, absPath) {
-  let v = '';
-  try { v = '?v=' + Math.floor(fs.statSync(absPath).mtimeMs); } catch { /* Datei weg */ }
-  return `/audio-files/${relPath}${v}`;
-}
 
 async function scanDir(dirPath, author, year, collector, {
   strict = false, targetFile = null, directories = createDirectoryCache(),
@@ -653,136 +294,6 @@ async function scanDir(dirPath, author, year, collector, {
   }
 }
 
-// Zuordnung Infografik → Artikel über Jahr + Dateistamm. Anhänge heißen
-// „<Stamm>_1“, „<Stamm>_2“ …; der Stamm ohne Suffix bleibt einem eigenständigen
-// Artikel samt Hauptbild vorbehalten. Die Endung _N wird nur abgeschnitten, wenn es
-// den verkürzten Stamm tatsächlich gibt – sonst gehört die Zahl zum Namen
-// (Stefan Hiene: „…_Audioquickie_2961“).
-function resolveInfographicStem(stem, hasArticle, hasInfographic) {
-  if (hasArticle(stem)) return { baseStem: stem, ordinal: 1 };
-  const m = stem.match(/^(.+)_(\d+)$/);
-  if (m && /^[1-9]\d*$/.test(m[2]) && (hasArticle(m[1]) || hasInfographic(m[1]))) {
-    return { baseStem: m[1], ordinal: parseInt(m[2], 10) };
-  }
-  return { baseStem: stem, ordinal: 1 };
-}
-
-// Verknüpft Infografiken mit ihrem Originalartikel:
-//  - Platzhalter-Infografiken (ohne eigenen Text) werden Mitglieder einer Gruppe,
-//    deren Anker der Originalartikel ist – oder, ohne Artikel, die Basis-Infografik.
-//  - Eine Basis-Infografik mit eigenem Text ist selbst ein Original; ihre Varianten
-//    gehören zu ihr (deren doppelter Text wird nicht angezeigt).
-//  - Mitglieder erben Kategorien/Tags des Ankers, Infografiken ohne eigenes Audio
-//    das Audio der Basis-Infografik bzw. des Artikels (Zugriff bleibt beim Ursprung).
-// Mehrdeutige Basis (gleicher Stamm bei mehreren Autoren): zuerst konfigurierte
-// Autoren-Priorität, danach eindeutiger Kandidat mit Audio, sonst keine Zuordnung.
-function linkInfographics(articleList, authorPriority = []) {
-  const key = (year, stem) => `${year || ''}/${stem}`;
-  const stemOf = article => path.basename(article.filePath, '.md');
-  const priorityByAuthor = new Map(authorPriority.map((author, index) => [author, index]));
-  const candidatesByKey = new Map();
-  const infographicsByKey = new Map();
-  for (const article of articleList) {
-    const k = key(article.year, stemOf(article));
-    if (article.author === INFOGRAPHICS_AUTHOR) infographicsByKey.set(k, article);
-    else candidatesByKey.set(k, [...(candidatesByKey.get(k) || []), article]);
-  }
-  const baseArticleFor = k => {
-    const candidates = candidatesByKey.get(k) || [];
-    const ranked = candidates
-      .filter(article => priorityByAuthor.has(article.author))
-      .sort((a, b) => priorityByAuthor.get(a.author) - priorityByAuthor.get(b.author));
-    if (ranked.length) return ranked[0];
-    const withAudio = candidates.filter(article => article.audioUrl);
-    if (withAudio.length === 1) return withAudio[0];
-    return candidates.length === 1 ? candidates[0] : null;
-  };
-
-  const infographics = articleList.filter(article => article.author === INFOGRAPHICS_AUTHOR);
-  for (const info of infographics) {
-    const { baseStem, ordinal } = resolveInfographicStem(stemOf(info),
-      stem => candidatesByKey.has(key(info.year, stem)),
-      stem => infographicsByKey.has(key(info.year, stem)));
-    info.infographicBase = baseStem;
-    info.infographicOrdinal = ordinal;
-  }
-
-  const groups = new Map();   // Anker-ID → Mitglieder (sortiert)
-  const anchorOf = new Map(); // Mitglieds-ID → Anker-ID
-  for (const info of infographics) {
-    // Eigene Audio-Datei bedeutet eigenständige Infografik, nicht Artikelanhang.
-    if (info.audioUrl) continue;
-    const k = key(info.year, info.infographicBase);
-    const baseArticle = baseArticleFor(k);
-    const baseInfo = infographicsByKey.get(k);
-    // Eine vorhandene _1 macht die suffixlose Infografik eindeutig zum
-    // eigenständigen Anker. Ohne _1 bleibt die alte Basis-Zuordnung bis zur
-    // Dateimigration lesbar.
-    const standaloneBase = baseInfo && (baseInfo.hasBody
-      || (baseInfo.audioUrl && !baseInfo.inheritedAudioAuthor)
-      || infographicsByKey.has(key(info.year, infographicAttachmentStem(info.infographicBase, 1))));
-    const isBase = baseInfo === info;
-    let anchor = null;
-    if (isBase) {
-      if (!standaloneBase && baseArticle) anchor = baseArticle;
-    } else if (standaloneBase) {
-      anchor = baseInfo;
-    } else if (!info.hasBody) {
-      // Ohne Artikel ist die Basis-Infografik der Anker (und selbst das erste Bild).
-      anchor = baseArticle || (baseInfo && !baseInfo.hasBody ? baseInfo : null);
-    }
-    if (!anchor) continue;
-    anchorOf.set(info.id, anchor.id);
-    groups.set(anchor.id, [...(groups.get(anchor.id) || []), info]);
-  }
-  for (const members of groups.values()) members.sort((a, b) => a.infographicOrdinal - b.infographicOrdinal);
-
-  const byId = new Map(articleList.map(article => [article.id, article]));
-  for (const [memberId, anchorId] of anchorOf) {
-    const member = byId.get(memberId);
-    const anchor = byId.get(anchorId);
-    if (anchor.author === INFOGRAPHICS_AUTHOR && !anchor.hasBody) continue;
-    member.categories = [...anchor.categories];
-    member.tags = [...anchor.tags];
-  }
-
-  // Audio-Vererbung (unabhängig davon, ob die Infografik gruppiert ist).
-  for (const info of infographics) {
-    if (info.audioUrl) continue;
-    const k = key(info.year, info.infographicBase);
-    const baseInfo = infographicsByKey.get(k);
-    const source = (baseInfo && baseInfo !== info && baseInfo.audioUrl ? baseInfo : null) || baseArticleFor(k);
-    if (!source || !source.audioUrl) continue;
-    info.audioUrl = source.audioUrl;
-    info.hasExternalAudio = !!source.hasExternalAudio;
-    info.episodeNum = info.episodeNum || source.episodeNum;
-    info.inheritedAudioAuthor = source.inheritedAudioAuthor || source.author;
-    info.inheritedAudioArticleId = source.inheritedAudioArticleId || source.id;
-  }
-  return { groups, anchorOf };
-}
-
-function buildArticleSearchIndex(articleList) {
-  return new Fuse(articleList, {
-    keys: [
-      { name: 'title',      weight: 3 },
-      { name: 'episodeNum', weight: 2 },
-      { name: 'author',     weight: 1.5 },
-      { name: 'categories', weight: 1 },
-      { name: 'excerpt',    weight: 0.8 },
-    ],
-    threshold: 0.35,
-    includeScore: true,
-    ignoreLocation: true,
-    minMatchCharLength: 2,
-  });
-}
-
-function articleDisplayAuthor(article, linkedArticle = null) {
-  if (article?.author !== INFOGRAPHICS_AUTHOR) return article?.author || '';
-  return linkedArticle?.author || INFOGRAPHICS_AUTHOR;
-}
-
 // Nur interne Felder entfernen und geerbtes Audio ohne Recht am Ursprung verbergen.
 function exposeArticleForUser(article, user) {
   const {
@@ -866,23 +377,6 @@ async function buildIndex() {
   }
 }
 
-function uniqueArticles(articleList) {
-  const seen = new Set();
-  return articleList.filter(article => {
-    if (seen.has(article.id)) return false;
-    seen.add(article.id);
-    return true;
-  });
-}
-
-function replaceInfographicYearArticles(articleList, year, scanned) {
-  const folderPrefix = `${INFOGRAPHICS_AUTHOR}/${year}/`;
-  return uniqueArticles([
-    ...articleList.filter(article => !article.id.startsWith(folderPrefix)),
-    ...scanned,
-  ]);
-}
-
 function prepareLinkedArticles(nextSourceArticles, authorPriority) {
   // Gruppen, Kategorien und Audio-Vererbung nur auf Kopien berechnen; die
   // unverknüpften Scan-Ergebnisse bleiben für spätere Teil-Neuindizes sauber.
@@ -924,30 +418,6 @@ function publishArticleIndex(nextSourceArticles) {
   meta = nextMeta;
   fuseIndex = nextFuseIndex;
   refreshDuplicateState();
-}
-
-function replaceArticleIndexEntry(articleList, id, replacement) {
-  const index = articleList.findIndex(article => article.id === id);
-  if (index < 0) throw new Error(`Artikel „${id}“ fehlt im Rohindex.`);
-  if (!replacement || replacement.id !== id) throw new Error(`Artikel „${id}“ wurde unter einer unerwarteten ID eingelesen.`);
-  const next = articleList.slice();
-  next[index] = replacement;
-  return next;
-}
-
-function upsertArticleIndexEntries(articleList, replacements) {
-  const next = articleList.slice();
-  const positions = new Map(next.map((article, index) => [article.id, index]));
-  for (const replacement of replacements) {
-    const index = positions.get(replacement.id);
-    if (index === undefined) {
-      positions.set(replacement.id, next.length);
-      next.push(replacement);
-    } else {
-      next[index] = replacement;
-    }
-  }
-  return uniqueArticles(next);
 }
 
 // Vom Scraper gemeldete Markdown-Dateien einzeln einlesen und anschließend
@@ -992,30 +462,6 @@ async function republishArticleIndex() {
   const t0 = Date.now();
   publishArticleIndex(sourceArticles);
   console.log(`✓ Artikelverknüpfungen aus dem Speicher aktualisiert (${Date.now() - t0}ms)`);
-}
-
-function infographicYearsFromMigrations(migrations) {
-  const years = new Set();
-  for (const migration of migrations || []) {
-    for (const relativePath of [migration?.from, migration?.to]) {
-      if (!relativePath) continue;
-      const parts = String(relativePath).replace(/\\/g, '/').split('/');
-      if (parts[0] === INFOGRAPHICS_AUTHOR && /^\d{4}$/.test(parts[1] || '')) years.add(parts[1]);
-    }
-  }
-  return [...years];
-}
-
-function parseScraperChangedFiles(output) {
-  const markerLine = String(output || '').split(/\r?\n/)
-    .findLast(line => line.startsWith(SCRAPER_CHANGED_FILES_MARKER));
-  if (!markerLine) return null;
-  try {
-    const parsed = JSON.parse(markerLine.slice(SCRAPER_CHANGED_FILES_MARKER.length));
-    return Array.isArray(parsed) && parsed.every(filename => typeof filename === 'string') ? parsed : null;
-  } catch {
-    return null;
-  }
 }
 
 // Nach einer Editor-Änderung nur die betroffene Markdown-Datei erneut von der
@@ -1150,27 +596,6 @@ function conflictingInfographicBase(article, byId = articleById, anchorOf = grou
   return !!base && anchorOf.get(base.id) !== article.id;
 }
 
-function imageExtensionFromContentType(contentType) {
-  const type = String(contentType || '').split(';')[0].trim().toLowerCase();
-  if (type === 'image/png') return '.png';
-  if (type === 'image/jpeg') return '.jpg';
-  return null;
-}
-
-function resolveUnder(root, ...segments) {
-  const absPath = path.resolve(path.join(root, ...segments));
-  if (absPath !== root && !absPath.startsWith(root + path.sep)) return null;
-  return absPath;
-}
-
-function infographicStemExists(dir, stem) {
-  return ['.md', '.jpg', '.jpeg', '.png'].some(ext => fs.existsSync(path.join(dir, stem + ext)));
-}
-
-function infographicAttachmentStem(baseStem, ordinal) {
-  return `${baseStem}_${ordinal}`;
-}
-
 function firstAvailableInfographicOrdinal(article, byId = articleById, anchorOf = groupAnchorOf) {
   const year = article.year || article.date?.slice(0, 4) || '';
   const stem = path.basename(article.filePath, '.md');
@@ -1205,160 +630,7 @@ function getInfographicTarget(article, imageExt) {
   return null;
 }
 
-function appendOrdinalToMarkdownTitle(lines, ordinal) {
-  if (ordinal <= 1) return lines;
-  const appendSuffix = (line) => {
-    const suffix = ` (${ordinal})`;
-    const trailingWhitespace = line.match(/\s*$/)?.[0] || '';
-    const core = line.slice(0, line.length - trailingWhitespace.length);
-    for (const marker of ['**', '*', '__', '_']) {
-      if (core.endsWith(marker)) return core.slice(0, -marker.length) + suffix + marker + trailingWhitespace;
-    }
-    return core + suffix + trailingWhitespace;
-  };
-
-  let datumIdx = -1;
-  for (let i = 0; i < Math.min(lines.length, 20); i++) {
-    const clean = lines[i]
-      .replace(/\*\*/g, '')
-      .replace(/^#+\s*/, '')
-      .replace(/^\*|\*$/g, '')
-      .trim()
-      .replace(/^_+|_+$/g, '')
-      .trim();
-    if (/^datum:/i.test(clean)) {
-      datumIdx = i;
-      break;
-    }
-  }
-
-  const limitIdx = datumIdx >= 0 ? datumIdx : Math.min(lines.length, 5);
-  for (let i = limitIdx - 1; i >= 0; i--) {
-    const clean = lines[i]
-      .replace(/^#+\s*/, '')
-      .replace(/\*\*/g, '')
-      .replace(/^\*|\*$/g, '')
-      .trim()
-      .replace(/^_+|_+$/g, '')
-      .trim();
-    if (!clean || /^quelle:/i.test(clean)) continue;
-    lines[i] = appendSuffix(lines[i]);
-    break;
-  }
-  return lines;
-}
-
-function validateInfographicHeader(content) {
-  const lines = content.split(/\r?\n/);
-  let datumIdx = -1;
-  let date = '';
-
-  for (let i = 0; i < Math.min(lines.length, 20); i++) {
-    const clean = lines[i]
-      .replace(/\*\*/g, '')
-      .replace(/^#+\s*/, '')
-      .replace(/^\*|\*$/g, '')
-      .trim()
-      .replace(/^_+|_+$/g, '')
-      .trim();
-    if (!/^datum:/i.test(clean)) continue;
-
-    datumIdx = i;
-    const raw = clean.replace(/^datum:\s*/i, '').trim();
-    date = normalizeDate(raw) || normalizeDate(lines[i]) || '';
-    break;
-  }
-
-  let hasTitle = false;
-  if (datumIdx >= 0) {
-    for (let i = 0; i < datumIdx; i++) {
-      const clean = lines[i]
-        .replace(/^#+\s*/, '')
-        .replace(/\*\*/g, '')
-        .replace(/^\*|\*$/g, '')
-        .replace(/^_+|_+$/g, '')
-        .replace(/[»«]/g, '')
-        .trim();
-      if (clean && !/^quelle:/i.test(clean)) {
-        hasTitle = true;
-        break;
-      }
-    }
-  }
-
-  return {
-    hasTitle,
-    date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '',
-  };
-}
-
-// Infografiken erben die Kategorien ihres Artikels; eine eigene „Kategorien:“-Zeile
-// im Kopf entfällt (samt einer dadurch doppelten Leerzeile).
-function removeCategoryLines(lines) {
-  const result = [];
-  for (let i = 0; i < lines.length; i++) {
-    const clean = lines[i].replace(/\*\*/g, '').replace(/^#+\s*/, '').trim().replace(/^_+|_+$/g, '').trim();
-    if (!/^kategorien:/i.test(clean)) { result.push(lines[i]); continue; }
-    if (result.length && result[result.length - 1].trim() === '' && (lines[i + 1] ?? '').trim() === '') i++;
-  }
-  return result;
-}
-
-function buildInfographicMarkdown(content, ordinal) {
-  const eol = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.split(/\r?\n/);
-
-  let datumIdx = -1;
-  for (let i = 0; i < Math.min(lines.length, 20); i++) {
-    const clean = lines[i]
-      .replace(/\*\*/g, '')
-      .replace(/^#+\s*/, '')
-      .replace(/^\*|\*$/g, '')
-      .trim()
-      .replace(/^_+|_+$/g, '')
-      .trim();
-    if (/^datum:/i.test(clean)) {
-      datumIdx = i;
-      break;
-    }
-  }
-
-  let inSummary = false;
-  let lastMetaIdx = datumIdx >= 0 ? datumIdx : -1;
-  let separatorIdx = -1;
-
-  for (let i = (datumIdx >= 0 ? datumIdx + 1 : 0); i < lines.length; i++) {
-    const raw = lines[i];
-    const clean = raw.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim().replace(/^_+|_+$/g, '').trim();
-
-    if (/^\*{4,}$|^-{4,}$/.test(raw.trim())) {
-      inSummary = false;
-      separatorIdx = i;
-      break;
-    }
-    if (inSummary) continue;
-
-    if (/^audioquickie:/i.test(clean) || /^kategorien:/i.test(clean) || /^quelle:/i.test(clean)) {
-      lastMetaIdx = i;
-      continue;
-    }
-    if (/^zusammenfassung:/i.test(clean)) {
-      inSummary = true;
-      lastMetaIdx = i;
-    }
-  }
-
-  const cutIdx = separatorIdx >= 0 ? separatorIdx : (lastMetaIdx >= 0 ? lastMetaIdx + 1 : lines.length);
-  const keptLines = appendOrdinalToMarkdownTitle(removeCategoryLines(lines.slice(0, cutIdx)), ordinal);
-  while (keptLines.length && keptLines[keptLines.length - 1].trim() === '') keptLines.pop();
-  return keptLines.join(eol) + eol;
-}
-
 const DUPLICATE_MEDIA_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.mp3', '.mp4', '.pdf']);
-
-function duplicateFail(status, message) {
-  return Object.assign(new Error(message), { status });
-}
 
 function duplicateInfographicViews(article) {
   return (infographicGroups.get(article.id) || [])
@@ -1391,9 +663,9 @@ function duplicateArticleView(article) {
 function duplicatePair(blogId, facebookId) {
   const blog = articleById.get(blogId);
   const facebook = articleById.get(facebookId);
-  if (!blog || !facebook) throw duplicateFail(404, 'Einer der Artikel wurde nicht gefunden.');
+  if (!blog || !facebook) throw httpError(404, 'Einer der Artikel wurde nicht gefunden.');
   if (blog.author !== duplicateConfig.blogAuthor || !duplicateConfig.facebookAuthors.includes(facebook.author)) {
-    throw duplicateFail(400, 'Diese Autoren können nicht als Blog-/Quellen-Dublette verknüpft werden.');
+    throw httpError(400, 'Diese Autoren können nicht als Blog-/Quellen-Dublette verknüpft werden.');
   }
   return { blog, facebook };
 }
@@ -1416,24 +688,24 @@ function filesForInfographic(article) {
 // oder Audio) wird niemals durch Umordnen/Löschen ihrer Anhänge verändert.
 function managedInfographicContext(id, user) {
   const requested = articleById.get(id);
-  if (!requested) throw duplicateFail(404, 'Artikel nicht gefunden.');
+  if (!requested) throw httpError(404, 'Artikel nicht gefunden.');
   const article = duplicateCanonicalFor(requested, user) || requested;
-  if (!canUploadInfographic(user, article)) throw duplicateFail(403, 'Keine Berechtigung für diese Infografiken.');
+  if (!canUploadInfographic(user, article)) throw httpError(403, 'Keine Berechtigung für diese Infografiken.');
   const year = article.year || article.date?.slice(0, 4) || '';
-  if (!/^\d{4}$/.test(year)) throw duplicateFail(400, 'Der Artikel hat kein gültiges Jahr.');
+  if (!/^\d{4}$/.test(year)) throw httpError(400, 'Der Artikel hat kein gültiges Jahr.');
   const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
   const baseStem = path.basename(article.filePath, '.md');
-  if (!dir || !baseStem) throw duplicateFail(400, 'Kein gültiges Infografik-Ziel gefunden.');
+  if (!dir || !baseStem) throw httpError(400, 'Kein gültiges Infografik-Ziel gefunden.');
   const members = (infographicGroups.get(article.id) || []).filter(item => item.ownImage);
   const bundles = members.map(item => {
     if (item.author !== INFOGRAPHICS_AUTHOR || path.resolve(path.dirname(item.filePath)) !== dir
       || item.infographicBase !== baseStem) {
-      throw duplicateFail(409, 'Eine Grafik gehört nicht zu den verwaltbaren Artikel-Infografiken.');
+      throw httpError(409, 'Eine Grafik gehört nicht zu den verwaltbaren Artikel-Infografiken.');
     }
     const files = filesForInfographic(item);
     const imageFiles = files.filter(file => ['.png', '.jpg', '.jpeg'].includes(path.extname(file).toLowerCase()));
     if (files.length !== 2 || imageFiles.length !== 1 || !files.includes(item.filePath)) {
-      throw duplicateFail(409, 'Eine Infografik hat zusätzliche oder unvollständige Dateien und kann nicht automatisch verwaltet werden.');
+      throw httpError(409, 'Eine Infografik hat zusätzliche oder unvollständige Dateien und kann nicht automatisch verwaltet werden.');
     }
     return { id: item.id, ordinal: item.infographicOrdinal, title: item.title,
       imageUrl: item.imageUrl, instagramPoster: item.instagramPoster === true,
@@ -1449,56 +721,8 @@ function managedInfographicContext(id, user) {
   return { article, dir, year, baseStem, bundles, items: ownGraphic ? [ownGraphic, ...bundles] : bundles };
 }
 
-function retitleInfographicMarkdown(content, oldOrdinal, newOrdinal) {
-  if (oldOrdinal === newOrdinal) return content;
-  const eol = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.split(/\r?\n/);
-  let datumIdx = lines.findIndex((line, index) => index < 20
-    && /^datum:/i.test(line.replace(/\*\*/g, '').replace(/^#+\s*/, '').replace(/^_+|_+$/g, '').trim()));
-  if (datumIdx < 0) datumIdx = Math.min(lines.length, 5);
-  if (oldOrdinal > 1) {
-    for (let i = datumIdx - 1; i >= 0; i--) {
-      const clean = lines[i].replace(/^#+\s*/, '').replace(/\*\*/g, '')
-        .replace(/^\*|\*$/g, '').replace(/^_+|_+$/g, '').trim();
-      if (!clean || /^quelle:/i.test(clean)) continue;
-      const suffix = new RegExp(' \\(' + oldOrdinal + '\\)(?=(?:\\*\\*|__|\\*|_)?\\s*$)');
-      lines[i] = lines[i].replace(suffix, '');
-      break;
-    }
-  }
-  appendOrdinalToMarkdownTitle(lines, newOrdinal);
-  return lines.join(eol);
-}
-
-function setInstagramPosterMetadata(content, enabled) {
-  const eol = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.split(/\r?\n/);
-  const cleanMetadataLine = line => line.replace(/\*\*/g, '').replace(/^#+\s*/, '')
-    .replace(/^\*|\*$/g, '').replace(/^_+|_+$/g, '').trim();
-  const hadMarker = lines.some(line => /^instagram-poster:/i.test(cleanMetadataLine(line)));
-  if (!enabled && !hadMarker) return content;
-  const withoutMarker = lines.filter(line => !/^instagram-poster:/i.test(cleanMetadataLine(line)));
-  const datumIdx = withoutMarker.findIndex((line, index) => index < 20
-    && /^datum:/i.test(cleanMetadataLine(line)));
-  if (datumIdx < 0) {
-    if (enabled) throw duplicateFail(409, 'Die Infografik hat keine Datum-Zeile.');
-    return withoutMarker.join(eol);
-  }
-
-  // Der Marker ist ein eigener Markdown-Absatz. Vorhandene Leerzeilen direkt
-  // nach dem Datum werden dabei vereinheitlicht, damit Aktivieren und Entfernen
-  // keine immer größeren Lücken erzeugt.
-  let nextContentIdx = datumIdx + 1;
-  while (nextContentIdx < withoutMarker.length && !withoutMarker[nextContentIdx].trim()) {
-    nextContentIdx++;
-  }
-  withoutMarker.splice(datumIdx + 1, nextContentIdx - datumIdx - 1,
-    ...(enabled ? ['', 'Instagram-Poster: Ja', ''] : ['']));
-  return withoutMarker.join(eol);
-}
-
 async function setManagedInfographicInstagramPoster(item, enabled) {
-  if (typeof enabled !== 'boolean') throw duplicateFail(400, 'Der Instagram-Poster-Wert ist ungültig.');
+  if (typeof enabled !== 'boolean') throw httpError(400, 'Der Instagram-Poster-Wert ist ungültig.');
   const original = await fs.promises.readFile(item.mdPath, 'utf8');
   const updated = setInstagramPosterMetadata(original, enabled);
   if (updated === original) return async () => {};
@@ -1507,7 +731,7 @@ async function setManagedInfographicInstagramPoster(item, enabled) {
 
 async function prepareInfographicPosterBatch(changes) {
   if (!Array.isArray(changes) || !changes.length || changes.length > 2000) {
-    throw duplicateFail(400, 'Bitte mindestens eine und höchstens 2000 Änderungen senden.');
+    throw httpError(400, 'Bitte mindestens eine und höchstens 2000 Änderungen senden.');
   }
   const seen = new Set();
   const mappings = [];
@@ -1519,18 +743,18 @@ async function prepareInfographicPosterBatch(changes) {
     const id = typeof change?.id === 'string' ? change.id : '';
     if (!id || seen.has(id) || typeof change.enabled !== 'boolean'
         || (change.expected !== undefined && typeof change.expected !== 'boolean')) {
-      throw duplicateFail(400, 'Eine Poster-Änderung ist ungültig oder doppelt enthalten.');
+      throw httpError(400, 'Eine Poster-Änderung ist ungültig oder doppelt enthalten.');
     }
     seen.add(id);
     const article = articleById.get(id);
     const mdPath = article?.filePath ? path.resolve(article.filePath) : '';
     if (!article || article.author !== INFOGRAPHICS_AUTHOR || !article.ownImage
         || !mdPath.startsWith(root) || path.extname(mdPath).toLowerCase() !== '.md') {
-      throw duplicateFail(404, 'Infografik nicht gefunden: ' + id);
+      throw httpError(404, 'Infografik nicht gefunden: ' + id);
     }
     const current = article.instagramPoster === true;
     if (change.expected !== undefined && change.expected !== current) {
-      throw duplicateFail(409, 'Die Poster-Markierung wurde zwischenzeitlich geändert. Bitte die Ansicht neu laden.');
+      throw httpError(409, 'Die Poster-Markierung wurde zwischenzeitlich geändert. Bitte die Ansicht neu laden.');
     }
     if (current === change.enabled) continue;
     const original = await fs.promises.readFile(mdPath, 'utf8');
@@ -1543,74 +767,12 @@ async function prepareInfographicPosterBatch(changes) {
   return { mappings, years: [...years], updated };
 }
 
-// Alle Quellen erst in temporäre Namen verschieben, dann die Ziele belegen:
-// dadurch sind auch Vertauschungen von _1, _2, _3 usw. ohne Überschreiben
-// möglich. Fehler rollen sowohl Dateinamen als auch Markdown-Inhalte zurück.
-async function moveInfographicFiles(mappings) {
-  if (!mappings.length) return async () => {};
-  const key = file => process.platform === 'win32' ? file.toLowerCase() : file;
-  const sources = new Set(mappings.map(item => key(item.source)));
-  const targets = new Set();
-  if (sources.size !== mappings.length) throw duplicateFail(409, 'Eine Infografikdatei ist mehrfach enthalten.');
-  for (const item of mappings) {
-    const targetKey = key(item.target);
-    if (targets.has(targetKey)) throw duplicateFail(409, 'Zwei Infografikdateien hätten denselben Zielnamen.');
-    targets.add(targetKey);
-    const stat = await fs.promises.lstat(item.source);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw duplicateFail(409, 'Symbolische Links oder Ordner können nicht verschoben werden.');
-    try {
-      await fs.promises.lstat(item.target);
-      if (!sources.has(targetKey)) throw duplicateFail(409, 'Zieldatei existiert bereits: ' + path.basename(item.target));
-    } catch (error) {
-      if (error.status) throw error;
-      if (error.code !== 'ENOENT') throw error;
-    }
-  }
-  const token = crypto.randomBytes(8).toString('hex');
-  const work = await Promise.all(mappings.map(async (item, index) => ({
-    ...item,
-    temp: path.join(path.dirname(item.source), '.infographic-' + token + '-' + index + '.tmp'),
-    original: item.content === undefined ? undefined : await fs.promises.readFile(item.source),
-    state: 'source',
-  })));
-  try {
-    for (const item of work) {
-      await fs.promises.rename(item.source, item.temp);
-      item.state = 'temp';
-    }
-    for (const item of work) {
-      if (item.content !== undefined) await fs.promises.writeFile(item.temp, item.content);
-    }
-    for (const item of work) {
-      await fs.promises.rename(item.temp, item.target);
-      item.state = 'target';
-    }
-  } catch (error) {
-    for (const item of work.filter(item => item.state === 'target').reverse()) {
-      await fs.promises.rename(item.target, item.temp);
-      item.state = 'temp';
-    }
-    for (const item of work) {
-      if (item.state === 'temp' && item.original !== undefined) await fs.promises.writeFile(item.temp, item.original);
-    }
-    for (const item of [...work].reverse()) {
-      if (item.state === 'temp') await fs.promises.rename(item.temp, item.source);
-    }
-    throw error;
-  }
-  return async () => {
-    await moveInfographicFiles(work.map(item => ({
-      source: item.target, target: item.source, content: item.original,
-    })));
-  };
-}
-
 async function reorderManagedInfographics(context, orderedIds) {
   const { bundles, baseStem, dir } = context;
   if (!Array.isArray(orderedIds) || orderedIds.length !== bundles.length
     || new Set(orderedIds).size !== bundles.length
     || orderedIds.some(id => !bundles.some(item => item.id === id))) {
-    throw duplicateFail(400, 'Die Reihenfolge enthält nicht genau die vorhandenen Infografiken.');
+    throw httpError(400, 'Die Reihenfolge enthält nicht genau die vorhandenen Infografiken.');
   }
   if (!bundles.length) return async () => {};
   const byId = new Map(bundles.map(item => [item.id, item]));
@@ -1630,7 +792,7 @@ async function reorderManagedInfographics(context, orderedIds) {
       if (!blockedStems.has(candidate.toLowerCase())) break;
       nextOrdinal++;
     }
-    if (nextOrdinal >= 1000) throw duplicateFail(409, 'Keine freien Infografik-Dateinamen gefunden.');
+    if (nextOrdinal >= 1000) throw httpError(409, 'Keine freien Infografik-Dateinamen gefunden.');
     const ordinal = nextOrdinal++;
     const stem = infographicAttachmentStem(baseStem, ordinal);
     for (const source of bundle.files) {
@@ -1650,13 +812,13 @@ async function infographicTrashFolder(year) {
   const ensureDirectory = async dir => {
     try {
       const stat = await fs.promises.lstat(dir);
-      if (!stat.isDirectory() || stat.isSymbolicLink()) throw duplicateFail(409, 'Der Infografik-Papierkorb ist kein sicherer Ordner.');
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw httpError(409, 'Der Infografik-Papierkorb ist kein sicherer Ordner.');
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
       await fs.promises.mkdir(dir);
     }
     const real = await fs.promises.realpath(dir);
-    if (!real.startsWith(root + path.sep)) throw duplicateFail(403, 'Der Papierkorb liegt außerhalb des Infografik-Ordners.');
+    if (!real.startsWith(root + path.sep)) throw httpError(403, 'Der Papierkorb liegt außerhalb des Infografik-Ordners.');
   };
   await ensureDirectory(INFOGRAPHIC_TRASH_DIR);
   const yearDir = path.join(INFOGRAPHIC_TRASH_DIR, year);
@@ -1667,17 +829,17 @@ async function infographicTrashFolder(year) {
     try { await fs.promises.mkdir(folder); return folder; }
     catch (error) { if (error.code !== 'EEXIST') throw error; }
   }
-  throw duplicateFail(409, 'Kein freier Platz im Infografik-Papierkorb gefunden.');
+  throw httpError(409, 'Kein freier Platz im Infografik-Papierkorb gefunden.');
 }
 
 function nextDuplicateInfographicTarget(blog, reserved) {
   if (conflictingInfographicBase(blog)) {
-    throw duplicateFail(409, 'Unter diesem Dateistamm existiert eine eigenständige oder anders zugeordnete Infografik.');
+    throw httpError(409, 'Unter diesem Dateistamm existiert eine eigenständige oder anders zugeordnete Infografik.');
   }
   const year = blog.year || blog.date?.slice(0, 4) || '';
-  if (!/^\d{4}$/.test(year)) throw duplicateFail(400, 'Der Blogartikel hat kein gültiges Jahr.');
+  if (!/^\d{4}$/.test(year)) throw httpError(400, 'Der Blogartikel hat kein gültiges Jahr.');
   const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
-  if (!dir) throw duplicateFail(400, 'Kein gültiges Infografik-Ziel gefunden.');
+  if (!dir) throw httpError(400, 'Kein gültiges Infografik-Ziel gefunden.');
   const baseStem = path.basename(blog.filePath, '.md');
   for (let ordinal = firstAvailableInfographicOrdinal(blog); ordinal < 1000; ordinal++) {
     const stem = infographicAttachmentStem(baseStem, ordinal);
@@ -1686,14 +848,14 @@ function nextDuplicateInfographicTarget(blog, reserved) {
       return { dir, stem, ordinal };
     }
   }
-  throw duplicateFail(409, 'Es konnte kein freier Infografik-Dateiname gefunden werden.');
+  throw httpError(409, 'Es konnte kein freier Infografik-Dateiname gefunden werden.');
 }
 
 function planDuplicateMigration(blog, facebook) {
   const bundles = [];
   for (const info of infographicGroups.get(facebook.id) || []) {
     if (!info.ownImage) continue;
-    if (info.hasBody) throw duplicateFail(409, `„${info.title}“ enthält eigenen Text und wird nicht automatisch migriert.`);
+    if (info.hasBody) throw httpError(409, `„${info.title}“ enthält eigenen Text und wird nicht automatisch migriert.`);
     bundles.push({ kind: 'infographic', sourceArticle: info, files: filesForInfographic(info) });
   }
   const reserved = new Set();
@@ -1720,7 +882,7 @@ async function migrateDuplicateInfographics(blog, facebook) {
   if (!plan.length) return { migrations: [], rollback: async () => {} };
   const blogContent = await fs.promises.readFile(blog.filePath, 'utf8');
   const header = validateInfographicHeader(blogContent);
-  if (!header.hasTitle || !header.date) throw duplicateFail(400, 'Der Blogartikel hat keinen gültigen Titel- und Datumskopf.');
+  if (!header.hasTitle || !header.date) throw httpError(400, 'Der Blogartikel hat keinen gültigen Titel- und Datumskopf.');
 
   const moved = [];
   const created = [];
@@ -1740,18 +902,18 @@ async function migrateDuplicateInfographics(blog, facebook) {
     for (const bundle of plan) {
       await fs.promises.mkdir(bundle.dir, { recursive: true });
       const realTargetDir = await fs.promises.realpath(bundle.dir);
-      if (!isInsideArchive(realTargetDir)) throw duplicateFail(403, 'Das Infografik-Ziel liegt außerhalb des Archivs.');
+      if (!isInsideArchive(realTargetDir)) throw httpError(403, 'Das Infografik-Ziel liegt außerhalb des Archivs.');
       for (const mapping of bundle.mappings) {
         const source = path.resolve(mapping.source);
         const target = path.resolve(mapping.target);
         if (!source.startsWith(WWW_DIR + path.sep) || !target.startsWith(WWW_DIR + path.sep)) {
-          throw duplicateFail(403, 'Ein Medienpfad liegt außerhalb des Archivs.');
+          throw httpError(403, 'Ein Medienpfad liegt außerhalb des Archivs.');
         }
         const stat = await fs.promises.lstat(source);
-        if (stat.isSymbolicLink() || !stat.isFile()) throw duplicateFail(409, 'Symbolische Links können nicht migriert werden.');
+        if (stat.isSymbolicLink() || !stat.isFile()) throw httpError(409, 'Symbolische Links können nicht migriert werden.');
         const realSource = await fs.promises.realpath(source);
-        if (!isInsideArchive(realSource)) throw duplicateFail(403, 'Eine Quelldatei liegt außerhalb des Archivs.');
-        try { await fs.promises.access(target); throw duplicateFail(409, `Zieldatei existiert bereits: ${path.basename(target)}`); }
+        if (!isInsideArchive(realSource)) throw httpError(403, 'Eine Quelldatei liegt außerhalb des Archivs.');
+        try { await fs.promises.access(target); throw httpError(409, `Zieldatei existiert bereits: ${path.basename(target)}`); }
         catch (error) { if (error.status) throw error; if (error.code !== 'ENOENT') throw error; }
       }
 
@@ -2268,11 +1430,11 @@ app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
       undoOrder = await reorderManagedInfographics(context, req.body.ids);
     } else if (req.body?.action === 'instagram-poster') {
       const item = context.items.find(candidate => candidate.id === req.body.id);
-      if (!item) throw duplicateFail(404, 'Infografik nicht gefunden.');
+      if (!item) throw httpError(404, 'Infografik nicht gefunden.');
       undoInstagramPoster = await setManagedInfographicInstagramPoster(item, req.body.enabled);
     } else if (req.body?.action === 'trash') {
       const item = context.bundles.find(bundle => bundle.id === req.body.id);
-      if (!item) throw duplicateFail(404, 'Infografik nicht gefunden.');
+      if (!item) throw httpError(404, 'Infografik nicht gefunden.');
       trashFolder = await infographicTrashFolder(context.year);
       undoTrash = await moveInfographicFiles(item.files.map(source => ({
         source, target: path.join(trashFolder, path.basename(source)),
@@ -2281,7 +1443,7 @@ app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
       undoOrder = await reorderManagedInfographics(
         { ...context, bundles: remaining }, remaining.map(bundle => bundle.id));
     } else {
-      throw duplicateFail(400, 'Unbekannte Infografik-Aktion.');
+      throw httpError(400, 'Unbekannte Infografik-Aktion.');
     }
     await refreshInfographicsForYear(context.year);
     res.json({ ok: true, trash: trashFolder
@@ -2416,54 +1578,6 @@ app.post(
 // Markdown + Bild in einer Anfrage (Bild base64 in JSON, keine Zusatz-Abhängigkeit).
 // Dateiname: <Datum>_<Slug aus dem Titel>; Konflikt → -2, -3 … (nicht _2, das
 // bedeutet „Variante“). Unveränderte Platzhalter der Vorlage werden entfernt.
-
-function slugify(title) {
-  return String(title || '').toLowerCase()
-    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
-    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-    .slice(0, 80).replace(/-+$/, '');
-}
-
-// „Kategorien: [a, b]“ → „Kategorien: a, b“, leere Liste entfernen; ein
-// stehengebliebenes „[Inhalt]“ unter der Trennlinie entfernen. Im Dialog
-// angehakte Kategorien (nur Taxonomie-Labels) kommen erst hier in die Datei:
-// in eine vorhandene Kategorien-Zeile, sonst als neue Zeile nach „Datum:“.
-function normalizeNewInfographicMarkdown(markdown, categories = []) {
-  const checked = [...new Set((categories || []).filter(label => TAXONOMY_LABELS.has(label)))];
-  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
-  const result = [];
-  const separatorIdx = lines.findIndex(line => /^(\*{4,}|-{4,})\s*$/.test(line.trim()));
-  const hasCategoryLine = lines.slice(0, separatorIdx < 0 ? lines.length : separatorIdx)
-    .some(line => /^\s*\**_?kategorien:/i.test(line));
-  let afterSeparator = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^(\*{4,}|-{4,})\s*$/.test(line.trim())) afterSeparator = true;
-    const m = !afterSeparator && line.match(/^(\s*\**_?kategorien:\**_?\s*)(.*)$/i);
-    if (m) {
-      const values = [...new Set([...m[2].replace(/^\[|\]$/g, '').split(',').map(v => v.trim()).filter(Boolean), ...checked])];
-      checked.length = 0;
-      if (values.length) result.push(m[1] + values.join(', '));
-      else if (result.length && result[result.length - 1].trim() === '' && (lines[i + 1] ?? '').trim() === '') i++;
-      continue;
-    }
-    result.push(line);
-    if (checked.length && !hasCategoryLine && !afterSeparator && /^[\s*_]*datum:/i.test(line)) {
-      result.push(`Kategorien: ${checked.join(', ')}`);
-      checked.length = 0;
-    }
-  }
-  let text = result.join('\n');
-  text = text.replace(/(\n(?:\*{4,}|-{4,})[ \t]*\n)\s*\[Inhalt\]\s*$/i, '$1');
-  return text.replace(/\s+$/, '') + '\n';
-}
-
-function detectImageType(buffer) {
-  if (buffer.length > 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return '.png';
-  if (buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return '.jpg';
-  return null;
-}
 
 app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
   if (req.get('sec-fetch-site') === 'cross-site') return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
@@ -2693,7 +1807,7 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
     for (const item of items) {
       duplicatePair(item.blogId, item.facebookId);
       if (facebookIds.has(item.facebookId)) {
-        throw duplicateFail(400, 'Ein Quellartikel darf nur einmal in einer Sammelaktion vorkommen.');
+        throw httpError(400, 'Ein Quellartikel darf nur einmal in einer Sammelaktion vorkommen.');
       }
       facebookIds.add(item.facebookId);
     }
@@ -2768,10 +1882,10 @@ app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
       refreshDuplicateState();
       return res.json({ ok: true });
     }
-    if (!['link', 'migrate'].includes(action)) throw duplicateFail(400, 'Unbekannte Dublettenaktion.');
+    if (!['link', 'migrate'].includes(action)) throw httpError(400, 'Unbekannte Dublettenaktion.');
     const existing = duplicateStore.find(blogId, facebookId);
     if (action === 'migrate' && existing?.status !== 'linked') {
-      throw duplicateFail(409, 'Grafiken können erst nach dem Verknüpfen migriert werden.');
+      throw httpError(409, 'Grafiken können erst nach dem Verknüpfen migriert werden.');
     }
     const result = await linkDuplicatePair({
       blogId, facebookId,
