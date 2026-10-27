@@ -14,7 +14,7 @@ const {
   AUDIOBOOK_AUTHOR, createAudiobookLibrary, createProgressStore, loadAudiobookConfig, installAudiobookRoutes,
 } = require('./audiobooks.cjs');
 const { createBookmarkStore, installBookmarkRoutes } = require('./bookmarks.cjs');
-const { isPathInside, installMediaRoutes } = require('./media-files.cjs');
+const { installMediaRoutes } = require('./media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./login-limiter.cjs');
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./security-headers.cjs');
 const { createArchiveLock } = require('./archive-lock.cjs');
@@ -27,7 +27,10 @@ const {
   parseArticleSearchQuery, bodyExcerpt, mergeCategories, autoCategorize,
   extractSourceUrl, parseArticle,
 } = require('./lib/article-parser.cjs');
-const { createDirectoryCache, findSibling, fileUrl, audioFileUrl, resolveUnder } = require('./lib/archive-files.cjs');
+const {
+  createDirectoryCache, findSibling, fileUrl, audioFileUrl, isPathInside, resolveUnder, yearFromRelativeDir,
+} = require('./lib/archive-files.cjs');
+const { resolveMediaRequest } = require('./media-files.cjs');
 const {
   INFOGRAPHICS_AUTHOR, linkInfographics, infographicYearsFromMigrations, imageExtensionFromContentType,
   infographicStemExists, infographicAttachmentStem, validateInfographicHeader, removeCategoryLines,
@@ -377,12 +380,22 @@ function exposeGroupForUser(anchor, user) {
   return images ? { ...exposed, imageUrl: images[0].url, images } : exposed;
 }
 
-async function buildIndex() {
-  try { await rebuildIndex(); }
-  catch (error) {
+// Reindex-Status für Voll- und Teil-Reindex: läuft (sofort, damit die Sperre
+// greift), fertig mit der Artikelzahl des neuen Index oder fertig mit Fehler.
+async function withReindexState(articleCount, task) {
+  reindexState = { running: true, processed: 0, articles: articleCount, done: false };
+  try {
+    const result = await task();
+    reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
+    return result;
+  } catch (error) {
     reindexState = { ...reindexState, running: false, done: true, error: error.message };
     throw error;
   }
+}
+
+function buildIndex() {
+  return withReindexState(0, rebuildIndex);
 }
 
 function prepareLinkedArticles(nextSourceArticles, authorPriority) {
@@ -437,8 +450,7 @@ async function refreshScrapedMarkdownFiles(filenames) {
   if (!sourceArticles.length) return buildIndex();
 
   const t0 = Date.now();
-  reindexState = { running: true, processed: 0, articles: articles.length, done: false };
-  try {
+  await withReindexState(articles.length, async () => {
     const replacements = [];
     for (const filename of uniqueFiles) {
       if (path.extname(filename).toLowerCase() !== '.md' || !isPathInside(WWW_DIR, filename)) {
@@ -448,8 +460,7 @@ async function refreshScrapedMarkdownFiles(filenames) {
       const segments = relative.split(path.sep);
       const author = segments.shift();
       if (!author || !segments.length) throw new Error('Der Scraper-Artikel hat keinen gültigen Autorpfad.');
-      const relativeDir = path.dirname(segments.join(path.sep));
-      const year = relativeDir.split(path.sep).filter(segment => /^\d{4}$/.test(segment)).at(-1) || null;
+      const year = yearFromRelativeDir(path.dirname(segments.join(path.sep)));
       const scanned = [];
       await scanDir(path.dirname(filename), author, year, scanned, { strict: true, targetFile: filename });
       const replacement = scanned.find(article => path.resolve(article.filePath) === filename);
@@ -457,12 +468,8 @@ async function refreshScrapedMarkdownFiles(filenames) {
       replacements.push(replacement);
     }
     publishArticleIndex(upsertArticleIndexEntries(sourceArticles, replacements));
-    reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-  console.log(`[OK] ${replacements.length} Scraper-Artikel gezielt neu eingelesen (${Date.now() - t0}ms)`);
-  } catch (error) {
-    reindexState = { ...reindexState, running: false, done: true, error: error.message };
-    throw error;
-  }
+    console.log(`[OK] ${replacements.length} Scraper-Artikel gezielt neu eingelesen (${Date.now() - t0}ms)`);
+  });
 }
 
 async function republishArticleIndex() {
@@ -480,12 +487,10 @@ async function refreshMarkdownIndex({ id, filename } = {}) {
   if (!id || !filename) return buildIndex();
 
   const t0 = Date.now();
-  reindexState = { running: true, processed: 0, articles: articles.length, done: false };
-  try {
+  await withReindexState(articles.length, async () => {
     if (isPathInside(AUDIO_DIR, filename)) {
       await audiobooks.refresh(id);
-      reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-    console.log(`[OK] Hoerbuch "${id}" gezielt aktualisiert (${Date.now() - t0}ms)`);
+      console.log(`[OK] Hoerbuch "${id}" gezielt aktualisiert (${Date.now() - t0}ms)`);
       return;
     }
     if (!isPathInside(WWW_DIR, filename)) throw new Error('Der bearbeitete Artikel liegt außerhalb des Archivs.');
@@ -497,20 +502,13 @@ async function refreshMarkdownIndex({ id, filename } = {}) {
       throw new Error(`Artikel „${id}“ verweist auf einen unerwarteten Dateipfad.`);
     }
 
-    const authorRoot = path.join(WWW_DIR, current.author);
-    const relativeDir = path.relative(authorRoot, path.dirname(filename));
-    const year = relativeDir.split(path.sep).filter(segment => /^\d{4}$/.test(segment)).at(-1) || null;
+    const year = yearFromRelativeDir(path.relative(path.join(WWW_DIR, current.author), path.dirname(filename)));
     const scanned = [];
     await scanDir(path.dirname(filename), current.author, year, scanned, { strict: true, targetFile: filename });
     const replacement = scanned.find(article => article.id === id);
     publishArticleIndex(replaceArticleIndexEntry(sourceArticles, id, replacement));
-
-    reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-  console.log(`[OK] Artikel "${id}" gezielt neu eingelesen (${Date.now() - t0}ms)`);
-  } catch (error) {
-    reindexState = { ...reindexState, running: false, done: true, error: error.message };
-    throw error;
-  }
+    console.log(`[OK] Artikel "${id}" gezielt neu eingelesen (${Date.now() - t0}ms)`);
+  });
 }
 
 async function refreshInfographicsForYears(years) {
@@ -519,8 +517,7 @@ async function refreshInfographicsForYears(years) {
   if (uniqueYears.some(year => !/^\d{4}$/.test(year))) throw new Error('Ungültiges Infografik-Jahr.');
   if (!sourceArticles.length) return buildIndex();
   const t0 = Date.now();
-  reindexState = { running: true, processed: 0, articles: 0, done: false };
-  try {
+  await withReindexState(0, async () => {
     let nextSourceArticles = sourceArticles;
     let scannedCount = 0;
     for (const year of uniqueYears) {
@@ -535,12 +532,8 @@ async function refreshInfographicsForYears(years) {
     // Mehrere geänderte Jahrgänge gemeinsam veröffentlichen: Leser sehen so
     // entweder vollständig den alten oder vollständig den neuen Indexstand.
     publishArticleIndex(nextSourceArticles);
-    reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-  console.log(`[OK] Infografiken ${uniqueYears.join(', ')} neu eingelesen (${scannedCount} Eintraege, ${Date.now() - t0}ms)`);
-  } catch (error) {
-    reindexState = { ...reindexState, running: false, done: true, error: error.message };
-    throw error;
-  }
+    console.log(`[OK] Infografiken ${uniqueYears.join(', ')} neu eingelesen (${scannedCount} Eintraege, ${Date.now() - t0}ms)`);
+  });
 }
 
 async function refreshInfographicsForYear(year) {
@@ -550,7 +543,6 @@ async function refreshInfographicsForYear(year) {
 async function rebuildIndex() {
   console.log('Building article index...');
   const t0 = Date.now();
-  reindexState = { running: true, processed: 0, articles: 0, done: false };
   const collector = [];
 
   let authorDirs;
@@ -558,7 +550,6 @@ async function rebuildIndex() {
     authorDirs = (await fs.promises.readdir(WWW_DIR, { withFileTypes: true })).filter(d => d.isDirectory());
   } catch (err) {
     console.error('Cannot read www directory:', err.message);
-    reindexState = { running: false, processed: 0, articles: 0, done: true };
     throw err;
   }
 
@@ -572,8 +563,6 @@ async function rebuildIndex() {
   // Hörbücher werden nur beim vollständigen Neuindex erneut eingelesen.
   await audiobooks.rebuild();
   publishArticleIndex(uniqueArticles(collector));
-
-  reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
   console.log(`[OK] ${articles.length} articles, ${audiobooks.books.length} audiobooks indexed in ${Date.now() - t0}ms`);
 }
 
@@ -826,7 +815,7 @@ async function infographicTrashFolder(year) {
       await fs.promises.mkdir(dir);
     }
     const real = await fs.promises.realpath(dir);
-    if (!real.startsWith(root + path.sep)) throw httpError(403, 'Der Papierkorb liegt außerhalb des Infografik-Ordners.');
+    if (!isPathInside(root, real)) throw httpError(403, 'Der Papierkorb liegt außerhalb des Infografik-Ordners.');
   };
   await ensureDirectory(INFOGRAPHIC_TRASH_DIR);
   const yearDir = path.join(INFOGRAPHIC_TRASH_DIR, year);
@@ -896,11 +885,7 @@ async function migrateDuplicateInfographics(blog, facebook) {
   const created = [];
   const overwrittenMarkdown = [];
   const archiveRoot = await fs.promises.realpath(WWW_DIR);
-  const isInsideArchive = file => {
-    const root = process.platform === 'win32' ? archiveRoot.toLowerCase() : archiveRoot;
-    const candidate = process.platform === 'win32' ? file.toLowerCase() : file;
-    return candidate.startsWith(root + path.sep);
-  };
+  const isInsideArchive = file => isPathInside(archiveRoot, file);
   const rollback = async () => {
     for (const file of [...created].reverse()) await fs.promises.unlink(file).catch(() => {});
     for (const item of [...overwrittenMarkdown].reverse()) await fs.promises.writeFile(item.path, item.content).catch(() => {});
@@ -914,7 +899,7 @@ async function migrateDuplicateInfographics(blog, facebook) {
       for (const mapping of bundle.mappings) {
         const source = path.resolve(mapping.source);
         const target = path.resolve(mapping.target);
-        if (!source.startsWith(WWW_DIR + path.sep) || !target.startsWith(WWW_DIR + path.sep)) {
+        if (!isPathInside(WWW_DIR, source) || !isPathInside(WWW_DIR, target)) {
           throw httpError(403, 'Ein Medienpfad liegt außerhalb des Archivs.');
         }
         const stat = await fs.promises.lstat(source);
@@ -1204,9 +1189,8 @@ function resolvePreviewImagePath(item) {
   let rel;
   try { rel = decodeURIComponent(pathname.replace(/^\/(?:files|audio-files)\//, '')); }
   catch { return null; }
-  const absPath = path.resolve(path.join(root, rel));
-  if (!absPath.startsWith(root + path.sep)) return null;
-  return absPath;
+  // Dieselbe Prüfung wie /files/* und /audio-files/* (keine Punktsegmente).
+  return resolveMediaRequest(root, rel)?.absPath || null;
 }
 
 function ogDescription(article) {
@@ -1381,8 +1365,8 @@ app.get('/api/prompts', attachUser, (_req, res) => {
 app.get('/api/prompts/:file', attachUser, (req, res) => {
   const file = path.basename(req.params.file);
   if (!file.toLowerCase().endsWith('.txt')) return res.status(400).end();
-  const absPath = path.resolve(path.join(PROMPTS_DIR, file));
-  if (!absPath.startsWith(PROMPTS_DIR + path.sep)) return res.status(400).end();
+  const absPath = path.resolve(PROMPTS_DIR, file);
+  if (!isPathInside(PROMPTS_DIR, absPath)) return res.status(400).end();
   try {
     const txt = fs.readFileSync(absPath, 'utf8');
     const { prompt } = parsePromptDefinition(txt);
@@ -1397,7 +1381,7 @@ app.get('/api/prompts/:file', attachUser, (req, res) => {
 app.post('/api/reindex', requireAdminAccess, (req, res) => {
   if (reindexState.running) return res.json({ started: false, reason: 'already running' });
   if (archiveLock.busy) return sendArchiveBusy(res, { started: false });
-  // rebuildIndex setzt reindexState.running synchron und belegt damit die Sperre.
+  // withReindexState setzt reindexState.running synchron und belegt damit die Sperre.
   buildIndex().catch(console.error);
   res.json({ started: true });
 });

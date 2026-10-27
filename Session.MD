@@ -1674,3 +1674,29 @@ also weiterhin ohne Neustart, und gespeicherte Artikel erscheinen sofort.
   - `server.js`, `lib/app-shell.cjs`
   - `scraper/scrape_all.js`, `scraper/scraper-config.json`
 - Danach den Dienst neu starten.
+
+## 32. Aktualisierung 27.10.2026 – Kleinere Code-Punkte aus dem Review
+
+- **Reindex-Status:** `withReindexState(anzahl, task)` in `server.js` ersetzt die fünf gleichartigen
+  try/catch-Blöcke (Voll-Reindex, Scraper-Dateien, Editor-Datei, Infografik-Jahrgänge).
+  - Der Status „läuft“ wird weiterhin sofort gesetzt, damit die Archivsperre greift.
+  - Danach gilt „fertig“ mit der Artikelzahl des neuen Index oder „fertig mit Fehler“.
+- **Jahr aus dem Pfad:** `yearFromRelativeDir` (`lib/archive-files.cjs`) ersetzt die zwei kopierten
+  Ausdrücke.
+- **Pfadschutz an einer Stelle:** `isPathInside` liegt jetzt in `lib/archive-files.cjs`;
+  `media-files.cjs` und `resolveUnder` nutzen es.
+  - Die fünf direkten `startsWith(root + path.sep)`-Prüfungen in `server.js` (Papierkorb, Dublettenmigration,
+    Prompts) sind ersetzt.
+  - Die Vorschaubilder (`/og-image`) prüfen ihren Pfad jetzt mit `resolveMediaRequest`, wie `/files/*`.
+  - Die eigene Windows-Sonderbehandlung (Kleinschreibung) entfällt, weil `path.relative` sie schon beachtet.
+- **Papierkorb in `/files/*`:** Wird nur noch einmal geprüft; das war schon mit der Pfad-Korrektur
+  (`media-files.cjs`) erledigt.
+
+**Geprüft:**
+- Node-Suite 407/407, neu: Test für `isPathInside`, `resolveUnder` und `yearFromRelativeDir`.
+- Echter Server mit Test-Admin: Reindex über `/api/reindex`, Status läuft durch bis „fertig“
+  (7.096 Artikel); Vorschaubild und Prompts antworten wie vorher.
+
+**Deployment:**
+- Kopieren: `server.js`, `media-files.cjs`, `lib/archive-files.cjs`.
+- Danach den Dienst neu starten.

@@ -37,7 +37,8 @@ server-side files are isolated under `tts-server/` and never run as part of `ser
 stores, sessions, lock) and the routes; pure logic lives in `lib/` and can be required by scripts
 and tests without starting the server: `article-parser.cjs` (`parseArticle`, date/search parsing,
 taxonomy), `infographics.cjs` (`linkInfographics`, naming, header editing, `moveInfographicFiles`),
-`archive-files.cjs` (directory cache, `findSibling`, file URLs, `resolveUnder`), `article-index.cjs`
+`archive-files.cjs` (directory cache, `findSibling`, file URLs, `isPathInside`, `resolveUnder`,
+`yearFromRelativeDir` — the only path-containment checks; never write `startsWith(root + path.sep)`), `article-index.cjs`
 (Fuse index, list helpers for partial reindex, scraper manifest), `app-shell.cjs` (PWA version, stat-based
 file caches for `index.html` and the service-worker version), `article-body-cache.cjs` (rendered article
 bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categories), `session-file-store.cjs`

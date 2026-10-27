@@ -7,13 +7,9 @@
 // wurde als öffentlicher Autor „Videos“ geprüft, aber aus „Joe Turan“ geliefert).
 
 const path = require('path');
+const { isPathInside } = require('./lib/archive-files.cjs');
 
 const IS_WINDOWS = process.platform === 'win32';
-
-function isPathInside(root, target) {
-  const relative = path.relative(path.resolve(root), path.resolve(target));
-  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
-}
 
 // Auf Windows unterscheidet das Dateisystem keine Groß-/Kleinschreibung.
 function sameName(actual, expected) {

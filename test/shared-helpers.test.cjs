@@ -136,3 +136,23 @@ test('escapeHtml maskiert alle HTML-Sonderzeichen', () => {
   assert.equal(escapeHtml(null), '');
   assert.equal(escapeHtml(0), '0');
 });
+
+test('isPathInside, resolveUnder und yearFromRelativeDir prüfen Pfade an einer Stelle', () => {
+  const { isPathInside, resolveUnder, yearFromRelativeDir } = require('../lib/archive-files.cjs');
+  const root = path.resolve(os.tmpdir(), 'archiv');
+  assert.equal(isPathInside(root, path.join(root, 'Autor', 'a.md')), true);
+  assert.equal(isPathInside(root, root), false, 'die Wurzel selbst liegt nicht „innerhalb“');
+  assert.equal(isPathInside(root, path.join(root, '..', 'anderes')), false);
+  assert.equal(isPathInside(root, root + '-nachbar'), false, 'gleicher Präfix, anderer Ordner');
+  if (process.platform === 'win32') assert.equal(isPathInside(root, path.join(root.toUpperCase(), 'x')), true);
+
+  assert.equal(resolveUnder(root, 'Autor', '2024'), path.join(root, 'Autor', '2024'));
+  assert.equal(resolveUnder(root), root);
+  assert.equal(resolveUnder(root, '..', 'x'), null);
+
+  assert.equal(yearFromRelativeDir('2024'), '2024');
+  assert.equal(yearFromRelativeDir(path.join('2019', 'orig', '2024')), '2024');
+  assert.equal(yearFromRelativeDir('2024/orig'), '2024');
+  assert.equal(yearFromRelativeDir('orig'), null);
+  assert.equal(yearFromRelativeDir(''), null);
+});
