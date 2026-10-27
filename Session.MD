@@ -1603,3 +1603,38 @@ also weiterhin ohne Neustart, und gespeicherte Artikel erscheinen sofort.
 **Deployment:**
 - Kopieren: `server.js`, `lib/app-shell.cjs`, `lib/article-body-cache.cjs` (neu).
 - Danach den Dienst neu starten.
+
+## 30. Aktualisierung 27.10.2026 – Robustheit und Sicherheit
+
+- **TTS-Routen:** Ohne eigenen Status (z. B. wenn der TTS-Dienst nicht erreichbar ist) antworten sie mit
+  einer allgemeinen Meldung; die Details stehen im Dienst-Log. Eigene Meldungen (409, 404, 502 …) bleiben.
+- **JSON-Stores** (Lesezeichen, Hörfortschritt, Dubletten): `createJsonState` in `lib/atomic-file.cjs`
+  ersetzt `createJsonFile`.
+  - Eine Änderung läuft auf einer Kopie; der neue Stand gilt erst, wenn die Datei geschrieben ist.
+  - Scheitert das Schreiben, bleiben Speicher und Datei auf dem alten Stand.
+  - Änderungen laufen nacheinander, jede sieht die vorige; ohne Änderung wird nicht geschrieben.
+- **Fehler-Handler:** Zu große Anfragen melden je nach Route „Bilddatei größer als 10 MB“ (Infografiken),
+  „Aufnahme größer als 10 MB“ (Stimmen) oder allgemein „Die Anfrage ist zu groß.“. Kaputtes JSON ergibt
+  400 „Ungültige Anfrage.“ statt der Express-Standardseite.
+- **Volltextsuche:** Das Fuse-Limit von 2.000 Treffern vor dem Filtern ist entfallen. Gemessen: Bei „frau“
+  mit Autor „Stefan Hiene“ fehlten 421 von 823 Treffern. Ohne Limit ist die Suche nicht langsamer, der
+  Aufwand steckt im Durchsuchen selbst.
+- **Sitzungen überstehen Neustarts:** `lib/session-file-store.cjs` speichert sie in `sessions.json`
+  (`SESSIONS_FILE`, Rechte 0600, gitignored).
+  - Änderungen werden nach einer Sekunde gebündelt und atomar geschrieben, beim Beenden sofort.
+  - Abgelaufene Sitzungen werden beim Laden und stündlich entfernt.
+  - Das funktioniert nur mit festem `SESSION_SECRET` (in Produktion Pflicht); ohne ihn passt die Signatur
+    der Cookies nach dem Neustart nicht mehr.
+  - Tests und Skripte, die `server.js` nur laden, nutzen weiter den flüchtigen Speicher.
+
+**Geprüft:**
+- Node-Suite 401/401, neu: `test/session-file-store.test.cjs` und `test/error-responses.test.cjs`, dazu
+  der Schreibfehler-Test in `test/shared-helpers.test.cjs`.
+- Echter Server mit Test-Admin: anmelden, Server beenden, neu starten – `/api/me` liefert weiter den
+  angemeldeten Admin.
+
+**Deployment:**
+- Kopieren: `server.js`, `.gitignore`, `audiobooks.cjs`, `bookmarks.cjs`, `duplicates.cjs`,
+  `tts/jobs.cjs`, `lib/atomic-file.cjs`, `lib/session-file-store.cjs` (neu).
+- Der Dienstnutzer muss im App-Verzeichnis `sessions.json` anlegen dürfen (wie `users.json`).
+- Danach den Dienst neu starten. Beim allerersten Neustart sind noch alle abgemeldet, ab dann nicht mehr.

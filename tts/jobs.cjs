@@ -205,7 +205,13 @@ function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./pro
     res.set('Cache-Control', 'no-store');
     try { await handler(req, res); }
     catch (error) {
-      res.status(error.status || 500).json({ error: error.message, ...(error.apiCode ? { code: error.apiCode } : {}) });
+      // Nur eigene Fehler (mit status) gehen an die Oberfläche; unerwartete
+      // (z. B. nicht erreichbarer TTS-Dienst) landen mit Details im Dienst-Log.
+      if (!error.status) {
+        console.error(`TTS ${req.method} ${req.path}:`, error);
+        return res.status(500).json({ error: 'Unerwarteter Fehler im Audio-Modul. Details stehen im Server-Log.' });
+      }
+      res.status(error.status).json({ error: error.message, ...(error.apiCode ? { code: error.apiCode } : {}) });
     }
   };
   app.post('/api/tts', requireAdmin, route(async (req, res) => {

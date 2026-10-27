@@ -2,54 +2,52 @@
 // Nur für angemeldete Nutzer; Gäste haben keine Lesezeichen.
 
 const fs = require('fs/promises');
-const { createJsonFile } = require('./lib/atomic-file.cjs');
+const { createJsonState } = require('./lib/atomic-file.cjs');
 const { httpError: fail, jsonRoute } = require('./lib/http-errors.cjs');
 
 const emailKey = email => String(email || '').toLowerCase();
 const EMPTY = new Set();
 
 function createBookmarkStore({ file, io = fs }) {
-  const store = createJsonFile({ file, io });
-  let data = {};
-
-  function load() {
-    const parsed = store.read({});
-    data = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  }
-
-  const persist = () => store.write(data);
+  // Änderungen wirken erst, wenn bookmarks.json geschrieben ist (createJsonState).
+  const state = createJsonState({ file, io, fromDocument: parsed => (parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}) });
 
   return {
-    load,
+    load: () => { state.load(); },
     // Menge der Artikel-IDs mit Lesezeichen (leer für Gäste).
     idsFor(email) {
-      const entries = email ? data[emailKey(email)] : null;
+      const entries = email ? state.value[emailKey(email)] : null;
       return entries ? new Set(Object.keys(entries)) : EMPTY;
     },
     has(email, id) {
-      return !!(email && data[emailKey(email)]?.[id]);
+      return !!(email && state.value[emailKey(email)]?.[id]);
     },
     async add(email, id) {
       if (!email) throw fail(401, 'Nicht angemeldet.');
       const key = emailKey(email);
-      if (data[key]?.[id]) return;
-      data[key] = { ...(data[key] || {}), [id]: new Date().toISOString() };
-      await persist();
+      await state.update(data => {
+        if (data[key]?.[id]) return false;
+        data[key] = { ...(data[key] || {}), [id]: new Date().toISOString() };
+        return true;
+      });
     },
     async remove(email, id) {
       if (!email) throw fail(401, 'Nicht angemeldet.');
       const key = emailKey(email);
-      if (!data[key]?.[id]) return;
-      const { [id]: _removed, ...rest } = data[key];
-      if (Object.keys(rest).length) data[key] = rest;
-      else delete data[key];
-      await persist();
+      await state.update(data => {
+        if (!data[key]?.[id]) return false;
+        delete data[key][id];
+        if (!Object.keys(data[key]).length) delete data[key];
+        return true;
+      });
     },
     async removeUser(email) {
       const key = emailKey(email);
-      if (!data[key]) return;
-      delete data[key];
-      await persist();
+      await state.update(data => {
+        if (!data[key]) return false;
+        delete data[key];
+        return true;
+      });
     },
     // Beim Verknüpfen einer Dublette bleiben vorhandene Lesezeichen erhalten,
     // zeigen aber künftig auf den kanonischen Blogartikel.
@@ -62,19 +60,18 @@ function createBookmarkStore({ file, io = fs }) {
       const valid = (Array.isArray(replacements) ? replacements : [])
         .filter(item => item?.oldId && item?.newId && item.oldId !== item.newId);
       if (!valid.length) return;
-      let changed = false;
-      for (const [key, entries] of Object.entries(data)) {
-        let next = entries;
-        for (const { oldId, newId } of valid) {
-          if (!next?.[oldId]) continue;
-          const timestamp = next[newId] || next[oldId];
-          const { [oldId]: _removed, ...rest } = next;
-          next = { ...rest, [newId]: timestamp };
-          changed = true;
+      await state.update(data => {
+        let changed = false;
+        for (const entries of Object.values(data)) {
+          for (const { oldId, newId } of valid) {
+            if (!entries?.[oldId]) continue;
+            entries[newId] = entries[newId] || entries[oldId];
+            delete entries[oldId];
+            changed = true;
+          }
         }
-        if (next !== entries) data[key] = next;
-      }
-      if (changed) await persist();
+        return changed;
+      });
     },
   };
 }

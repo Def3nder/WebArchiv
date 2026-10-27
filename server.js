@@ -22,6 +22,7 @@ const { createArchiveLock } = require('./archive-lock.cjs');
 const { httpError, isCrossSite } = require('./lib/http-errors.cjs');
 const { computeAppShellVersion, createAppShellVersion, cachedTextFile, serviceWorkerSource } = require('./lib/app-shell.cjs');
 const { createArticleBodyCache } = require('./lib/article-body-cache.cjs');
+const { FileSessionStore } = require('./lib/session-file-store.cjs');
 const {
   parseArticleSearchQuery, bodyExcerpt, mergeCategories, autoCategorize,
   extractSourceUrl, parseArticle,
@@ -1050,8 +1051,14 @@ app.use('/api/new-infographic', express.json({ limit: Math.ceil(INFOGRAPHIC_MAX_
 // Kurze Mikrofonaufnahme als Base64-JSON; die eigentliche Voice-Datei entsteht nur auf dem Qwen-Server.
 app.use('/api/tts/voices', express.json({ limit: Math.ceil(TTS_VOICE_MAX_BYTES * 1.4) + 1024 * 1024 }));
 app.use(express.json());
+// Im Dienst überstehen Sitzungen einen Neustart (sessions.json); Tests und
+// Messskripte, die server.js nur laden, bleiben beim flüchtigen Speicher.
+const sessionStore = require.main === module
+  ? new FileSessionStore({ file: process.env.SESSIONS_FILE || path.join(__dirname, 'sessions.json') })
+  : undefined;
 app.use(session({
   secret: resolveSessionSecret({ strict: require.main === module }),
+  store: sessionStore,
   resave: false,
   saveUninitialized: false,
   // secure: 'auto' setzt das Secure-Flag, sobald die Anfrage (über den
@@ -1963,10 +1970,12 @@ app.get('/api/articles', attachUser, (req, res) => {
         ? filtered.filter(a => a.date === dq.value)
         : filtered.filter(a => a.date && a.date.startsWith(dq.value));
     }
-    // Restlicher Text über Fuse, auf die datums-gefilterte Teilmenge eingeschränkt
+    // Restlicher Text über Fuse, auf die gefilterte Teilmenge eingeschränkt. Ohne
+    // Trefferlimit: Ein Limit vor dem Filtern ließ bei allgemeinen Begriffen
+    // Treffer des gewählten Autors wegfallen; schneller war es nicht.
     if (text && fuseIndex) {
       const filteredIds = new Set(filtered.map(a => a.id));
-      const results = fuseIndex.search(text, { limit: 2000 });
+      const results = fuseIndex.search(text);
       filtered = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
     }
   }
@@ -2061,8 +2070,14 @@ app.use((err, _req, res, next) => {
     if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Ungültige Speicheranfrage.' });
   }
   if (err?.type === 'entity.too.large') {
-    return res.status(413).json({ error: 'Die Bilddatei ist größer als 10 MB.' });
+    const message = _req.path.startsWith('/api/infographics/') || _req.path.startsWith('/api/new-infographic')
+      ? 'Die Bilddatei ist größer als 10 MB.'
+      : _req.path.startsWith('/api/tts/voices')
+        ? 'Die Aufnahme ist größer als 10 MB.'
+        : 'Die Anfrage ist zu groß.';
+    return res.status(413).json({ error: message });
   }
+  if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Ungültige Anfrage.' });
   next(err);
 });
 
@@ -2091,6 +2106,7 @@ if (require.main === module) {
     shuttingDown = true;
     server.close();
     await ttsJobs.shutdown();
+    await sessionStore?.close().catch(() => {});
     process.exit(0);
   });
 }

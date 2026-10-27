@@ -38,7 +38,8 @@ taxonomy), `infographics.cjs` (`linkInfographics`, naming, header editing, `move
 `archive-files.cjs` (directory cache, `findSibling`, file URLs, `resolveUnder`), `article-index.cjs`
 (Fuse index, list helpers for partial reindex, scraper manifest), `app-shell.cjs` (PWA version, stat-based
 file caches for `index.html` and the service-worker version), `article-body-cache.cjs` (rendered article
-bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categories),
+bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categories), `session-file-store.cjs`
+(sessions survive restarts in `sessions.json`, gitignored; only when `server.js` runs as main module),
 `http-errors.cjs` (`httpError`, `jsonRoute`, `isCrossSite`), `atomic-file.cjs` (`writeFileAtomic`,
 `writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`). Never `require('./server.js')` from scripts — import from `lib/`.
 Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors);
@@ -77,6 +78,9 @@ object in `app.js`.
 
 ## Auth & access control
 
+- **JSON stores** (bookmarks, audiobook progress, duplicate decisions) use `createJsonState` from
+  `lib/atomic-file.cjs`: change state only via `state.update(draft => …)` — the new state is committed
+  after the file write succeeded, updates run one after another. Never mutate `state.value` directly.
 - **Runtime files are gitignored:** `config.json` (author priority, duplicates, audiobook skips) and
   `public-directories.txt` are written by the app; templates are `example-config.json` and
   `example-public-directories.txt` — never re-add the real files to git.

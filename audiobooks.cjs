@@ -4,7 +4,7 @@ const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const express = require('express');
 const Fuse = require('fuse.js');
-const { writeFileAtomic, createJsonFile } = require('./lib/atomic-file.cjs');
+const { writeFileAtomic, createJsonState } = require('./lib/atomic-file.cjs');
 const { httpError: fail, jsonRoute } = require('./lib/http-errors.cjs');
 const { versionedUrl: withVersion } = require('./lib/archive-files.cjs');
 const { escapeHtml } = require('./html-sanitizer.cjs');
@@ -849,10 +849,10 @@ function resolveTrackIndex(book, entry) {
 // ─── Hörfortschritt pro Nutzer (audiobook-progress.json) ───────────────────
 
 function createProgressStore({ file, io = fs }) {
-  const store = createJsonFile({ file, io });
-  let data = {};
+  // Änderungen wirken erst, wenn die Datei geschrieben ist (createJsonState).
+  const state = createJsonState({ file, io, fromDocument: parsed => (parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}) });
 
-  function migratePrivateBooks() {
+  function migratePrivateBooks(data) {
     const privateBooks = { ...(data[GLOBAL_STATE_KEY]?.[PRIVATE_BOOKS_KEY] || {}) };
     let changed = false;
     for (const [key, entry] of Object.entries(data)) {
@@ -873,25 +873,21 @@ function createProgressStore({ file, io = fs }) {
   }
 
   function load() {
-    const parsed = store.read({});
-    data = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     // Frühere Versionen speicherten „privat“ pro Nutzer. Die Vereinigung aller
     // Markierungen wird global übernommen, damit beim Update nichts offengelegt wird.
-    if (migratePrivateBooks()) persist();
+    // Die Migration gilt sofort im Speicher, auch wenn das Schreiben scheitert.
+    if (migratePrivateBooks(state.load())) state.save().catch(() => {});
   }
-
-  function persist() {
-    return store.write(data);
-  }
+  const data = () => state.value;
 
   return {
     load,
     get(email, bookId) {
-      return (email && data[emailKey(email)]?.[bookId]) || null;
+      return (email && data()[emailKey(email)]?.[bookId]) || null;
     },
     // Zeitpunkt der letzten Nutzung (Hören oder Lesen), für die Sortierung „zuletzt“.
     lastActivity(email, bookId) {
-      const user = email ? data[emailKey(email)] : null;
+      const user = email ? data()[emailKey(email)] : null;
       const heard = user?.[bookId]?.updatedAt || '';
       const read = user?.[TEXT_PROGRESS_KEY]?.[bookId]?.updatedAt || '';
       return heard > read ? heard : read;
@@ -912,29 +908,31 @@ function createProgressStore({ file, io = fs }) {
         updatedAt: new Date().toISOString(),
       };
       const key = emailKey(email);
-      data[key] = { ...(data[key] || {}), [book.id]: entry };
-      await persist();
-      return entry;
+      return state.update(data => {
+        data[key] = { ...(data[key] || {}), [book.id]: entry };
+        return entry;
+      });
     },
     getText(email, bookId, format) {
-      const entry = email ? data[emailKey(email)]?.[TEXT_PROGRESS_KEY]?.[bookId] : null;
+      const entry = email ? data()[emailKey(email)]?.[TEXT_PROGRESS_KEY]?.[bookId] : null;
       return entry && entry.format === format ? entry.position : null;
     },
     isPrivate(bookId) {
-      return !!data[GLOBAL_STATE_KEY]?.[PRIVATE_BOOKS_KEY]?.[bookId];
+      return !!data()[GLOBAL_STATE_KEY]?.[PRIVATE_BOOKS_KEY]?.[bookId];
     },
     async setPrivate(bookId, value) {
       if (typeof value !== 'boolean') throw fail(400, 'Ungültige Privat-Markierung.');
-      const globalState = { ...(data[GLOBAL_STATE_KEY] || {}) };
-      const privateBooks = { ...(globalState[PRIVATE_BOOKS_KEY] || {}) };
-      if (value) privateBooks[bookId] = true;
-      else delete privateBooks[bookId];
-      if (Object.keys(privateBooks).length) globalState[PRIVATE_BOOKS_KEY] = privateBooks;
-      else delete globalState[PRIVATE_BOOKS_KEY];
-      if (Object.keys(globalState).length) data[GLOBAL_STATE_KEY] = globalState;
-      else delete data[GLOBAL_STATE_KEY];
-      await persist();
-      return { private: value };
+      return state.update(data => {
+        const globalState = { ...(data[GLOBAL_STATE_KEY] || {}) };
+        const privateBooks = { ...(globalState[PRIVATE_BOOKS_KEY] || {}) };
+        if (value) privateBooks[bookId] = true;
+        else delete privateBooks[bookId];
+        if (Object.keys(privateBooks).length) globalState[PRIVATE_BOOKS_KEY] = privateBooks;
+        else delete globalState[PRIVATE_BOOKS_KEY];
+        if (Object.keys(globalState).length) data[GLOBAL_STATE_KEY] = globalState;
+        else delete data[GLOBAL_STATE_KEY];
+        return { private: value };
+      });
     },
     // Leseposition: Anteil 0–1 (md/txt) bzw. Seitenzahl (pdf); getrennt vom Hörstand.
     async setText(email, book, input) {
@@ -947,17 +945,20 @@ function createProgressStore({ file, io = fs }) {
         : Number.isFinite(position) && position >= 0 && position <= 1;
       if (!valid) throw fail(400, 'Ungültige Leseposition.');
       const key = emailKey(email);
-      const user = data[key] || {};
       const entry = { format, position: format === 'pdf' ? position : Math.round(position * 10000) / 10000, updatedAt: new Date().toISOString() };
-      data[key] = { ...user, [TEXT_PROGRESS_KEY]: { ...(user[TEXT_PROGRESS_KEY] || {}), [book.id]: entry } };
-      await persist();
-      return entry;
+      return state.update(data => {
+        const user = data[key] || {};
+        data[key] = { ...user, [TEXT_PROGRESS_KEY]: { ...(user[TEXT_PROGRESS_KEY] || {}), [book.id]: entry } };
+        return entry;
+      });
     },
     async removeUser(email) {
       const key = emailKey(email);
-      if (!data[key]) return;
-      delete data[key];
-      await persist();
+      await state.update(data => {
+        if (!data[key]) return false;
+        delete data[key];
+        return true;
+      });
     },
   };
 }

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { writeFileAtomic, writeJsonAtomic, writeFileAtomicSync, createJsonFile } = require('../lib/atomic-file.cjs');
+const { writeFileAtomic, writeJsonAtomic, writeFileAtomicSync, readJsonFile, createJsonState } = require('../lib/atomic-file.cjs');
 const { jsonRoute } = require('../lib/http-errors.cjs');
 const { escapeHtml } = require('../html-sanitizer.cjs');
 
@@ -49,15 +49,43 @@ test('writeFileAtomicSync ersetzt nur vorhandene Dateien', async t => {
   assert.deepEqual(await fs.readdir(dir), ['b.md']);
 });
 
-test('createJsonFile liest tolerant und schreibt nacheinander', async t => {
+test('readJsonFile liest tolerant (BOM, fehlende Datei)', async t => {
   const dir = await tempDir(t);
   const file = path.join(dir, 'store.json');
-  const store = createJsonFile({ file });
-  assert.deepEqual(store.read({ leer: true }), { leer: true });
-  await fs.writeFile(file, '﻿{"a":1}');
-  assert.deepEqual(store.read({}), { a: 1 });
-  await Promise.all([store.write({ n: 1 }), store.write({ n: 2 })]);
-  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { n: 2 });
+  assert.deepEqual(readJsonFile(file, { leer: true }), { leer: true });
+  await fs.writeFile(file, '\uFEFF{"a":1}');
+  assert.deepEqual(readJsonFile(file, {}), { a: 1 });
+});
+
+test('createJsonState übernimmt Änderungen erst nach erfolgreichem Schreiben', async t => {
+  const dir = await tempDir(t);
+  const file = path.join(dir, 'state.json');
+  let failWrites = false;
+  const io = { ...fs, rename: async (...args) => {
+    if (failWrites) throw Object.assign(new Error('Platte voll'), { code: 'ENOSPC' });
+    return fs.rename(...args);
+  } };
+  const state = createJsonState({ file, io, fromDocument: doc => doc || {} });
+  state.load();
+  assert.equal(await state.update(data => { data.a = 1; return 'ok'; }), 'ok');
+  assert.deepEqual(state.value, { a: 1 });
+
+  failWrites = true;
+  const errors = [];
+  const original = console.error;
+  console.error = (...args) => errors.push(args);
+  try {
+    await assert.rejects(state.update(data => { data.b = 2; }), { code: 'ENOSPC' });
+  } finally { console.error = original; }
+  assert.deepEqual(state.value, { a: 1 }, 'Speicher bleibt beim alten Stand');
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { a: 1 }, 'Datei bleibt beim alten Stand');
+  assert.equal(errors.length, 1);
+
+  failWrites = false;
+  assert.equal(await state.update(() => false), false, 'ohne Änderung wird nicht geschrieben');
+  await Promise.all([1, 2, 3].map(n => state.update(data => { data.n = (data.n || 0) + n; })));
+  assert.equal(state.value.n, 6, 'nacheinander, jede Änderung sieht die vorige');
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { a: 1, n: 6 });
 });
 
 function fakeResponse() {

@@ -5,7 +5,7 @@
 const fsSync = require('fs');
 const fs = require('fs/promises');
 const crypto = require('crypto');
-const { createJsonFile } = require('./lib/atomic-file.cjs');
+const { createJsonState } = require('./lib/atomic-file.cjs');
 
 const DEFAULT_CONFIG = Object.freeze({
   blogAuthor: 'Joe Turan',
@@ -147,18 +147,17 @@ function detectDuplicateCandidates(articles, config = DEFAULT_CONFIG) {
 }
 
 function createDuplicateStore({ file, io = fs }) {
-  const store = createJsonFile({ file, io });
-  let decisions = [];
-
-  function load() {
-    const parsed = store.read(null);
-    decisions = Array.isArray(parsed?.decisions) ? parsed.decisions.filter(Boolean) : [];
-  }
-
-  const persist = () => store.write({ version: 1, decisions });
+  // Änderungen wirken erst, wenn die Datei geschrieben ist (createJsonState).
+  const state = createJsonState({
+    file, io,
+    fromDocument: parsed => (Array.isArray(parsed?.decisions) ? parsed.decisions.filter(Boolean) : []),
+    toDocument: decisions => ({ version: 1, decisions }),
+  });
+  const load = () => { state.load(); };
 
   const keyOf = (blogId, facebookId) => `${blogId}\0${facebookId}`;
-  function upsert({ blogId, facebookId, status, blogHash, facebookHash, user, migrations = [] }) {
+  // Ändert die übergebene Liste (Kopie aus state.update) an Ort und Stelle.
+  function upsert(decisions, { blogId, facebookId, status, blogHash, facebookHash, user, migrations = [] }) {
     if (!['linked', 'ignored'].includes(status)) throw new Error('Ungültiger Dublettenstatus.');
     const now = new Date().toISOString();
     const existing = decisions.find(item => keyOf(item.blogId, item.facebookId) === keyOf(blogId, facebookId));
@@ -169,43 +168,39 @@ function createDuplicateStore({ file, io = fs }) {
       createdBy: existing?.createdBy || String(user || ''),
       migrations: migrations.length ? migrations : (existing?.migrations || []),
     };
-    decisions = decisions.filter(item => keyOf(item.blogId, item.facebookId) !== keyOf(blogId, facebookId));
-    if (status === 'linked') decisions = decisions.filter(item => item.status !== 'linked' || item.facebookId !== facebookId);
-    decisions.push(decision);
+    const kept = decisions.filter(item => keyOf(item.blogId, item.facebookId) !== keyOf(blogId, facebookId)
+      && (status !== 'linked' || item.status !== 'linked' || item.facebookId !== facebookId));
+    decisions.splice(0, decisions.length, ...kept, decision);
     return decision;
   }
   return {
     load,
-    all() { return decisions.map(decision => ({ ...decision })); },
+    all() { return state.value.map(decision => ({ ...decision })); },
     find(blogId, facebookId) {
       const key = keyOf(blogId, facebookId);
-      return decisions.find(item => keyOf(item.blogId, item.facebookId) === key) || null;
+      return state.value.find(item => keyOf(item.blogId, item.facebookId) === key) || null;
     },
     linkedCanonicalId(facebookId) {
-      return decisions.find(item => item.status === 'linked' && item.facebookId === facebookId)?.blogId || null;
+      return state.value.find(item => item.status === 'linked' && item.facebookId === facebookId)?.blogId || null;
     },
     async set(input) {
-      const previous = decisions;
-      const decision = upsert(input);
-      try { await persist(); }
-      catch (error) { decisions = previous; throw error; }
-      return { ...decision };
+      return { ...await state.update(decisions => upsert(decisions, input)) };
     },
     async setMany(inputs) {
       if (!Array.isArray(inputs) || !inputs.length) return [];
       for (const input of inputs) {
         if (!['linked', 'ignored'].includes(input?.status)) throw new Error('Ungültiger Dublettenstatus.');
       }
-      const previous = decisions;
-      const stored = inputs.map(upsert);
-      try { await persist(); }
-      catch (error) { decisions = previous; throw error; }
+      const stored = await state.update(decisions => inputs.map(input => upsert(decisions, input)));
       return stored.map(decision => ({ ...decision }));
     },
     async remove(blogId, facebookId) {
-      const previousLength = decisions.length;
-      decisions = decisions.filter(item => keyOf(item.blogId, item.facebookId) !== keyOf(blogId, facebookId));
-      if (decisions.length !== previousLength) await persist();
+      await state.update(decisions => {
+        const index = decisions.findIndex(item => keyOf(item.blogId, item.facebookId) === keyOf(blogId, facebookId));
+        if (index < 0) return false;
+        decisions.splice(index, 1);
+        return true;
+      });
     },
   };
 }

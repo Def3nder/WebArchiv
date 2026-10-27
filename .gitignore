@@ -41,6 +41,7 @@ __pycache__/
 users.json
 audiobook-progress.json
 bookmarks.json
+sessions.json
 duplicate-decisions.json
 tts-settings.json
 /tts-voice-previews/
