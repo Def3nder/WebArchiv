@@ -487,39 +487,52 @@ function renderArticleBody(body) {
 
 // ─── File scanner ──────────────────────────────────────────────────────────
 
-function indexFilesByLowerName(entries) {
-  const files = new Map();
+// Dateinamen eines Verzeichnisses: exakt (Normalfall) und klein geschrieben.
+// Symlinks zählen mit, weil sie bisher über existsSync ebenfalls gefunden wurden.
+function directoryListing(entries) {
+  const exact = new Set();
+  const lower = new Map();
   for (const entry of entries) {
-    if (entry.isFile()) files.set(entry.name.toLowerCase(), entry.name);
+    if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+    exact.add(entry.name);
+    const key = entry.name.toLowerCase();
+    if (!lower.has(key)) lower.set(key, entry.name);
   }
-  return files;
+  return { exact, lower };
 }
 
-function findSibling(dir, basename, exts, filesByLowerName = null) {
-  // Schneller Normalfall: exakt gleichnamige Datei mit erwarteter Endung.
-  for (const ext of exts) {
-    const p = path.join(dir, basename + ext);
-    if (fs.existsSync(p)) return p;
-  }
+// Ein Scan liest jedes Verzeichnis höchstens einmal: den Artikelordner, den
+// parallelen Ordner unter audio/ und den Autorenordner (standard.jpg). Vorher
+// kostete jeder Artikel ohne lokale MP3 ein eigenes readdir des Audio-Ordners
+// plus mehrere existsSync – bei rund 7.000 Artikeln tausende Dateisystemaufrufe.
+function createDirectoryCache() {
+  const listings = new Map();
+  return {
+    seed(dir, entries) { listings.set(dir, directoryListing(entries)); },
+    get(dir) {
+      if (!listings.has(dir)) {
+        let listing = null; // Verzeichnis fehlt: keine Medien
+        try { listing = directoryListing(fs.readdirSync(dir, { withFileTypes: true })); } catch { /* fehlt */ }
+        listings.set(dir, listing);
+      }
+      return listings.get(dir);
+    },
+  };
+}
 
+function findSibling(dir, basename, exts, listing) {
+  if (!listing) return null;
+  // Normalfall: exakt gleichnamige Datei mit erwarteter Endung.
+  for (const ext of exts) {
+    if (listing.exact.has(basename + ext)) return path.join(dir, basename + ext);
+  }
   // Auf dem Debian-Zielsystem ist das Dateisystem case-sensitive. Medien sollen
   // trotzdem autorenunabhängig erkannt werden, wenn nur Groß-/Kleinschreibung
   // von Basisname oder Endung abweicht (z. B. Artikel.md + artikel.MP3).
-  if (!filesByLowerName) {
-    try {
-      filesByLowerName = indexFilesByLowerName(
-        fs.readdirSync(dir, { withFileTypes: true })
-      );
-    } catch {
-      return null;
-    }
-  }
-
   for (const ext of exts) {
-    const actualName = filesByLowerName.get((basename + ext).toLowerCase());
+    const actualName = listing.lower.get((basename + ext).toLowerCase());
     if (actualName) return path.join(dir, actualName);
   }
-
   return null;
 }
 
@@ -537,7 +550,9 @@ function audioFileUrl(relPath, absPath) {
   return `/audio-files/${relPath}${v}`;
 }
 
-async function scanDir(dirPath, author, year, collector, { strict = false, targetFile = null } = {}) {
+async function scanDir(dirPath, author, year, collector, {
+  strict = false, targetFile = null, directories = createDirectoryCache(),
+} = {}) {
   let entries;
   try {
     entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
@@ -545,7 +560,8 @@ async function scanDir(dirPath, author, year, collector, { strict = false, targe
     if (strict) throw error;
     return;
   }
-  const filesByLowerName = indexFilesByLowerName(entries);
+  directories.seed(dirPath, entries);
+  const listing = directories.get(dirPath);
   const resolvedTarget = targetFile ? path.resolve(targetFile) : null;
 
   for (const entry of entries) {
@@ -556,7 +572,7 @@ async function scanDir(dirPath, author, year, collector, { strict = false, targe
       // wieder in den Artikelindex oder in eine Bildgruppe.
       if (author === INFOGRAPHICS_AUTHOR && fullPath === INFOGRAPHIC_TRASH_DIR) continue;
       const nextYear = /^\d{4}$/.test(entry.name) ? entry.name : year;
-      await scanDir(fullPath, author, nextYear, collector, { strict, targetFile: resolvedTarget });
+      await scanDir(fullPath, author, nextYear, collector, { strict, targetFile: resolvedTarget, directories });
       continue;
     }
     if (!entry.name.endsWith('.md')) continue;
@@ -570,17 +586,18 @@ async function scanDir(dirPath, author, year, collector, { strict = false, targe
       const content = await fs.promises.readFile(fullPath, 'utf8');
       const parsed = parseArticle(content, fullPath);
 
-      const ownImgPath = findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'], filesByLowerName);
+      const ownImgPath = findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'], listing);
+      const authorDir = path.join(WWW_DIR, author);
       const imgPath = ownImgPath
-        || findSibling(path.join(WWW_DIR, author), 'standard', ['.jpg', '.jpeg', '.png']);
-      const localAudioPath = findSibling(dirPath, basename, ['.mp3'], filesByLowerName);
+        || findSibling(authorDir, 'standard', ['.jpg', '.jpeg', '.png'], directories.get(authorDir));
+      const localAudioPath = findSibling(dirPath, basename, ['.mp3'], listing);
       const externalAudioDir = path.join(AUDIO_DIR, author, relDir);
       const externalAudioPath = localAudioPath
         ? null
-        : findSibling(externalAudioDir, basename, ['.mp3']);
+        : findSibling(externalAudioDir, basename, ['.mp3'], directories.get(externalAudioDir));
       const audioPath = localAudioPath || externalAudioPath;
-      const videoPath = findSibling(dirPath, basename, ['.mp4'], filesByLowerName);
-      const pdfPath   = findSibling(dirPath, basename, ['.pdf'], filesByLowerName);
+      const videoPath = findSibling(dirPath, basename, ['.mp4'], listing);
+      const pdfPath   = findSibling(dirPath, basename, ['.pdf'], listing);
 
       const relImg   = imgPath   ? path.relative(WWW_DIR, imgPath).replace(/\\/g, '/')   : null;
       const relAudio = audioPath
@@ -1091,8 +1108,10 @@ async function rebuildIndex() {
     throw err;
   }
 
+  // Ein gemeinsamer Verzeichnis-Cache für den ganzen Scan (frisch je Reindex).
+  const directories = createDirectoryCache();
   for (const dir of authorDirs) {
-    await scanDir(path.join(WWW_DIR, dir.name), dir.name, null, collector);
+    await scanDir(path.join(WWW_DIR, dir.name), dir.name, null, collector, { directories });
   }
 
   // Deduplicate by id (orig/ subdirs may duplicate files).
@@ -2771,6 +2790,14 @@ app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
   }
 });
 
+// Ungültige Werte (z. B. page=abc) ergaben früher NaN und damit eine leere Seite.
+function paginationParams(page, limit) {
+  return {
+    page: Math.max(1, parseInt(page, 10) || 1),
+    limit: Math.min(100, Math.max(1, parseInt(limit, 10) || 24)),
+  };
+}
+
 app.get('/api/articles', attachUser, (req, res) => {
   const {
     q, author, year, category, page = '1', limit = '24', telegram, externalAudio,
@@ -2845,8 +2872,7 @@ app.get('/api/articles', attachUser, (req, res) => {
     }
   }
 
-  const p = Math.max(1, parseInt(page));
-  const lim = Math.min(100, Math.max(1, parseInt(limit)));
+  const { page: p, limit: lim } = paginationParams(page, limit);
 
   // Kachelansichten: Artikel und ihre Infografiken als eine Kachel. Eine Gruppe
   // erscheint an der ersten Stelle, an der der Anker oder eine Grafik passt.
@@ -2971,6 +2997,9 @@ if (require.main === module) {
 
 module.exports = {
   app, resolveSessionSecret, parseTrustProxy, extractSourceUrl,
+  // Für Tests und Messskripte: vollständiger Scan und der unverknüpfte Rohindex.
+  buildIndex, indexedSourceArticles: () => sourceArticles,
+  createDirectoryCache, findSibling, paginationParams,
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
   articleDisplayAuthor,
   replaceInfographicYearArticles, replaceArticleIndexEntry, upsertArticleIndexEntries,

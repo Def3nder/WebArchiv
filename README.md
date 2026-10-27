@@ -784,6 +784,13 @@ Videos, PDFs und MP3s nach der oben beschriebenen Suchreihenfolge in `www/` und
 Neustart — offene Sessions bleiben erhalten). Da der Index im Speicher liegt,
 werden **neu hinzugefügte Dateien erst nach einem Reindex sichtbar**.
 
+Für die Medienzuordnung liest ein Scan jedes Verzeichnis nur einmal (`createDirectoryCache` in
+`server.js`): den Artikelordner, den parallelen Ordner unter `audio/` und den Autorenordner mit
+`standard.*`. Gesucht wird danach im Speicher, zuerst mit exaktem Namen, dann ohne Beachtung der
+Groß-/Kleinschreibung. Am lokalen Bestand (7.080 Einträge) sank das von rund 4.300 Verzeichnis-
+Lesungen und 39.000 `existsSync`-Aufrufen auf 26 bzw. 0; der vollständige Index wurde etwa 18 %
+schneller, bei identischer Zuordnung.
+
 Eine bestehende Markdown-Datei über **Artikel editieren** zu speichern ist davon
 ausgenommen: Der Server liest nur diese Datei samt Medienzuordnung ihres
 Verzeichnisses neu ein und ersetzt ihren Eintrag im vorhandenen Rohindex. Danach

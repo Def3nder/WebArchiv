@@ -1404,3 +1404,20 @@ TTS-Start und Scrape-Lauf (nur Anzeige).
   Kopfbereich. Jetzt bleibt eine Ansicht ganz oben ganz oben; gescrollt bleibt die Karte im Blick.
   Im Browserbereich der Entwicklungsumgebung ist das Scrollen nicht verlässlich messbar; geprüft
   über die Kartenpositionen und einen Test, nicht per Augenschein.
+
+## 24. Aktualisierung 27.10.2026 – Verzeichnis-Cache beim Scan, Seitenparameter
+
+- **Mediensuche beim Scan:** `findSibling` las für jeden Artikel ohne lokale MP3 den Ordner unter
+  `audio/` neu ein und prüfte jede Endung per `existsSync`. Neu: `createDirectoryCache` liest jedes
+  Verzeichnis pro Scan höchstens einmal (Artikelordner, Audio-Ordner, Autorenordner für
+  `standard.*`); der vollständige Reindex teilt einen Cache über alle Autoren, Teil-Reindexe
+  erhalten je Aufruf einen frischen. Reihenfolge unverändert: exakter Name vor abweichender
+  Schreibweise, Endungen in der angegebenen Reihenfolge; Symlinks zählen weiter mit.
+- **Messung am lokalen Bestand (7.080 Einträge, je 3 Läufe):** `readdirSync` 4.304 → 26,
+  `existsSync` 39.384 → 0, Dauer ≈ 10,5 s → ≈ 8,6 s. Ein Snapshot aller Bild-, Audio-, Video- und
+  PDF-Zuordnungen war vorher und nachher identisch (0 Abweichungen).
+- **Seitenparameter:** `/api/articles?page=abc` bzw. `limit=xyz` ergaben `NaN` und eine leere Seite.
+  `paginationParams` fällt jetzt auf Seite 1 bzw. 24 Einträge zurück (Limit weiterhin 1–100).
+- **Tests:** `test/media-scan.test.cjs` (Cache, Namensauflösung, Symlinks/Ordner, Seitenparameter);
+  Node-Suite 377/377.
+- **Deployment:** nur `server.js`, danach Dienst neu starten.
