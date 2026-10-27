@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const readStyles = require('./support/read-styles.cjs');
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+const gestures = read('public/touch-gestures.js');
 
 test('Dublettenprüfung ist als Admin-Dialog mit allen Entscheidungswegen eingebunden', () => {
   const html = read('public/index.html');
@@ -223,12 +224,11 @@ test('100-Prozent-Filter nimmt nur echte normalisierte Textgleichheit und rundet
 
 test('alle drei Dublettendialoge verwenden das sichtbare Ziehen und Rückfedern der Hauptansicht', () => {
   const ui = read('public/duplicates.js');
-  const app = read('public/app.js');
   assert.match(ui, /for \(const dialog of \[duplicateDialog, duplicateDetailDialog, duplicateImageViewer\]\)/);
   assert.match(ui, /enablePullToClose\(\{[\s\S]*scroller: dialog,[\s\S]*moving: dialog,[\s\S]*scrolledWithin\(event\.target, dialog\)/);
-  assert.match(app, /const PULL_CLOSE_DISTANCE = 120/);
-  assert.match(app, /moving\.style\.transform = `translateY\(\$\{offset\}px\)`/);
-  assert.match(app, /dy < PULL_CLOSE_DISTANCE\) \{ reset\(true\); return; \}/);
+  assert.match(gestures, /const PULL_CLOSE_DISTANCE = 120/);
+  assert.match(gestures, /moving\.style\.transform = `translateY\(\$\{offset\}px\)`/);
+  assert.match(gestures, /dy < PULL_CLOSE_DISTANCE\) \{ reset\(true\); return; \}/);
 });
 
 test('offene Dublettendialoge sperren die Seite dahinter, nicht ihre inneren Scrollbereiche', () => {

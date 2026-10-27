@@ -1700,3 +1700,29 @@ also weiterhin ohne Neustart, und gespeicherte Artikel erscheinen sofort.
 **Deployment:**
 - Kopieren: `server.js`, `media-files.cjs`, `lib/archive-files.cjs`.
 - Danach den Dienst neu starten.
+
+## 33. Aktualisierung 27.10.2026 – Große Dateien aufgeteilt (Schritt 1)
+
+- **Hörbuch-Extras:** Die Extras-Verwaltung (Auflisten, Markdown bearbeiten/anlegen, Hochladen,
+  Umbenennen, Sortieren, Löschen) liegt jetzt in `audiobook-extras.cjs` (`createAudiobookExtras`).
+  - `audiobooks.cjs` schrumpft von 1.087 auf 706 Zeilen.
+  - Die Bibliothek reicht nur Wurzelordner, versionierte Medien-URLs und den Neuaufbau hinein.
+  - Die Routen und die öffentliche API (`library.extras` usw.) bleiben unverändert.
+- **Touch-Gesten:** Pinch-Erkennung, Textauswahl, bedienbare Fortschrittslinie (`enableScrubBar`) und
+  Nach-unten-Wischen (`enablePullToClose`) liegen jetzt in `public/touch-gestures.js`.
+  - Die Datei wird vor `app.js` geladen und hängt nicht von `app.js` ab.
+  - `app.js`, `audiobooks.js` und `book-reader.js` rufen die Funktionen wie bisher auf.
+  - `app.js`: 3.345 → 3.192 Zeilen.
+- **Bewusst noch nicht ausgelagert:** Detailansicht, Vollbild-Galerie und Audio/Media Session in `app.js`.
+  - Diese Teile greifen eng auf den Zustand und die DOM-Referenzen von `app.js` zu.
+  - Rund 130 Testprüfungen lesen `app.js` als Quelltext.
+  - Eine Auslagerung braucht zuerst klare Schnittstellen (wie bei `adminHooks`) und ist ein eigener Schritt.
+
+**Geprüft:**
+- Node-Suite 408/408, neu: `test/touch-gestures.test.cjs`.
+- Im Browser: Gesten-Funktionen geladen, Artikel öffnet, keine Konsolenfehler.
+
+**Deployment:**
+- Kopieren: `audiobooks.cjs`, `audiobook-extras.cjs` (neu), `public/app.js`, `public/touch-gestures.js` (neu),
+  `public/index.html`.
+- Danach den Dienst neu starten.

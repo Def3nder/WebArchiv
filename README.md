@@ -882,6 +882,7 @@ lib/http-errors.cjs           httpError(status, message), jsonRoute (gemeinsamer
 lib/atomic-file.cjs           Atomares Schreiben (async/sync, JSON) und createJsonFile für die JSON-Speicher
 user-store.cjs                Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen
 audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
+audiobook-extras.cjs          Hörbuch-Extras: Ordner extras/ auflisten, bearbeiten, hochladen, sortieren, löschen
 article-editor.cjs            Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown
 bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
 media-files.cjs               Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)

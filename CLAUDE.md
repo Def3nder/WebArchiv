@@ -118,7 +118,8 @@ object in `app.js`.
   checked on that validated path — never check a raw first segment and resolve afterwards. Reuse
   it for any new file-serving route. `prompts/*` uses the same
   `path.basename` + prefix-check guard.
-- **Audiobooks** (`audiobooks.cjs`, `public/audiobooks.js`): author `Hörbücher` lives under
+- **Audiobooks** (`audiobooks.cjs` = library, index, progress, routes; `audiobook-extras.cjs` = extras folder
+  management; `public/audiobooks.js`): author `Hörbücher` lives under
   `audio/Hoerbuecher/<book>/` (ASCII dir name, mapped to author `Hörbücher`; tracks + cover + optional `abstract.md`), has its own index and
   `/api/audiobooks*` routes (a book without tracks but with an ebook text file is an "ebook only" book: `trackCount: 0`, `ebookOnly: true`, no player), is never public (guests blocked in `canAccessAuthor`, filtered from
   `public-directories.txt`), and stores per-user playback position in `audiobook-progress.json`.
@@ -155,7 +156,8 @@ NPMplus reverse proxy (192.168.1.14). With `NODE_ENV=production` the server refu
 proxies may set `X-Forwarded-*`; `CSP_MODE` is `report` (default), `enforce` or `off`.
 
 **Browser script forms (keep to these three, don't add a fourth):**
-- *Shared classic scripts* (`app.js`, `audiobooks.js`, `book-reader.js`, `duplicates.js`, `user-admin.js`, …):
+- *Shared classic scripts* (`touch-gestures.js` — loaded before `app.js`, generic touch helpers —, `app.js`,
+  `audiobooks.js`, `book-reader.js`, `duplicates.js`, `user-admin.js`, …):
   top-level functions/consts are deliberately shared across scripts via the global scope; load order in
   `index.html` matters. Only for code that genuinely shares state with `app.js`.
 - *Encapsulated scripts* (IIFE or UMD like `aria-menu.js`, `session-state.js`, `admin-tasks.js`,

@@ -129,7 +129,8 @@ NPMplus reverse proxy (192.168.1.14). With `NODE_ENV=production` the server refu
 proxies may set `X-Forwarded-*`; `CSP_MODE` is `report` (default), `enforce` or `off`.
 
 **Browser script forms (keep to these three, don't add a fourth):**
-- *Shared classic scripts* (`app.js`, `audiobooks.js`, `book-reader.js`, `duplicates.js`, `user-admin.js`, …):
+- *Shared classic scripts* (`touch-gestures.js` — loaded before `app.js`, generic touch helpers —, `app.js`,
+  `audiobooks.js`, `book-reader.js`, `duplicates.js`, `user-admin.js`, …):
   top-level functions/consts are deliberately shared across scripts via the global scope; load order in
   `index.html` matters. Only for code that genuinely shares state with `app.js`.
 - *Encapsulated scripts* (IIFE or UMD like `aria-menu.js`, `session-state.js`, `admin-tasks.js`,

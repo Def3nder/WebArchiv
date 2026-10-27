@@ -11,7 +11,10 @@ const books = fs.readFileSync(path.join(ROOT, 'public', 'audiobooks.js'), 'utf8'
 const manager = fs.readFileSync(path.join(ROOT, 'public', 'audiobook-extras-manager.js'), 'utf8');
 const editorEntry = fs.readFileSync(path.join(ROOT, 'public', 'markdown-editors.js'), 'utf8');
 const styles = readStyles();
-const server = fs.readFileSync(path.join(ROOT, 'audiobooks.cjs'), 'utf8');
+const library = fs.readFileSync(path.join(ROOT, 'audiobooks.cjs'), 'utf8');
+const extrasModule = fs.readFileSync(path.join(ROOT, 'audiobook-extras.cjs'), 'utf8');
+// Routen und Bibliothek in audiobooks.cjs, Extras-Verwaltung in audiobook-extras.cjs.
+const server = library + extrasModule;
 
 test('Admin-Aktionen öffnen die Extras-Verwaltung auch ohne vorhandene Extras', () => {
   assert.match(books, /currentUser\?\.role === 'admin'[\s\S]*data-book-extras-manage>Extras verwalten/);
