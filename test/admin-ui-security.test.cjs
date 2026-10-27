@@ -40,7 +40,7 @@ test('Gast- und Benutzer-Shell enthalten keine Admin-Dialoge oder Admin-Skripte'
     assert.doesNotMatch(html, /(?:user-admin|tts-settings|duplicates|article-editor\.bundle|infographic-new|infographic-manager)\.js/);
     assert.doesNotMatch(html, /admin-csrf-token/);
     assert.match(html, /id="password-dialog"/);
-    assert.match(html, /password\.js\?v=1/);
+    assert.match(html, /password\.js(?:\?v=[a-f0-9]+)?/);
     assert.match(html, /data-action="settings"/);
   }
 });
@@ -50,8 +50,8 @@ test('Admin-Shell enthält die vollständige Oberfläche und ein sitzungsgebunde
   const html = renderIndexForSession(req);
   assert.match(html, /id="user-admin"/);
   assert.match(html, /id="tts-settings-dialog"/);
-  assert.match(html, /user-admin\.js\?v=12/);
-  assert.doesNotMatch(html, /password\.js\?v=1/);
+  assert.match(html, /user-admin\.js(?:\?v=[a-f0-9]+)?/);
+  assert.doesNotMatch(html, /password\.js(?:\?v=[a-f0-9]+)?/);
   assert.match(html, new RegExp(`<meta name="admin-csrf-token" content="${req.session.adminCsrfToken}">`));
   assert.match(req.session.adminCsrfToken, /^[a-f0-9]{64}$/);
 });
@@ -61,7 +61,7 @@ test('Admin mit ausstehendem Kennwortwechsel erhält zunächst nur die normale S
     session: { user: { role: 'admin', mustChangePassword: true } },
   });
   assert.doesNotMatch(html, /id="user-admin"/);
-  assert.match(html, /password\.js\?v=1/);
+  assert.match(html, /password\.js(?:\?v=[a-f0-9]+)?/);
 });
 
 test('zentrale Admin-Middleware schützt Rolle, Herkunft und CSRF-Token', () => {
@@ -128,5 +128,18 @@ test('Admin-Aufgaben (TTS, Reindex, Scrape) liegen in admin-tasks.js und nur in 
     assert.doesNotMatch(renderIndexForSession({ session: role ? { user: { role } } : {} }), /admin-tasks\.js/);
   }
   assert.match(renderIndexForSession({ session: { user: { role: 'admin', mustChangePassword: false } } }),
-    /<script src="app\.js\?v=\d+"><\/script>\s*<script src="admin-tasks\.js\?v=\d+" data-admin-asset><\/script>/);
+    /<script src="app\.js(?:\?v=[a-f0-9]+)?"><\/script>\s*<script src="admin-tasks\.js(?:\?v=[a-f0-9]+)?" data-admin-asset><\/script>/);
+});
+
+test('Stylesheets: alle Teildateien vorhanden, Dubletten-Styles nur in der Admin-Shell', () => {
+  const { styleFiles } = require('./support/read-styles.cjs');
+  const files = styleFiles();
+  assert.ok(files.length >= 9);
+  for (const file of files) assert.ok(fs.existsSync(path.join(ROOT, 'public', file)), file);
+  assert.equal(fs.existsSync(path.join(ROOT, 'public', 'styles.css')), false, 'keine alte Gesamtdatei mehr');
+  const guest = renderIndexForSession({ session: {} });
+  const admin = renderIndexForSession({ session: { user: { role: 'admin', mustChangePassword: false } } });
+  assert.doesNotMatch(guest, /css\/duplicates\.css/);
+  assert.match(admin, /<link rel="stylesheet" href="css\/duplicates\.css\?v=[a-f0-9]{10}" data-admin-asset \/>/);
+  assert.match(guest, /href="css\/base\.css\?v=[a-f0-9]{10}"[\s\S]*href="css\/audiobook-extras\.css\?v=[a-f0-9]{10}"/);
 });

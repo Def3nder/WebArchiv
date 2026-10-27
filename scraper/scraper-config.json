@@ -3,14 +3,18 @@
     {
       "Name": "Joe Turan",
       "URL": "https://www.joeturan.com/blog",
-      "OutputPath": "../www/Joe Turan"
+      "OutputPath": "../www/Joe Turan",
+      "Signature": { "Name": "Joe Turan", "Website": "joeturan.com" }
     }
   ],
   "Facebook": [
     {
       "Name": "Facebook",
       "URL": "https://www.facebook.com/61551902387350/supporters/",
-      "OutputPath": "../www/Facebook"
+      "OutputPath": "../www/Facebook",
+      "FileAuthor": "Joe Turan",
+      "Signature": { "Name": "Joe Turan", "Website": "joeturan.com" },
+      "Exclude": "kuschel[\\s\\-_]*workshop"
     },
     {
       "Name": "Joe Turan Facebook",
@@ -27,7 +31,10 @@
     {
       "Name": "Telegram",
       "URL": "https://t.me/s/joeturan",
-      "OutputPath": "../www/Telegram"
+      "OutputPath": "../www/Telegram",
+      "FileAuthor": "Joe Turan",
+      "Signature": { "Name": "Joe Turan", "Website": "joeturan.com" },
+      "Exclude": "kuschel[\\s\\-_]*workshop"
     }
   ]
 }

@@ -2,10 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readStyles = require('./support/read-styles.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
+const CSS = readStyles();
 const APP = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
 const ARIA = fs.readFileSync(path.join(ROOT, 'public', 'aria-menu.js'), 'utf8');
 
@@ -18,7 +19,7 @@ test('Alle Desktop-Auswahlfilter verwenden das vorhandene Aktionsmenü', () => {
   assert.match(ARIA, /item\.setAttribute\('role', 'menuitemradio'\)/);
   assert.match(ARIA, /item\.setAttribute\('aria-checked', String\(option\.value === select\.value\)\)/);
   assert.match(APP, /WebArchivAriaMenu\.bindSelect\(document\.getElementById\(root\.dataset\.filterAriaMenu\), root\)/);
-  assert.match(HTML, /<script src="aria-menu\.js\?v=\d+"><\/script>[\s\S]*<script src="app\.js/);
+  assert.match(HTML, /<script src="aria-menu\.js(?:\?v=[a-f0-9]+)?"><\/script>[\s\S]*<script src="app\.js/);
 });
 
 test('Aktionsmenü-Stil liefert Rundungen und Schatten, während Mobilgeräte native Selects behalten', () => {

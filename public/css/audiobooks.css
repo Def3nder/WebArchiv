@@ -1,0 +1,335 @@
+/* ── Hörbücher ─────────────────────────────────────────────────────────── */
+/* Filterleiste: in der Hörbuch-Ansicht Sortierung statt Jahr/Kategorie */
+.filter-group-books { display: none; }
+body.mode-audiobooks .filter-group-books { display: flex; }
+body.mode-audiobooks .filter-group-articles { display: none; }
+
+.card-book .card-image img { object-fit: contain; }
+.card-book-author {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.card-book-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin: 2px 0 4px;
+}
+.card-book-progress-bar {
+  flex: 1;
+  height: 3px;
+  background: var(--border-hi);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.card-book-progress-bar > div { height: 100%; background: var(--accent); }
+body.layout-list .card-book .card-body { grid-template-areas: "meta cats" "title title" "progress progress" "preview preview"; }
+body.layout-list .card-book-progress { grid-area: progress; margin: 0; }
+
+/* Detailansicht: Cover vollständig zeigen */
+.detail-hero-book {
+  aspect-ratio: auto;
+  height: min(46vh, 380px);
+  display: flex;
+  justify-content: center;
+}
+.detail-hero-book img { width: auto; max-width: 100%; object-fit: contain; }
+.detail-book-author {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin: -6px 0 12px;
+}
+
+.book-player {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.book-player-now {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 0.82rem;
+}
+.book-player-track {
+  color: var(--text);
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.book-player-time { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.book-progress { flex: none; height: 6px; border-radius: 3px; }
+.book-progress:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.book-player-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.book-btn {
+  min-width: 44px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 18px;
+  border: 1px solid var(--border-hi);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.book-btn:hover { border-color: var(--accent); background: var(--accent-glow); }
+.book-btn svg { width: 18px; height: 18px; }
+.book-btn-play {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.book-btn-play:hover { background: #d4b25e; }
+.book-btn-play svg { width: 22px; height: 22px; }
+.book-player-extra {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.book-speed { display: inline-flex; align-items: center; gap: 8px; }
+.book-tracks { flex: 1; min-width: 200px; }
+.book-tracks summary { cursor: pointer; padding: 6px 0; }
+.book-track-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+.book-track {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 4px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.book-track:hover { background: var(--accent-glow); }
+.book-track.is-current { color: var(--accent); font-weight: 600; }
+.book-track-num { color: var(--text-dim); min-width: 2.5em; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Miniplayer am unteren Rand */
+.mini-player {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - 24px));
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.mini-player[hidden] { display: none; }
+.mini-player-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.mini-player-open img { width: 44px; height: 44px; object-fit: cover; border-radius: var(--radius); flex-shrink: 0; }
+.mini-player-text { display: flex; flex-direction: column; min-width: 0; }
+.mini-player-title,
+.mini-player-track { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-player-title { font-size: 0.85rem; font-weight: 600; }
+.mini-player-track { font-size: 0.72rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.mini-player-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--border); }
+.mini-player-fill { height: 100%; width: 0; background: var(--accent); }
+.mini-player-buttons { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.mini-player .book-btn-play { width: 42px; height: 42px; }
+.mini-player-close { min-width: 36px; padding: 0; border-color: transparent; }
+body.has-mini-player #app { padding-bottom: 84px; }
+
+@media (max-width: 600px) {
+  .book-player { padding: 14px 12px; }
+  .book-player-now { flex-direction: column; gap: 2px; }
+  .book-player-track { white-space: normal; }
+  /* Alle sieben Transporttasten passen auch auf schmalen iPhones in eine Zeile. */
+  .book-player-buttons {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: clamp(1px, 0.8vw, 4px);
+  }
+  .book-player-buttons .book-btn:not(.book-btn-play) {
+    min-width: 30px;
+    height: 32px;
+    padding: 0 clamp(2px, 0.8vw, 5px);
+    border-radius: 16px;
+    font-size: clamp(0.64rem, 2.8vw, 0.72rem);
+  }
+  .book-player-buttons .book-btn-play {
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+  }
+  .book-player-buttons .book-btn svg { width: 16px; height: 16px; }
+  .book-player-buttons .book-btn-play svg { width: 20px; height: 20px; }
+  .book-btn { min-width: 40px; padding: 0 8px; font-size: 0.74rem; }
+  .mini-player { gap: 8px; padding: 6px 8px; bottom: 8px; }
+}
+
+/* ── eBook-Text zum Hörbuch (Vollbild-Reiter, Miniplayer bleibt darüber) ─── */
+.book-reader {
+  position: fixed;
+  inset: 0;
+  z-index: 205;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+body.book-reader-open .mini-player { z-index: 215; }
+.book-reader-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.book-reader-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.book-reader-where {
+  display: flex;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: pre;
+}
+.book-reader-where:empty { display: none; }
+.book-reader-chapter { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.book-reader-percent { flex-shrink: 0; }
+/* Lesefortschritt: optisch 3 px, Tippzone per ::before deutlich höher (für den Finger). */
+.book-reader-progress {
+  position: relative;
+  z-index: 3;
+  flex-shrink: 0;
+  height: 3px;
+  background: var(--border);
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+  transform-origin: top;
+  transition: transform .15s ease;
+}
+.book-reader-progress::before { content: ''; position: absolute; left: 0; right: 0; top: -10px; bottom: -14px; }
+.book-reader-progress.is-active,
+.book-reader-progress:focus-visible { transform: scaleY(2.3); }
+.book-reader-progress-fill { width: 0; height: 100%; background: var(--accent); }
+/* Sprechblase beim Ziehen einer Fortschrittslinie (enableScrubBar): über der Linie,
+   Position per Skript; über Reader (205) und Miniplayer (215). */
+.scrub-bubble {
+  position: fixed;
+  top: 0;
+  z-index: 620;
+  transform: translateX(-50%);
+  max-width: min(80%, 24rem);
+  padding: 6px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  white-space: pre;
+  pointer-events: none;
+  box-shadow: var(--shadow-lg);
+}
+.scrub-bubble:not([hidden]) { display: flex; }
+.scrub-bubble[hidden] { display: none; }
+.book-reader-title {
+  min-width: 0;
+  font-family: var(--font-head);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.book-reader-size { display: flex; gap: 6px; flex-shrink: 0; }
+.book-reader-size .book-btn:disabled { opacity: 0.35; cursor: default; }
+.book-reader-close { min-width: 36px; padding: 0; }
+.book-reader-body { flex: 1; min-height: 0; position: relative; }
+.book-reader-status { padding: 32px 20px; text-align: center; color: var(--text-muted); }
+.book-reader-scroll {
+  position: relative;   /* Bezug für offsetTop der Überschriften (Kapitelanzeige) */
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 20px 40px;
+  outline: none;
+}
+.book-reader-text { max-width: 42rem; margin: 0 auto; }
+.book-reader-text img { display: block; max-width: 100%; height: auto; margin: 1.2em auto; border-radius: 4px; }
+.book-reader-back {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+}
+.book-reader-back[hidden] { display: none; }
+.book-reader-back:hover { background: var(--accent-glow); }
+.book-reader-pdf { width: 100%; height: 100%; border: 0; display: block; }
+/* Platz für den Miniplayer unten */
+body.has-mini-player .book-reader-body { padding-bottom: 76px; }
+body.has-mini-player .book-reader-back { bottom: 92px; }
+

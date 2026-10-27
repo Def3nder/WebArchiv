@@ -43,6 +43,16 @@ Weitere Autoren oder Kanäle werden als zusätzliche
 Objekte mit `Name`, `URL` und `OutputPath` im passenden Array ergänzt. Leere
 Platzhalter gehören nicht in die aktive Config, da jeder Eintrag aufgerufen wird.
 
+Optionale Felder je Quelle (nichts davon ist im Code fest eingetragen):
+
+| Feld | Wirkung |
+|---|---|
+| `FileAuthor` | Autorenname in Dateinamen von Facebook-/Telegram-Beiträgen (`<Datum>_<FileAuthor> - <Slug>.md`); Standard: `Name` |
+| `Signature` | `{ "Name": "…", "Website": "…" }` – Abspann, Social-Media-Hinweise und Call-to-Action dieses Autors entfernen |
+| `Exclude` | Regulärer Ausdruck (ohne Groß-/Kleinschreibung); passende Beiträge werden übersprungen |
+
+Die Endung „/ Blog | www.<Domain>“ im Blog-Titel wird aus der Domain der `URL` abgeleitet.
+
 Pro Beitrag entsteht eine Markdown-Datei (Blog/Facebook zusätzlich das Bild mit
 gleichem Dateinamen-Stamm). Jede Quelle bricht nach **3** bereits vorhandenen
 Artikeln ab (`SKIP_LIMIT`). Der Scraper ist self-contained (eigene

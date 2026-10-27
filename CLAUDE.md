@@ -31,7 +31,9 @@ Run the complete Node and Python test suite with `npm test`. Tests live under
 `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button
 → `POST /api/reindex`, or restart). Frontend changes (`public/`) only need a browser reload;
-bump the `?v=` query on the `<script>`/`<link>` tags in `public/index.html` to bust caches.
+the server appends `?v=<content hash>` to every local `<script>`/`<link>` in `public/index.html`
+automatically (`createVersionedIndex` in `lib/app-shell.cjs`) — never add `?v=` numbers by hand, and tests
+must not pin versions.
 
 ## Architecture
 
@@ -81,7 +83,7 @@ members of a group anchored on the article (or the base infographic); they inher
 the ACL filter, so users who cannot see the article get the infographic as its own tile.
 
 **Frontend: `public/` (no framework).** `index.html` is the shell, `app.js` is a hash-routed SPA
-(`#/article/<id>` deep-links), `styles.css` the styling. It talks only to the `/api/*` JSON
+(`#/article/<id>` deep-links), `public/css/*.css` the styling. It talks only to the `/api/*` JSON
 endpoints and renders cards, an article overlay, audio/video players, and an embedded PDF viewer
 (`public/vendor/pdfjs/`). State (search query, filters, pagination, current user) lives in the `state`
 object in `app.js`.
@@ -150,6 +152,20 @@ for the full setup log (SSH keys, systemd unit, mount/permission notes). HTTPS t
 NPMplus reverse proxy (192.168.1.14). With `NODE_ENV=production` the server refuses to start without a
 `SESSION_SECRET` of at least 32 chars. `TRUST_PROXY` (default `loopback, 192.168.1.14`) limits which
 proxies may set `X-Forwarded-*`; `CSP_MODE` is `report` (default), `enforce` or `off`.
+
+**Browser script forms (keep to these three, don't add a fourth):**
+- *Shared classic scripts* (`app.js`, `audiobooks.js`, `book-reader.js`, `duplicates.js`, `user-admin.js`, …):
+  top-level functions/consts are deliberately shared across scripts via the global scope; load order in
+  `index.html` matters. Only for code that genuinely shares state with `app.js`.
+- *Encapsulated scripts* (IIFE or UMD like `aria-menu.js`, `session-state.js`, `admin-tasks.js`,
+  `infographic-review.js`): the default for new browser code. Expose an explicit API (`window.X`,
+  `adminHooks`, placeholder objects) instead of new globals; UMD when Node tests import the module.
+- *ES modules only inside esbuild bundles* (`markdown-editors.js` → `vendor/article-editor.bundle.js`,
+  `duplicate-diff.js`): only where npm packages (CodeMirror, diff) are needed; rebuild with `npm run build:*`.
+
+**Stylesheets** live in `public/css/` (base, filters, cards, detail, dialogs, account, audiobooks,
+duplicates [admin only], audiobook-extras), loaded in this order — the order is the cascade. Tests read all
+of them via `test/support/read-styles.cjs`.
 
 **Menus and admin code (frontend):** every dropdown/action menu uses `public/aria-menu.js`
 (`WebArchivAriaMenu.create` / `bindSelect`) — no hand-written open/close/Escape/outside-click logic and no

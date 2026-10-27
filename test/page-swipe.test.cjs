@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ROOT = path.join(__dirname, '..');
 const pageSwipe = require('../public/page-swipe.js');
+const readStyles = require('./support/read-styles.cjs');
 
 function gesture(overrides = {}) {
   return {
@@ -90,7 +91,7 @@ test('Zu kurze, vertikale und blockierte Gesten werden ignoriert', () => {
 });
 
 test('Auch die Listenansicht reserviert horizontale Inhaltsgesten', () => {
-  const css = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
+  const css = readStyles();
   assert.match(css, /body\.layout-list \.article-grid\s*\{[^}]*touch-action:\s*pan-y;/s);
 });
 

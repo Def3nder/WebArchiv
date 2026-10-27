@@ -2,9 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readStyles = require('./support/read-styles.cjs');
 
 const APP = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
-const CSS = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
+const CSS = readStyles();
 
 test('Externe Prompt-Ziele erzeugen unter iOS kein zusätzliches leeres Fenster', () => {
   assert.match(APP, /const isIosPromptNavigation = \(\) => \/iPad\|iPhone\|iPod\//);

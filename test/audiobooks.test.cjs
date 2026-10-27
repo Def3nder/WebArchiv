@@ -74,7 +74,7 @@ test('Bibliothek: natürliche Sortierung, Cover, Fallbacks, leere Ordner übersp
   assert.equal(library.directory, 'Hoerbuecher');
   assert.equal(kuschik.id, `${AUDIOBOOK_AUTHOR}/Karin Kuschik - 50 Fragen`);
   assert.equal(kuschik.author, AUDIOBOOK_AUTHOR);
-  assert.match(kuschik.imageUrl, /^\/audio-files\/Hoerbuecher\/Karin%20Kuschik%20-%2050%20Fragen\/cover\.jpg\?v=\d+$/);
+  assert.match(kuschik.imageUrl, /^\/audio-files\/Hoerbuecher\/Karin%20Kuschik%20-%2050%20Fragen\/cover\.jpg(?:\?v=[a-f0-9]+)?$/);
   assert.equal(kuschik.tracks[0].url, '/audio-files/Hoerbuecher/Karin%20Kuschik%20-%2050%20Fragen/01%20-%20Intro.mp3');
   assert.equal(nagoski.bookAuthor, 'Emily Nagoski');
   assert.equal(nagoski.filePath, null);
@@ -91,7 +91,7 @@ test('Bibliothek: natürliche Sortierung, Cover, Fallbacks, leere Ordner übersp
     ['02 - Übersicht.jpg', 'Übersicht', 'image'],
     ['10 - Animation.GIF', 'Animation', 'image'],
   ]);
-  assert.match(extras.extras[1].url, /\/extras\/02%20-%20%C3%9Cbersicht\.jpg\?v=\d+$/);
+  assert.match(extras.extras[1].url, /\/extras\/02%20-%20%C3%9Cbersicht\.jpg(?:\?v=[a-f0-9]+)?$/);
   assert.equal(library.list({ email: 'a@b.de' }).items[0].tracks, undefined);
   assert.equal(library.list({ email: 'a@b.de' }).items[0].hasExtras, undefined);
 });
@@ -133,7 +133,7 @@ test('Extras: Markdown wird gerendert, Bilder nur aus extras/images aufgelöst u
   const result = await library.extraText(book, '01 - Praxisübungen.md');
   assert.equal(result.format, 'md');
   assert.equal(result.title, 'Praxisübungen');
-  assert.match(result.html, /\/audio-files\/Hoerbuecher\/Karin%20Kuschik%20-%2050%20Fragen\/extras\/images\/grafik\.jpg\?v=\d+/);
+  assert.match(result.html, /\/audio-files\/Hoerbuecher\/Karin%20Kuschik%20-%2050%20Fragen\/extras\/images\/grafik\.jpg(?:\?v=[a-f0-9]+)?/);
   await assert.rejects(library.extraText(book, '../abstract.md'), { status: 404 });
   await assert.rejects(library.extraText(book, '02 - Übersicht.jpg'), { status: 404 });
 });
@@ -400,7 +400,7 @@ test('eBook-Inhalt: Markdown gerendert, Text escaped und in Absätze, PDF als Me
     { format: 'txt', html: '<p>Erste Zeile zweite &lt;b&gt;Zeile&lt;/b&gt;</p>\n<p>Neuer Absatz</p>' });
   assert.equal((await library.ebookText(byTitle('Zeilenweise'))).html, '<p>Eins</p>\n<p>Zwei</p>');
   const pdf = await library.ebookText(byTitle('Mit PDF'));
-  assert.match(pdf.url, /^\/audio-files\/Hoerbuecher\/Autor%20-%20Mit%20PDF\/Autor%20-%20Mit%20PDF\.pdf\?v=\d+$/);
+  assert.match(pdf.url, /^\/audio-files\/Hoerbuecher\/Autor%20-%20Mit%20PDF\/Autor%20-%20Mit%20PDF\.pdf(?:\?v=[a-f0-9]+)?$/);
   await assert.rejects(library.ebookText(byTitle('Ohne')), { status: 404 });
 });
 
@@ -453,7 +453,7 @@ test('eBook-Bilder: Unterordner (Groß-/Kleinschreibung egal) wird zu /audio-fil
   const library = createAudiobookLibrary({ audioRoot: path.join(dir, 'audio'), progress, excerpt: x => x, renderMarkdown: x => x });
   await library.rebuild();
   const { html } = await library.ebookText(library.books[0]);
-  const srcs = [...html.matchAll(/src="([^"]*)"/g)].map(m => m[1].replace(/\?v=\d+$/, '').replace(/\/images\//i, '/Images/'));   // Windows behält die Schreibweise, Linux liefert die echte
+  const srcs = [...html.matchAll(/src="([^"]*)"/g)].map(m => m[1].replace(/(?:\?v=[a-f0-9]+)?$/, '').replace(/\/images\//i, '/Images/'));   // Windows behält die Schreibweise, Linux liefert die echte
   assert.deepEqual(srcs, [
     '/audio-files/Hoerbuecher/Autor%20-%20Bilder/Images/a%20b.jpg',
     '/audio-files/Hoerbuecher/Autor%20-%20Bilder/Images/sub/c.png',

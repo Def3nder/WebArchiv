@@ -34,7 +34,7 @@ test('Update-Oberfläche und Registrierung sind in der App-Shell eingebunden', (
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
   const client = fs.readFileSync(path.join(ROOT, 'public', 'pwa-update.js'), 'utf8');
   assert.match(html, /id="pwa-update-notice"/);
-  assert.match(html, /pwa-update\.js\?v=1/);
+  assert.match(html, /pwa-update\.js(?:\?v=[a-f0-9]+)?/);
   assert.match(client, /serviceWorker\.register\('\/service-worker\.js'/);
   assert.match(client, /updateViaCache:\s*'none'/);
   assert.match(client, /app-update/);

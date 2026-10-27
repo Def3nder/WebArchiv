@@ -2,10 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readStyles = require('./support/read-styles.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const APP = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
+const CSS = readStyles();
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
 
 test('abgeschnittene Kachelvorschauen erhalten zuverlässig ein Auslassungszeichen', () => {
@@ -21,6 +22,6 @@ test('abgeschnittene Kachelvorschauen erhalten zuverlässig ein Auslassungszeich
 });
 
 test('geänderte Vorschau-Ressourcen werden ohne alten Browser-Cache geladen', () => {
-  assert.match(HTML, /styles\.css\?v=163/);
-  assert.match(HTML, /app\.js\?v=137/);
+  assert.match(HTML, /css\/base\.css(?:\?v=[a-f0-9]+)?/);
+  assert.match(HTML, /app\.js(?:\?v=[a-f0-9]+)?/);
 });

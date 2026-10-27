@@ -1638,3 +1638,39 @@ also weiterhin ohne Neustart, und gespeicherte Artikel erscheinen sofort.
   `tts/jobs.cjs`, `lib/atomic-file.cjs`, `lib/session-file-store.cjs` (neu).
 - Der Dienstnutzer muss im App-Verzeichnis `sessions.json` anlegen dürfen (wie `users.json`).
 - Danach den Dienst neu starten. Beim allerersten Neustart sind noch alle abgemeldet, ab dann nicht mehr.
+
+## 31. Aktualisierung 27.10.2026 – Frontend und Pflege
+
+- **Automatische Cache-Buster:** `createVersionedIndex` (`lib/app-shell.cjs`) hängt beim Ausliefern jeder
+  lokalen JS-/CSS-Referenz in `index.html` `?v=<10 Zeichen SHA-256 des Inhalts>` an.
+  - Neu berechnet wird nur nach einer Änderung an `index.html` oder einer referenzierten Datei; pro Abruf
+    genügt ein `stat` je Datei.
+  - Die 20 handgepflegten Nummern sind aus `index.html` entfernt; ein Test verhindert neue.
+  - Tests prüfen keine festen Versionen mehr (28 Stellen in 17 Dateien).
+- **Stylesheets aufgeteilt:** `styles.css` (3.824 Zeilen) liegt jetzt in neun Dateien unter `public/css/`,
+  geschnitten an den bestehenden Abschnittsgrenzen.
+  - Reihenfolge und Inhalt sind unverändert; zusammengesetzt ergeben die Teile exakt die alte Datei.
+  - `css/duplicates.css` wird nur Admins ausgeliefert (`data-admin-asset`, `ADMIN_ASSET_PATHS`).
+  - Die Service-Worker-Version beobachtet auch `public/css/`.
+  - Tests lesen alle Teile über `test/support/read-styles.cjs`.
+- **Scraper ohne feste Joe-Turan-Werte:** `CHANNEL_DISPLAY_NAME`, `LEGACY_POST_AUTHORS`, der Titel-Suffix
+  mit `joeturan.com` und der Kuschel-Workshop-Filter sind aus `scrape_all.js` entfernt.
+  - Neue optionale Felder je Quelle in `scraper-config.json`: `FileAuthor`, `Signature` (`Name`, `Website`)
+    und `Exclude` (regulärer Ausdruck).
+  - Die Blog-Titelendung „/ Blog | www.<Domain>“ wird aus der Quell-URL abgeleitet.
+  - Die Config ist so ergänzt, dass sich das Verhalten der bestehenden Quellen nicht ändert.
+- **Modulformen:** Bewusst nicht migriert. Die drei Formen haben jeweils einen Zweck; die Regeln, welche Form
+  wann gilt, stehen jetzt in CLAUDE.md und AGENTS.md. Eine vollständige Umstellung von `app.js`
+  (rund 3.500 Zeilen, geteilte globale Funktionen mit sechs anderen Skripten) wäre ein eigenes Vorhaben.
+
+**Geprüft:**
+- Node-Suite 405/405 und Scraper-Tests 11/11 (neu: Config-Felder, Titel-Suffix, ungültige Optionen).
+- Im Browser: Alle Skripte und die neun Stylesheets laden mit Hash-Versionen, Kacheln und Gestaltung wie
+  vorher, der Update-Hinweis erscheint nach der Änderung.
+
+**Deployment:**
+- Kopieren:
+  - `public/index.html` und den neuen Ordner `public/css/`; `public/styles.css` auf dem Server löschen
+  - `server.js`, `lib/app-shell.cjs`
+  - `scraper/scrape_all.js`, `scraper/scraper-config.json`
+- Danach den Dienst neu starten.

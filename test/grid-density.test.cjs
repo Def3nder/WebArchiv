@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ROOT = path.join(__dirname, '..');
 const gridDensity = require('../public/grid-density.js');
+const readStyles = require('./support/read-styles.cjs');
 
 test('Browser-Script stellt die Berechnung vor app.js global bereit', () => {
   const context = { globalThis: {} };
@@ -13,7 +14,7 @@ test('Browser-Script stellt die Berechnung vor app.js global bereit', () => {
 });
 
 test('Das gesamte Raster reserviert Pinch-Gesten und lässt vertikales Scrollen zu', () => {
-  const css = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
+  const css = readStyles();
   assert.match(css, /body:not\(\.layout-list\) \.article-grid\s*\{[^}]*touch-action:\s*pan-y;/s);
   assert.match(css, /\.article-grid\s*\{[^}]*overflow-anchor:\s*none;/s);
 });

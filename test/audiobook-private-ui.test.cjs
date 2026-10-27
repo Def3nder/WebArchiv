@@ -28,7 +28,7 @@ test('Nur Administratoren können die globale Privat-Markierung umschalten', () 
   assert.match(books, /data-book-private>\$\{book\.private \? 'Privat aufheben' : 'Als privat markieren'\}/);
   assert.match(books, /apiFetch\('\/api\/audiobook-private\/'[\s\S]*?method: 'PUT'[\s\S]*?private: !book\.private/);
   assert.match(server, /app\.put\('\/api\/audiobook-private\/\*'[\s\S]*?progress\.setPrivate\(book\.id, req\.body\?\.private\)[\s\S]*?}, true\)\);/);
-  assert.match(html, /audiobooks\.js\?v=26/);
+  assert.match(html, /audiobooks\.js(?:\?v=[a-f0-9]+)?/);
 });
 
 test('Server sperrt Detail-, Zusatz- und Medienzugriffe auf private Hörbücher', () => {

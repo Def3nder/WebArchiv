@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import {
   buildFilename,
   cleanFacebookText,
   loadScraperConfig,
-  postAuthorName,
+  blogTitleSuffixRe,
   stripLeadingDuplicateTitle,
   stripLeadingIntro,
 } from "../scrape_all.js";
@@ -51,16 +54,45 @@ test("verwendet den konfigurierten Autor im neuen Facebook-Dateinamen", () => {
   );
 });
 
-test("bewahrt die bisherigen Dateinamen für Facebook und Telegram", () => {
-  assert.equal(postAuthorName("facebook", "Facebook"), "Joe Turan");
-  assert.equal(postAuthorName("telegram", "Telegram"), "Joe Turan");
-  assert.equal(postAuthorName("facebook", "Nawal Boussi"), "Nawal Boussi");
+test("bewahrt die bisherigen Dateinamen für Facebook und Telegram über FileAuthor", () => {
+  const config = loadScraperConfig();
+  assert.equal(config.facebook[0].fileAuthor, "Joe Turan");
+  assert.equal(config.telegram[0].fileAuthor, "Joe Turan");
+  assert.equal(config.facebook[2].fileAuthor, "Joe Turan Gruppe", "ohne FileAuthor gilt der Name");
+});
+
+test("Signatur und Ausschlussfilter kommen aus der Konfiguration", () => {
+  const config = loadScraperConfig();
+  assert.deepEqual(config.blog[0].signature, { name: "Joe Turan", website: "joeturan.com" });
+  assert.ok(config.telegram[0].exclude.test("Kuschel-Workshop am Samstag"));
+  assert.equal(config.facebook[1].signature, null);
+  assert.equal(config.facebook[1].exclude, null);
+});
+
+test("Blog-Titelendung wird aus der Domain der Quelle abgeleitet", () => {
+  const re = blogTitleSuffixRe("https://www.example.org/blog");
+  assert.equal("Ein Titel / Blog | www.example.org".replace(re, ""), "Ein Titel");
+  assert.equal("Ein Titel / Blog | example.org".replace(re, ""), "Ein Titel");
+  assert.equal("Ein Titel / Blog | www.anderes.de".replace(re, ""), "Ein Titel / Blog | www.anderes.de");
+});
+
+test("ungültige Quellenoptionen werden beim Laden abgelehnt", t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scraper-config-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const write = entry => {
+    const file = path.join(dir, "config.json");
+    fs.writeFileSync(file, JSON.stringify({ Blog: [], Facebook: [{ Name: "X", URL: "https://example.org", OutputPath: "../www/X", ...entry }], Telegram: [] }));
+    return file;
+  };
+  assert.throws(() => loadScraperConfig(write({ Exclude: "(" })), /Exclude/);
+  assert.throws(() => loadScraperConfig(write({ Signature: {} })), /Signature/);
+  assert.throws(() => loadScraperConfig(write({ FileAuthor: "a/b" })), /FileAuthor/);
 });
 
 test("wendet Joe-spezifische Facebook-Bereinigung nicht auf Nawal an", () => {
   const text = "Beitrag von Nawal\n\nJoe Turan\njoeturan.com";
   assert.equal(
-    cleanFacebookText(text, "Nawal Boussi"),
+    cleanFacebookText(text, null),
     text
   );
 });

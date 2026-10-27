@@ -40,7 +40,6 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 // Projekt-Roots (eine Ebene höher), das der WebArchiv-Server rendert.
 const PROJECT_ROOT = path.join(SCRIPT_DIR, "..");
 
-const CHANNEL_DISPLAY_NAME = "Joe Turan";
 const WWW_DIR = path.join(PROJECT_ROOT, "www");
 
 const COOKIES_FILE = path.join(SCRIPT_DIR, "cookies.txt");
@@ -62,9 +61,6 @@ const REQUEST_TIMEOUT = 30; // Sekunden
 const PAGE_WAIT_MS = 4000;
 const ARTICLE_PAUSE_SECONDS = 0.4;
 const PAGE_PAUSE_SECONDS = 0.8;
-const TITLE_SUFFIX_RE = /\s*\/\s*Blog\s*\|\s*www\.joeturan\.com\s*$/i;
-
-const EXCLUDE_RE = /kuschel[\s\-_]*workshop/i;
 
 const CANONICAL_ORDER = ["blog", "facebook", "telegram"];
 
@@ -74,13 +70,11 @@ const CONFIG_SECTIONS = {
   telegram: "Telegram",
 };
 
-// Die bisherigen Verzeichnisse Facebook/Telegram enthalten Joe-Turan-Dateien
-// mit "Joe Turan" im Dateinamen. Diese Zuordnung verhindert beim Umstieg auf
-// die Config doppelte Dateien; neue Quellen verwenden ihren konfigurierten Namen.
-const LEGACY_POST_AUTHORS = {
-  facebook: { Facebook: CHANNEL_DISPLAY_NAME },
-  telegram: { Telegram: CHANNEL_DISPLAY_NAME },
-};
+// Blog-Titel enden auf „/ Blog | www.<Domain>“; die Domain stammt aus der Quell-URL.
+function blogTitleSuffixRe(url) {
+  const host = new URL(url).hostname.replace(/^www\./i, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\s*/\\s*Blog\\s*\\|\\s*(?:www\\.)?${host}\\s*$`, "i");
+}
 
 function sourceOutputDir(outputPath) {
   if (!outputPath || path.isAbsolute(outputPath)) {
@@ -126,14 +120,32 @@ function loadScraperConfig(configPath = CONFIG_FILE) {
       if (!["http:", "https:"].includes(parsedUrl.protocol)) {
         throw new Error(`Scraper-Config: nur HTTP(S)-URLs sind erlaubt: ${url}`);
       }
-      return { name, url, outputDir: sourceOutputDir(outputPath) };
+      return { name, url, outputDir: sourceOutputDir(outputPath), ...sourceOptions(entry, section, index, name) };
     });
   }
   return config;
 }
 
-function postAuthorName(type, sourceName) {
-  return LEGACY_POST_AUTHORS[type]?.[sourceName] || sourceName;
+// Optionale Felder je Quelle (siehe README):
+// - FileAuthor: Autorenname in Dateinamen von Facebook-/Telegram-Beiträgen (Standard: Name)
+// - Signature: { Name, Website } – Abspann und Call-to-Action dieses Autors entfernen
+// - Exclude: regulärer Ausdruck; passende Beiträge werden übersprungen
+function sourceOptions(entry, section, index, name) {
+  const where = `Scraper-Config: ${section}[${index}]`;
+  const fileAuthor = entry.FileAuthor === undefined ? name : String(entry.FileAuthor).trim();
+  if (!fileAuthor || /[\\/:*?"<>|]/.test(fileAuthor)) throw new Error(`${where}: ungültiger FileAuthor.`);
+  let signature = null;
+  if (entry.Signature !== undefined) {
+    const signatureName = String(entry.Signature?.Name || "").trim();
+    if (!signatureName) throw new Error(`${where}: Signature benötigt einen Namen.`);
+    signature = { name: signatureName, website: String(entry.Signature?.Website || "").trim() };
+  }
+  let exclude = null;
+  if (entry.Exclude !== undefined) {
+    try { exclude = new RegExp(String(entry.Exclude), "i"); }
+    catch (exc) { throw new Error(`${where}: ungültiger Exclude-Ausdruck: ${exc.message}`); }
+  }
+  return { fileAuthor, signature, exclude };
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +312,7 @@ function stripFbUiText(text) {
  * 3. Ohne Anker-Treffer die letzte passende Autorenzeile nehmen.
  * 4. Ab dort abschneiden und den sauberen Autorennamen anhängen.
  */
-function stripSignature(mdText, displayName = CHANNEL_DISPLAY_NAME, websiteAnchor = "joeturan.com") {
+function stripSignature(mdText, displayName, websiteAnchor = "") {
   const lines = splitlines(mdText);
   const target = displayName.toLowerCase();
 
@@ -377,13 +389,13 @@ function stripCtaBlockLines(text) {
   return kept.join("\n");
 }
 
-function cleanFacebookText(rawText, displayName) {
+function cleanFacebookText(rawText, signature = null) {
   let text = stripFbUiText(rawText);
   text = stripLeadingIntro(text);
   text = stripTrailingGreeting(text);
-  if (displayName === CHANNEL_DISPLAY_NAME) {
+  if (signature) {
     text = stripCtaBlockLines(text);
-    text = stripSignature(text);
+    text = stripSignature(text, signature.name, signature.website);
   }
   return text;
 }
@@ -420,7 +432,7 @@ function slugify(sentence, maxLen = SLUG_MAX_LEN) {
 }
 
 /** Dateiname für Telegram-/Facebook-Beiträge: '<date>_<Autor> - <slug>.md'. */
-function buildFilename(dateStr, slug, displayName = CHANNEL_DISPLAY_NAME) {
+function buildFilename(dateStr, slug, displayName) {
   return `${dateStr}_${displayName} - ${slug}.md`;
 }
 
@@ -554,7 +566,7 @@ function parseFbDate(text, today = null) {
 }
 
 // ===========================================================================
-// Quelle 1: BLOG (joeturan.com/blog)
+// Quelle 1: BLOG (Startseite eines Blogs, z. B. /blog)
 // ===========================================================================
 const turndownService = new TurndownService({ headingStyle: "atx" });
 turndownService.remove(["script", "style"]);
@@ -583,10 +595,10 @@ function metaContent($, selector) {
   return content.trim();
 }
 
-function extractTitle($) {
+function extractTitle($, titleSuffixRe = null) {
   const raw = metaContent($, "meta[property='og:title']");
   if (!raw) return "Unbekannter Artikel";
-  return raw.replace(TITLE_SUFFIX_RE, "").trim() || "Unbekannter Artikel";
+  return (titleSuffixRe ? raw.replace(titleSuffixRe, "") : raw).trim() || "Unbekannter Artikel";
 }
 
 function extractBlogDate($) {
@@ -634,7 +646,7 @@ function _normalizeForCompare(text) {
   return text.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function extractContentMarkdown($, title, displayName = CHANNEL_DISPLAY_NAME) {
+function extractContentMarkdown($, title, signature = null) {
   const titleNorm = _normalizeForCompare(title);
   const chunks = [];
   $(`.${CONTENT_CONTAINER_CLASS}`).each((_i, container) => {
@@ -654,17 +666,17 @@ function extractContentMarkdown($, title, displayName = CHANNEL_DISPLAY_NAME) {
   let result = chunks.join("\n\n").trim();
   result = stripLeadingDuplicateTitle(result, title);
   result = stripLeadingIntro(result);
-  if (displayName === CHANNEL_DISPLAY_NAME) {
+  if (signature) {
     result = stripCtaBlockParagraphs(result);
-    result = stripSignature(result);
+    result = stripSignature(result, signature.name, signature.website);
   }
   return result;
 }
 
-function parseArticle(html, url, displayName = CHANNEL_DISPLAY_NAME) {
+function parseArticle(html, url, { signature = null, titleSuffixRe = null } = {}) {
   const $ = cheerio.load(html);
   const ogUrl = extractOgUrl($, url);
-  const title = extractTitle($);
+  const title = extractTitle($, titleSuffixRe);
   const dateStr = extractBlogDate($);
   const slug = buildSlugFromUrl(ogUrl);
   return {
@@ -672,7 +684,7 @@ function parseArticle(html, url, displayName = CHANNEL_DISPLAY_NAME) {
     title,
     date: dateStr,
     slug,
-    content_md: extractContentMarkdown($, title, displayName),
+    content_md: extractContentMarkdown($, title, signature),
     image_url: extractImageUrl($),
     og_description: extractOgDescription($),
   };
@@ -817,7 +829,7 @@ async function processBlogListingPage(page, context, source, processedUrls, skip
     try {
       await articlePage.goto(articleUrl, { waitUntil: "networkidle", timeout: REQUEST_TIMEOUT * 1000 });
       const articleHtml = await articlePage.content();
-      const article = parseArticle(articleHtml, articleUrl, source.name);
+      const article = parseArticle(articleHtml, articleUrl, { signature: source.signature, titleSuffixRe: blogTitleSuffixRe(source.url) });
       const [mdPath, jpgPath] = articlePaths(outputDir, article);
 
       if (fs.existsSync(mdPath) && fs.existsSync(jpgPath)) {
@@ -912,8 +924,7 @@ async function extractTelegramDate(post) {
 async function scrapeTelegram(browser, source, changedFiles) {
   const channelUrl = source.url;
   const outputDir = source.outputDir;
-  const displayName = postAuthorName("telegram", source.name);
-  const applyJoeFilters = displayName === CHANNEL_DISPLAY_NAME;
+  const displayName = source.fileAuthor;
   await fs.promises.mkdir(outputDir, { recursive: true });
 
   const context = await browser.newContext({ userAgent: USER_AGENT });
@@ -957,7 +968,7 @@ async function scrapeTelegram(browser, source, changedFiles) {
         text = stripTrailingGreeting(text);
         if (!text) continue;
 
-        if (applyJoeFilters && EXCLUDE_RE.test(text)) {
+        if (source.exclude?.test(text)) {
           logger.info(`[SKIP] Post ${postId} enthält 'Kuschel Workshop'`);
           continue;
         }
@@ -998,7 +1009,7 @@ async function scrapeTelegram(browser, source, changedFiles) {
         const markdown = renderPostMarkdown(title, postUrl, dateStr, text);
         await fs.promises.writeFile(outPath, markdown, "utf-8");
         changedFiles.add(path.resolve(outPath));
-        logger.info(`[OK]   ${path.basename(outPath)}  ←  Post ${postId}`);
+            logger.info(`[OK]   ${path.basename(outPath)}  <-  Post ${postId}`);
         saved += 1;
       }
 
@@ -1304,8 +1315,7 @@ async function fbExtractImageUrl(article) {
 
 async function scrapeFacebook(browser, source, cookiesFile, changedFiles) {
   const { url, outputDir } = source;
-  const displayName = postAuthorName("facebook", source.name);
-  const applyJoeFilters = displayName === CHANNEL_DISPLAY_NAME;
+  const displayName = source.fileAuthor;
   await fs.promises.mkdir(outputDir, { recursive: true });
   const cookies = loadNetscapeCookies(cookiesFile);
 
@@ -1401,10 +1411,10 @@ async function scrapeFacebook(browser, source, cookiesFile, changedFiles) {
         await fbExpandMore(post, page);
         const rawText = await fbExtractText(post);
 
-        const text = cleanFacebookText(rawText, displayName);
+        const text = cleanFacebookText(rawText, source.signature);
         if (!text) continue;
 
-        if (applyJoeFilters && EXCLUDE_RE.test(text)) {
+        if (source.exclude?.test(text)) {
           logger.info("[SKIP] Beitrag enthält 'Kuschel Workshop'");
           continue;
         }
@@ -1622,7 +1632,7 @@ export {
   buildFilename,
   cleanFacebookText,
   loadScraperConfig,
-  postAuthorName,
+  blogTitleSuffixRe,
   splitlines,
   stripLeadingDuplicateTitle,
   stripLeadingIntro,

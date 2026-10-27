@@ -17,7 +17,7 @@ Reverse Proxy — die Details dazu stehen in `LXC-container node.js Setup.md`.
 ## Architektur
 
 ```
-Browser (rollenabhängige SPA-Shell aus public/index.html + app.js + styles.css)
+Browser (rollenabhängige SPA-Shell aus public/index.html + app.js + public/css/)
     │  fetch /api/*
     ▼
 Express-Server (server.js, CommonJS)
@@ -37,7 +37,7 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Video/PDF)
   Für den normalen Serverstart gibt es keinen Build-Schritt. Geänderte Quellen des
   Markdown-Editors bzw. der Dubletten-Diff-Anzeige müssen jedoch mit
   `npm run build:editor` bzw. `npm run build:duplicate-diff` gebündelt werden.
-- **Frontend**: statische SPA unter `public/` (kein Framework), Hash-Routing (`#/article/<id>`), Cache-Busting per `?v=N`.
+- **Frontend**: statische SPA unter `public/` (kein Framework), Hash-Routing (`#/article/<id>`), Cache-Busting per `?v=<Inhalts-Hash>`, den der Server automatisch setzt.
   `server.js` rendert `/` und `/index.html` dabei sitzungsabhängig: Admin-Menüpunkte,
   Redaktionsdialoge und deren Script-Tags werden nur für eine bestätigte Admin-Sitzung
   in die ausgelieferte HTML-Shell übernommen. Die betreffenden Script-URLs sind zusätzlich
@@ -52,7 +52,7 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Video/PDF)
 - **PWA-Aktualisierung**: Änderungen an den Frontend-Dateien werden automatisch erkannt. Eine
   installierte Web-App zeigt „Neue Version verfügbar“ und übernimmt sie über „Jetzt aktualisieren“
   ohne Löschen oder erneutes Anlegen des Home-Screen-Symbols. Der Update-Worker cached selbst keine
-  App-Dateien; reguläres Cache-Busting per `?v=N` bleibt maßgeblich.
+  App-Dateien; maßgeblich bleibt das automatische Cache-Busting per `?v=<Inhalts-Hash>`.
 - **Bedienmenüs (verbindliche UI-Regel)**: Auswahlfilter verwenden auf Touch-Geräten immer
   native `<select>`-Systemmenüs. Auf Desktopgeräten mit Maus/präzisem Zeiger verwenden sie den
   vorhandenen Menü-Typ: `.header-menu` mit `.filter-menu-trigger`, `.header-menu-dropdown` und
@@ -89,8 +89,8 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Video/PDF)
   ergänzen. Nur für besondere bildschirmfüllende Ansichten ein bestehendes Overlay-Muster
   statt `<dialog>` übernehmen; neue solche Overlays zusätzlich in `modalOverlays` registrieren
   und per `hidden` öffnen/schließen. Neue Touch-Dialoge in `PULL_DIALOGS` in `public/app.js`
-  eintragen oder bei Sonderfällen `enablePullToClose()` direkt aufrufen. Bei geänderten
-  Frontend-Dateien die `?v=`-Kennung in `public/index.html` erhöhen.
+  eintragen oder bei Sonderfällen `enablePullToClose()` direkt aufrufen. Die `?v=`-Kennungen
+  setzt der Server automatisch aus dem Dateiinhalt; nichts von Hand hochzählen.
 - **Pull-to-Close (Touch-Dialoge und Overlays)**: Neue Ansichten verwenden die gemeinsame
   Funktion `enablePullToClose({ scroller, moving, fading, canStart, onClose })` aus `public/app.js`;
   keine eigene Wisch-Erkennung pro Dialog einführen. `moving` ist der gesamte sichtbare Dialog
@@ -616,7 +616,7 @@ führen zu `409`, statt überschrieben zu werden. BOM, CRLF und Dateirechte blei
 npm run build:editor
 ```
 
-Danach die `?v=`-Version von `vendor/article-editor.bundle.js` in `public/index.html` erhöhen.
+Die `?v=`-Version des Bundles setzt der Server automatisch aus dem Dateiinhalt.
 Der eingebettete PDF.js-Viewer bleibt ein eigenständiger Drittanbieterbereich und wird nicht in
 Editor- oder Menülogik einbezogen.
 
@@ -916,7 +916,8 @@ public/
 ├── favicon.svg               Favicon (Bücherregal, Gold auf Dunkel) – Vorlage für die beiden folgenden
 ├── favicon.ico               16/32/48 px (PNG-Einträge), aus favicon.svg erzeugt
 ├── apple-touch-icon.png      180 px ohne Eckenradius für den iOS-Homescreen
-├── styles.css                Styles (Light/Dark, Layouts)
+├── css/                      Styles in Ladereihenfolge: base, filters, cards, detail, dialogs, account,
+│                             audiobooks, duplicates (nur Admin), audiobook-extras
 └── vendor/
     └── pdfjs/                PDF.js-Anzeige (Drittanbieterbibliothek)
 epub-tool/                    Eigenständiges Werkzeug: EPUB → Markdown; Tests unter epub-tool/test/
@@ -1035,9 +1036,9 @@ npx playwright install --with-deps chromium
   sudo systemctl status nodeapp           # Dienststatus prüfen
   journalctl -u nodeapp -n 100 --no-pager # letzte Logzeilen anzeigen
   ```
-- Reine Änderungen unter `public/` benötigen keinen Serverneustart. Die passende `?v=`-Query in
-  `public/index.html` erhöhen, Dateien übertragen und Browser/PWA neu laden bzw. das angebotene
-  PWA-Update anwenden. Änderungen an Editor-Quellen vorher mit `npm run build:editor`,
+- Reine Änderungen unter `public/` benötigen keinen Serverneustart. Dateien übertragen und
+  Browser/PWA neu laden bzw. das angebotene PWA-Update anwenden; die `?v=`-Kennungen ändern sich
+  automatisch mit dem Dateiinhalt. Änderungen an Editor-Quellen vorher mit `npm run build:editor`,
   Änderungen an der Dubletten-Diff-Quelle mit `npm run build:duplicate-diff` bündeln.
 - Änderungen an `server.js`, `*.cjs`, Abhängigkeiten oder Umgebungsvariablen benötigen einen
   Neustart des Dienstes. Bei geänderter `package.json`/`package-lock.json` vorher in `/opt/nodeapp`

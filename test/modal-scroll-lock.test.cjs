@@ -3,10 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const readStyles = require('./support/read-styles.cjs');
 
 const root = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
-const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
+const css = readStyles();
 const start = app.indexOf('const modalOverlays =');
 const end = app.indexOf('\nconst dialogOpen', start);
 

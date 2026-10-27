@@ -2,13 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readStyles = require('./support/read-styles.cjs');
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 
 test('Admin-Menü und nativer Dialog enthalten die vollständige Qwen-Stimmenverwaltung', () => {
   const html = read('public/index.html');
   const app = read('public/app.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   assert.match(html, /data-action="tts-settings"[^>]*data-admin-only[^>]*>TTS-Einstellungen/);
   assert.match(html, /<dialog id="tts-settings-dialog"[^>]*aria-labelledby="tts-settings-title"/);
   for (const id of ['tts-settings-voice', 'tts-settings-preview', 'tts-settings-rename', 'tts-settings-trash',
@@ -17,8 +18,8 @@ test('Admin-Menü und nativer Dialog enthalten die vollständige Qwen-Stimmenver
   }
   assert.match(html, /-1\.7B\.pt/);
   assert.doesNotMatch(html, /Einwilligung|Zustimmung|consent/i);
-  assert.match(html, /tts-settings\.js\?v=4[\s\S]*app\.js\?v=137/);
-  assert.match(html, /styles\.css\?v=163/);
+  assert.match(html, /tts-settings\.js(?:\?v=[a-f0-9]+)?[\s\S]*app\.js(?:\?v=[a-f0-9]+)?/);
+  assert.match(html, /css\/base\.css(?:\?v=[a-f0-9]+)?/);
   assert.match(css, /#tts-settings-meta\s*{[^}]*margin-top:\s*6px/);
   assert.match(html, /id="tts-settings-name"[^>]*aria-describedby="tts-settings-name-hint"/);
   assert.match(css, /#tts-settings-name-hint\s*{[^}]*margin-top:\s*6px/);
@@ -29,7 +30,7 @@ test('Admin-Menü und nativer Dialog enthalten die vollständige Qwen-Stimmenver
 test('Server-Einstellungen stehen unter den vorhandenen Bereichen und bilden alle Qwen-Werte ab', () => {
   const html = read('public/index.html');
   const source = read('public/tts-settings.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   assert.ok(html.indexOf('id="tts-server-settings-title"') > html.indexOf('id="tts-settings-new-title"'));
   assert.doesNotMatch(html, /article-editor-heading[\s\S]{0,200}id="tts-settings-status"/);
   for (const id of ['tts-server-min-chunk', 'tts-server-target-chunk', 'tts-server-max-chunk',
@@ -49,7 +50,7 @@ test('Server-Einstellungen stehen unter den vorhandenen Bereichen und bilden all
 test('Die Stimmenauswahl verwendet das gemeinsame ARIA-Menü mit nativem Touch-Fallback', () => {
   const html = read('public/index.html');
   const source = read('public/tts-settings.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   assert.match(html, /id="tts-settings-voice" class="settings-select filter-select filter-menu-native"/);
   assert.match(html, /class="header-menu filter-header-menu tts-settings-voice-menu" data-filter-aria-menu="tts-settings-voice"/);
   assert.match(html, /aria-controls="tts-settings-voice-menu" aria-labelledby="tts-settings-voice-label tts-settings-voice-value"/);

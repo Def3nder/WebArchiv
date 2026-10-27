@@ -20,7 +20,7 @@ const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PA
 const { createArchiveLock } = require('./archive-lock.cjs');
 // Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
 const { httpError, isCrossSite } = require('./lib/http-errors.cjs');
-const { computeAppShellVersion, createAppShellVersion, cachedTextFile, serviceWorkerSource } = require('./lib/app-shell.cjs');
+const { computeAppShellVersion, createAppShellVersion, createVersionedIndex, serviceWorkerSource } = require('./lib/app-shell.cjs');
 const { createArticleBodyCache } = require('./lib/article-body-cache.cjs');
 const { FileSessionStore } = require('./lib/session-file-store.cjs');
 const {
@@ -97,6 +97,7 @@ const ADMIN_ASSET_PATHS = new Set([
   '/user-admin.js',
   '/tts-settings.js',
   '/duplicates.js',
+  '/css/duplicates.css',
   '/infographic-new.js',
   '/infographic-manager.js',
   '/article-editor.js',
@@ -457,7 +458,7 @@ async function refreshScrapedMarkdownFiles(filenames) {
     }
     publishArticleIndex(upsertArticleIndexEntries(sourceArticles, replacements));
     reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-    console.log(`✓ ${replacements.length} Scraper-Artikel gezielt neu eingelesen (${Date.now() - t0}ms)`);
+  console.log(`[OK] ${replacements.length} Scraper-Artikel gezielt neu eingelesen (${Date.now() - t0}ms)`);
   } catch (error) {
     reindexState = { ...reindexState, running: false, done: true, error: error.message };
     throw error;
@@ -468,7 +469,7 @@ async function republishArticleIndex() {
   if (!sourceArticles.length) return buildIndex();
   const t0 = Date.now();
   publishArticleIndex(sourceArticles);
-  console.log(`✓ Artikelverknüpfungen aus dem Speicher aktualisiert (${Date.now() - t0}ms)`);
+  console.log(`[OK] Artikelverknuepfungen aus dem Speicher aktualisiert (${Date.now() - t0}ms)`);
 }
 
 // Nach einer Editor-Änderung nur die betroffene Markdown-Datei erneut von der
@@ -484,7 +485,7 @@ async function refreshMarkdownIndex({ id, filename } = {}) {
     if (isPathInside(AUDIO_DIR, filename)) {
       await audiobooks.refresh(id);
       reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-      console.log(`✓ Hörbuch „${id}“ gezielt aktualisiert (${Date.now() - t0}ms)`);
+    console.log(`[OK] Hoerbuch "${id}" gezielt aktualisiert (${Date.now() - t0}ms)`);
       return;
     }
     if (!isPathInside(WWW_DIR, filename)) throw new Error('Der bearbeitete Artikel liegt außerhalb des Archivs.');
@@ -505,7 +506,7 @@ async function refreshMarkdownIndex({ id, filename } = {}) {
     publishArticleIndex(replaceArticleIndexEntry(sourceArticles, id, replacement));
 
     reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-    console.log(`✓ Artikel „${id}“ gezielt neu eingelesen (${Date.now() - t0}ms)`);
+  console.log(`[OK] Artikel "${id}" gezielt neu eingelesen (${Date.now() - t0}ms)`);
   } catch (error) {
     reindexState = { ...reindexState, running: false, done: true, error: error.message };
     throw error;
@@ -535,7 +536,7 @@ async function refreshInfographicsForYears(years) {
     // entweder vollständig den alten oder vollständig den neuen Indexstand.
     publishArticleIndex(nextSourceArticles);
     reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-    console.log(`✓ Infografiken ${uniqueYears.join(', ')} neu eingelesen (${scannedCount} Einträge, ${Date.now() - t0}ms)`);
+  console.log(`[OK] Infografiken ${uniqueYears.join(', ')} neu eingelesen (${scannedCount} Eintraege, ${Date.now() - t0}ms)`);
   } catch (error) {
     reindexState = { ...reindexState, running: false, done: true, error: error.message };
     throw error;
@@ -547,7 +548,7 @@ async function refreshInfographicsForYear(year) {
 }
 
 async function rebuildIndex() {
-  console.log('Building article index…');
+  console.log('Building article index...');
   const t0 = Date.now();
   reindexState = { running: true, processed: 0, articles: 0, done: false };
   const collector = [];
@@ -573,7 +574,7 @@ async function rebuildIndex() {
   publishArticleIndex(uniqueArticles(collector));
 
   reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
-  console.log(`✓ ${articles.length} articles, ${audiobooks.books.length} Hörbücher indexed in ${Date.now() - t0}ms`);
+  console.log(`[OK] ${articles.length} articles, ${audiobooks.books.length} audiobooks indexed in ${Date.now() - t0}ms`);
 }
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
@@ -1004,9 +1005,10 @@ function requireAdminAccess(req, res, next) {
   });
 }
 
-// Beide Shell-Varianten werden nur neu gebaut, wenn sich index.html ändert;
-// pro Anfrage kommt lediglich das sitzungsgebundene CSRF-Token hinzu.
-const indexShells = cachedTextFile(INDEX_FILE, html => ({
+// Beide Shell-Varianten werden nur neu gebaut, wenn sich index.html oder ein darin
+// geladenes Skript/Stylesheet ändert; die ?v=-Cache-Buster setzt createVersionedIndex
+// automatisch. Pro Anfrage kommt lediglich das sitzungsgebundene CSRF-Token hinzu.
+const indexShells = createVersionedIndex(INDEX_FILE, html => ({
   admin: html.split(/\r?\n/)
     .filter(line => !line.includes('data-non-admin-asset'))
     .join('\n'),
@@ -2087,7 +2089,7 @@ if (require.main === module) {
   // User (ralf) ohne sudo aufrufbar:
   //   kill -HUP "$(systemctl show -p MainPID --value nodeapp)"
   process.on('SIGHUP', () => {
-    console.log('SIGHUP empfangen → Reindex');
+  console.log('SIGHUP empfangen -> Reindex');
     if (archiveLock.busy) {
       console.warn(`SIGHUP-Reindex übersprungen: Es läuft bereits ${archiveLock.current}.`);
       return;
@@ -2097,7 +2099,7 @@ if (require.main === module) {
 
   buildIndex().catch(console.error);
   const server = app.listen(PORT, () => {
-    console.log(`WebArchiv → http://localhost:${PORT}`);
+    console.log(`WebArchiv -> http://localhost:${PORT}`);
   });
 
   let shuttingDown = false;

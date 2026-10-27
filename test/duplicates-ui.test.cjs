@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const readStyles = require('./support/read-styles.cjs');
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 
@@ -12,7 +13,7 @@ test('Dublettenprüfung ist als Admin-Dialog mit allen Entscheidungswegen eingeb
   const ui = read('public/duplicates.js');
   assert.match(html, /data-action="duplicates"[^>]*data-admin-only/);
   assert.match(html, /id="duplicate-review"[\s\S]*data-duplicate-tab="pending"[\s\S]*data-duplicate-tab="linked"[\s\S]*data-duplicate-tab="ignored"/);
-  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=7[\s\S]*duplicates\.js\?v=20/);
+  assert.match(html, /vendor\/duplicate-diff\.bundle\.js(?:\?v=[a-f0-9]+)?[\s\S]*duplicates\.js(?:\?v=[a-f0-9]+)?/);
   assert.match(html, /id="duplicate-detail-dialog"[\s\S]*id="duplicate-detail-content"/);
   assert.match(app, /action === 'duplicates'[\s\S]*openDuplicateReview/);
   for (const action of ['inspect', 'toggle-selection', 'mobile-side', 'ignore', 'migrate', 'reset']) {
@@ -43,7 +44,7 @@ test('Migration richtet sich nur nach Infografiken und bleibt ohne Fund deaktivi
 
 test('beide Artikelseiten zeigen ihre Infografikanzahl und der Detailfuß bleibt sichtbar', () => {
   const ui = read('public/duplicates.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   assert.match(ui, /duplicateInfographicGallery\(pair\.blog, 'blog'\)/);
   assert.match(ui, /duplicateInfographicGallery\(pair\.facebook, 'facebook'\)/);
   assert.match(ui, /<details class="duplicate-infographic-gallery"/);
@@ -61,7 +62,7 @@ test('beide Artikelseiten zeigen ihre Infografikanzahl und der Detailfuß bleibt
 test('Blog- und Facebook-Infografiken lassen sich vergleichen und bildschirmfüllend öffnen', () => {
   const html = read('public/index.html');
   const ui = read('public/duplicates.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   const server = read('server.js');
   assert.match(server, /function duplicateInfographicViews[\s\S]*infographicGroups\.get\(article\.id\)[\s\S]*imageUrl: item\.imageUrl/);
   assert.doesNotMatch(server.slice(server.indexOf('function duplicateInfographicViews'), server.indexOf('function duplicateArticleView')), /article\.ownImage|article\.imageUrl/);
@@ -86,7 +87,7 @@ test('Filter sind kombinierbar, Auswahl bleibt gespeichert und doppelte Quellen-
 test('Autorfilter bietet alle konfigurierten Quellen zur Mehrfachauswahl auf jedem Tab', () => {
   const html = read('public/index.html');
   const ui = read('public/duplicates.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   assert.match(html, /id="duplicate-author-filter"[\s\S]*id="duplicate-author-options"/);
   assert.match(ui, /duplicateUi\.data\.config\?\.facebookAuthors/);
   assert.match(html, /data-duplicate-filter-menu="authors"[\s\S]*data-duplicate-filter-menu="score"[\s\S]*data-duplicate-filter-menu="infographics"/);
@@ -97,7 +98,7 @@ test('Autorfilter bietet alle konfigurierten Quellen zur Mehrfachauswahl auf jed
   assert.match(ui, /duplicateVisibleItems\(duplicateUi\.tab\)/);
   assert.match(ui, /duplicateSelectionTools\.hidden = !pending/);
   assert.match(css, /\.duplicate-filter-menu \.header-menu-dropdown \{/);
-  assert.match(html, /styles\.css\?v=163/);
+  assert.match(html, /css\/base\.css(?:\?v=[a-f0-9]+)?/);
 });
 
 test('Suche grenzt beide Artikelseiten in allen Dublettentabs ein und kombiniert sich mit Filtern', () => {
@@ -133,7 +134,7 @@ test('Suche grenzt beide Artikelseiten in allen Dublettentabs ein und kombiniert
 test('Mobilgeräte nutzen System-Selects; Autorenauswahl bleibt mehrfach kombinierbar', () => {
   const html = read('public/index.html');
   const ui = read('public/duplicates.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   for (const id of ['author', 'score', 'infographic']) {
     assert.match(html, new RegExp(`<select id="duplicate-${id}-native" class="filter-select filter-menu-native duplicate-filter-native"`));
   }
@@ -150,7 +151,7 @@ test('Mobilgeräte nutzen System-Selects; Autorenauswahl bleibt mehrfach kombini
 test('Dublettenfilter folgen den Beschriftungseinstellungen und der Kopf reagiert auf Listenscrollen', () => {
   const html = read('public/index.html');
   const ui = read('public/duplicates.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   assert.match(html, /id="duplicate-chrome"[\s\S]*id="duplicate-content"/);
   assert.match(css, /body\[data-filter-labels="hidden"\] \.duplicate-filter-caption \{ display: none; \}/);
   assert.match(css, /@media \(max-width: 600px\) \{\s*\.duplicate-filter-caption \{ display: none; \}/);
@@ -178,7 +179,7 @@ test('Sammelverknüpfung liest nur betroffene Infografik-Jahre und reine Links g
 
 test('Mobil wechselt nur Artikelkopf und Infografiken; der einspaltige Diff bleibt sichtbar', () => {
   const ui = read('public/duplicates.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   assert.match(ui, /duplicateUi\.tab === 'pending' && !duplicateUi\.detail/);
   assert.match(ui, /data-mobile-side="\$\{duplicateUi\.mobileSide\}"/);
   assert.match(ui, /data-side="blog"[\s\S]*data-side="facebook"/);
@@ -201,7 +202,7 @@ test('Prüfansicht kehrt bei Auswahl, Ignorieren und Escape in die Trefferliste 
 
 test('Volltext und nur Unterschiede lassen sich im Prüfdialog umschalten', () => {
   const ui = read('public/duplicates.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   assert.match(ui, /onlyDifferences: true/);
   assert.match(ui, /data-duplicate-action="toggle-differences" aria-pressed="\$\{duplicateUi\.onlyDifferences\}"/);
   assert.match(ui, /function toggleDuplicateDiffMode\(\)[\s\S]*onlyDifferences = !duplicateUi\.onlyDifferences[\s\S]*duplicateComparisonRows\(pair\)/);
@@ -232,7 +233,7 @@ test('alle drei Dublettendialoge verwenden das sichtbare Ziehen und Rückfedern 
 
 test('offene Dublettendialoge sperren die Seite dahinter, nicht ihre inneren Scrollbereiche', () => {
   const ui = read('public/duplicates.js');
-  const css = read('public/styles.css');
+  const css = readStyles();
   assert.match(ui, /function syncDuplicatePageScroll\(\)[\s\S]*duplicateDialogs\.some\(dialog => dialog\.open\)/);
   assert.match(ui, /duplicateImageViewer\.showModal\(\);\s*syncDuplicatePageScroll\(\)/);
   assert.match(ui, /duplicateDetailDialog\.showModal\(\);\s*syncDuplicatePageScroll\(\)/);

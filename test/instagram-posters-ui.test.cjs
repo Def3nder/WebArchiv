@@ -2,11 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readStyles = require('./support/read-styles.cjs');
 
 const root = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
-const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
+const css = readStyles();
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const review = fs.readFileSync(path.join(root, 'public', 'infographic-review.js'), 'utf8');
 // Prüfmodus: Logik in infographic-review.js, Einhängepunkte in app.js.
@@ -133,6 +134,6 @@ test('Prüfmodus liegt im Admin-Skript infographic-review.js, app.js hält nur P
   assert.match(app, /const infographicReview = \{[\s\S]*?active: false,[\s\S]*?renderCard: \(\) => '',/);
   assert.match(review, /Object\.assign\(infographicReview, \{[\s\S]*?renderCard: renderInfographicReviewCard,/);
   assert.match(review, /adminHooks\.actions\['review-infographics'\]/);
-  assert.match(html, /<script src="infographic-review\.js\?v=1" data-admin-asset><\/script>/);
+  assert.match(html, /<script src="infographic-review\.js(?:\?v=[a-f0-9]+)?" data-admin-asset><\/script>/);
   assert.match(server, /'\/infographic-review\.js',/);
 });

@@ -2,11 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readStyles = require('./support/read-styles.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const APP = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
+const CSS = readStyles();
 
 test('Reset erscheint nur bei einer aktiven Suche oder einem aktiven Filter', () => {
   assert.match(HTML, /id="reset-filters"[^>]*\shidden(?:\s|>)/);
@@ -18,5 +19,5 @@ test('Reset erscheint nur bei einer aktiven Suche oder einem aktiven Filter', ()
 
 test('die persönliche Einstellung zum Ausblenden bleibt wirksam', () => {
   assert.match(CSS, /body\[data-reset-filters="hidden"\] #reset-filters \{ display: none; \}/);
-  assert.match(HTML, /app\.js\?v=137/);
+  assert.match(HTML, /app\.js(?:\?v=[a-f0-9]+)?/);
 });

@@ -62,9 +62,9 @@ async function main() {
   const svg = fs.readFileSync(SVG_FILE, 'utf8');
   const pngs = await Promise.all(ICO_SIZES.map(size => render(svg, size)));
   fs.writeFileSync(ICO_FILE, buildIco(pngs, ICO_SIZES));
-  console.log(`✓ ${path.relative(process.cwd(), ICO_FILE)} (${ICO_SIZES.join('/')} px)`);
+  console.log(`[OK] ${path.relative(process.cwd(), ICO_FILE)} (${ICO_SIZES.join('/')} px)`);
   fs.writeFileSync(TOUCH_FILE, await render(touchVariant(svg), TOUCH_SIZE));
-  console.log(`✓ ${path.relative(process.cwd(), TOUCH_FILE)} (${TOUCH_SIZE} px)`);
+  console.log(`[OK] ${path.relative(process.cwd(), TOUCH_FILE)} (${TOUCH_SIZE} px)`);
 }
 
 main().catch(err => { console.error(err.message || err); process.exit(1); });

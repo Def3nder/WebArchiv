@@ -2,10 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readStyles = require('./support/read-styles.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
+const CSS = readStyles();
 const APP = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
 
 test('Kopf und Filter bilden eine gemeinsam verschiebbare Navigation', () => {

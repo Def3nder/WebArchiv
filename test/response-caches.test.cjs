@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { cachedTextFile, createAppShellVersion, computeAppShellVersion } = require('../lib/app-shell.cjs');
+const { createVersionedIndex, createAppShellVersion, computeAppShellVersion } = require('../lib/app-shell.cjs');
 const { createArticleBodyCache } = require('../lib/article-body-cache.cjs');
 
 function tempDir(t) {
@@ -18,17 +18,35 @@ function touch(file, content, seconds) {
   fs.utimesSync(file, seconds, seconds);
 }
 
-test('cachedTextFile liest und transformiert nur nach einer Änderung neu', t => {
-  const file = path.join(tempDir(t), 'index.html');
-  touch(file, 'eins', 1000);
-  let calls = 0;
-  const read = cachedTextFile(file, text => { calls++; return text.toUpperCase(); });
-  assert.equal(read(), 'EINS');
-  assert.equal(read(), 'EINS');
-  assert.equal(calls, 1);
-  touch(file, 'zwei', 2000);
-  assert.equal(read(), 'ZWEI');
-  assert.equal(calls, 2);
+test('index.html bekommt automatische ?v=-Versionen aus dem Dateiinhalt', t => {
+  const dir = tempDir(t);
+  const index = path.join(dir, 'index.html');
+  touch(index, '<link rel="stylesheet" href="styles.css" />\n<script src="app.js?v=7"></script>\n'
+    + '<script src="https://cdn.example/x.js"></script>\n<link rel="icon" href="favicon.ico" />', 1000);
+  touch(path.join(dir, 'styles.css'), 'body {}', 1000);
+  touch(path.join(dir, 'app.js'), 'const a = 1;', 1000);
+  let builds = 0;
+  const shell = createVersionedIndex(index, html => { builds++; return html; });
+
+  const first = shell();
+  const appVersion = first.match(/app\.js\?v=([a-f0-9]{10})"/)?.[1];
+  assert.ok(appVersion, 'handgepflegte Nummer wird durch den Hash ersetzt');
+  assert.match(first, /href="styles\.css\?v=[a-f0-9]{10}"/);
+  assert.match(first, /src="https:\/\/cdn\.example\/x\.js"/, 'externe Skripte bleiben unverändert');
+  assert.match(first, /href="favicon\.ico"/, 'nur JS und CSS werden versioniert');
+  assert.equal(shell(), first);
+  assert.equal(builds, 1, 'ohne Änderung kein Neuaufbau');
+
+  touch(path.join(dir, 'app.js'), 'const a = 2;', 2000);
+  const second = shell();
+  assert.notEqual(second.match(/app\.js\?v=([a-f0-9]{10})"/)[1], appVersion);
+  assert.equal(second.match(/styles\.css\?v=([a-f0-9]{10})"/)[1], first.match(/styles\.css\?v=([a-f0-9]{10})"/)[1]);
+  assert.equal(builds, 2);
+});
+
+test('index.html enthält keine handgepflegten ?v=-Nummern mehr', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /\.(?:js|css)\?v=/);
 });
 
 test('App-Shell-Version wird nur bei geänderten Dateien neu berechnet und stimmt mit der direkten Berechnung überein', t => {

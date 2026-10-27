@@ -1,0 +1,697 @@
+/* ── Main / grid ─────────────────────────────────────────────────────────── */
+#app {
+  max-width: 1920px;
+  margin: 0 auto;
+  padding: 32px clamp(16px, 2vw, 32px) 80px;
+}
+
+.article-grid {
+  --grid-default-columns: 4;
+  display: grid;
+  grid-template-columns: repeat(var(--grid-columns, var(--grid-default-columns)), minmax(0, 1fr));
+  gap: 16px;
+  /* Pinch/Punch verankert die berührte Kachel selbst; eine zusätzliche
+     Browserkorrektur würde danach ein zweites, sichtbares Springen auslösen. */
+  overflow-anchor: none;
+}
+body:not(.layout-list) .article-grid {
+  /* Vertikales Scrollen bleibt nativ; Zwei-Finger-Skalierung gehört überall
+     im Raster der Kacheldichte und wird nicht vom Seitenzoom übernommen. */
+  touch-action: pan-y;
+}
+body.layout-list .article-grid {
+  /* Vertikales Scrollen bleibt nativ; Zwei-Finger-Skalierung ändert die
+     Zeilenhöhe, während horizontales Einfinger-Wischen Seiten blättert. */
+  touch-action: pan-y;
+}
+@media (min-width: 1451px) { .article-grid { --grid-default-columns: 5; } }
+@media (min-width: 1751px) { .article-grid { --grid-default-columns: 6; } }
+@media (max-width: 1100px) { .article-grid { --grid-default-columns: 3; } }
+@media (max-width: 720px)  { .article-grid { --grid-default-columns: 2; } }
+@media (max-width: 440px)  { .article-grid { --grid-default-columns: 2; gap: 10px; } }
+/* Handy: schmalere Ränder, damit die Kacheln mehr Inhalt zeigen. */
+@media (max-width: 600px) {
+  #app { padding: 16px 8px 60px; }
+  .article-grid { gap: 8px; }
+}
+
+.grid-density-status {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 95;
+  padding: 7px 13px;
+  border: 1px solid var(--border-hi);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity var(--transition), transform var(--transition);
+  backdrop-filter: blur(8px);
+}
+.grid-density-status.is-visible { opacity: 1; transform: translate(-50%, 0); }
+body.has-mini-player .grid-density-status { bottom: 88px; }
+
+.pwa-update-notice {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 96;
+  width: min(680px, calc(100vw - 24px));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--border-hi);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+  animation: pwaUpdateIn .24s ease-out both;
+}
+.pwa-update-notice[hidden] { display: none; }
+body.has-mini-player .pwa-update-notice { bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
+.pwa-update-icon { width: 24px; height: 24px; color: var(--accent); }
+.pwa-update-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pwa-update-copy strong { font-family: var(--font-head); font-size: 0.98rem; }
+.pwa-update-copy span { color: var(--text-muted); font-size: 0.78rem; line-height: 1.35; }
+.pwa-update-button {
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 8px 13px;
+  background: var(--accent);
+  color: var(--bg);
+  font: 600 0.78rem var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pwa-update-button:hover { filter: brightness(1.08); }
+.pwa-update-button:disabled { cursor: wait; opacity: 0.72; }
+.pwa-update-dismiss {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.pwa-update-dismiss:hover { background: var(--surface-2); color: var(--text); }
+@keyframes pwaUpdateIn {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (max-width: 560px) {
+  .pwa-update-notice {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 9px;
+    padding: 11px 10px 11px 13px;
+  }
+  .pwa-update-button { grid-column: 2; justify-self: start; }
+  .pwa-update-dismiss { grid-column: 3; grid-row: 1 / span 2; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pwa-update-notice { animation: none; }
+}
+
+/* ── Article card ────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+  display: flex;
+  flex-direction: column;
+  animation: fadeUp .3s ease both;
+  aspect-ratio: 1 / 1;
+}
+.card:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow);
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.card-image {
+  aspect-ratio: unset;
+  flex: 0 0 52%;
+  overflow: hidden;
+  background: var(--surface-2);
+  position: relative;
+}
+.card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform .5s ease;
+}
+.card:hover .card-image img { transform: scale(1.04); }
+/* Infografiken von oben zeigen – auch als einziges Bild einer Gruppe (Artikel ohne eigenes Foto). */
+.card[data-author="Infografiken"] .card-image img,
+.card-image.is-infographic img { object-position: top; }
+
+/* Gefilterte Grafiken sind einheitliche 9:16-Bildkacheln. Dadurch haben
+   Poster und klassische Infografiken dieselbe Größe ohne seitliche Flächen. */
+.instagram-poster-grid .instagram-poster-card,
+body.layout-tall .instagram-poster-grid .instagram-poster-card,
+body.layout-list .instagram-poster-grid .instagram-poster-card {
+  aspect-ratio: 9 / 16;
+  min-width: 0;
+  display: block;
+}
+body.layout-list .instagram-poster-grid {
+  grid-template-columns: repeat(var(--grid-columns, var(--grid-default-columns)), minmax(0, 1fr));
+  gap: 16px;
+}
+.instagram-poster-image {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface-2) 84%, #000 16%);
+}
+.instagram-poster-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transition: transform .35s ease;
+}
+.instagram-poster-card:hover .instagram-poster-image img { transform: scale(1.012); }
+.infographic-review-card {
+  position: relative;
+  box-sizing: border-box;
+  border: 3px solid transparent;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(145deg, var(--border), var(--border)) border-box;
+  overflow: visible;
+}
+.infographic-review-card.is-poster {
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(145deg, #ffd600, #ff0169 52%, #7638fa) border-box;
+  box-shadow: 0 8px 26px color-mix(in srgb, #d300c5 22%, transparent);
+}
+.infographic-review-image {
+  all: unset;
+  position: relative;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: zoom-in;
+  overflow: hidden;
+  border-radius: calc(var(--radius) - 3px);
+  background: color-mix(in srgb, var(--surface-2) 84%, #000 16%);
+}
+.infographic-review-image:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.poster-review-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  min-width: 48px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.poster-review-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.poster-review-check {
+  width: 29px;
+  height: 29px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255,255,255,.88);
+  border-radius: 9px;
+  background: rgba(22,20,18,.7);
+  box-shadow: 0 2px 10px rgba(0,0,0,.42);
+  backdrop-filter: blur(7px);
+  transition: transform var(--transition), background var(--transition), border-color var(--transition);
+}
+.poster-review-check svg { width: 19px; height: 19px; fill: none; stroke: #fff; stroke-width: 2.6; opacity: 0; }
+.poster-review-toggle input:checked + .poster-review-check {
+  border-color: transparent;
+  background: linear-gradient(145deg, #ffd600, #ff0169 52%, #7638fa);
+}
+.poster-review-toggle input:checked + .poster-review-check svg { opacity: 1; }
+.poster-review-toggle input:focus-visible + .poster-review-check { outline: 3px solid #fff; outline-offset: 2px; }
+.poster-review-toggle:active .poster-review-check { transform: scale(.94); }
+.poster-review-toggle-text { display: none; }
+.instagram-poster-badge {
+  position: absolute;
+  bottom: 10px;
+  z-index: 1;
+  max-width: calc(50% - 14px);
+  overflow: hidden;
+  padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 999px;
+  background: rgba(10,10,10,.72);
+  box-shadow: 0 2px 9px rgba(0,0,0,.24);
+  color: #f4f1e8;
+  font-size: .65rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(7px);
+}
+.instagram-poster-author {
+  left: 10px;
+  color: hsl(var(--author-hue, 45) 62% 75%);
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}
+.instagram-poster-date {
+  right: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: clip;
+}
+@media (max-width: 600px) {
+  body.layout-list .instagram-poster-grid { gap: 8px; }
+  .instagram-poster-badge { bottom: 7px; padding: 3px 6px; font-size: .58rem; }
+  .instagram-poster-author { left: 7px; }
+  .instagram-poster-date { right: 7px; }
+}
+
+/* Kachel mit mehreren Bildern (Artikel + Infografiken): Streifen, der per Maus-
+   position (Desktop) oder Wischen (Touch) verschoben wird; Striche unten links. */
+.card-gallery { touch-action: pan-y; }
+.card-gallery-track {
+  display: flex;
+  height: 100%;
+  transition: transform .25s ease;
+}
+.card-gallery-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.card-gallery-slide.is-infographic img { object-position: top; }
+.card-gallery-slide:not(.is-infographic) img { object-position: center; }
+/* Unten links, damit sie die Medien-Badges (unten rechts) nicht überdecken. */
+.card-gallery-dots {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  background: rgba(0,0,0,.45);
+  pointer-events: none;
+}
+.card-gallery-dots span {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,.4);
+  transition: background .2s ease;
+}
+.card-gallery-dots span.active { background: #fff; }
+.card-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--surface-2) 0%, var(--bg) 100%);
+}
+.card-image-placeholder svg {
+  width: 28px;
+  height: 28px;
+  color: var(--text-dim);
+  opacity: 0.4;
+}
+
+/* Medien-Badges unten rechts gestapelt (Audio unten, darüber Video/PDF) */
+.card-badges {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+  /* Helles Gold auf dunklem Badge-Hintergrund (themenunabhängig gut lesbar) */
+  color: #f0d98a;
+}
+
+.card-audio-badge {
+  background: rgba(0,0,0,.75);
+  border-radius: 20px;
+  padding: 4px 10px 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  backdrop-filter: blur(4px);
+}
+.card-audio-badge svg { width: 12px; height: 12px; }
+
+.card-video-badge,
+.card-pdf-badge {
+  background: rgba(0,0,0,.75);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  backdrop-filter: blur(4px);
+}
+
+/* Video player in detail overlay */
+.video-player { margin: 0 0 1.25rem; }
+.detail-video {
+  width: 100%; display: block;
+  border-radius: 6px; background: #000;
+  max-height: 480px;
+}
+
+/* PDF inline viewer */
+.pdf-player { margin-top: 1.5rem; }
+.detail-pdf {
+  width: 100%;
+  height: 750px;
+  border: none;
+  border-radius: 6px;
+  display: block;
+}
+.pdf-hint {
+  display: inline-block;
+  margin-top: .5rem;
+  font-size: .8rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+.pdf-hint:hover { text-decoration: underline; }
+
+.card-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  overflow: hidden;
+  container: article-card-body / inline-size;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.author-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 20px;
+  /* Farbe pro Autor aus --author-hue (in app.js gesetzt). Heller Ton fürs
+     dunkle Standard-Theme, sodass JEDER Autor sichtbar hervorgehoben ist. */
+  color: hsl(var(--author-hue, 45) 45% 62%);
+  background: hsl(var(--author-hue, 45) 45% 62% / 0.15);
+}
+body[data-theme="light"] .author-badge {
+  /* dunklerer Ton auf hellem Untergrund */
+  color: hsl(var(--author-hue, 45) 50% 38%);
+  background: hsl(var(--author-hue, 45) 50% 38% / 0.12);
+}
+
+.card-date {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .card-body { padding: 8px 8px 10px; gap: 5px; }
+  /* Nur komprimieren, wenn Badge und Datum dadurch wirklich nebeneinander
+     passen. In sehr schmalen Drei-Spalten-Kacheln bleibt der normale Umbruch. */
+  @container article-card-body (min-width: 132px) {
+    body:not(.layout-list) .card[data-author="Infografiken"] .card-meta {
+      flex-wrap: nowrap;
+      gap: 4px;
+    }
+    body:not(.layout-list) .card[data-author="Infografiken"] .author-badge {
+      padding-inline: 5px;
+      font-size: calc(0.65rem - 1px);
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+  }
+  /* „Quadratisch“ auf dem Handy leicht hochkant, damit der Titel meist ganz passt. */
+  body:not(.layout-tall):not(.layout-list) .card { aspect-ratio: 2 / 3; }
+  body:not(.layout-tall):not(.layout-list) .card-image { flex-basis: 40%; }
+  body:not(.layout-tall):not(.layout-list) .card-title { -webkit-line-clamp: 5; }
+  body:not(.layout-tall):not(.layout-list) .card-categories { flex-wrap: nowrap; overflow: hidden; }
+}
+.episode-num {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+.card-title {
+  font-family: var(--font-head);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.card-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.card-preview {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  position: relative;
+  display: block;
+  max-height: 3em;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+.card-preview.is-truncated::after {
+  content: '…';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding-left: 0.7em;
+  color: var(--text-muted);
+  background: var(--surface);
+  box-shadow: -0.55em 0 0.35em var(--surface);
+}
+.cat-pill {
+  font-size: 0.62rem;
+  padding: 1px 6px;
+  border-radius: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: color var(--transition), border-color var(--transition);
+}
+.card:hover .cat-pill { border-color: var(--border-hi); }
+body[data-card-categories="hidden"]:not(.layout-list) .card-categories { display: none; }
+body[data-reset-filters="hidden"] #reset-filters { display: none; }
+
+/* ── Länglich-Modus ──────────────────────────────────────────────────────── */
+body.layout-tall .card         { aspect-ratio: unset; }
+body.layout-tall .card-image   { flex: unset; aspect-ratio: 1 / 1; }
+body.layout-tall .card-title   { -webkit-line-clamp: 3; }
+body.layout-tall .card-preview { max-height: 4.5em; }
+
+/* ── Listen-Modus: eine Zeile pro Artikel ──────────────────────────────────
+   Desktop: quadratisches Bild; daneben Autor + Kategorien, Titel, Anfang des
+   Inhalts; Medien-Kennzeichen rechts oben. Handy: kleines Bild, Autor mit
+   Medien-Kennzeichen rechts, Titel. */
+body.layout-list .article-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+body.layout-list .card {
+  aspect-ratio: unset;
+  flex-direction: row;
+  align-items: center;
+  height: var(--list-row-height, 120px);
+  min-height: 0;
+  border-radius: var(--radius);
+  position: relative;
+}
+body.layout-list .card:hover { transform: none; }
+/* Desktop: quadratisches Bild; die Zeile ist so hoch wie das Bild. Das Bild wird
+   am Kartenrand statt am Bildcontainer ausgerichtet, damit die Medien-Kennzeichen
+   (ebenfalls an der Karte ausgerichtet) rechts oben neben dem Autor stehen können. */
+body.layout-list .card-image { flex: 0 0 var(--list-row-height, 120px); height: var(--list-row-height, 120px); position: static; }
+body.layout-list .card-image img,
+body.layout-list .card-image-placeholder { position: absolute; top: 0; bottom: 0; left: 0; width: var(--list-row-height, 120px); }
+body.layout-list .card-image-placeholder svg { width: 22px; height: 22px; }
+body.layout-list .card-badges { top: 8px; right: 12px; bottom: auto; flex-direction: row; gap: 4px; color: var(--accent); }
+/* Neben dem Text statt auf dem Bild: helle Kennzeichen passend zum Kartenhintergrund. */
+body.layout-list .card-audio-badge,
+body.layout-list .card-video-badge,
+body.layout-list .card-pdf-badge {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-hi);
+  backdrop-filter: none;
+}
+/* Platz für die Kennzeichen freihalten, damit Kategorien nicht darunter laufen. */
+body.layout-list .card:has(.card-badges) .card-body { padding-right: 100px; }
+body.layout-list .card:has(.card-badges > :nth-child(2)) .card-body { padding-right: 170px; }
+body.layout-list .episode-num { display: none; }
+body.layout-list .card-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "meta cats" "title title" "preview preview";
+  /* Oben ausrichten, damit Autor und Medien-Kennzeichen immer auf einer Höhe stehen. */
+  align-self: stretch;
+  align-content: start;
+  gap: 3px 10px;
+  padding: 8px 16px 6px;
+  min-width: 0;
+}
+body.layout-list .card-meta { grid-area: meta; flex-wrap: nowrap; }
+body.layout-list .author-badge { white-space: nowrap; }
+body.layout-list .card-categories { grid-area: cats; flex-wrap: nowrap; overflow: hidden; margin: 0; align-items: center; }
+body.layout-list .card-title { grid-area: title; font-size: 0.95rem; -webkit-line-clamp: 1; }
+body.layout-list .card-preview { grid-area: preview; max-height: 4.5em; flex: none; }
+@media (max-width: 600px), (hover: none) and (pointer: coarse) {
+  body.layout-list .article-grid { gap: 6px; }
+  body.layout-list .card { height: var(--list-row-height, 64px); }
+  /* Bild füllt die Zeilenhöhe; es wird am Kartenrand statt am Bildcontainer
+     ausgerichtet, damit die Medien-Kennzeichen rechts neben dem Autor stehen können. */
+  body.layout-list .card-image { flex-basis: var(--list-row-height, 64px); height: var(--list-row-height, 64px); min-height: 0; align-self: stretch; }
+  body.layout-list .card-image img,
+  body.layout-list .card-image-placeholder { width: var(--list-row-height, 64px); }
+  body.layout-list .card-badges { top: 5px; right: 8px; }
+  body.layout-list .card-audio-badge,
+  body.layout-list .card-video-badge,
+  body.layout-list .card-pdf-badge { font-size: 0.62rem; padding: 2px 7px; }
+  /* Auf dem Handy nur die Autorenzeile freihalten; der Titel darf die volle Breite nutzen. */
+  body.layout-list .card:has(.card-badges) .card-body,
+  body.layout-list .card:has(.card-badges > :nth-child(2)) .card-body { padding-right: 10px; }
+  body.layout-list .card:has(.card-badges) .card-meta { padding-right: 80px; }
+  body.layout-list .card:has(.card-badges > :nth-child(2)) .card-meta { padding-right: 150px; }
+  body.layout-list .card-categories,
+  body.layout-list .card-preview { display: none; }
+  body.layout-list .card-body { grid-template-areas: "meta meta" "title title"; gap: 3px; padding: 5px 10px; }
+  /* Immer Platz für zwei Titelzeilen: alle Zeilen gleich hoch. */
+  body.layout-list .card-title { font-size: 0.85rem; -webkit-line-clamp: 2; min-height: 2.6em; }
+}
+
+/* ── Pagination ──────────────────────────────────────────────────────────── */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 48px;
+  flex-wrap: wrap;
+}
+.page-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--surface);
+  transition: all var(--transition);
+}
+.page-btn:hover { color: var(--text); border-color: var(--border-hi); }
+.page-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.page-btn:disabled { opacity: 0.3; cursor: default; }
+.page-ellipsis { opacity: .3; cursor: default; }
+@media (max-width: 600px) {
+  body:not(.layout-list) .pagination {
+    gap: 2px;
+    flex-wrap: nowrap;
+    margin-top: 32px;
+  }
+  body:not(.layout-list) .page-btn {
+    min-width: 28px;
+    height: 32px;
+    padding-inline: 4px;
+    font-size: .78rem;
+  }
+  body:not(.layout-list) .page-btn-nav {
+    min-width: 30px;
+  }
+  body:not(.layout-list) .page-ellipsis {
+    min-width: 16px;
+    padding-inline: 0;
+    border-color: transparent;
+    background: transparent;
+  }
+}
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 80px 24px;
+  color: var(--text-muted);
+}
+.empty-state svg {
+  width: 48px; height: 48px;
+  margin: 0 auto 16px;
+  opacity: 0.3;
+}
+.empty-state h2 {
+  font-family: var(--font-head);
+  font-size: 1.4rem;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+

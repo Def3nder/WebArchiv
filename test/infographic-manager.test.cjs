@@ -230,7 +230,7 @@ test('Escape schließt nur die oberste Ebene des Infografik-Managers und erhält
   assert.match(manager, /document\.addEventListener\('keydown'[\s\S]*!\$igm\.open \|\| event\.key !== 'Escape'[\s\S]*event\.preventDefault\(\)[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)/);
   assert.match(manager, /\$igm\.addEventListener\('cancel'[\s\S]*event\.preventDefault\(\)[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)/);
   assert.match(manager, /igmState\.returnFocus = document\.activeElement[\s\S]*\$igm\.addEventListener\('close'[\s\S]*returnFocus\?\.isConnected[\s\S]*article-overlay/);
-  assert.match(html, /infographic-manager\.js\?v=3/);
+  assert.match(html, /infographic-manager\.js(?:\?v=[a-f0-9]+)?/);
 });
 
 test('Manager bietet pro Grafik eine sofort gespeicherte Instagram-Markierung an', async () => {

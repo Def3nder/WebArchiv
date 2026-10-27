@@ -2,10 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readStyles = require('./support/read-styles.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
+const CSS = readStyles();
 const EDITOR = fs.readFileSync(path.join(ROOT, 'public', 'article-editor.js'), 'utf8');
 const EDITOR_BUNDLE = fs.readFileSync(path.join(ROOT, 'public', 'vendor', 'article-editor.bundle.js'), 'utf8');
 const PREVIEW = fs.readFileSync(path.join(ROOT, 'public', 'markdown-live-preview.js'), 'utf8');
@@ -13,7 +14,7 @@ const PREVIEW = fs.readFileSync(path.join(ROOT, 'public', 'markdown-live-preview
 test('Artikeleditor verwendet die lokale Markdown-Live-Vorschau', () => {
   assert.doesNotMatch(HTML, /<textarea id="article-editor-text"/);
   assert.match(HTML, /<div id="article-editor-text"/);
-  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=19/);
+  assert.match(HTML, /vendor\/article-editor\.bundle\.js(?:\?v=[a-f0-9]+)?/);
   assert.match(EDITOR, /createMarkdownInput/);
   assert.match(EDITOR, /markdownInput\.getValue\(\)/);
   assert.match(EDITOR, /markdownInput\.setValue\(result\.markdown\)/);
@@ -42,7 +43,7 @@ test('aktive Markdown-Zeichen und gerenderte Strukturen besitzen eigene Stile', 
   assert.match(CSS, /\.cm-md-table-widget/);
   assert.match(CSS, /\.cm-md-image-widget/);
   assert.match(CSS, /\.cm-md-task-widget/);
-  assert.match(HTML, /styles\.css\?v=163/);
+  assert.match(HTML, /css\/base\.css(?:\?v=[a-f0-9]+)?/);
   assert.match(CSS, /\.markdown-live-editor \.cm-md-markup/);
   assert.match(PREVIEW, /replaceSelection\(value\)/);
   assert.match(PREVIEW, /reflectReadOnly\(readOnly\)/);

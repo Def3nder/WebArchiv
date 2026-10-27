@@ -41,7 +41,7 @@ async function main() {
       u.passwordHash = await bcrypt.hash(u.password, 12);
       delete u.password;
       changed++;
-      console.log(`✓ Passwort gehashed: ${u.email}`);
+      console.log(`[OK] Passwort gehashed: ${u.email}`);
     } else if (u.passwordHash) {
       console.log(`  Bereits gehashed:  ${u.email}`);
     } else {
