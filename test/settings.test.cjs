@@ -79,7 +79,14 @@ test('Dialog verwendet Dropdowns und die neuen Sichtbarkeitseinstellungen', () =
   const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
 
   assert.match(html, /Filter-Beschriftungen/);
-  assert.match(html, /<select class="settings-select" name="filterLabels">/);
+  // Touch: natives Select; Desktop: ARIA-Menü als Spiegel (aria-menu.js, bindSelect).
+  for (const name of ['font', 'theme', 'textSize', 'filterLabels', 'cardCategories', 'resetFilters']) {
+    assert.match(html, new RegExp(`<select id="settings-${name}" class="settings-select filter-menu-native" name="${name}" aria-labelledby="settings-${name}-label">`));
+    assert.match(html, new RegExp(`data-filter-aria-menu="settings-${name}"[\\s\\S]*?class="settings-select filter-select filter-menu-trigger"[\\s\\S]*?id="settings-${name}-menu" class="header-menu-dropdown" role="menu"`));
+  }
+  assert.match(css, /body\.filter-aria-menus-ready \.settings-select\.filter-menu-native \{ display: none; \}/);
+  const settingsJs = fs.readFileSync(path.join(ROOT, 'public', 'settings.js'), 'utf8');
+  assert.match(settingsJs, /control\.value = displaySettings\[key\];[\s\S]*?WebArchivAriaMenu\.syncSelect\(control\)/);
   assert.match(html, /name="cardCategories"/);
   assert.match(html, /name="resetFilters"/);
   assert.match(css, /body\[data-filter-labels="hidden"\] \.filter-label/);

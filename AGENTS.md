@@ -107,6 +107,12 @@ NPMplus reverse proxy (192.168.1.14). With `NODE_ENV=production` the server refu
 `SESSION_SECRET` of at least 32 chars. `TRUST_PROXY` (default `loopback, 192.168.1.14`) limits which
 proxies may set `X-Forwarded-*`; `CSP_MODE` is `report` (default), `enforce` or `off`.
 
+**Menus and admin code (frontend):** every dropdown/action menu uses `public/aria-menu.js`
+(`WebArchivAriaMenu.create` / `bindSelect`) — no hand-written open/close/Escape/outside-click logic and no
+`<details>` menus. Admin-only browser code goes into admin scripts (`data-admin-asset` in `index.html`
+and listed in `ADMIN_ASSET_PATHS` in `server.js`); `public/admin-tasks.js` holds TTS, reindex, scrape and
+log and plugs into `app.js` via `adminHooks` (empty for guests/users).
+
 **Concurrent jobs:** all archive writes and index rebuilds go through the single lock in
 `archive-lock.cjs` (`archiveLock` in `server.js`). Jobs with their own state (reindex, scrape, editor,
 TTS) are `register`ed once; new write routes use `archiveLock.tryAcquire(label)` + `release()` in

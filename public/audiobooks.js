@@ -117,7 +117,7 @@ function renderBookGrid(items) {
 // ── Detailansicht ──────────────────────────────────────────────────────────
 function renderBookDetail(book) {
   selectedTtsArticle = null;
-  updateTtsActions();
+  adminHooks.articleChanged();
   currentBookDetail = book;
   // Läuft dieses Buch bereits, gilt die aktuelle Wiedergabeposition.
   if (bookPlayer.book?.id === book.id) {
@@ -137,15 +137,15 @@ function renderBookDetail(book) {
     ? `<button type="button" class="detail-cat-pill" data-book-extras title="Extra-Material anzeigen">Extras</button>`
     : '';
   const editAction = currentUser?.role === 'admin' && book.hasAbstract
-    ? '<button type="button" class="header-menu-item" data-article-edit>Abstract editieren</button>'
+    ? '<button type="button" role="menuitem" class="header-menu-item" data-article-edit>Abstract editieren</button>'
     : '';
   const manageExtrasAction = currentUser?.role === 'admin'
-    ? '<button type="button" class="header-menu-item" data-book-extras-manage>Extras verwalten …</button>'
+    ? '<button type="button" role="menuitem" class="header-menu-item" data-book-extras-manage>Extras verwalten …</button>'
     : '';
   const privateAction = currentUser?.role === 'admin'
-    ? `<button type="button" class="header-menu-item" data-book-private>${book.private ? 'Privat aufheben' : 'Als privat markieren'}</button>`
+    ? `<button type="button" role="menuitem" class="header-menu-item" data-book-private>${book.private ? 'Privat aufheben' : 'Als privat markieren'}</button>`
     : '';
-  const actionsMenu = `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Aktionen zum Hörbuch">Aktionen</summary><div class="copy-prompt-menu">${editAction}${manageExtrasAction}${privateAction}<button type="button" class="header-menu-item" data-book-share>Teilen</button></div></details>`;
+  const actionsMenu = `<div class="detail-tts-menu"><button type="button" class="detail-cat-pill" id="book-actions-btn" aria-haspopup="menu" aria-controls="book-actions-menu" aria-expanded="false" title="Aktionen zum Hörbuch">Aktionen</button><div class="copy-prompt-menu" id="book-actions-menu" role="menu" hidden>${editAction}${manageExtrasAction}${privateAction}<button type="button" role="menuitem" class="header-menu-item" data-book-share>Teilen</button></div></div>`;
   const tracks = book.tracks.map((track, i) =>
     `<li><button type="button" class="book-track" data-track="${i}"><span class="book-track-num">${i + 1}</span><span class="book-track-title">${esc(track.title)}</span></button></li>`
   ).join('');
@@ -202,24 +202,13 @@ function renderBookDetail(book) {
     document.getElementById('detail-hero-expand')?.addEventListener('click', e => { e.stopPropagation(); openFs(); });
     document.getElementById('detail-hero-img')?.addEventListener('click', openFs);
   }
-  $detail.querySelectorAll('.detail-tts-menu').forEach(details => {
-    details.addEventListener('toggle', () => {
-      if (!details.open) return;
-      const menu = details.querySelector('.copy-prompt-menu');
-      requestAnimationFrame(() => {
-        // Beidseitig im Fenster halten (CSS richtet das Menü am Button aus).
-        const box = menu.getBoundingClientRect();
-        const margin = 8;
-        let shift = 0;
-        if (box.left < margin) shift = margin - box.left;
-        else if (box.right > window.innerWidth - margin) shift = window.innerWidth - margin - box.right;
-        if (shift) {
-          const left = menu.offsetLeft + shift;
-          menu.style.left = `${left}px`;
-          menu.style.right = 'auto';
-        }
-      });
-    });
+  // Aktionen zum Hörbuch: gemeinsames ARIA-Menü (aria-menu.js); die Einträge
+  // haben ihre eigenen Klick-Handler unten bzw. in article-editor.js.
+  const bookActionsMenu = WebArchivAriaMenu.create({
+    trigger: document.getElementById('book-actions-btn'),
+    menu: document.getElementById('book-actions-menu'),
+    // Die Privat-Markierung bleibt offen, bis der Server geantwortet hat.
+    keepOpen: item => item.hasAttribute('data-book-private'),
   });
   $detail.querySelector('[data-book-text]')?.addEventListener('click', () => openBookReader(book));
   $detail.querySelector('[data-book-extras]')?.addEventListener('click', () => openBookExtras(book));
@@ -237,7 +226,7 @@ function renderBookDetail(book) {
       if (!response.ok) throw new Error(data.error || 'Die Privat-Markierung konnte nicht geändert werden.');
       book.private = data.private;
       button.textContent = book.private ? 'Privat aufheben' : 'Als privat markieren';
-      button.closest('details')?.removeAttribute('open');
+      bookActionsMenu?.close({ restoreFocus: true });
       state.page = 1;
       await loadArticles();
     } catch (error) {

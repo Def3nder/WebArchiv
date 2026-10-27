@@ -12,7 +12,7 @@ test('Dublettenprüfung ist als Admin-Dialog mit allen Entscheidungswegen eingeb
   const ui = read('public/duplicates.js');
   assert.match(html, /data-action="duplicates"[^>]*data-admin-only/);
   assert.match(html, /id="duplicate-review"[\s\S]*data-duplicate-tab="pending"[\s\S]*data-duplicate-tab="linked"[\s\S]*data-duplicate-tab="ignored"/);
-  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=7[\s\S]*duplicates\.js\?v=19/);
+  assert.match(html, /vendor\/duplicate-diff\.bundle\.js\?v=7[\s\S]*duplicates\.js\?v=20/);
   assert.match(html, /id="duplicate-detail-dialog"[\s\S]*id="duplicate-detail-content"/);
   assert.match(app, /action === 'duplicates'[\s\S]*openDuplicateReview/);
   for (const action of ['inspect', 'toggle-selection', 'mobile-side', 'ignore', 'migrate', 'reset']) {
@@ -92,12 +92,12 @@ test('Autorfilter bietet alle konfigurierten Quellen zur Mehrfachauswahl auf jed
   assert.match(html, /data-duplicate-filter-menu="authors"[\s\S]*data-duplicate-filter-menu="score"[\s\S]*data-duplicate-filter-menu="infographics"/);
   assert.match(html, /class="header-menu-dropdown" role="menu"/);
   assert.match(ui, /authors\.map\(author => `<button type="button" class="header-menu-item" role="menuitemcheckbox"/);
-  assert.match(ui, /menu\.addEventListener\('click'/);
+  assert.match(ui, /WebArchivAriaMenu\.create\(\{[\s\S]*?keepOpen: \(\) => root\.dataset\.duplicateFilterMenu === 'authors'/);
   assert.match(ui, /duplicateUi\.filters\[root\.dataset\.duplicateFilterMenu\] = item\.dataset\.duplicateFilterValue/);
   assert.match(ui, /duplicateVisibleItems\(duplicateUi\.tab\)/);
   assert.match(ui, /duplicateSelectionTools\.hidden = !pending/);
   assert.match(css, /\.duplicate-filter-menu \.header-menu-dropdown \{/);
-  assert.match(html, /styles\.css\?v=158/);
+  assert.match(html, /styles\.css\?v=162/);
 });
 
 test('Suche grenzt beide Artikelseiten in allen Dublettentabs ein und kombiniert sich mit Filtern', () => {

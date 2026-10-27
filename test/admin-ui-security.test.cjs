@@ -112,3 +112,21 @@ test('Frontend hängt das Admin-CSRF-Token zentral an schreibende API-Aufrufe', 
   assert.match(editor, /apiFetch\(`\/api\/article-markdown/);
   assert.match(infographic, /apiFetch\('\/api\/new-infographic'/);
 });
+
+test('Admin-Aufgaben (TTS, Reindex, Scrape) liegen in admin-tasks.js und nur in der Admin-Shell', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const admin = fs.readFileSync(path.join(ROOT, 'public', 'admin-tasks.js'), 'utf8');
+  const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  for (const name of ['runTts', 'showTtsJob', 'watchTts', 'chooseTtsProvider', 'runReindex', 'runScrape', 'showScrapeLog']) {
+    assert.doesNotMatch(app, new RegExp(`function ${name}[(]`), `${name} gehört nicht mehr in app.js`);
+    assert.match(admin, new RegExp(`function ${name}[(]`));
+  }
+  assert.match(app, /const adminHooks = \{[\s\S]*?articleChanged\(\) \{\},[\s\S]*?ttsBusy: \(\) => false,[\s\S]*?actions: \{\},/);
+  assert.match(admin, /Object\.assign\(adminHooks, \{[\s\S]*?reindex: runReindex,[\s\S]*?'tts-job': showTtsJob,/);
+  assert.match(server, /ADMIN_ASSET_PATHS = new Set\(\[\s*'\/admin-tasks\.js',/);
+  for (const role of [null, 'guest', 'user']) {
+    assert.doesNotMatch(renderIndexForSession({ session: role ? { user: { role } } : {} }), /admin-tasks\.js/);
+  }
+  assert.match(renderIndexForSession({ session: { user: { role: 'admin', mustChangePassword: false } } }),
+    /<script src="app\.js\?v=\d+"><\/script>\s*<script src="admin-tasks\.js\?v=\d+" data-admin-asset><\/script>/);
+});

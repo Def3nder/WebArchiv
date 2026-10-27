@@ -154,7 +154,7 @@ test('Qwen kurz/lang: Original-Markdown einmal übertragen, fertige MP3 byteglei
 }));
 
 test('Bestätigung: Ablehnen startet nichts; Zustimmung übermittelt Provider', async () => {
-  const source = await fs.readFile(path.join(root, '../public/app.js'), 'utf8');
+  const source = await fs.readFile(path.join(root, '../public/admin-tasks.js'), 'utf8');
   const start = source.indexOf('async function runTts() {');
   const end = source.indexOf('\n}', start) + 2;
   for (const provider of ['qwen', 'openai']) for (const accepted of [false, true]) {
@@ -179,7 +179,7 @@ test('Bestätigung: Ablehnen startet nichts; Zustimmung übermittelt Provider', 
 });
 
 test('Vorhandenes Artikel-Audio wird nur nach ausdrücklicher Bestätigung ersetzt', async () => {
-  const source = await fs.readFile(path.join(root, '../public/app.js'), 'utf8');
+  const source = await fs.readFile(path.join(root, '../public/admin-tasks.js'), 'utf8');
   const start = source.indexOf('async function runTts() {');
   const end = source.indexOf('\n}', start) + 2;
   for (const accepted of [false, true]) {
@@ -206,7 +206,7 @@ test('Vorhandenes Artikel-Audio wird nur nach ausdrücklicher Bestätigung erset
 });
 
 test('Anbieterdialog: explizite Auswahl, Kostenhinweis, gesperrte Anbieter und Abbrechen', async () => {
-  const source = await fs.readFile(path.join(root, '../public/app.js'), 'utf8');
+  const source = await fs.readFile(path.join(root, '../public/admin-tasks.js'), 'utf8');
   const start = source.indexOf('function chooseTtsProvider(');
   const end = source.indexOf('\n}', start) + 2;
   for (const available of [[true, true], [true, false], [false, true], [false, false]]) {
@@ -264,7 +264,7 @@ test('Qwen-Abbruch hinterlässt keine MP3 oder Sperre', () => temporary(async di
 }));
 
 test('Status-Polling lässt unverändertes Log und manuelle Scrollposition stehen', async () => {
-  const source = await fs.readFile(path.join(root, '../public/app.js'), 'utf8');
+  const source = await fs.readFile(path.join(root, '../public/admin-tasks.js'), 'utf8');
   const start = source.indexOf('function formatTtsOutput(output) {');
   const watchStart = source.indexOf('async function watchTts(jobId) {', start);
   const end = source.indexOf('\n}', watchStart) + 2;
@@ -289,7 +289,7 @@ test('Status-Polling lässt unverändertes Log und manuelle Scrollposition stehe
 });
 
 test('Audio-Log formatiert ISO-Zeit in lokale Browserzeit mit vollen Sekunden', async () => {
-  const source = await fs.readFile(path.join(root, '../public/app.js'), 'utf8');
+  const source = await fs.readFile(path.join(root, '../public/admin-tasks.js'), 'utf8');
   const start = source.indexOf('function formatTtsOutput(output) {');
   const watchStart = source.indexOf('async function watchTts(jobId) {', start);
   const end = source.indexOf('\n}', watchStart) + 2;

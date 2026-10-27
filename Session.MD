@@ -1356,3 +1356,51 @@ echten Betrieb nicht manuell ausgelöst.
 
 **Deployment:** `server.js`, `audiobooks.cjs`, `archive-lock.cjs` (neu) kopieren und den Dienst neu
 starten; keine neuen Abhängigkeiten.
+
+## 23. Aktualisierung 27.10.2026 – Gemeinsame ARIA-Menükomponente, Admin-Code aus app.js
+
+**Menüs:** Neue Komponente `public/aria-menu.js` (`WebArchivAriaMenu`). Sie übernimmt Öffnen/Schließen,
+`aria-expanded`, Pfeiltasten/Pos1/Ende/Tab, Escape in der Capture-Phase (schließt nur das Menü, nicht
+den Dialog darunter), Klick außerhalb, Fokus-Rückgabe, Einpassen in den Viewport und „immer nur ein Menü
+offen“. Die Aktion läuft erst nach dem Schließen, damit ein geöffneter Dialog den Fokus behält;
+`keepOpen` hält Mehrfachauswahlen offen. Umgestellt: Desktop-Filter (inkl. TTS-Stimmenauswahl über
+`bindSelect`), Kopiermenü, ↺-Admin-Menü, Dubletten-Filter (Autoren als Mehrfachauswahl) sowie die
+bisherigen `<details>`-Menüs „Aktionen“ im Artikel und im Hörbuch, die gegen die README-Regel
+verstießen. Rund 200 Zeilen doppelte Menülogik in `app.js`, `audiobooks.js` und `duplicates.js`
+entfallen. Nicht umgestellt: Werkzeugleiste des Markdown-Editors und ⋯-Menü der Hörbuch-Extras
+(eigene Zustandslogik im Editor-Bundle).
+
+**Admin-Code:** TTS-Auftrag, Archiv neu einlesen, Scrapen und Scrape-Log (rund 440 Zeilen) liegen jetzt in
+`public/admin-tasks.js`. Das Skript steht in `ADMIN_ASSET_PATHS` und wird Gästen und Nutzern nicht
+ausgeliefert (404). `app.js` spricht es über `adminHooks` an (`articleChanged`, `userChanged`,
+`ttsBusy`, `actions`). Der Prüfmodus „Infografiken prüfen“ ist mit Raster und Vollbild verflochten und
+bleibt vorerst in `app.js`.
+
+**Geprüft:** neuer Verhaltenstest `test/aria-menu.test.cjs` (11 Tests, eigener DOM-Nachbau), Test der
+Admin-Trennung in `test/admin-ui-security.test.cjs`, gesamte Node-Suite 371/371; Browser lokal mit
+Test-Admin (eigene Nutzerdatei im Scratchpad): Filter per Maus und Tastatur, Kopiermenü, Artikel-
+Aktionen mit Editor und Fokus-Rückgabe, ↺-Menü mit Dialog, Dubletten-Filter inkl. Mehrfachauswahl und
+zweistufigem Escape, Hörbuch-Aktionen inkl. Privat-Markierung, Audio-Auftrag- und Log-Anzeige; als Gast
+`admin-tasks.js` 404 und keine Konsolenfehler; keine CSP-Meldungen. Nicht geprüft: echte Touch-Geräte,
+TTS-Start und Scrape-Lauf (nur Anzeige).
+
+**Deployment:** `server.js` (Neustart), `public/aria-menu.js` und `public/admin-tasks.js` (neu),
+`public/app.js`, `public/audiobooks.js`, `public/duplicates.js`, `public/index.html`, `public/styles.css`,
+`public/vendor/article-editor.bundle.js` (neu gebaut, enthält `article-editor.js`).
+
+**Nachtrag 27.10.2026 (Rückmeldungen zu Punkt 4):**
+- *Zeilenhöhe:* Alte und neue Fassung messen lokal identisch (≈ 38 px); die Regel `.header-menu-item`
+  ist seit 10.07. unverändert, die Filtermenüs nutzen sie seit dem Menü-Redesign vom 16.10. (davor
+  native Dropdowns). Auf Wunsch jetzt kompakte Zeilen am Desktop (≈ 30 px: `padding: 5px 12px`,
+  Zeilenhöhe 1,45; nur `(hover: hover) and (pointer: fine)`); Touch behält ≈ 38 px.
+- *Filtermenü blieb offen beim Öffnen des Admin-Menüs:* Fehler des alten Stands (der ↺-Button stoppte
+  den Klick per `stopPropagation`); mit `aria-menu.js` behoben, im Browser mit echten Klicks bestätigt.
+- *Einstellungen-Dialog:* Die sechs Auswahlfelder haben am Desktop ein ARIA-Menü als Spiegel
+  (`bindSelect`), Touch behält das native Select. `openSettingsDialog` synchronisiert die Menüs, weil
+  programmatisch gesetzte Werte kein `change` auslösen. (In der Benutzerverwaltung gibt es keine
+  Dropdowns; gemeint war dieser Dialog.)
+- *Header-Versatz beim Wechsel Raster ↔ Liste:* Ganz oben stand die erste Karte im Raster 12 px höher
+  als in der Liste; `restoreListPosition` glich das per Scrollen aus und verschob so den nicht fixierten
+  Kopfbereich. Jetzt bleibt eine Ansicht ganz oben ganz oben; gescrollt bleibt die Karte im Blick.
+  Im Browserbereich der Entwicklungsumgebung ist das Scrollen nicht verlässlich messbar; geprüft
+  über die Kartenpositionen und einen Test, nicht per Augenschein.

@@ -14,7 +14,9 @@ test('Sortierung bietet die Privat-Ansicht ausschließlich Administratoren an', 
   assert.match(html, /<option value="private" hidden disabled>Privat<\/option>/);
   assert.match(books, /const BOOK_SORTS = \['recent', 'added', 'title', 'date', 'private'\]/);
   assert.match(books, /function syncBookPrivateAccess\([\s\S]*?option\.hidden = !isAdmin;[\s\S]*?option\.disabled = !isAdmin/);
-  assert.match(app, /const visibleOptions = \[\.\.\.select\.options\]\.filter\(option => !option\.hidden\)/);
+  // Ausgeblendete Optionen (Privat für Nicht-Admins) erscheinen auch nicht im ARIA-Menü.
+  const ariaMenu = fs.readFileSync(path.join(ROOT, 'public', 'aria-menu.js'), 'utf8');
+  assert.match(ariaMenu, /const visibleOptions = \[\.\.\.select\.options\]\.filter\(option => !option\.hidden\)/);
   assert.match(books, /state\.bookSort === 'private'[\s\S]*?state\.bookSort = 'recent'/);
   assert.match(sessionState, /\['recent', 'added', 'title', 'date', 'private'\]/);
   assert.match(server, /requestedMode === 'private' && !isAdmin \? 'recent' : requestedMode/);
@@ -26,7 +28,7 @@ test('Nur Administratoren können die globale Privat-Markierung umschalten', () 
   assert.match(books, /data-book-private>\$\{book\.private \? 'Privat aufheben' : 'Als privat markieren'\}/);
   assert.match(books, /apiFetch\('\/api\/audiobook-private\/'[\s\S]*?method: 'PUT'[\s\S]*?private: !book\.private/);
   assert.match(server, /app\.put\('\/api\/audiobook-private\/\*'[\s\S]*?progress\.setPrivate\(book\.id, req\.body\?\.private\)[\s\S]*?}, true\)\);/);
-  assert.match(html, /audiobooks\.js\?v=25/);
+  assert.match(html, /audiobooks\.js\?v=26/);
 });
 
 test('Server sperrt Detail-, Zusatz- und Medienzugriffe auf private Hörbücher', () => {

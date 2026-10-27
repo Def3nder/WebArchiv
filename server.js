@@ -71,6 +71,7 @@ const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const PWA_SHELL_EXTENSIONS = new Set(['.css', '.html', '.ico', '.js', '.json', '.png', '.svg']);
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const ADMIN_ASSET_PATHS = new Set([
+  '/admin-tasks.js',
   '/user-admin.js',
   '/tts-settings.js',
   '/duplicates.js',

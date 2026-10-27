@@ -116,10 +116,11 @@ document.addEventListener('click', event => {
   // Artikel oder angezeigtes Hörbuch (dessen abstract.md).
   const entry = selectedTtsArticle || (typeof currentBookDetail !== 'undefined' ? currentBookDetail : null);
   if (!button || !entry || currentUser?.role !== 'admin') return;
-  button.closest('details')?.removeAttribute('open');
+  // Das Aktionen-Menü (aria-menu.js) schließt sich selbst; nach dem Editor
+  // kehrt der Fokus zu seinem Auslöser zurück.
   articleEditorState.id = entry.id;
   articleEditorState.url = location.href;
-  articleEditorState.focus = button.closest('details')?.querySelector('summary');
+  articleEditorState.focus = button.closest('.detail-tts-menu')?.querySelector('[aria-haspopup="menu"]');
   articleEditorState.version = null;
   articleEditorState.original = '';
   markdownInput.setValue('', { readOnly: true });

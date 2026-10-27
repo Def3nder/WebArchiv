@@ -88,7 +88,11 @@ function openSettingsDialog() {
   for (const key of Object.keys(DISPLAY_OPTIONS)) {
     const control = $settingsForm.elements?.namedItem(key)
       || $settingsForm.querySelector(`[name="${key}"]`);
-    if (control) control.value = displaySettings[key];
+    if (control) {
+      control.value = displaySettings[key];
+      // Programmatisch gesetzte Werte lösen kein change aus; Desktop-Menü nachziehen.
+      if (typeof WebArchivAriaMenu === 'object') WebArchivAriaMenu.syncSelect(control);
+    }
   }
   $settingsDialog.showModal();
   // Den Dialog selbst fokussieren. Insbesondere mobile Browser öffnen sonst

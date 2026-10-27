@@ -422,43 +422,8 @@ function chooseDuplicateAuthors(choice) {
   renderDuplicateList();
 }
 
-function closeDuplicateFilterMenu(root, restoreFocus = false) {
-  const trigger = root.querySelector('.filter-menu-trigger');
-  root.querySelector('[role="menu"]').hidden = true;
-  trigger.setAttribute('aria-expanded', 'false');
-  if (restoreFocus) trigger.focus();
-}
-
-function closeDuplicateFilterMenus(except = null) {
-  duplicateFilterMenus.forEach(root => {
-    if (root !== except) closeDuplicateFilterMenu(root);
-  });
-}
-
-function openDuplicateFilterMenu(root, focusSelection = false) {
-  closeDuplicateFilterMenus(root);
-  const menu = root.querySelector('[role="menu"]');
-  menu.hidden = false;
-  root.querySelector('.filter-menu-trigger').setAttribute('aria-expanded', 'true');
-  requestAnimationFrame(() => {
-    if (menu.hidden) return;
-    menu.style.transform = '';
-    const rect = menu.getBoundingClientRect();
-    const margin = 8;
-    const shift = rect.left < margin ? margin - rect.left
-      : rect.right > window.innerWidth - margin ? window.innerWidth - margin - rect.right : 0;
-    if (shift) menu.style.transform = `translateX(${Math.round(shift)}px)`;
-    if (focusSelection) (menu.querySelector('[aria-checked="true"]') || menu.querySelector('.header-menu-item'))?.focus();
-  });
-}
-
-function moveDuplicateFilterFocus(menu, direction) {
-  const items = [...menu.querySelectorAll('.header-menu-item:not(:disabled)')];
-  if (!items.length) return;
-  const current = items.indexOf(document.activeElement);
-  const next = direction === 'first' ? 0 : direction === 'last' ? items.length - 1
-    : (current + direction + items.length) % items.length;
-  items[next].focus();
+function closeDuplicateFilterMenus() {
+  duplicateFilterControllers.forEach(controller => controller?.close());
 }
 
 function duplicateAuthorMatches(item) {
@@ -791,9 +756,8 @@ document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || ![duplicateDialog, duplicateDetailDialog, duplicateImageViewer].some(dialog => dialog.open)) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  const openMenu = duplicateFilterMenus.find(root => !root.querySelector('[role="menu"]').hidden);
-  if (openMenu) closeDuplicateFilterMenu(openMenu, true);
-  else closeTopDuplicateDialog();
+  // Ein offenes Filtermenü schließt aria-menu.js bereits vorher (Capture-Phase).
+  closeTopDuplicateDialog();
 }, true);
 let duplicateCancelGuard = false;
 for (const dialog of [duplicateDialog, duplicateDetailDialog, duplicateImageViewer]) {
@@ -850,42 +814,26 @@ duplicateSearch.addEventListener('input', () => {
   renderDuplicateList();
 });
 
-for (const root of duplicateFilterMenus) {
-  const trigger = root.querySelector('.filter-menu-trigger');
+// Filtermenüs: gemeinsames ARIA-Menü (aria-menu.js). Autoren sind eine
+// Mehrfachauswahl; dieses Menü bleibt beim Umschalten offen.
+const duplicateFilterControllers = duplicateFilterMenus.map(root => {
   const menu = root.querySelector('[role="menu"]');
-  trigger.addEventListener('click', () => {
-    if (menu.hidden) openDuplicateFilterMenu(root);
-    else closeDuplicateFilterMenu(root);
-  });
-  trigger.addEventListener('keydown', event => {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    event.preventDefault();
-    openDuplicateFilterMenu(root, true);
-  });
-  menu.addEventListener('click', event => {
-    const item = event.target.closest('.header-menu-item');
-    if (!item) return;
-    if (root.dataset.duplicateFilterMenu === 'authors') {
-      chooseDuplicateAuthors(item.hasAttribute('data-duplicate-author-all') ? 'toggle-all' : item.dataset.duplicateAuthor);
-      return;
-    } else {
+  return WebArchivAriaMenu.create({
+    trigger: root.querySelector('.filter-menu-trigger'),
+    menu,
+    keepOpen: () => root.dataset.duplicateFilterMenu === 'authors',
+    onSelect: item => {
+      if (root.dataset.duplicateFilterMenu === 'authors') {
+        chooseDuplicateAuthors(item.hasAttribute('data-duplicate-author-all') ? 'toggle-all' : item.dataset.duplicateAuthor);
+        return;
+      }
       duplicateUi.filters[root.dataset.duplicateFilterMenu] = item.dataset.duplicateFilterValue;
       syncDuplicateSingleFilters();
-      closeDuplicateFilterMenu(root, true);
-    }
-    duplicateUi.listScrollTop = 0;
-    renderDuplicateList();
+      duplicateUi.listScrollTop = 0;
+      renderDuplicateList();
+    },
   });
-  menu.addEventListener('keydown', event => {
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      moveDuplicateFilterFocus(menu, event.key === 'ArrowDown' ? 1 : -1);
-    } else if (event.key === 'Home' || event.key === 'End') {
-      event.preventDefault();
-      moveDuplicateFilterFocus(menu, event.key === 'Home' ? 'first' : 'last');
-    } else if (event.key === 'Tab') closeDuplicateFilterMenu(root);
-  });
-}
+});
 duplicateAuthorNative.addEventListener('change', () => {
   const choice = duplicateAuthorNative.value;
   if (choice === 'all' || choice === 'none') chooseDuplicateAuthors(choice);
@@ -907,9 +855,6 @@ window.addEventListener('resize', () => {
   sizeDuplicateNativeFilter(duplicateAuthorNative);
   sizeDuplicateNativeFilter(duplicateScoreNative);
   sizeDuplicateNativeFilter(duplicateInfographicNative);
-});
-document.addEventListener('click', event => {
-  if (!event.target.closest('[data-duplicate-filter-menu]')) closeDuplicateFilterMenus();
 });
 duplicateDialog.addEventListener('close', () => closeDuplicateFilterMenus());
 duplicateSelectAll.addEventListener('click', () => {

@@ -15,7 +15,10 @@ test('Externe Prompt-Ziele erzeugen unter iOS kein zusätzliches leeres Fenster'
 });
 
 test('Das Copy-Menü bleibt auch bei schmalen Viewports vollständig sichtbar', () => {
-  assert.match(APP, /await buildMenu\(\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?keepFilterAriaMenuVisible\(\$copyMenu\)/);
+  // Prompts werden vor dem Einpassen geladen; das Einpassen übernimmt aria-menu.js.
+  assert.match(APP, /WebArchivAriaMenu\.create\(\{[\s\S]*?trigger: \$copyBtn,[\s\S]*?onBeforeOpen: buildMenu/);
+  const ARIA = fs.readFileSync(path.join(__dirname, '..', 'public', 'aria-menu.js'), 'utf8');
+  assert.match(ARIA, /if \(onBeforeOpen\) await onBeforeOpen\(\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?keepInViewport\(menu\)/);
   assert.match(CSS, /\.copy-prompt-menu \{[\s\S]*?min-width:\s*min\(200px, calc\(100vw - 16px\)\);[\s\S]*?max-width:\s*calc\(100vw - 16px\);/);
   assert.match(CSS, /\.detail-copy-wrap > \.copy-prompt-menu \{ width:\s*max-content; \}/);
   assert.match(CSS, /\.copy-prompt-item \{[\s\S]*?white-space:\s*normal;[\s\S]*?overflow-wrap:\s*anywhere;/);

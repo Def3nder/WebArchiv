@@ -61,6 +61,15 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Video/PDF)
   abweichenden Popup-Stile oder neuen Menükomponenten einführen. Auswahlmenüs verwenden
   `role="menu"` und je nach Verhalten `menuitemradio` oder `menuitemcheckbox` mit `aria-checked`;
   Tastatursteuerung, Escape, Außenklick und Fokus-Rückgabe gehören dazu.
+  Die Bedienung liegt zentral in `public/aria-menu.js` (`WebArchivAriaMenu`): `create({ trigger,
+  menu, onSelect, keepOpen, onBeforeOpen })` für Aktionsmenüs, `bindSelect(select, root)` für
+  Desktop-Spiegel nativer Selects. Die Komponente schließt das Menü vor der Aktion und gibt den
+  Fokus an den Auslöser zurück, sodass ein geöffneter Dialog den Fokus behält; Escape schließt nur
+  das Menü, nicht den Dialog darunter; es ist immer höchstens ein Menü offen. Filter, Kopiermenü,
+  Admin-Menü, Artikel- und Hörbuch-„Aktionen“, die Dubletten-Filter und die Auswahlfelder im Dialog
+  *Einstellungen* nutzen sie. Am Desktop (Maus) sind die Menüzeilen kompakt (ca. 30 px:
+  `padding: 5px 12px`, Zeilenhöhe 1,45); Touch-Geräte behalten ca. 38 px als Tippfläche. Ausnahmen:
+  Werkzeugleiste des Markdown-Editors und ⋯-Menü der Hörbuch-Extras (eigene Logik im Editor-Bundle).
 - **Modale Dialoge (verbindliches Muster)**: Neue Dialoge grundsätzlich als natives `<dialog>`
   in `public/index.html` anlegen, mit eindeutiger ID, `aria-labelledby` und sichtbarer
   Überschrift/Schließen-Schaltfläche. Für normale Formulare `.account-dialog`, für breite
@@ -869,7 +878,9 @@ package.json                  Deps: express, express-session, bcryptjs, fuse.js,
 test/                         Tests der Hauptanwendung
 public/
 ├── index.html                SPA-Servervorlage mit markierten Admin-Bereichen
-├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü: Reindex/Scrape/Log)
+├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü; Admin-Einhängepunkte adminHooks)
+├── aria-menu.js              Gemeinsame ARIA-Menükomponente (Tastatur, Escape, Außenklick, Fokus, Viewport)
+├── admin-tasks.js            Nur Admin-Shell: Audio erzeugen (TTS), Archiv neu einlesen, Scrapen, Scrape-Log
 ├── duplicates.js             Admin-Prüfung und Verknüpfung von Blog-/Quellen-Dubletten
 ├── article-editor.js         Dialoglogik für Artikel- und Abstract-Markdown
 ├── markdown-live-preview.js  CodeMirror-Live-Darstellung, Toolbar und Cursor-Navigation

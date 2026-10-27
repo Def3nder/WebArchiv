@@ -302,6 +302,7 @@ body.mode-infographic-review .telegram-btn { display: none; }
 }
 @media (min-width: 601px) and (hover: hover) and (pointer: fine) {
   body.filter-aria-menus-ready .filter-select.filter-menu-native { display: none; }
+  body.filter-aria-menus-ready .settings-select.filter-menu-native { display: none; }
   body.filter-aria-menus-ready .header-menu.filter-header-menu { display: inline-flex; }
 }
 .layout-toggle {
@@ -1580,7 +1581,6 @@ html.modal-open body {
   font-family: inherit;
   white-space: nowrap;
 }
-.detail-tts-menu summary::-webkit-details-marker { display: none; }
 .detail-infographic-wrap {
   display: inline-flex;
   align-items: center;
@@ -1725,6 +1725,12 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
   padding-bottom: 9px;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
+}
+/* Desktop mit Maus: kompakte Menüzeilen (ca. 30 px) für alle ARIA-Menüs.
+   Touch-Geräte behalten die größeren Tippflächen (ca. 38 px). */
+@media (hover: hover) and (pointer: fine) {
+  .header-menu-item, .copy-prompt-item { padding: 5px 12px; line-height: 1.45; }
+  .copy-prompt-item.is-article { padding-bottom: 7px; }
 }
 
 .detail-summary {
@@ -1924,7 +1930,6 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
 #tts-output { max-height: 40vh; }
 #tts-article { overflow-wrap: anywhere; margin-bottom: 12px; }
 .detail-tts-menu { position: relative; display: inline-flex; flex: 0 0 auto; }
-.detail-tts-menu summary { cursor: pointer; }
 .detail-tts-menu .copy-prompt-menu {
   left: 0;
   right: auto;
@@ -2617,6 +2622,11 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
   font-size: .88rem;
   cursor: pointer;
 }
+
+/* Einstellungen auf Desktopgeräten: ARIA-Menü in voller Feldbreite (Touch: natives Select). */
+.settings-aria-menu { width: 100%; }
+.settings-aria-menu .filter-menu-trigger { width: 100%; max-width: none; min-height: 42px; }
+.settings-aria-menu .header-menu-dropdown { left: 0; right: auto; width: 100%; min-width: 100%; max-width: 100%; }
 
 /* Serverweite Qwen-TTS-Einstellungen */
 #tts-settings-dialog { width: min(760px, calc(100vw - 24px)); overflow-y: auto; }

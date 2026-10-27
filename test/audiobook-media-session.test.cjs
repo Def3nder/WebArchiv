@@ -18,5 +18,5 @@ test('Hörbuchplayer synchronisiert Wiedergabestatus und Position mit der Media 
 });
 
 test('Hörbuch-Script erhält einen neuen Cache-Buster', () => {
-  assert.match(index, /audiobooks\.js\?v=25/);
+  assert.match(index, /audiobooks\.js\?v=26/);
 });

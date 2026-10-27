@@ -79,11 +79,6 @@ const $gridDensityStatus = document.getElementById('grid-density-status');
 const $reindexBtn    = document.getElementById('reindex-btn');
 const $adminMenu      = document.getElementById('admin-menu');
 const $scrapeOverlay  = document.getElementById('scrape-overlay');
-const $scrapeBackdrop = document.getElementById('scrape-backdrop');
-const $scrapeClose    = document.getElementById('scrape-close');
-const $scrapeTitle    = document.getElementById('scrape-title');
-const $scrapeStatus   = document.getElementById('scrape-status');
-const $scrapeOutput   = document.getElementById('scrape-output');
 const $telegramBtn    = document.getElementById('telegram-btn');
 const $bookmarkBtn    = document.getElementById('bookmark-btn');
 const $logoutBtn      = document.getElementById('logout-btn');
@@ -114,151 +109,28 @@ function nextPaint() {
   return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
+// ── ARIA-Menüs der Desktop-Filter ─────────────────────────────────────────
+// Bedienung (Tastatur, Escape, Klick außerhalb, Viewport) liegt zentral in
+// aria-menu.js; hier nur die Kopplung an die nativen Selects (Touch-Variante).
 function filterAriaRoot(select) {
   return document.querySelector(`[data-filter-aria-menu="${select.id}"]`);
 }
 
 function syncFilterAriaMenu(select) {
-  const root = filterAriaRoot(select);
-  if (!root) return;
-  const trigger = root.querySelector('.filter-menu-trigger');
-  const value = root.querySelector('[data-filter-menu-value]');
-  const menu = root.querySelector('[role="menu"]');
-  const visibleOptions = [...select.options].filter(option => !option.hidden);
-  const selected = visibleOptions.find(option => option.value === select.value)
-    || visibleOptions[0];
-  value.textContent = selected?.textContent || '';
-  menu.replaceChildren();
-  visibleOptions.forEach(option => {
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = 'header-menu-item';
-    item.dataset.filterValue = option.value;
-    item.setAttribute('role', 'menuitemradio');
-    item.setAttribute('aria-checked', String(option.value === select.value));
-    item.disabled = option.disabled;
-    item.textContent = option.textContent;
-    menu.appendChild(item);
-  });
-  trigger.title = selected?.textContent || '';
+  WebArchivAriaMenu.syncSelect(select);
 }
 
 function closeFilterAriaMenu(root, restoreFocus = false) {
-  if (!root) return;
-  const trigger = root.querySelector('.filter-menu-trigger');
-  root.querySelector('[role="menu"]').hidden = true;
-  trigger.setAttribute('aria-expanded', 'false');
-  if (restoreFocus) trigger.focus();
-}
-
-function closeFilterAriaMenus(except = null) {
-  document.querySelectorAll('[data-filter-aria-menu]').forEach(root => {
-    if (root !== except) closeFilterAriaMenu(root);
-  });
-}
-
-function keepFilterAriaMenuVisible(menu) {
-  menu.style.transform = '';
-  const rect = menu.getBoundingClientRect();
-  const margin = 8;
-  let shift = rect.left < margin ? margin - rect.left : 0;
-  if (rect.right + shift > window.innerWidth - margin) {
-    shift += window.innerWidth - margin - rect.right - shift;
-  }
-  if (shift) menu.style.transform = `translateX(${Math.round(shift)}px)`;
-}
-
-function openFilterAriaMenu(root, focusSelection = false) {
-  const select = document.getElementById(root.dataset.filterAriaMenu);
-  const trigger = root.querySelector('.filter-menu-trigger');
-  const menu = root.querySelector('[role="menu"]');
-  closeFilterAriaMenus(root);
-  syncFilterAriaMenu(select);
-  menu.hidden = false;
-  trigger.setAttribute('aria-expanded', 'true');
-  requestAnimationFrame(() => {
-    keepFilterAriaMenuVisible(menu);
-    if (focusSelection) {
-      (menu.querySelector('[aria-checked="true"]:not(:disabled)')
-        || menu.querySelector('.header-menu-item:not(:disabled)'))?.focus();
-    }
-  });
-}
-
-function moveFilterAriaMenuFocus(menu, direction) {
-  const items = [...menu.querySelectorAll('.header-menu-item:not(:disabled)')];
-  if (!items.length) return;
-  const current = items.indexOf(document.activeElement);
-  const next = direction === 'first' ? 0
-    : direction === 'last' ? items.length - 1
-      : (current + direction + items.length) % items.length;
-  items[next].focus();
+  const select = root && document.getElementById(root.dataset.filterAriaMenu);
+  if (select) WebArchivAriaMenu.selectController(select)?.close({ restoreFocus });
 }
 
 function wireFilterAriaMenus() {
   document.querySelectorAll('[data-filter-aria-menu]').forEach(root => {
-    const select = document.getElementById(root.dataset.filterAriaMenu);
-    const trigger = root.querySelector('.filter-menu-trigger');
-    const menu = root.querySelector('[role="menu"]');
-    if (!select || !trigger || !menu) return;
-    syncFilterAriaMenu(select);
-    trigger.addEventListener('click', event => {
-      event.stopPropagation();
-      if (!menu.hidden) closeFilterAriaMenu(root);
-      else openFilterAriaMenu(root);
-    });
-    trigger.addEventListener('keydown', event => {
-      if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
-      event.preventDefault();
-      openFilterAriaMenu(root, true);
-    });
-    menu.addEventListener('click', event => {
-      const item = event.target.closest('[data-filter-value]');
-      if (!item || item.disabled) return;
-      select.value = item.dataset.filterValue;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      closeFilterAriaMenu(root, true);
-    });
-    menu.addEventListener('keydown', event => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        closeFilterAriaMenu(root, true);
-      } else if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        moveFilterAriaMenuFocus(menu, 1);
-      } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        moveFilterAriaMenuFocus(menu, -1);
-      } else if (event.key === 'Home') {
-        event.preventDefault();
-        moveFilterAriaMenuFocus(menu, 'first');
-      } else if (event.key === 'End') {
-        event.preventDefault();
-        moveFilterAriaMenuFocus(menu, 'last');
-      } else if (event.key === 'Tab') {
-        closeFilterAriaMenu(root);
-      }
-    });
-    select.addEventListener('change', () => queueMicrotask(() => syncFilterAriaMenu(select)));
+    WebArchivAriaMenu.bindSelect(document.getElementById(root.dataset.filterAriaMenu), root);
   });
   document.body.classList.add('filter-aria-menus-ready');
 }
-
-document.addEventListener('click', event => {
-  document.querySelectorAll('[data-filter-aria-menu]').forEach(root => {
-    if (!root.contains(event.target)) closeFilterAriaMenu(root);
-  });
-});
-document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape') return;
-  const root = [...document.querySelectorAll('[data-filter-aria-menu]')]
-    .find(candidate => candidate.querySelector('.filter-menu-trigger')?.getAttribute('aria-expanded') === 'true');
-  if (!root) return;
-  event.preventDefault();
-  event.stopPropagation();
-  closeFilterAriaMenu(root, true);
-}, true);
 
 function updateFilterLabelLayout() {
   if (!$filterBarInner) return;
@@ -395,6 +267,13 @@ async function restoreListPosition(position) {
     return;
   }
   await nextPaint();
+  // Ganz oben bleibt ganz oben: Raster und Liste haben unterschiedliche Abstände
+  // über der ersten Karte. Deren Ausgleich würde die Seite samt Kopfbereich um
+  // ein paar Pixel verschieben (sichtbar beim Wechsel quadratisch/länglich ↔ Liste).
+  if ((position.top || 0) <= 1) {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    return;
+  }
   const cards = [...$app.querySelectorAll('.card[data-id]')];
   const anchor = cards.find(card => card.dataset.id === position.anchorId)
     || cards[Math.min(position.anchorIndex || 0, Math.max(0, cards.length - 1))];
@@ -836,7 +715,7 @@ function hideLogin() {
 const SVG_ACCOUNT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
 
 function applyUserUI(user) {
-  if (user?.role !== 'admin') clearTtsUI();
+  adminHooks.userChanged(user);
   const isGuest = !user || user.role === 'guest';
   const isAdmin = user?.role === 'admin';
   if (!isAdmin && isInfographicReviewMode()) resetInfographicReviewState();
@@ -1637,7 +1516,7 @@ async function openArticle(id, {
   if ($overlay.hidden) lastListPosition = captureListPosition();
   if (!detailPosition) lastDetailPosition = null;
   selectedTtsArticle = null;
-  updateTtsActions();
+  adminHooks.articleChanged();
   $overlay.hidden = false;
   document.body.style.overflow = 'hidden';
   // Beim Artikel-Wechsel laufende Medien stoppen
@@ -1708,7 +1587,7 @@ async function openArticle(id, {
 function closeOverlay() {
   if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) return;
   selectedTtsArticle = null;
-  updateTtsActions();
+  adminHooks.articleChanged();
   $overlay.hidden = true;
   document.body.style.overflow = '';
   currentViewItemId = '';
@@ -1788,7 +1667,7 @@ function stopAudio() {
 function renderDetail(article) {
   if (article.kind === 'audiobook') return renderBookDetail(article);
   selectedTtsArticle = article;
-  updateTtsActions();
+  adminHooks.articleChanged();
   const hue = authorHue(article.author);
 
   // Gruppe: Bildleiste (drei 9:16-Bilder nebeneinander, bei zwei je halbe Breite,
@@ -1845,7 +1724,7 @@ function renderDetail(article) {
   const dateHtml = `<div class="detail-date-row">
         <span class="detail-date-block">${article.date ? esc(formatDate(article.date)) : ''}</span>
         <div class="detail-action-row">
-          ${currentUser?.role === 'admin' ? `<details class="detail-tts-menu"><summary class="detail-cat-pill" title="Artikel bearbeiten und Audio erzeugen">Aktionen</summary><div class="copy-prompt-menu"><button type="button" class="header-menu-item" data-article-edit>Artikel editieren</button><button type="button" class="header-menu-item" data-tts-action="start" ${ttsStarting || ttsActive ? 'disabled' : ''}>Audio erzeugen</button><button type="button" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></details>` : ''}
+          ${currentUser?.role === 'admin' ? `<div class="detail-tts-menu"><button type="button" class="detail-cat-pill" id="detail-actions-btn" aria-haspopup="menu" aria-controls="detail-actions-menu" aria-expanded="false" title="Artikel bearbeiten und Audio erzeugen">Aktionen</button><div class="copy-prompt-menu" id="detail-actions-menu" role="menu" hidden><button type="button" role="menuitem" class="header-menu-item" data-article-edit>Artikel editieren</button><button type="button" role="menuitem" class="header-menu-item" data-tts-action="start" ${adminHooks.ttsBusy() ? 'disabled' : ''}>Audio erzeugen</button><button type="button" role="menuitem" class="header-menu-item" data-tts-action="show">Audio-Auftrag anzeigen</button></div></div>` : ''}
           ${infographicBtnHtml}
           ${copyBtnHtml}
           ${shareBtnHtml}
@@ -1904,24 +1783,11 @@ function renderDetail(article) {
     });
   });
 
-  // Das TTS-Dropdown bleibt auch bei schmalen Viewports vollständig sichtbar.
-  $detail.querySelectorAll('.detail-tts-menu').forEach(details => {
-    details.addEventListener('toggle', () => {
-      if (!details.open) return;
-      const menu = details.querySelector('.copy-prompt-menu');
-      if (!menu) return;
-      requestAnimationFrame(() => {
-        const box = menu.getBoundingClientRect();
-        const margin = 8;
-        let left = 0;
-        if (box.left < margin) left += margin - box.left;
-        if (box.right > window.innerWidth - margin) left -= box.right - (window.innerWidth - margin);
-        if (left) {
-          menu.style.left = `${left}px`;
-          menu.style.right = 'auto';
-        }
-      });
-    });
+  // Admin-Aktionen (Editor, Audio): gemeinsames ARIA-Menü. Die Einträge selbst
+  // bedienen delegierte Handler ([data-article-edit], [data-tts-action]).
+  WebArchivAriaMenu.create({
+    trigger: document.getElementById('detail-actions-btn'),
+    menu: document.getElementById('detail-actions-menu'),
   });
 
   const $bookmarkDetailBtn = document.getElementById('detail-bookmark-btn');
@@ -2022,61 +1888,38 @@ function renderDetail(article) {
       return url;
     };
 
-    let promptsLoaded = false;
-    const closeMenu = () => {
-      $copyMenu.hidden = true;
-      $copyBtn.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('click', onOutside, true);
-      document.removeEventListener('keydown', onEsc, true);
-    };
-    const onOutside = ev => { if (!$copyMenu.contains(ev.target) && !$copyBtn.contains(ev.target)) closeMenu(); };
-    const onEsc = ev => { if (ev.key === 'Escape') { ev.stopPropagation(); closeMenu(); $copyBtn.focus(); } };
-
+    // Erster Eintrag: nur Artikel; die Prompts werden beim ersten Öffnen geladen.
+    let promptItems = null;
     const buildMenu = async () => {
-      if (promptsLoaded) return;
-      promptsLoaded = true;
-      // Erster Eintrag: nur Artikel
-      const items = [{ file: null, label: 'Artikel' }];
+      if (promptItems) return;
+      promptItems = [{ file: null, label: 'Artikel' }];
       try {
         const r = await fetch('/api/prompts');
-        if (r.ok) items.push(...await r.json());
+        if (r.ok) promptItems.push(...await r.json());
       } catch { /* nur "Artikel" anbieten */ }
-      $copyMenu.innerHTML = items.map((it, i) =>
+      $copyMenu.innerHTML = promptItems.map((it, i) =>
         `<button type="button" role="menuitem" class="copy-prompt-item${i === 0 ? ' is-article' : ''}" data-prompt-index="${i}">${esc(it.label)}</button>`
       ).join('');
-      $copyMenu.querySelectorAll('.copy-prompt-item').forEach(item => {
-        item.addEventListener('click', async ev => {
-          ev.stopPropagation();
-          const selected = items[Number(item.dataset.promptIndex)] || items[0];
-          closeMenu();
-          const opensExternalPrompt = !!(selected.file && selected.url);
-          if (opensExternalPrompt && isIosPromptNavigation()) {
-            // iOS hinterlässt bei window.open aus einer installierten Web-App
-            // gelegentlich einen leeren weißen Browserkontext. Eine Navigation
-            // im aktuellen Kontext übergibt externe URLs direkt an Safari.
-            await copyArticle(selected.prompt || '');
-            window.location.assign(iosPromptTarget(selected.url));
-            return;
-          }
-          void copyArticle(selected.prompt || '');
-          if (opensExternalPrompt) window.open(selected.url, '_blank', 'noopener,noreferrer');
-        });
-      });
     };
-
-    $copyBtn.addEventListener('click', async e => {
-      e.stopPropagation();
-      if (!$copyMenu.hidden) { closeMenu(); return; }
-      $copyMenu.hidden = false;
-      $copyBtn.setAttribute('aria-expanded', 'true');
-      document.addEventListener('click', onOutside, true);
-      document.addEventListener('keydown', onEsc, true);
-      await buildMenu();
-      requestAnimationFrame(() => {
-        if ($copyMenu.hidden) return;
-        keepFilterAriaMenuVisible($copyMenu);
-        if (e.detail === 0) $copyMenu.querySelector('button')?.focus();
-      });
+    const choosePrompt = async item => {
+      const selected = promptItems[Number(item.dataset.promptIndex)] || promptItems[0];
+      const opensExternalPrompt = !!(selected.file && selected.url);
+      if (opensExternalPrompt && isIosPromptNavigation()) {
+        // iOS hinterlässt bei window.open aus einer installierten Web-App
+        // gelegentlich einen leeren weißen Browserkontext. Eine Navigation
+        // im aktuellen Kontext übergibt externe URLs direkt an Safari.
+        await copyArticle(selected.prompt || '');
+        window.location.assign(iosPromptTarget(selected.url));
+        return;
+      }
+      void copyArticle(selected.prompt || '');
+      if (opensExternalPrompt) window.open(selected.url, '_blank', 'noopener,noreferrer');
+    };
+    WebArchivAriaMenu.create({
+      trigger: $copyBtn,
+      menu: $copyMenu,
+      onBeforeOpen: buildMenu,
+      onSelect: item => { void choosePrompt(item); },
     });
   }
 
@@ -3078,484 +2921,32 @@ document.querySelector('.site-logo').addEventListener('click', event => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
-// ── Audio erzeugen: bestätigter Start und wiederaufnehmbares Status-Polling ──
+// ── Admin-Funktionen (admin-tasks.js, nur in der Admin-Shell geladen) ──────────
+// Artikel der offenen Detailansicht; Editor und Audio-Erzeugung beziehen sich darauf.
 let selectedTtsArticle = null;
-let ttsStarting = false;
-let ttsActive = false;
-let ttsJobId = null;
-let ttsPollGeneration = 0;
-let ttsReturnFocus = null;
 const $ttsOverlay = document.getElementById('tts-overlay');
-const $ttsStatus = document.getElementById('tts-status');
-const $ttsOutput = document.getElementById('tts-output');
-const $ttsCancel = document.getElementById('tts-cancel');
-const $ttsAudio = document.getElementById('tts-audio');
-const $ttsActivity = document.getElementById('tts-activity');
-const $ttsReindex = document.getElementById('tts-reindex');
+// admin-tasks.js füllt diese Einhängepunkte. Für Gäste und Nutzer bleiben sie
+// leer, weil der Server ihnen das Admin-Skript gar nicht ausliefert.
+const adminHooks = {
+  articleChanged() {},
+  userChanged() {},
+  ttsBusy: () => false,
+  actions: {},
+};
 
-function updateTtsActions() {
-  const disabled = !selectedTtsArticle || $overlay.hidden || ttsStarting || ttsActive;
-  const startMenu = document.getElementById('tts-start-menu');
-  if (startMenu) startMenu.disabled = disabled;
-  document.querySelectorAll('[data-tts-action="start"]').forEach(button => { button.disabled = disabled; });
-}
-function rememberTtsJob(id) {
-  ttsJobId = id;
-  try {
-    if (id) sessionStorage.setItem('wa-tts-job', id);
-    else sessionStorage.removeItem('wa-tts-job');
-  } catch { /* Status bleibt über den Server wiederauffindbar. */ }
-}
-function clearTtsUI() {
-  ++ttsPollGeneration;
-  rememberTtsJob(null);
-  ttsActive = false;
-  if (!$ttsOverlay) return;
-  $ttsOverlay.hidden = true;
-  $ttsOutput.textContent = '';
-  $ttsStatus.textContent = '';
-  $ttsAudio.hidden = true;
-}
-function openTtsModal() {
-  ++ttsPollGeneration;
-  if ($ttsOverlay.hidden) ttsReturnFocus = document.activeElement;
-  $ttsOverlay.hidden = false;
-  document.body.style.overflow = 'hidden';
-  $ttsOutput.textContent = '';
-  $ttsStatus.textContent = 'Auftrag wird geladen …';
-  $ttsAudio.hidden = true;
-  $ttsReindex.hidden = true;
-  $ttsCancel.disabled = true;
-  $ttsActivity.hidden = false;
-  document.getElementById('tts-article').textContent = '';
-  document.getElementById('tts-close').focus();
-}
-function closeTtsModal() {
-  ++ttsPollGeneration;
-  $ttsOverlay.hidden = true;
-  document.body.style.overflow = $overlay.hidden ? '' : 'hidden';
-  if (ttsReturnFocus?.isConnected) ttsReturnFocus.focus();
-  else if (!$overlay.hidden) $overlayClose.focus();
-  else $reindexBtn.focus();
-}
-function chooseTtsProvider(article, providers) {
-  const dialog = document.getElementById('tts-provider-dialog');
-  const options = document.getElementById('tts-provider-options');
-  const start = document.getElementById('tts-provider-start');
-  const description = document.getElementById('tts-provider-description');
-  const status = document.getElementById('tts-provider-status');
-  document.getElementById('tts-provider-article').textContent = article.title;
-  options.replaceChildren();
-  const radios = [];
-  for (const provider of providers) {
-    const label = document.createElement('label');
-    const radio = document.createElement('input');
-    radio.type = 'radio'; radio.name = 'tts-provider';
-    radio.value = provider.provider;
-    radio.disabled = !provider.available;
-    radio.checked = provider.provider === 'qwen' && provider.available;
-    const text = document.createElement('span');
-    text.textContent = provider.label + (provider.available ? '' : ' – nicht verfügbar');
-    label.append(radio); label.append(text);
-    options.append(label);
-    radios.push(radio);
-  }
-  const selectedProvider = () => providers.find(p => p.available
-    && radios.some(radio => radio.checked && radio.value === p.provider));
-  status.textContent = providers.map(p => `${p.label}: ${p.status}`).join('\n');
-  const update = () => {
-    const selected = selectedProvider();
-    start.disabled = !selected;
-    description.textContent = selected?.confirmation || (providers.some(p => p.available)
-      ? 'Wählen Sie einen Anbieter. Erst der Startbutton bestätigt die Generierung.'
-      : 'Kein Anbieter verfügbar. Bitte Server oder API-Schlüssel prüfen.');
-  };
-  for (const radio of radios) radio.onchange = update;
-  update();
-  dialog.returnValue = '';
-  return new Promise(resolve => {
-    dialog.addEventListener('close', () => {
-      const selected = selectedProvider();
-      resolve(dialog.returnValue === 'start' ? selected || null : null);
-    }, { once: true });
-    dialog.showModal();
-    (radios.find(radio => radio.checked) || radios.find(radio => !radio.disabled)
-      || dialog.querySelector('button')).focus();
-  });
-}
-
-async function runTts() {
-  const article = selectedTtsArticle;
-  if (!article || $overlay.hidden || currentUser?.role !== 'admin' || ttsStarting || ttsActive) return;
-  ttsStarting = true;
-  let startUncertain = false;
-  updateTtsActions();
-  try {
-    const providerResponse = await apiFetch('/api/tts/provider');
-    const info = await providerResponse.json();
-    if (!providerResponse.ok) throw new Error(info.error || 'TTS-Provider nicht verfügbar.');
-    if (currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
-    const provider = await chooseTtsProvider(article, info.providers);
-    if (!provider || currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
-    const startRequest = async replaceExisting => {
-      const response = await apiFetch('/api/tts', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleId: article.id, provider: provider.provider, replaceExisting }),
-      });
-      return { response, data: await response.json() };
-    };
-    startUncertain = true;
-    let { response, data } = await startRequest(false);
-    if (response.status === 409 && data.code === 'audio_exists') {
-      startUncertain = false;
-      const replace = window.confirm('Für diesen Artikel ist bereits eine Audiodatei vorhanden. Soll sie durch eine neu erzeugte Version ersetzt werden? Die vorhandene Datei wird nach erfolgreicher Erzeugung in den Papierkorb verschoben.');
-      if (!replace) return;
-      if (currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
-      startUncertain = true;
-      ({ response, data } = await startRequest(true));
-    }
-    if (!response.ok) {
-      startUncertain = false;
-      throw new Error(data.error || 'Audio-Auftrag konnte nicht gestartet werden.');
-    }
-    if (currentUser?.role !== 'admin') return;
-    openTtsModal();
-    document.getElementById('tts-article').textContent = article.title;
-    $ttsStatus.textContent = 'Audio-Auftrag wurde gestartet.';
-    rememberTtsJob(data.jobId);
-    ttsActive = true;
-    if (!$ttsOverlay.hidden) watchTts(data.jobId);
-  } catch (error) {
-    openTtsModal();
-    $ttsActivity.hidden = true;
-    $ttsStatus.textContent = error.message + (startUncertain
-      ? ' Bei unklarer Verbindung „Status aktualisieren“ verwenden; der Auftrag könnte bereits laufen.' : '');
-  } finally {
-    ttsStarting = false;
-    updateTtsActions();
-  }
-}
-async function showTtsJob() {
-  if (currentUser?.role !== 'admin') return;
-  openTtsModal();
-  const generation = ttsPollGeneration;
-  try {
-    // Funktioniert auch nach Reload oder in einem zweiten Browserfenster.
-    const response = await apiFetch('/api/tts/latest');
-    const data = await response.json();
-    if (generation !== ttsPollGeneration) return;
-    if (!response.ok) throw new Error(data.error || 'Auftrag nicht verfügbar.');
-    rememberTtsJob(data.jobId);
-    if (data.jobId) watchTts(data.jobId);
-    else {
-      ttsActive = false;
-      updateTtsActions();
-      $ttsActivity.hidden = true;
-      $ttsStatus.textContent = 'Kein gespeicherter Audio-Auftrag vorhanden.';
-    }
-  } catch (error) {
-    if (generation !== ttsPollGeneration) return;
-    $ttsActivity.hidden = true;
-    $ttsStatus.textContent = error.message;
-  }
-}
-async function refreshTtsArticle(articleId) {
-  await loadMeta();
-  await loadArticles();
-  if (!$overlay.hidden && selectedTtsArticle?.id === articleId) {
-    const article = await fetchArticle(articleId);
-    if (!$overlay.hidden && selectedTtsArticle?.id === articleId) {
-      stopAudio();
-      stopVideo();
-      renderDetail(article);
-    }
-  }
-}
-function formatTtsOutput(output) {
-  const pad = value => String(value).padStart(2, '0');
-  return String(output || '').replace(
-    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)(?= \[)/gm,
-    (original, timestamp) => {
-      const date = new Date(timestamp);
-      if (!Number.isFinite(date.getTime())) return original;
-      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
-        + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-    }
-  );
-}
-async function watchTts(jobId) {
-  const generation = ++ttsPollGeneration;
-  let failures = 0;
-  while (generation === ttsPollGeneration && !$ttsOverlay.hidden) {
-    try {
-      const response = await apiFetch(`/api/tts/${encodeURIComponent(jobId)}/status`);
-      if (generation !== ttsPollGeneration) return;
-      if ([401, 403, 404].includes(response.status)) {
-        rememberTtsJob(null);
-        ttsActive = false;
-        updateTtsActions();
-        $ttsOutput.textContent = '';
-        $ttsCancel.disabled = true;
-        $ttsActivity.hidden = true;
-        $ttsStatus.textContent = 'Auftrag nicht verfügbar oder keine Berechtigung.';
-        return;
-      }
-      if (!response.ok) throw new Error(`Status HTTP ${response.status}`);
-      const s = await response.json();
-      if (generation !== ttsPollGeneration) return;
-      failures = 0;
-      ttsActive = !s.done;
-      updateTtsActions();
-      document.getElementById('tts-article').textContent = s.title;
-      const nextOutput = formatTtsOutput(s.output);
-      if ($ttsOutput.textContent !== nextOutput) {
-        const scrollTop = $ttsOutput.scrollTop;
-        const atBottom = scrollTop + $ttsOutput.clientHeight >= $ttsOutput.scrollHeight - 24;
-        $ttsOutput.textContent = nextOutput;
-        $ttsOutput.scrollTop = atBottom ? $ttsOutput.scrollHeight : scrollTop;
-      }
-      const labels = { starting: 'Start wird vorbereitet …', running: 'Sprachgenerierung läuft …',
-        cancelling: 'Abbruch angefordert …', indexing: 'MP3 fertig – Artikelindex wird aktualisiert …',
-        succeeded: 'Fertig. Die MP3 wurde erzeugt.', failed: 'Sprachgenerierung fehlgeschlagen.', cancelled: 'Audio-Auftrag abgebrochen.' };
-      $ttsStatus.textContent = s.indexError || s.error || ((labels[s.status] || s.status)
-        + (!s.done && s.total ? ` · Chunk ${s.current || 0} von ${s.total}` : ''));
-      $ttsCancel.disabled = s.done || ['cancelling', 'indexing'].includes(s.status);
-      $ttsActivity.hidden = s.done;
-      $ttsReindex.hidden = !s.indexError;
-      if (s.done) {
-        if (s.status === 'succeeded' && (s.audioUrl?.startsWith('/files/') || s.audioUrl?.startsWith('/audio-files/'))) {
-          $ttsAudio.href = s.audioUrl;
-          $ttsAudio.hidden = false;
-          try { await refreshTtsArticle(s.articleId); }
-          catch {
-            if (generation === ttsPollGeneration) $ttsStatus.textContent += ' Die Artikelansicht konnte nicht aktualisiert werden. Bitte neu laden; die MP3 ist fertig.';
-          }
-        }
-        return;
-      }
-    } catch {
-      if (generation !== ttsPollGeneration) return;
-      $ttsStatus.textContent = 'Verbindung unterbrochen; der Auftrag kann weiterlaufen. Status aktualisieren oder später wieder öffnen.';
-      if (++failures >= 3) { $ttsActivity.hidden = true; return; }
-    }
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-}
-document.getElementById('tts-close')?.addEventListener('click', closeTtsModal);
-document.getElementById('tts-backdrop')?.addEventListener('click', closeTtsModal);
-document.getElementById('tts-refresh')?.addEventListener('click', showTtsJob);
-$ttsReindex?.addEventListener('click', async () => {
-  await runReindex();
-  if (ttsJobId && !$ttsOverlay.hidden) watchTts(ttsJobId);
+// ── Aktions-Menü hinter dem ↺-Button (gemeinsames ARIA-Menü) ────────────────
+const adminMenu = WebArchivAriaMenu.create({
+  trigger: $reindexBtn,
+  menu: $adminMenu,
+  onBeforeOpen: () => adminHooks.articleChanged(),
+  onSelect: item => runAdminMenuAction(item.dataset.action),
 });
-$ttsCancel?.addEventListener('click', async () => {
-  if (!ttsJobId || $ttsCancel.disabled) return;
-  $ttsCancel.disabled = true;
-  const generation = ttsPollGeneration;
-  try {
-    const response = await apiFetch(`/api/tts/${encodeURIComponent(ttsJobId)}/cancel`, { method: 'POST' });
-    if (!response.ok) throw new Error((await response.json()).error || 'Abbruch konnte nicht angefordert werden.');
-    if (generation === ttsPollGeneration) watchTts(ttsJobId);
-  } catch (error) {
-    if (generation !== ttsPollGeneration) return;
-    $ttsStatus.textContent = error.message;
-    $ttsCancel.disabled = false;
-  }
-});
-document.addEventListener('click', event => {
-  const button = event.target.closest('[data-tts-action]');
-  if (!button || button.disabled) return;
-  if (button.dataset.ttsAction === 'start') runTts();
-  else showTtsJob();
-});
-// Geöffnete Artikel-Aktionsmenüs schließen bei einem Klick außerhalb.
-document.addEventListener('click', event => {
-  document.querySelectorAll('.detail-tts-menu[open]').forEach(menu => {
-    if (!menu.contains(event.target)) menu.removeAttribute('open');
-  });
-});
-document.addEventListener('keydown', event => {
-  if (!$ttsOverlay || $ttsOverlay.hidden) return;
-  // Keine Navigation oder Schließen des darunterliegenden Artikels.
-  event.stopImmediatePropagation();
-  if (event.key === 'Escape') { event.preventDefault(); closeTtsModal(); }
-  if (event.key === 'Tab') {
-    const controls = [...$ttsOverlay.querySelectorAll('button, a[href], [tabindex="0"]')]
-      .filter(element => !element.disabled && !element.hidden);
-    const first = controls[0], last = controls[controls.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  }
-}, true);
-
-async function runReindex() {
-  if (!confirm('Archiv neu indizieren?')) return;
-  $reindexBtn.disabled = true;
-  $reindexBtn.textContent = '…';
-  try {
-    const r = await apiFetch('/api/reindex', { method: 'POST' });
-    const data = await r.json();
-    if (!data.started) {
-      alert(data.error || 'Re-Index läuft bereits.');
-      return;
-    }
-    await new Promise(resolve => {
-      const poll = setInterval(async () => {
-        try {
-          const sr = await apiFetch('/api/reindex/status');
-          const status = await sr.json();
-          if (status.processed) {
-            $count.textContent = `${status.processed.toLocaleString('de-DE')} Artikel verarbeitet…`;
-          }
-          if (status.done) { clearInterval(poll); resolve(); }
-        } catch { clearInterval(poll); resolve(); }
-      }, 600);
-    });
-    await loadMeta();
-    state.page = 1;
-    await loadArticles();
-  } finally {
-    $reindexBtn.disabled = false;
-    $reindexBtn.textContent = '↺';
-  }
-}
-
-function openScrapeModal(title) {
-  $scrapeOverlay.hidden = false;
-  document.body.style.overflow = 'hidden';
-  if ($scrapeTitle) $scrapeTitle.textContent = title || 'Scrapen';
-  $scrapeOutput.textContent = '';
-  $scrapeStatus.textContent = '';
-}
-function closeScrapeModal() {
-  $scrapeOverlay.hidden = true;
-  document.body.style.overflow = '';
-}
-$scrapeClose?.addEventListener('click', closeScrapeModal);
-$scrapeBackdrop?.addEventListener('click', closeScrapeModal);
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && $scrapeOverlay && !$scrapeOverlay.hidden) closeScrapeModal();
-});
-
-async function runScrape() {
-  if (!confirm('Neue Beiträge scrapen (Blog, Facebook, Telegram)? Das kann einige Minuten dauern.')) return;
-  $reindexBtn.disabled = true;
-  $reindexBtn.textContent = '…';
-  openScrapeModal('Scrapen');
-  $scrapeStatus.textContent = 'Scrape läuft …';
-  try {
-    const r = await apiFetch('/api/scrape', { method: 'POST' });
-    const data = await r.json();
-    if (!data.started) {
-      $scrapeStatus.textContent = data.error || (data.reason === 'reindex running'
-        ? 'Re-Index läuft gerade – bitte kurz warten.'
-        : 'Ein Scrape-Lauf läuft bereits.');
-      return;
-    }
-    // 1) Scrape-Lauf: Ausgabe live anzeigen, bis fertig.
-    const result = await new Promise(resolve => {
-      const poll = setInterval(async () => {
-        try {
-          const sr = await apiFetch('/api/scrape/status');
-          const s = await sr.json();
-          if (typeof s.output === 'string') {
-            $scrapeOutput.textContent = s.output;
-            $scrapeOutput.scrollTop = $scrapeOutput.scrollHeight;
-          }
-          if (s.done) { clearInterval(poll); resolve(s); }
-        } catch { clearInterval(poll); resolve(null); }
-      }, 1000);
-    });
-    if (result && result.exitCode === -1) {
-      $scrapeStatus.textContent = 'Fehler: Scraper konnte nicht gestartet werden — ' + (result.error || 'unbekannt');
-      return;
-    }
-    // 2) Anschließender, serverseitig angestoßener Reindex.
-    $scrapeStatus.textContent = `Scrape fertig (Exit ${result ? result.exitCode : '?'}) — Index wird aktualisiert …`;
-    await new Promise(resolve => {
-      const poll = setInterval(async () => {
-        try {
-          const sr = await apiFetch('/api/reindex/status');
-          const st = await sr.json();
-          if (st.processed) {
-            $count.textContent = `${st.processed.toLocaleString('de-DE')} Artikel verarbeitet…`;
-          }
-          if (st.done) { clearInterval(poll); resolve(); }
-        } catch { clearInterval(poll); resolve(); }
-      }, 600);
-    });
-    await loadMeta();
-    state.page = 1;
-    await loadArticles();
-    $scrapeStatus.textContent = 'Fertig. Der Index wurde aktualisiert.';
-  } catch (e) {
-    $scrapeStatus.textContent = 'Abgebrochen: ' + ((e && e.message) || e);
-  } finally {
-    $reindexBtn.disabled = false;
-    $reindexBtn.textContent = '↺';
-  }
-}
-
-async function showScrapeLog() {
-  openScrapeModal('Scrape-Log (letzte 100 Zeilen)');
-  $scrapeStatus.textContent = 'Lade …';
-  try {
-    const r = await apiFetch('/api/scrape/log');
-    const ct = r.headers.get('content-type') || '';
-    if (!r.ok || !ct.includes('application/json')) {
-      // Kein JSON -> vermutlich läuft eine ältere Server-Version ohne diese Route.
-      $scrapeOutput.textContent =
-        `Log-Endpoint nicht verfügbar (HTTP ${r.status}).\n` +
-        `Vermutlich läuft eine ältere Server-Version — bitte die aktuelle server.js ` +
-        `deployen und den Dienst neu starten (sudo systemctl restart nodeapp).`;
-      $scrapeStatus.textContent = 'Fehler';
-    } else {
-      const data = await r.json();
-      $scrapeOutput.textContent = data.text || '(leer)';
-      $scrapeStatus.textContent = 'scraper/scrape_all.log';
-    }
-  } catch (e) {
-    $scrapeOutput.textContent = 'Konnte das Log nicht laden: ' + ((e && e.message) || e);
-    $scrapeStatus.textContent = 'Fehler';
-  }
-  // Beim Öffnen ans untere Ende scrollen (neueste Zeilen), nach oben scrollbar.
-  requestAnimationFrame(() => { $scrapeOutput.scrollTop = $scrapeOutput.scrollHeight; });
-}
-
-// ── Aktions-Menü hinter dem ↺-Button ───────────────────────────────────────
 function closeAdminMenu() {
-  $adminMenu.hidden = true;
-  $reindexBtn.setAttribute('aria-expanded', 'false');
-  document.removeEventListener('click', onAdminOutside, true);
-  document.removeEventListener('keydown', onAdminEsc, true);
+  adminMenu?.close();
 }
-function onAdminOutside(ev) {
-  if (!$adminMenu.contains(ev.target) && ev.target !== $reindexBtn && !$reindexBtn.contains(ev.target)) {
-    closeAdminMenu();
-  }
-}
-function onAdminEsc(ev) {
-  if (ev.key === 'Escape') { ev.stopPropagation(); closeAdminMenu(); }
-}
-$reindexBtn.addEventListener('click', e => {
-  e.stopPropagation();
-  if (!$adminMenu.hidden) { closeAdminMenu(); return; }
-  updateTtsActions();
-  $adminMenu.hidden = false;
-  $reindexBtn.setAttribute('aria-expanded', 'true');
-  document.addEventListener('click', onAdminOutside, true);
-  document.addEventListener('keydown', onAdminEsc, true);
-});
-$adminMenu.addEventListener('click', ev => {
-  const item = ev.target.closest('[data-action]');
-  if (!item) return;
-  closeAdminMenu();
-  const action = item.dataset.action;
-  if (action === 'reindex') runReindex();
-  else if (action === 'scrape') runScrape();
-  else if (action === 'log') showScrapeLog();
-  else if (action === 'tts') runTts();
-  else if (action === 'tts-job') showTtsJob();
+function runAdminMenuAction(action) {
+  // Reindex, Scrape, Log und Audio-Aufträge stellt admin-tasks.js bereit.
+  if (adminHooks.actions[action]) adminHooks.actions[action]();
   else if (action === 'tts-settings') openTtsSettingsDialog();
   else if (action === 'new-infographic') openNewInfographic();
   else if (action === 'review-infographics') {
@@ -3566,7 +2957,7 @@ $adminMenu.addEventListener('click', ev => {
   else if (action === 'settings') openSettingsDialog();
   else if (action === 'users') openUserAdmin();
   else if (action === 'password') openPasswordDialog({ forced: false });
-});
+}
 
 $overlayClose.addEventListener('click', closeOverlay);
 $overlayBdrop.addEventListener('click', closeOverlay);

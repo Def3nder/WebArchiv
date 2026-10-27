@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=158" />
+  <link rel="stylesheet" href="styles.css?v=162" />
 </head>
 <body>
 
@@ -627,42 +627,78 @@
     <form id="settings-form" novalidate>
       <h2 id="settings-title" class="login-title">Einstellungen</h2>
       <fieldset class="settings-group">
-        <legend class="login-label">Schriftart</legend>
-        <select class="settings-select" name="font">
+        <legend class="login-label" id="settings-font-label">Schriftart</legend>
+        <select id="settings-font" class="settings-select filter-menu-native" name="font" aria-labelledby="settings-font-label">
           <option value="editorial">Editorial</option><option value="classic">Klassisch</option>
           <option value="modern">Modern</option><option value="system">System</option>
         </select>
+        <div class="header-menu filter-header-menu settings-aria-menu" data-filter-aria-menu="settings-font">
+          <button type="button" class="settings-select filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-font-menu" aria-labelledby="settings-font-label settings-font-value">
+            <span id="settings-font-value" data-filter-menu-value></span>
+          </button>
+          <div id="settings-font-menu" class="header-menu-dropdown" role="menu" aria-labelledby="settings-font-label" hidden></div>
+        </div>
       </fieldset>
       <fieldset class="settings-group">
-        <legend class="login-label">Darstellung</legend>
-        <select class="settings-select" name="theme">
+        <legend class="login-label" id="settings-theme-label">Darstellung</legend>
+        <select id="settings-theme" class="settings-select filter-menu-native" name="theme" aria-labelledby="settings-theme-label">
           <option value="light">Hell</option><option value="dark">Dunkel</option><option value="auto">Automatisch</option>
         </select>
+        <div class="header-menu filter-header-menu settings-aria-menu" data-filter-aria-menu="settings-theme">
+          <button type="button" class="settings-select filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-theme-menu" aria-labelledby="settings-theme-label settings-theme-value">
+            <span id="settings-theme-value" data-filter-menu-value></span>
+          </button>
+          <div id="settings-theme-menu" class="header-menu-dropdown" role="menu" aria-labelledby="settings-theme-label" hidden></div>
+        </div>
       </fieldset>
       <fieldset class="settings-group">
-        <legend class="login-label">Textgröße im Artikel</legend>
-        <select class="settings-select" name="textSize">
+        <legend class="login-label" id="settings-textSize-label">Textgröße im Artikel</legend>
+        <select id="settings-textSize" class="settings-select filter-menu-native" name="textSize" aria-labelledby="settings-textSize-label">
           <option value="small">Klein</option><option value="normal">Normal</option>
           <option value="large">Groß</option><option value="xlarge">Sehr groß</option>
         </select>
+        <div class="header-menu filter-header-menu settings-aria-menu" data-filter-aria-menu="settings-textSize">
+          <button type="button" class="settings-select filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-textSize-menu" aria-labelledby="settings-textSize-label settings-textSize-value">
+            <span id="settings-textSize-value" data-filter-menu-value></span>
+          </button>
+          <div id="settings-textSize-menu" class="header-menu-dropdown" role="menu" aria-labelledby="settings-textSize-label" hidden></div>
+        </div>
       </fieldset>
       <fieldset class="settings-group">
-        <legend class="login-label">Filter-Beschriftungen</legend>
-        <select class="settings-select" name="filterLabels">
+        <legend class="login-label" id="settings-filterLabels-label">Filter-Beschriftungen</legend>
+        <select id="settings-filterLabels" class="settings-select filter-menu-native" name="filterLabels" aria-labelledby="settings-filterLabels-label">
           <option value="auto">Automatisch</option><option value="hidden">Ausblenden</option>
         </select>
+        <div class="header-menu filter-header-menu settings-aria-menu" data-filter-aria-menu="settings-filterLabels">
+          <button type="button" class="settings-select filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-filterLabels-menu" aria-labelledby="settings-filterLabels-label settings-filterLabels-value">
+            <span id="settings-filterLabels-value" data-filter-menu-value></span>
+          </button>
+          <div id="settings-filterLabels-menu" class="header-menu-dropdown" role="menu" aria-labelledby="settings-filterLabels-label" hidden></div>
+        </div>
       </fieldset>
       <fieldset class="settings-group">
-        <legend class="login-label">Kategorien auf Kacheln</legend>
-        <select class="settings-select" name="cardCategories">
+        <legend class="login-label" id="settings-cardCategories-label">Kategorien auf Kacheln</legend>
+        <select id="settings-cardCategories" class="settings-select filter-menu-native" name="cardCategories" aria-labelledby="settings-cardCategories-label">
           <option value="visible">Einblenden</option><option value="hidden">Ausblenden</option>
         </select>
+        <div class="header-menu filter-header-menu settings-aria-menu" data-filter-aria-menu="settings-cardCategories">
+          <button type="button" class="settings-select filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-cardCategories-menu" aria-labelledby="settings-cardCategories-label settings-cardCategories-value">
+            <span id="settings-cardCategories-value" data-filter-menu-value></span>
+          </button>
+          <div id="settings-cardCategories-menu" class="header-menu-dropdown" role="menu" aria-labelledby="settings-cardCategories-label" hidden></div>
+        </div>
       </fieldset>
       <fieldset class="settings-group">
-        <legend class="login-label">Reset-Button bei Filtern</legend>
-        <select class="settings-select" name="resetFilters">
+        <legend class="login-label" id="settings-resetFilters-label">Reset-Button bei Filtern</legend>
+        <select id="settings-resetFilters" class="settings-select filter-menu-native" name="resetFilters" aria-labelledby="settings-resetFilters-label">
           <option value="visible">Einblenden</option><option value="hidden">Ausblenden</option>
         </select>
+        <div class="header-menu filter-header-menu settings-aria-menu" data-filter-aria-menu="settings-resetFilters">
+          <button type="button" class="settings-select filter-select filter-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-resetFilters-menu" aria-labelledby="settings-resetFilters-label settings-resetFilters-value">
+            <span id="settings-resetFilters-value" data-filter-menu-value></span>
+          </button>
+          <div id="settings-resetFilters-menu" class="header-menu-dropdown" role="menu" aria-labelledby="settings-resetFilters-label" hidden></div>
+        </div>
       </fieldset>
       <p class="account-hint">Die Filter-Beschriftungen werden pro Nutzer und Gerät gespeichert. „Automatisch“ zeigt sie nur, wenn genug Platz vorhanden ist.</p>
       <div class="account-buttons">
@@ -789,20 +825,22 @@
     </div>
   </dialog>
   <!-- ADMIN_ONLY_END -->
+  <script src="aria-menu.js?v=1"></script>
   <script src="password.js?v=1" data-non-admin-asset></script>
-  <script src="settings.js?v=4"></script>
+  <script src="settings.js?v=5"></script>
   <script src="user-admin.js?v=12" data-admin-asset></script>
   <script src="tts-settings.js?v=4" data-admin-asset></script>
   <script src="session-state.js?v=9"></script>
   <script src="grid-density.js?v=1"></script>
   <script src="page-swipe.js?v=6"></script>
   <script src="pwa-update.js?v=1"></script>
-  <script src="app.js?v=134"></script>
+  <script src="app.js?v=136"></script>
+  <script src="admin-tasks.js?v=1" data-admin-asset></script>
   <script src="vendor/duplicate-diff.bundle.js?v=7" data-admin-asset></script>
-  <script src="duplicates.js?v=19" data-admin-asset></script>
-  <script src="audiobooks.js?v=25"></script>
+  <script src="duplicates.js?v=20" data-admin-asset></script>
+  <script src="audiobooks.js?v=26"></script>
   <script src="book-reader.js?v=14"></script>
-  <script src="vendor/article-editor.bundle.js?v=17" data-admin-asset></script>
+  <script src="vendor/article-editor.bundle.js?v=18" data-admin-asset></script>
   <script src="infographic-new.js?v=3" data-admin-asset></script>
   <script src="infographic-manager.js?v=3" data-admin-asset></script>
 </body>
