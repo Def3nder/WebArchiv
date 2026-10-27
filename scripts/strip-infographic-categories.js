@@ -15,6 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeFileAtomicSync } = require('../lib/atomic-file.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const DIR = path.join(ROOT, 'www', 'Infografiken');
@@ -58,19 +59,6 @@ function stripCategories(content) {
   return changed ? [...head, ...lines.slice(end)].join(eol) : null;
 }
 
-function writeAtomic(file, content) {
-  const stat = fs.statSync(file);
-  const temp = path.join(path.dirname(file), `.strip-categories-${process.pid}.tmp`);
-  fs.writeFileSync(temp, content, { mode: stat.mode & 0o777 });
-  try {
-    if (process.platform !== 'win32') fs.chownSync(temp, stat.uid, stat.gid);
-    fs.renameSync(temp, file);
-  } catch (error) {
-    fs.rmSync(temp, { force: true });
-    throw error;
-  }
-}
-
 function main() {
   const changes = [];
   for (const file of listMarkdown(DIR)) {
@@ -88,7 +76,7 @@ function main() {
     if (!fs.existsSync(target)) fs.copyFileSync(file, target);
   }
   console.log(`Sicherung: ${path.relative(ROOT, backup)}`);
-  for (const { file, next } of changes) writeAtomic(file, next);
+  for (const { file, next } of changes) writeFileAtomicSync(file, next, { prefix: 'strip-categories' });
   console.log('Fertig. Bitte das Archiv neu einlesen.');
 }
 

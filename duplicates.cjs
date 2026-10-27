@@ -5,7 +5,7 @@
 const fsSync = require('fs');
 const fs = require('fs/promises');
 const crypto = require('crypto');
-const { writeJsonAtomic } = require('./user-store.cjs');
+const { createJsonFile } = require('./lib/atomic-file.cjs');
 
 const DEFAULT_CONFIG = Object.freeze({
   blogAuthor: 'Joe Turan',
@@ -147,25 +147,15 @@ function detectDuplicateCandidates(articles, config = DEFAULT_CONFIG) {
 }
 
 function createDuplicateStore({ file, io = fs }) {
+  const store = createJsonFile({ file, io });
   let decisions = [];
-  let queue = Promise.resolve();
 
   function load() {
-    try {
-      const parsed = JSON.parse(fsSync.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-      decisions = Array.isArray(parsed?.decisions) ? parsed.decisions.filter(Boolean) : [];
-    } catch (error) {
-      if (error.code !== 'ENOENT') console.warn('duplicate-decisions.json nicht geladen —', error.message);
-      decisions = [];
-    }
+    const parsed = store.read(null);
+    decisions = Array.isArray(parsed?.decisions) ? parsed.decisions.filter(Boolean) : [];
   }
 
-  function persist() {
-    const document = { version: 1, decisions };
-    const run = queue.then(() => writeJsonAtomic(file, document, io, 0o600));
-    queue = run.catch(error => console.error('Dubletten-Entscheidungen konnten nicht gespeichert werden:', error.message));
-    return run;
-  }
+  const persist = () => store.write({ version: 1, decisions });
 
   const keyOf = (blogId, facebookId) => `${blogId}\0${facebookId}`;
   function upsert({ blogId, facebookId, status, blogHash, facebookHash, user, migrations = [] }) {

@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { renderSafeMarkdown, safeHttpUrl } = require('./html-sanitizer.cjs');
+const { renderSafeMarkdown, safeHttpUrl, escapeHtml } = require('./html-sanitizer.cjs');
 const session = require('express-session');
 const sharp   = require('sharp');
 const { spawn } = require('child_process');
@@ -19,7 +19,7 @@ const { createLoginLimiter, tooManyAttemptsError } = require('./login-limiter.cj
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./security-headers.cjs');
 const { createArchiveLock } = require('./archive-lock.cjs');
 // Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
-const { httpError } = require('./lib/http-errors.cjs');
+const { httpError, isCrossSite } = require('./lib/http-errors.cjs');
 const { computeAppShellVersion, serviceWorkerSource } = require('./lib/app-shell.cjs');
 const {
   parseArticleSearchQuery, bodyExcerpt, mergeCategories, autoCategorize,
@@ -82,6 +82,8 @@ const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
 const WWW_DIR = path.join(__dirname, 'www');
 const AUDIO_DIR = path.join(__dirname, 'audio');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
+// Telegram ist in Listen ausgeblendet, außer mit ?telegram=1 oder author=Telegram.
+const TELEGRAM_AUTHOR = 'Telegram';
 const INFOGRAPHIC_TRASH_DIR = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR, 'trash');
 const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -340,7 +342,7 @@ function duplicateCanonicalFor(article, user = null) {
 function visibleGroupAnchor(article, user, { hideTelegram = false } = {}) {
   const anchor = articleById.get(groupAnchorOf.get(article?.id));
   if (!anchor || !canAccessAuthor(user, anchor.author)) return null;
-  if (hideTelegram && anchor.author === 'Telegram') return null;
+  if (hideTelegram && anchor.author === TELEGRAM_AUTHOR) return null;
   return anchor;
 }
 
@@ -982,7 +984,7 @@ function sameStringSecret(actual, expected) {
 function requireAdminAccess(req, res, next) {
   return requireAdmin(req, res, () => {
     if (SAFE_HTTP_METHODS.has(req.method)) return next();
-    if (req.get('sec-fetch-site') === 'cross-site') {
+    if (isCrossSite(req)) {
       return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
     }
     const origin = req.get('origin');
@@ -1173,12 +1175,6 @@ installMediaRoutes(app, {
 // den #-Teil der URL. Deshalb liefert /a/<id> serverseitig og:*-Meta-Tags und
 // leitet echte Besucher per JS/meta-refresh in den SPA (#/article/<id>) weiter.
 // Die ID kann zu einem Artikel oder Hörbuch gehören.
-
-function escapeHtml(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
 // Artikelbilder liegen unter /files, Hörbuch-Cover unter /audio-files. Für die
 // öffentliche Vorschau wird der URL-Pfad sicher auf die jeweilige Wurzel begrenzt.
@@ -1414,9 +1410,6 @@ app.get('/api/infographic-manager/*', requireAdminAccess, (req, res) => {
 });
 
 app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
-  if (req.get('sec-fetch-site') === 'cross-site') {
-    return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
-  }
   const release = archiveLock.tryAcquire('Infografiken ändern');
   if (!release) return sendArchiveBusy(res);
   let undoOrder = null;
@@ -1469,9 +1462,6 @@ app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
 // in einem atomaren Dateivorgang speichern. Anschließend werden ausschließlich
 // die tatsächlich betroffenen Infografik-Jahrgänge neu eingelesen.
 app.post('/api/infographic-review', requireAdminAccess, async (req, res) => {
-  if (req.get('sec-fetch-site') === 'cross-site') {
-    return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
-  }
   const release = archiveLock.tryAcquire('Infografik-Prüfung speichern');
   if (!release) return sendArchiveBusy(res);
   let undo = null;
@@ -1501,9 +1491,6 @@ app.post(
   requireAdminAccess,
   express.raw({ type: ['image/png', 'image/jpeg'], limit: INFOGRAPHIC_MAX_BYTES }),
   async (req, res) => {
-    if (req.get('sec-fetch-site') === 'cross-site') {
-      return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
-    }
     if (archiveLock.busy) return sendArchiveBusy(res);
     const id = req.params[0];
     const requested = articleById.get(id);
@@ -1580,7 +1567,6 @@ app.post(
 // bedeutet „Variante“). Unveränderte Platzhalter der Vorlage werden entfernt.
 
 app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
-  if (req.get('sec-fetch-site') === 'cross-site') return res.status(403).json({ error: 'Speichern ist nur aus dem Archiv erlaubt.' });
   if (archiveLock.busy) return sendArchiveBusy(res);
   const categories = Array.isArray(req.body?.categories) ? req.body.categories.map(String) : [];
   const markdown = normalizeNewInfographicMarkdown(req.body?.markdown, categories);
@@ -1790,9 +1776,6 @@ app.get('/api/duplicates/compare', requireAdminAccess, (req, res) => {
 
 app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  if (req.get('sec-fetch-site') === 'cross-site') {
-    return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
-  }
   if (archiveLock.busy) return sendArchiveBusy(res);
   const rawItems = req.body?.items;
   if (!Array.isArray(rawItems) || !rawItems.length || rawItems.length > 500) {
@@ -1857,9 +1840,6 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
 
 app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  if (req.get('sec-fetch-site') === 'cross-site') {
-    return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
-  }
   const release = archiveLock.tryAcquire('Dublettenaktion');
   if (!release) return sendArchiveBusy(res);
   const action = String(req.body?.action || '');
@@ -1940,9 +1920,9 @@ app.get('/api/articles', attachUser, (req, res) => {
 
   // "Telegram"-Artikel standardmäßig ausblenden; einbeziehen bei telegram=1,
   // wenn explizit nach Autor "Telegram" gefiltert wird oder bei Lesezeichen.
-  const hideTelegram = telegram !== '1' && author !== 'Telegram' && !onlyBookmarks;
+  const hideTelegram = telegram !== '1' && author !== TELEGRAM_AUTHOR && !onlyBookmarks;
   if (hideTelegram) {
-    filtered = filtered.filter(a => a.author !== 'Telegram');
+    filtered = filtered.filter(a => a.author !== TELEGRAM_AUTHOR);
   }
 
   if (author) {

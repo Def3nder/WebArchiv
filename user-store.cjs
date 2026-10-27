@@ -1,9 +1,10 @@
 const fsSync = require('node:fs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { randomUUID } = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const { tooManyAttemptsError } = require('./login-limiter.cjs');
+const { httpError: fail, jsonRoute } = require('./lib/http-errors.cjs');
+const { writeJsonAtomic } = require('./lib/atomic-file.cjs');
 
 const BCRYPT_ROUNDS = 12;
 const MIN_PASSWORD = 8;
@@ -12,39 +13,12 @@ const ROLES = ['admin', 'user'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Vergleich gegen einen Dummy-Hash, damit unbekannte E-Mails nicht schneller abgewiesen werden.
 const DUMMY_HASH = bcrypt.hashSync('webarchiv-dummy-password', 4);
-const fail = (status, message) => Object.assign(new Error(message), { status });
 const sameEmail = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
 
 function readJson(file, fallback) {
   try { return JSON.parse(fsSync.readFileSync(file, 'utf8').replace(/^﻿/, '')); }
   catch (err) {
     if (err.code === 'ENOENT') return fallback;
-    throw err;
-  }
-}
-
-// Temporäre Datei im selben Verzeichnis, danach atomar ersetzen; Rechte/Eigentümer bleiben erhalten.
-async function writeJsonAtomic(file, data, io, defaultMode) {
-  let stat = null;
-  try { stat = await io.stat(file); } catch (err) { if (err.code !== 'ENOENT') throw err; }
-  const mode = stat ? stat.mode & 0o777 : defaultMode;
-  const temp = path.join(path.dirname(file), `.${path.basename(file)}-${randomUUID()}.tmp`);
-  try {
-    const handle = await io.open(temp, 'wx', mode);
-    try {
-      await handle.writeFile(JSON.stringify(data, null, 2) + '\n', 'utf8');
-      if (process.platform !== 'win32') {
-        if (stat) await handle.chown(stat.uid, stat.gid).catch(() => {});
-        await handle.chmod(mode);
-      }
-      await handle.sync();
-    } finally { await handle.close(); }
-    await io.rename(temp, file);
-  } catch (err) {
-    await io.unlink(temp).catch(() => {});
-    if (err.code === 'EACCES' || err.code === 'EPERM') {
-      throw fail(500, `${path.basename(file)} konnte nicht gespeichert werden: keine Schreibberechtigung.`);
-    }
     throw err;
   }
 }
@@ -287,19 +261,7 @@ function createUserStore({ usersFile, publicFile, settingsFile = null, privateAu
 function installUserRoutes(app, {
   store, requireAuth, requireAdmin, getAuthors, onUserDeleted, onAuthorPriorityChanged, passwordLimiter = null,
 }) {
-  const route = handler => async (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    try {
-      if (req.method !== 'GET' && req.get('sec-fetch-site') === 'cross-site') {
-        throw fail(403, 'Änderungen sind nur aus dem Archiv erlaubt.');
-      }
-      res.json(await handler(req));
-    } catch (error) {
-      if (!error.status) console.error('Benutzerverwaltung:', error);
-      if (error.retryAfter) res.set('Retry-After', String(error.retryAfter));
-      res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Änderung konnte nicht gespeichert werden.' });
-    }
-  };
+  const route = handler => jsonRoute(handler, { label: 'Benutzerverwaltung', fallback: 'Die Änderung konnte nicht gespeichert werden.' });
   const actor = req => req.session.user.email;
   const overview = req => ({
     users: store.list(),

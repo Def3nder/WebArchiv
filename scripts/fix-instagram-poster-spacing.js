@@ -16,6 +16,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { writeFileAtomicSync } = require('../lib/atomic-file.cjs');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const DEFAULT_ROOT = path.join(REPO_ROOT, 'www', 'Infografiken');
@@ -52,19 +53,6 @@ function listMarkdownFiles(root) {
   }
   walk(root);
   return files;
-}
-
-function writeAtomic(file, content) {
-  const stat = fs.statSync(file);
-  const temp = path.join(path.dirname(file), `.poster-spacing-${process.pid}.tmp`);
-  fs.writeFileSync(temp, content, { mode: stat.mode & 0o777 });
-  try {
-    if (process.platform !== 'win32') fs.chownSync(temp, stat.uid, stat.gid);
-    fs.renameSync(temp, file);
-  } catch (error) {
-    fs.rmSync(temp, { force: true });
-    throw error;
-  }
 }
 
 function parseArguments(argv) {
@@ -114,7 +102,7 @@ function main(argv = process.argv.slice(2)) {
     fs.copyFileSync(file, backup);
   }
   console.log(`Sicherung: ${path.relative(REPO_ROOT, backupRoot)}`);
-  for (const { file, content } of changes) writeAtomic(file, content);
+  for (const { file, content } of changes) writeFileAtomicSync(file, content, { prefix: 'poster-spacing' });
   console.log('Korrektur abgeschlossen.');
 }
 

@@ -4,7 +4,10 @@ const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const express = require('express');
 const Fuse = require('fuse.js');
-const { writeJsonAtomic } = require('./user-store.cjs');
+const { writeFileAtomic, createJsonFile } = require('./lib/atomic-file.cjs');
+const { httpError: fail, jsonRoute } = require('./lib/http-errors.cjs');
+const { versionedUrl: withVersion } = require('./lib/archive-files.cjs');
+const { escapeHtml } = require('./html-sanitizer.cjs');
 
 // Hörbücher liegen als je ein Ordner unter audio/<Verzeichnis>/ (nicht unter www/),
 // damit der Artikel-Scan sie nicht als Artikel einliest. Angezeigt wird immer
@@ -26,7 +29,6 @@ const GLOBAL_STATE_KEY = '__global';
 const PRIVATE_BOOKS_KEY = '__private'; // global: { <Buch-ID>: true }
 const DEFAULT_CONFIG = { skipLongSeconds: 600, skipShortSeconds: 30 };
 const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
-const fail = (status, message) => Object.assign(new Error(message), { status });
 const emailKey = email => String(email || '').toLowerCase();
 
 function contentVersion(content) {
@@ -126,15 +128,6 @@ function trackTitles(files) {
 
 function mediaUrl(...segments) {
   return '/audio-files/' + segments.map(encodeURIComponent).join('/');
-}
-
-function withVersion(url, absPath) {
-  try { return `${url}?v=${Math.floor(fsSync.statSync(absPath).mtimeMs)}`; }
-  catch { return url; }
-}
-
-function escapeHtml(text) {
-  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // Reiner Text → Absätze. Ohne Leerzeilen gilt jede Zeile als Absatz, sonst werden
@@ -574,17 +567,6 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
     return { file, markdown, version: contentVersion(content) };
   }
 
-  async function atomicWrite(target, content, mode) {
-    const temp = path.join(path.dirname(target), `.extra-${randomUUID()}.tmp`);
-    const handle = await fs.open(temp, 'wx', mode);
-    try {
-      await handle.writeFile(content);
-      await handle.sync();
-    } finally { await handle.close(); }
-    try { await fs.rename(temp, target); }
-    catch (error) { await fs.unlink(temp).catch(() => {}); throw error; }
-  }
-
   async function withExtrasWrite(task) {
     if (extrasWriting) throw fail(409, 'Es wird bereits ein Extra bearbeitet. Bitte kurz warten.');
     extrasWriting = true;
@@ -609,7 +591,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       const target = path.join(extrasPath, file);
       const original = await fs.readFile(target);
       if (contentVersion(original) !== input.version) throw fail(409, 'Die Datei wurde inzwischen geändert. Bitte neu laden.');
-      await atomicWrite(target, content, (await fs.stat(target)).mode & 0o777);
+      await writeFileAtomic(target, content);
       return { saved: true, file, version: contentVersion(content) };
     });
   }
@@ -628,7 +610,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
         if (!dir) { await fs.mkdir(extrasPath); dir = extrasPath; created = true; }
         const file = safeExtraTitle(title) + '.md';
         if ((await fs.readdir(dir)).some(name => name.toLowerCase() === file.toLowerCase())) throw fail(409, 'Ein Extra mit diesem Namen existiert bereits.');
-        await atomicWrite(path.join(dir, file), content, 0o644);
+        await writeFileAtomic(path.join(dir, file), content);
         return { created: true, file };
       } catch (error) {
         if (created) await fs.rmdir(extrasPath).catch(() => {});
@@ -675,8 +657,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
           if (!existing || path.extname(existing).toLowerCase() !== ext) throw fail(404, 'Die zu ersetzende Datei wurde nicht gefunden oder hat einen anderen Typ.');
         } else if (existing) throw fail(409, 'Eine Datei mit diesem Namen existiert bereits.');
         const target = path.join(dir, replace ? existing : file);
-        const mode = replace ? (await fs.stat(target)).mode & 0o777 : 0o644;
-        await atomicWrite(target, content, mode);
+        await writeFileAtomic(target, content);
         return { uploaded: true, file: replace ? existing : file };
       } catch (error) {
         if (imagesCreated) await fs.rmdir(path.join(activeExtrasPath, 'images')).catch(() => {});
@@ -703,7 +684,7 @@ function createAudiobookLibrary({ audioRoot, directory = null, excerpt, renderMa
       catch { continue; }
       let updated = markdown;
       for (const [from, to] of variants) updated = updated.split(from).join(to);
-      if (updated !== markdown) await atomicWrite(target, Buffer.from(updated, 'utf8'), (await fs.stat(target)).mode & 0o777);
+      if (updated !== markdown) await writeFileAtomic(target, Buffer.from(updated, 'utf8'));
     }
   }
 
@@ -868,8 +849,8 @@ function resolveTrackIndex(book, entry) {
 // ─── Hörfortschritt pro Nutzer (audiobook-progress.json) ───────────────────
 
 function createProgressStore({ file, io = fs }) {
+  const store = createJsonFile({ file, io });
   let data = {};
-  let queue = Promise.resolve();
 
   function migratePrivateBooks() {
     const privateBooks = { ...(data[GLOBAL_STATE_KEY]?.[PRIVATE_BOOKS_KEY] || {}) };
@@ -892,22 +873,15 @@ function createProgressStore({ file, io = fs }) {
   }
 
   function load() {
-    try {
-      const parsed = JSON.parse(fsSync.readFileSync(file, 'utf8').replace(/^﻿/, ''));
-      data = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch (err) {
-      if (err.code !== 'ENOENT') console.warn('audiobook-progress.json nicht geladen —', err.message);
-      data = {};
-    }
+    const parsed = store.read({});
+    data = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     // Frühere Versionen speicherten „privat“ pro Nutzer. Die Vereinigung aller
     // Markierungen wird global übernommen, damit beim Update nichts offengelegt wird.
     if (migratePrivateBooks()) persist();
   }
 
   function persist() {
-    const run = queue.then(() => writeJsonAtomic(file, data, io, 0o600));
-    queue = run.catch(err => console.error('Hörfortschritt konnte nicht gespeichert werden:', err.message));
-    return run;
+    return store.write(data);
   }
 
   return {
@@ -1012,19 +986,13 @@ function installAudiobookRoutes(app, {
   // bereits ein anderer Schreib- oder Indexauftrag läuft.
   exclusive = (_label, task) => task(),
 }) {
-  const route = (handler, admin = false) => async (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    try {
-      if (!canAccessAuthor(req.session.user, AUDIOBOOK_AUTHOR)) throw fail(403, 'Kein Zugriff auf Hörbücher.');
-      if (admin && req.session.user?.role !== 'admin') throw fail(403, 'Nur Administratoren dürfen diese Funktion verwenden.');
-      if (req.method !== 'GET' && req.get('sec-fetch-site') === 'cross-site') throw fail(403, 'Änderungen sind nur aus dem Archiv erlaubt.');
-      const run = () => handler(req, req.session.user);
-      res.json(await (admin && req.method !== 'GET' ? exclusive('Hörbuch-Verwaltung', run) : run()));
-    } catch (error) {
-      if (!error.status) console.error('Hörbücher:', error);
-      res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Anfrage ist fehlgeschlagen.' });
-    }
-  };
+  // Schreibende Admin-Aufrufe laufen exklusiv unter der Archivsperre.
+  const route = (handler, admin = false) => jsonRoute(req => {
+    if (!canAccessAuthor(req.session.user, AUDIOBOOK_AUTHOR)) throw fail(403, 'Kein Zugriff auf Hörbücher.');
+    if (admin && req.session.user?.role !== 'admin') throw fail(403, 'Nur Administratoren dürfen diese Funktion verwenden.');
+    const run = () => handler(req, req.session.user);
+    return admin && req.method !== 'GET' ? exclusive('Hörbuch-Verwaltung', run) : run();
+  }, { label: 'Hörbücher' });
 
   const accessibleBook = (user, id) => {
     const book = library.getForUser(user, id);

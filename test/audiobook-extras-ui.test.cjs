@@ -166,7 +166,7 @@ test('Escape und Herunterziehen schließen zuerst nur die Dateivorschau', () => 
 
 test('Schreibende Extras-Routen sind admin- und same-site-geschützt', () => {
   assert.match(server, /admin && req\.session\.user\?\.role !== 'admin'/);
-  assert.match(server, /req\.get\('sec-fetch-site'\) === 'cross-site'/);
+  assert.match(server, /const route = \(handler, admin = false\) => jsonRoute\(/);
   for (const method of ['put', 'post', 'patch', 'delete']) {
     assert.match(server, new RegExp(`app\\.${method}\\([\\s\\S]*?\\/api\\/audiobook-extra-`));
   }

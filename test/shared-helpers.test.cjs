@@ -1,0 +1,110 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const { writeFileAtomic, writeJsonAtomic, writeFileAtomicSync, createJsonFile } = require('../lib/atomic-file.cjs');
+const { jsonRoute } = require('../lib/http-errors.cjs');
+const { escapeHtml } = require('../html-sanitizer.cjs');
+
+async function tempDir(t) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'webarchiv-helpers-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+test('writeFileAtomic ersetzt die Datei und hinterlässt keine temporären Dateien', async t => {
+  const dir = await tempDir(t);
+  const file = path.join(dir, 'a.md');
+  await writeFileAtomic(file, 'neu');
+  await writeFileAtomic(file, Buffer.from('zweiter Stand'));
+  assert.equal(await fs.readFile(file, 'utf8'), 'zweiter Stand');
+  assert.deepEqual(await fs.readdir(dir), ['a.md']);
+});
+
+test('writeFileAtomic: beforeRename kann abbrechen, das Original bleibt', async t => {
+  const dir = await tempDir(t);
+  const file = path.join(dir, 'a.md');
+  await fs.writeFile(file, 'original');
+  await assert.rejects(writeFileAtomic(file, 'neu', { beforeRename: () => { throw Object.assign(new Error('geändert'), { status: 409 }); } }), { status: 409 });
+  assert.equal(await fs.readFile(file, 'utf8'), 'original');
+  assert.deepEqual(await fs.readdir(dir), ['a.md']);
+});
+
+test('writeJsonAtomic meldet fehlende Schreibrechte als 500 mit Dateinamen', async t => {
+  const dir = await tempDir(t);
+  const io = { ...fs, rename: async () => { throw Object.assign(new Error('nein'), { code: 'EACCES' }); } };
+  await assert.rejects(writeJsonAtomic(path.join(dir, 'x.json'), {}, io, 0o600),
+    { status: 500, message: 'x.json konnte nicht gespeichert werden: keine Schreibberechtigung.' });
+  assert.deepEqual(await fs.readdir(dir), []);
+});
+
+test('writeFileAtomicSync ersetzt nur vorhandene Dateien', async t => {
+  const dir = await tempDir(t);
+  const file = path.join(dir, 'b.md');
+  assert.throws(() => writeFileAtomicSync(file, 'x'), { code: 'ENOENT' });
+  await fs.writeFile(file, 'alt');
+  writeFileAtomicSync(file, 'neu', { prefix: 'test' });
+  assert.equal(await fs.readFile(file, 'utf8'), 'neu');
+  assert.deepEqual(await fs.readdir(dir), ['b.md']);
+});
+
+test('createJsonFile liest tolerant und schreibt nacheinander', async t => {
+  const dir = await tempDir(t);
+  const file = path.join(dir, 'store.json');
+  const store = createJsonFile({ file });
+  assert.deepEqual(store.read({ leer: true }), { leer: true });
+  await fs.writeFile(file, '﻿{"a":1}');
+  assert.deepEqual(store.read({}), { a: 1 });
+  await Promise.all([store.write({ n: 1 }), store.write({ n: 2 })]);
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { n: 2 });
+});
+
+function fakeResponse() {
+  return {
+    statusCode: 200, headers: {}, body: undefined,
+    set(name, value) { this.headers[name] = value; return this; },
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+}
+const request = (method, site) => ({ method, path: '/x', get: name => (name === 'sec-fetch-site' ? site : undefined) });
+
+test('jsonRoute: no-store, Cross-Site nur für schreibende Aufrufe, Fehler ohne Details', async () => {
+  const errors = [];
+  const original = console.error;
+  console.error = (...args) => errors.push(args);
+  try {
+    const ok = jsonRoute(() => ({ ok: true }), { label: 'Test' });
+    let res = fakeResponse();
+    await ok(request('GET', 'cross-site'), res);
+    assert.deepEqual([res.statusCode, res.body, res.headers['Cache-Control']], [200, { ok: true }, 'no-store']);
+    res = fakeResponse();
+    await ok(request('PUT', 'cross-site'), res);
+    assert.deepEqual([res.statusCode, res.body], [403, { error: 'Änderungen sind nur aus dem Archiv erlaubt.' }]);
+
+    const broken = jsonRoute(() => { throw new Error('geheimer Pfad /opt'); }, { label: 'Test', fallback: 'Allgemein.' });
+    res = fakeResponse();
+    await broken(request('POST', 'same-origin'), res);
+    assert.deepEqual([res.statusCode, res.body], [500, { error: 'Allgemein.' }]);
+    assert.equal(errors.length, 1);
+
+    const limited = jsonRoute(() => { throw Object.assign(new Error('Zu viele Versuche.'), { status: 429, retryAfter: 60 }); });
+    res = fakeResponse();
+    await limited(request('POST'), res);
+    assert.deepEqual([res.statusCode, res.headers['Retry-After']], [429, '60']);
+
+    const missing = jsonRoute(() => { throw Object.assign(new Error('ENOENT: /opt/x'), { code: 'ENOENT' }); },
+      { mapError: e => e.code === 'ENOENT' ? Object.assign(new Error('Nicht gefunden.'), { status: 404 }) : null });
+    res = fakeResponse();
+    await missing(request('GET'), res);
+    assert.deepEqual([res.statusCode, res.body], [404, { error: 'Nicht gefunden.' }]);
+    assert.equal(errors.length, 1);
+  } finally { console.error = original; }
+});
+
+test('escapeHtml maskiert alle HTML-Sonderzeichen', () => {
+  assert.equal(escapeHtml(`<a href="x" title='y'>&</a>`), '&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;');
+  assert.equal(escapeHtml(null), '');
+  assert.equal(escapeHtml(0), '0');
+});

@@ -1448,3 +1448,50 @@ Vorschau von `migrate-infographic-names.js` vor/nach zeilengleich (545 Zeilen).
 
 **Deployment:** `server.js`, `scripts/migrate-infographic-names.js` und den neuen Ordner `lib/`
 (sechs Dateien) kopieren, danach Dienst neu starten. Keine neuen Abhängigkeiten.
+
+## 26. Aktualisierung 27.10.2026 – Doppelten Code zusammengeführt
+
+**Atomares Schreiben (`lib/atomic-file.cjs`):** Eine Umsetzung statt fünf.
+- `writeFileAtomic(file, content, { io, defaultMode, prefix, strictOwner, beforeRename })`: temporäre
+  Datei im selben Verzeichnis, Rechte und Eigentümer einer vorhandenen Datei bleiben erhalten.
+  - Der Artikel-Editor nutzt `strictOwner`: ein fehlgeschlagenes `chown` bricht ab.
+  - Pfad und Version werden in `beforeRename` erneut geprüft.
+- `writeJsonAtomic` meldet EACCES/EPERM weiterhin als 500 mit Dateinamen. `user-store.cjs`
+  exportiert es weiter.
+- `writeFileAtomicSync` ersetzt die Kopien in `scripts/fix-instagram-poster-spacing.js` und
+  `scripts/strip-infographic-categories.js`.
+- `createJsonFile({ file, io, mode })` liefert `read(fallback)` (BOM, fehlende Datei, Warnung) und
+  `write(data)` (Schreibvorgänge nacheinander). Genutzt von Lesezeichen, Dubletten-Entscheidungen
+  und Hörfortschritt.
+- Die Hörbuch-Extras übernehmen die Rechte jetzt selbst (neue Dateien 0644), statt sie bei jedem
+  Aufruf mitzugeben.
+
+**JSON-Routen (`lib/http-errors.cjs`):** `jsonRoute(handler, { label, fallback, crossSiteMessage, mapError })`
+ersetzt die vier eigenen Routen-Wrapper in Benutzerverwaltung, Lesezeichen, Hörbüchern und
+Artikel-Editor.
+- Gemeinsam: no-store, Cross-Site-Sperre für schreibende Aufrufe, `Retry-After` und eine allgemeine
+  Meldung statt Fehlerdetails.
+- Der Editor bildet ENOENT über `mapError` auf 404 ab.
+- Lokale `fail`-Funktionen sind durch `httpError` ersetzt.
+
+**Entfernt:** sieben doppelte `sec-fetch-site`-Prüfungen in Admin-Routen von `server.js`. Diese
+Routen laufen bereits durch `requireAdminAccess`, das Herkunft und CSRF-Token prüft.
+
+**Kleinere Duplikate:**
+- `escapeHtml` liegt einmal in `html-sanitizer.cjs`.
+- `fileUrl`/`audioFileUrl` und das `withVersion` der Hörbücher nutzen `versionedUrl`.
+- `TELEGRAM_AUTHOR` ersetzt die drei Telegram-Literale in `server.js`.
+
+**Bewusst getrennt geblieben:**
+- `normalizeDate` der Hörbücher (versteht reine Jahreszahlen, liefert `null`).
+- Das eigenständige `tts/`-Paket.
+- Die Kopien im Dubletten-Werkzeug und das `slugify` des Scrapers.
+
+**Geprüft:** Node-Suite 384/384, davon 7 neue Tests in `test/shared-helpers.test.cjs`. Ein Serverstart
+mit Abruf von Artikeln und Hörbüchern ist fehlerfrei.
+
+**Deployment:**
+- Kopieren: `lib/atomic-file.cjs`, `lib/http-errors.cjs`, `lib/archive-files.cjs`, `server.js`,
+  `user-store.cjs`, `bookmarks.cjs`, `duplicates.cjs`, `audiobooks.cjs`, `article-editor.cjs`,
+  `html-sanitizer.cjs` und die beiden Skripte.
+- Danach den Dienst neu starten. Keine neuen Abhängigkeiten.

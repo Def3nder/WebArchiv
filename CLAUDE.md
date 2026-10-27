@@ -41,7 +41,10 @@ and tests without starting the server: `article-parser.cjs` (`parseArticle`, dat
 taxonomy), `infographics.cjs` (`linkInfographics`, naming, header editing, `moveInfographicFiles`),
 `archive-files.cjs` (directory cache, `findSibling`, file URLs, `resolveUnder`), `article-index.cjs`
 (Fuse index, list helpers for partial reindex, scraper manifest), `app-shell.cjs` (PWA version),
-`http-errors.cjs` (`httpError`). Never `require('./server.js')` from scripts — import from `lib/`.
+`http-errors.cjs` (`httpError`, `jsonRoute`, `isCrossSite`), `atomic-file.cjs` (`writeFileAtomic`,
+`writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`). Never `require('./server.js')` from scripts — import from `lib/`.
+Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors);
+every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).
 New pure helpers belong in `lib/`, not in `server.js`. The index works in three phases:
 
 1. **Index build (`buildIndex` → `scanDir` → `parseArticle`).** On startup (and on reindex) it

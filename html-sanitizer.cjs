@@ -70,4 +70,10 @@ function safeHttpUrl(value) {
   }
 }
 
-module.exports = { renderSafeMarkdown, sanitizeRenderedHtml, safeHttpUrl };
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+module.exports = { renderSafeMarkdown, sanitizeRenderedHtml, safeHttpUrl, escapeHtml };
