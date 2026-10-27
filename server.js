@@ -89,6 +89,7 @@ const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const ADMIN_ASSET_PATHS = new Set([
   '/admin-tasks.js',
+  '/infographic-review.js',
   '/user-admin.js',
   '/tts-settings.js',
   '/duplicates.js',

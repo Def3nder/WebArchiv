@@ -2275,10 +2275,7 @@ body.layout-list .card-bookmark { right: auto; left: 6px; }
 .md-chevron { margin-left: 1px; font-size: .74rem; }
 .md-heading-summary { min-width: 57px; justify-content: space-between; }
 .md-toolbar-dropdown { position: relative; flex: 0 0 auto; }
-.md-toolbar-dropdown > summary { list-style: none; }
-.md-toolbar-dropdown > summary::-webkit-details-marker { display: none; }
-.md-toolbar-dropdown > summary[aria-disabled="true"] { opacity: .35; pointer-events: none; }
-.md-toolbar-dropdown[open] > summary { background: color-mix(in srgb, var(--surface) 70%, var(--accent) 30%); color: var(--accent); }
+.md-toolbar-dropdown > [aria-expanded="true"] { background: color-mix(in srgb, var(--surface) 70%, var(--accent) 30%); color: var(--accent); }
 .md-toolbar-menu {
   position: absolute;
   top: calc(100% + 7px);

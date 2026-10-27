@@ -452,6 +452,7 @@ Object.assign(adminHooks, {
   userChanged: user => { if (user?.role !== 'admin') clearTtsUI(); },
   ttsBusy: () => ttsStarting || ttsActive,
   actions: {
+    ...adminHooks.actions,
     reindex: runReindex,
     scrape: runScrape,
     log: showScrapeLog,

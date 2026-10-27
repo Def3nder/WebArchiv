@@ -13,7 +13,7 @@ const PREVIEW = fs.readFileSync(path.join(ROOT, 'public', 'markdown-live-preview
 test('Artikeleditor verwendet die lokale Markdown-Live-Vorschau', () => {
   assert.doesNotMatch(HTML, /<textarea id="article-editor-text"/);
   assert.match(HTML, /<div id="article-editor-text"/);
-  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=18/);
+  assert.match(HTML, /vendor\/article-editor\.bundle\.js\?v=19/);
   assert.match(EDITOR, /createMarkdownInput/);
   assert.match(EDITOR, /markdownInput\.getValue\(\)/);
   assert.match(EDITOR, /markdownInput\.setValue\(result\.markdown\)/);
@@ -42,7 +42,7 @@ test('aktive Markdown-Zeichen und gerenderte Strukturen besitzen eigene Stile', 
   assert.match(CSS, /\.cm-md-table-widget/);
   assert.match(CSS, /\.cm-md-image-widget/);
   assert.match(CSS, /\.cm-md-task-widget/);
-  assert.match(HTML, /styles\.css\?v=162/);
+  assert.match(HTML, /styles\.css\?v=163/);
   assert.match(CSS, /\.markdown-live-editor \.cm-md-markup/);
   assert.match(PREVIEW, /replaceSelection\(value\)/);
   assert.match(PREVIEW, /reflectReadOnly\(readOnly\)/);
@@ -98,7 +98,7 @@ test('Toolbar-Auswahl folgt Cursor, Überschrift und Inline-Formatierung', () =>
   assert.match(PREVIEW, /button\.setAttribute\('aria-pressed', String\(pressed\)\)/);
   assert.match(CSS, /\.md-toolbar-button\[aria-pressed="true"\]/);
   assert.match(CSS, /\.md-toolbar-menu button\[aria-current="true"\]/);
-  assert.match(PREVIEW, /if \(details\.open\) \{[\s\S]*?update\(\);[\s\S]*?closeMenus\(details\)/);
+  assert.match(PREVIEW, /WebArchivAriaMenu\.create\(\{[\s\S]*?onBeforeOpen: update,/);
 });
 
 test('Markdown-Überlaufmenü grenzt an die übrigen Schaltflächen und bleibt vollständig sichtbar', () => {

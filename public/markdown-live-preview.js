@@ -648,10 +648,10 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
     [1, 'Titel'], [2, 'Untertitel'], [3, 'Überschrift'], [4, 'Unterüberschrift'],
     [5, 'Abschnitt'], [6, 'Unterabschnitt'], [0, 'Textkörper'],
   ].map(([level, label]) => `<button type="button" class="md-heading-option md-heading-${level || 'body'}" data-md-heading="${level}" role="menuitem">${label}</button>`).join('');
-  const desktopTable = `<details class="md-toolbar-dropdown md-toolbar-secondary" data-md-details>
-    <summary class="md-toolbar-button" aria-label="Tabelle" title="Tabelle">${toolbarIcon('table')}<span class="md-chevron">⌄</span></summary>
-    <div class="md-toolbar-menu md-table-menu"><strong data-md-table-label>Tabelle einfügen</strong>${tableGrid()}</div>
-  </details>`;
+  const desktopTable = `<div class="md-toolbar-dropdown md-toolbar-secondary" data-md-dropdown>
+    <button type="button" class="md-toolbar-button" aria-haspopup="menu" aria-label="Tabelle" title="Tabelle">${toolbarIcon('table')}<span class="md-chevron">⌄</span></button>
+    <div class="md-toolbar-menu md-table-menu" role="menu" aria-label="Tabelle" hidden><strong data-md-table-label>Tabelle einfügen</strong>${tableGrid()}</div>
+  </div>`;
   const moreTable = `<div class="md-more-table"><strong data-md-table-label>Tabelle einfügen</strong>${tableGrid('is-compact')}</div>`;
   const element = document.createElement('div');
   element.className = 'md-editor-toolbar';
@@ -662,13 +662,13 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
       ${toolbarButton('undo', 'Rückgängig', toolbarIcon('undo'))}
       ${toolbarButton('redo', 'Wiederholen', toolbarIcon('redo'))}
     </div>
-    <details class="md-toolbar-dropdown" data-md-details>
-      <summary class="md-toolbar-button md-heading-summary" aria-label="Absatzformat" title="Absatzformat"><span data-md-heading-label>Text</span><span class="md-chevron">⌄</span></summary>
-      <div class="md-toolbar-menu md-heading-menu" role="menu">${headingItems}</div>
-    </details>
-    <details class="md-toolbar-dropdown" data-md-details>
-      <summary class="md-toolbar-button" aria-label="Listen und Einzüge" title="Listen und Einzüge">${toolbarIcon('list')}<span class="md-chevron">⌄</span></summary>
-      <div class="md-toolbar-menu md-list-menu" role="menu">
+    <div class="md-toolbar-dropdown" data-md-dropdown>
+      <button type="button" class="md-toolbar-button md-heading-summary" aria-haspopup="menu" aria-label="Absatzformat" title="Absatzformat"><span data-md-heading-label>Text</span><span class="md-chevron">⌄</span></button>
+      <div class="md-toolbar-menu md-heading-menu" role="menu" aria-label="Absatzformat" hidden>${headingItems}</div>
+    </div>
+    <div class="md-toolbar-dropdown" data-md-dropdown>
+      <button type="button" class="md-toolbar-button" aria-haspopup="menu" aria-label="Listen und Einzüge" title="Listen und Einzüge">${toolbarIcon('list')}<span class="md-chevron">⌄</span></button>
+      <div class="md-toolbar-menu md-list-menu" role="menu" aria-label="Listen und Einzüge" hidden>
         <button type="button" data-md-list="bullet" role="menuitem"><span class="md-list-icon md-list-icon-bullet" aria-hidden="true">•</span><span>Aufzählung</span></button>
         <button type="button" data-md-list="ordered" role="menuitem"><span class="md-list-icon md-list-icon-number" aria-hidden="true">1.</span><span>Nummerierte Liste</span></button>
         <button type="button" data-md-list="task" role="menuitem"><span class="md-list-icon md-list-icon-task" aria-hidden="true">☑</span><span>Checkboxen</span></button>
@@ -676,7 +676,7 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
         <button type="button" data-md-command="outdent" role="menuitem"><span class="md-list-icon" aria-hidden="true">←</span><span>Einzug verkleinern</span></button>
         <button type="button" data-md-command="rule" role="menuitem"><span class="md-list-icon md-list-icon-rule" aria-hidden="true">―</span><span>Trennlinie</span></button>
       </div>
-    </details>
+    </div>
     <span class="md-toolbar-divider"></span>
     <div class="md-toolbar-group">
       ${toolbarButton('bold', 'Fett', '<strong>B</strong>')}
@@ -695,9 +695,9 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
       ${imageDesktop}
       ${toolbarButton('clear', 'Formatierung löschen', toolbarIcon('clear'), 'md-toolbar-secondary')}
     </div>
-    <details class="md-toolbar-dropdown md-toolbar-more" data-md-details>
-      <summary class="md-toolbar-button" aria-label="Weitere Formatierungen" title="Weitere Formatierungen">${toolbarIcon('more')}</summary>
-      <div class="md-toolbar-menu md-more-menu">
+    <div class="md-toolbar-dropdown md-toolbar-more" data-md-dropdown>
+      <button type="button" class="md-toolbar-button" aria-haspopup="menu" aria-label="Weitere Formatierungen" title="Weitere Formatierungen">${toolbarIcon('more')}</button>
+      <div class="md-toolbar-menu md-more-menu" role="menu" aria-label="Weitere Formatierungen" hidden>
         <div class="md-more-actions">
           ${toolbarButton('undo', 'Rückgängig', `${toolbarIcon('undo')}<span>Rückgängig</span>`)}
           ${toolbarButton('redo', 'Wiederholen', `${toolbarIcon('redo')}<span>Wiederholen</span>`)}
@@ -708,7 +708,7 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
         </div>
         ${moreTable}
       </div>
-    </details>`;
+    </div>`;
   view.dom.parentNode.insertBefore(element, view.dom);
 
   let disabled = false;
@@ -727,11 +727,8 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
     applyEdit(fn(view.state.doc.toString(), from, to));
   };
   const linkDialog = createLinkDialog(view, applyEdit);
-  const closeMenus = except => element.querySelectorAll('[data-md-details][open]').forEach(details => {
-    if (details !== except) details.removeAttribute('open');
-  });
-  const keepMoreMenuVisible = details => {
-    const menu = details.querySelector('.md-more-menu');
+  const keepMoreMenuVisible = dropdown => {
+    const menu = dropdown.querySelector('.md-more-menu');
     if (!menu) return;
     menu.style.removeProperty('--md-menu-shift');
     const rect = menu.getBoundingClientRect();
@@ -742,26 +739,33 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
     if (rect.right + shift > maxRight) shift += maxRight - rect.right - shift;
     menu.style.setProperty('--md-menu-shift', `${Math.round(shift)}px`);
   };
-  const onDocumentClick = event => { if (!element.contains(event.target)) closeMenus(); };
-  const onViewportResize = () => element.querySelectorAll('.md-toolbar-more[open]').forEach(keepMoreMenuVisible);
-  document.addEventListener('click', onDocumentClick);
-  window.addEventListener('resize', onViewportResize);
-  element.querySelectorAll('[data-md-details]').forEach(details => details.addEventListener('toggle', () => {
-    if (details.open) {
-      // Der Klick auf die Toolbar nimmt dem Editor den DOM-Fokus. Die
-      // CodeMirror-Auswahl bleibt jedoch erhalten und wird hier unmittelbar
-      // vor dem Anzeigen des Menüs erneut in die Bedienelemente gespiegelt.
-      update();
-      closeMenus(details);
-      keepMoreMenuVisible(details);
-    }
+  // Öffnen, Schließen, Tastatur und Escape übernimmt aria-menu.js; die Befehle
+  // laufen über den delegierten Klick-Handler der Leiste.
+  element.querySelectorAll('[role="menu"] button').forEach(button => button.setAttribute('role', 'menuitem'));
+  const menus = [...element.querySelectorAll('[data-md-dropdown]')].map(dropdown => window.WebArchivAriaMenu.create({
+    trigger: dropdown.querySelector('[aria-haspopup="menu"]'),
+    menu: dropdown.querySelector('[role="menu"]'),
+    // Der Klick auf die Toolbar nimmt dem Editor den DOM-Fokus. Die
+    // CodeMirror-Auswahl bleibt jedoch erhalten und wird hier unmittelbar
+    // vor dem Anzeigen des Menüs erneut in die Bedienelemente gespiegelt.
+    onBeforeOpen: update,
+    onOpen: () => keepMoreMenuVisible(dropdown),
   }));
-  element.addEventListener('keydown', event => {
-    if (event.key === 'Escape') {
-      closeMenus();
-      view.focus();
-    }
-  });
+  const closeMenus = () => menus.forEach(menu => menu.close());
+  const onViewportResize = () => element.querySelectorAll('.md-toolbar-more').forEach(keepMoreMenuVisible);
+  window.addEventListener('resize', onViewportResize);
+  // Tabellenraster: Pfeiltasten bewegen sich zweidimensional statt der Listenfolge des Menüs
+  // (Listener am Raster, damit er vor dem des Menüs greift).
+  element.querySelectorAll('.md-table-picker').forEach(picker => picker.addEventListener('keydown', event => {
+    const cell = event.target.closest('[data-md-table]');
+    if (!cell || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const [row, column] = cell.dataset.mdTable.split(',').map(Number);
+    const next = event.key === 'ArrowUp' ? [row - 1, column] : event.key === 'ArrowDown' ? [row + 1, column]
+      : event.key === 'ArrowLeft' ? [row, column - 1] : [row, column + 1];
+    picker.querySelector(`[data-md-table="${next.join(',')}"]`)?.focus();
+  }));
   element.addEventListener('mouseover', event => {
     const cell = event.target.closest('[data-md-table]');
     if (!cell) return;
@@ -781,20 +785,17 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
     const heading = event.target.closest('[data-md-heading]');
     if (heading) {
       run((source, from, to) => setHeadingMarkdown(source, from, to, Number(heading.dataset.mdHeading)));
-      closeMenus();
       return;
     }
     const list = event.target.closest('[data-md-list]');
     if (list) {
       run((source, from, to) => setListMarkdown(source, from, to, list.dataset.mdList));
-      closeMenus();
       return;
     }
     const table = event.target.closest('[data-md-table]');
     if (table) {
       const [rows, columns] = table.dataset.mdTable.split(',').map(Number);
       run((source, from, to) => insertTableMarkdown(source, from, to, rows, columns));
-      closeMenus();
       return;
     }
     const button = event.target.closest('[data-md-command]');
@@ -814,7 +815,6 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
     else if (command === 'clear') run(clearMarkdownFormatting);
     else if (command === 'link') linkDialog.open();
     else if (command === 'image') onInsertImage?.();
-    if (!['link', 'image'].includes(command)) closeMenus();
   });
 
   function hasNode(names) {
@@ -876,7 +876,6 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
       element.querySelectorAll('[data-md-command="indent"], [data-md-command="outdent"]').forEach(button => { button.disabled = !list; });
     }
     element.classList.toggle('is-disabled', disabled);
-    element.querySelectorAll('summary').forEach(summary => summary.setAttribute('aria-disabled', String(disabled)));
     element.dataset.sourceLength = String(source.length);
   }
 
@@ -892,7 +891,7 @@ function createMarkdownToolbar(view, { onInsertImage } = {}) {
       return true;
     },
     destroy() {
-      document.removeEventListener('click', onDocumentClick);
+      menus.forEach(menu => menu.destroy());
       window.removeEventListener('resize', onViewportResize);
       linkDialog.destroy();
       element.remove();

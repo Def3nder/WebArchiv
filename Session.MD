@@ -1495,3 +1495,45 @@ mit Abruf von Artikeln und Hörbüchern ist fehlerfrei.
   `user-store.cjs`, `bookmarks.cjs`, `duplicates.cjs`, `audiobooks.cjs`, `article-editor.cjs`,
   `html-sanitizer.cjs` und die beiden Skripte.
 - Danach den Dienst neu starten. Keine neuen Abhängigkeiten.
+
+## 27. Aktualisierung 27.10.2026 – Restliche Menüs, Prüfmodus aus app.js
+
+**Markdown-Editor-Werkzeugleiste:** Die vier `<details>`-Menüs sind jetzt Button + `role="menu"` und laufen
+über `aria-menu.js`: Absatzformat, Listen, Tabelle und das Überlaufmenü am Handy.
+- Damit gibt es Pfeiltasten, Escape (schließt nur das Menü, nicht den Editor), Klick außerhalb und
+  „immer nur ein Menü offen“, auch zusammen mit anderen Menüs der App.
+- Im Tabellenraster bewegen die Pfeiltasten den Fokus in zwei Richtungen.
+- Eigene Schließlogik (`closeMenus`, Dokument-Klick, Escape-Handler) ist entfernt. Das Überlaufmenü bleibt
+  innerhalb der Werkzeugleiste.
+- Das Bundle ist neu gebaut (`npm run build:editor`, `article-editor.bundle.js?v=19`, `styles.css?v=163`).
+
+**Hörbuch-Extras ⋯:** Dieses ⋯ ist kein Popup-Menü, sondern eine Aufklappzeile. Auf dem Desktop sind die
+Aktionen immer sichtbar, am Handy klappt ⋯ sie inline auf, und nach ↑/↓ bleibt sie offen. Es gibt keine
+eigene Escape- oder Außenklick-Logik. Deshalb bleibt es eine Aufklappzeile; neu ist nur `aria-controls`
+auf die Aktionszeile.
+
+**Prüfmodus „Infografiken prüfen“:** Die Logik liegt jetzt in `public/infographic-review.js` (Admin-Asset,
+in `ADMIN_ASSET_PATHS`): Zustand, Betreten/Verlassen/Speichern, Prüfkachel, Speichern-Button,
+Vollbild-Checkbox, Leertaste und `beforeunload`.
+- `app.js` hält nur noch den Platzhalter `infographicReview` (`active`, `hasChanges`, `value`, `mark`,
+  `remember`, `reset`, `renderCard`); das Admin-Skript füllt ihn.
+- Der Menüeintrag läuft über `adminHooks.actions['review-infographics']`.
+- `admin-tasks.js` übernimmt vorhandene Aktionen, statt sie zu überschreiben.
+- Gäste und Nutzer laden den Code nicht mehr (`app.js?v=137`, `admin-tasks.js?v=2`).
+
+**Geprüft:**
+- Node-Suite 385/385. Ein neuer Test prüft, wo der Prüfmodus liegt; die Versions-Pins der Tests sind
+  nachgezogen.
+- Im Browser mit lokalem Test-Admin (1280 px und 375 px):
+  - Prüfmodus betreten, markieren, Vollbild mit Leertaste, ohne Speichern verlassen.
+  - Editor-Menüs: eines offen, Escape, Auswahl und Fokus, Tabellenraster per Tastatur.
+  - Das Überlaufmenü am Handy bleibt im Bild.
+  - Keine Konsolenfehler.
+
+**Deployment:**
+- Kopieren:
+  - `public/`: `infographic-review.js` (neu), `app.js`, `admin-tasks.js`, `index.html`, `styles.css`,
+    `markdown-live-preview.js`, `audiobook-extras-manager.js`
+  - `public/vendor/article-editor.bundle.js`
+  - `server.js`
+- Danach den Dienst neu starten.

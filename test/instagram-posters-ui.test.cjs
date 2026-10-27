@@ -8,6 +8,9 @@ const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+const review = fs.readFileSync(path.join(root, 'public', 'infographic-review.js'), 'utf8');
+// Prüfmodus: Logik in infographic-review.js, Einhängepunkte in app.js.
+const reviewUi = app + review;
 
 test('Infografiken-Autor schaltet zyklisch zwischen allen, Postern und klassischen Infografiken', () => {
   assert.match(html, /data-instagram-icon/);
@@ -41,7 +44,7 @@ test('Jede Infografik zeigt den Autor ihres Hauptartikels, sonst Infografiken', 
   assert.match(server, /map\(tile => \(\{ \.\.\.exposeGroupForUser\(tile, user\), bookmarked:/);
   assert.match(app, /function renderCard\(article, idx\) \{[\s\S]*const author = article\.displayAuthor \|\| article\.author;[\s\S]*authorHue\(author\)/);
   assert.match(app, /function renderInstagramPosterCard\(poster, idx\) \{[\s\S]*const author = poster\.displayAuthor \|\| INFOGRAPHICS_AUTHOR/);
-  assert.match(app, /function renderInfographicReviewCard\(poster, idx\) \{[\s\S]*const author = poster\.displayAuthor \|\| INFOGRAPHICS_AUTHOR/);
+  assert.match(review, /function renderInfographicReviewCard\(poster, idx\) \{[\s\S]*const author = poster\.displayAuthor \|\| INFOGRAPHICS_AUTHOR/);
   assert.match(app, /class="author-badge"[^>]*>\$\{esc\(author\.replace\(\/_\/g,' '\)\)\}<\/span>/);
 });
 
@@ -85,24 +88,24 @@ test('Poster öffnen die begrenzte Vollbildliste ohne sichtbare Navigation', () 
 test('Admin-Prüfmodus sammelt Poster-Markierungen seitenübergreifend und speichert sie gemeinsam', () => {
   assert.match(html, /data-action="review-infographics"[^>]*>Infografiken prüfen</);
   assert.match(html, /id="infographic-review-save"/);
-  assert.match(app, /baseline: new Map\(\)[\s\S]*changes: new Map\(\)/);
-  assert.match(app, /function setInfographicReviewMark\([\s\S]*infographicReview\.changes\.set/);
-  assert.match(app, /expected: infographicReview\.baseline\.get\(id\)/);
-  assert.match(app, /apiFetch\('\/api\/infographic-review'/);
-  assert.match(app, /infographicReview\.changes\.clear\(\);[\s\S]*await leaveInfographicReview\(\{ discard: true \}\)/);
-  assert.match(app, /count \? `Speichern \(\$\{count\}\)` : 'Abbrechen'/);
-  assert.match(app, /if \(infographicReview\.changes\.size\) void saveInfographicReview\(\);[\s\S]*else void leaveInfographicReview\(\);/);
-  assert.match(app, /infographicReview: isInfographicReviewMode\(\)/);
+  assert.match(reviewUi, /baseline: new Map\(\)[\s\S]*changes: new Map\(\)/);
+  assert.match(reviewUi, /function setInfographicReviewMark\([\s\S]*review\.changes\.set/);
+  assert.match(reviewUi, /expected: review\.baseline\.get\(id\)/);
+  assert.match(reviewUi, /apiFetch\('\/api\/infographic-review'/);
+  assert.match(reviewUi, /review\.changes\.clear\(\);[\s\S]*await leaveInfographicReview\(\{ discard: true \}\)/);
+  assert.match(reviewUi, /count \? `Speichern \(\$\{count\}\)` : 'Abbrechen'/);
+  assert.match(reviewUi, /if \(review\.changes\.size\) void saveInfographicReview\(\);[\s\S]*else void leaveInfographicReview\(\);/);
+  assert.match(reviewUi, /infographicReview: isInfographicReviewMode\(\)/);
   assert.match(server, /infographicReview === '1'[\s\S]*user\.role !== 'admin'/);
   assert.match(server, /infographicReviewMode[\s\S]*a\.author === INFOGRAPHICS_AUTHOR && a\.ownImage/);
 });
 
 test('Prüfkacheln trennen große Checkbox-Touchfläche und Vollbildöffnung', () => {
-  assert.match(app, /class="instagram-poster-image infographic-review-image"/);
-  assert.match(app, /data-review-poster-id/);
+  assert.match(reviewUi, /class="instagram-poster-image infographic-review-image"/);
+  assert.match(reviewUi, /data-review-poster-id/);
   assert.match(css, /\.poster-review-toggle \{[\s\S]*min-width: 48px;[\s\S]*min-height: 48px;/);
   assert.match(css, /\.infographic-review-card\.is-poster[\s\S]*#ffd600[\s\S]*#ff0169[\s\S]*#7638fa/);
-  assert.match(app, /openGalleryFullscreen\([\s\S]*state\.currentItems\.map\(item => item\.id\)/);
+  assert.match(reviewUi, /openGalleryFullscreen\([\s\S]*state\.currentItems\.map\(item => item\.id\)/);
 });
 
 test('Fokussierte Poster-Checkbox blockiert die Seitennavigation per Cursortaste nicht', () => {
@@ -113,11 +116,23 @@ test('Fokussierte Poster-Checkbox blockiert die Seitennavigation per Cursortaste
 test('Poster-Markierung ist auch in der Vollbildansicht verfügbar', () => {
   assert.match(html, /id="img-fullscreen-poster-toggle"/);
   assert.match(html, /id="img-fullscreen-poster-checkbox"/);
-  assert.match(app, /fsGallery\.reviewIds\[index\]/);
-  assert.match(app, /\$fullscreenPosterCheckbox\?\.addEventListener\('change'/);
-  assert.match(app, /\(e\.key === ' ' \|\| e\.code === 'Space'\)[\s\S]*isInfographicReviewMode\(\)[\s\S]*\$fullscreenPosterToggle && !\$fullscreenPosterToggle\.hidden/);
-  assert.match(app, /if \(e\.target === \$fullscreenPosterCheckbox\) return;[\s\S]*setInfographicReviewMark\(id, !\$fullscreenPosterCheckbox\.checked\)/);
-  assert.match(app, /e\.preventDefault\(\);[\s\S]*if \(e\.repeat\) return;/);
-  assert.match(app, /beforeunload[\s\S]*infographicReview\.changes\.size/);
+  assert.match(reviewUi, /fsGallery\.reviewIds\[index\]/);
+  assert.match(reviewUi, /\$fullscreenPosterCheckbox\?\.addEventListener\('change'/);
+  assert.match(reviewUi, /\(e\.key === ' ' \|\| e\.code === 'Space'\)[\s\S]*isInfographicReviewMode\(\)[\s\S]*\$fullscreenPosterToggle && !\$fullscreenPosterToggle\.hidden/);
+  assert.match(reviewUi, /if \(e\.target === \$fullscreenPosterCheckbox\) return;[\s\S]*setInfographicReviewMark\(id, !\$fullscreenPosterCheckbox\.checked\)/);
+  assert.match(reviewUi, /e\.preventDefault\(\);[\s\S]*if \(e\.repeat\) return;/);
+  assert.match(reviewUi, /beforeunload[\s\S]*review\.changes\.size/);
 });
 
+
+test('Prüfmodus liegt im Admin-Skript infographic-review.js, app.js hält nur Platzhalter', () => {
+  for (const name of ['enterInfographicReview', 'leaveInfographicReview', 'saveInfographicReview', 'setInfographicReviewMark', 'renderInfographicReviewCard']) {
+    assert.doesNotMatch(app, new RegExp(`function ${name}[(]`), `${name} gehört nicht mehr in app.js`);
+    assert.match(review, new RegExp(`function ${name}[(]`));
+  }
+  assert.match(app, /const infographicReview = \{[\s\S]*?active: false,[\s\S]*?renderCard: \(\) => '',/);
+  assert.match(review, /Object\.assign\(infographicReview, \{[\s\S]*?renderCard: renderInfographicReviewCard,/);
+  assert.match(review, /adminHooks\.actions\['review-infographics'\]/);
+  assert.match(html, /<script src="infographic-review\.js\?v=1" data-admin-asset><\/script>/);
+  assert.match(server, /'\/infographic-review\.js',/);
+});

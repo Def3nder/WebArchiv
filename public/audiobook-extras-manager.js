@@ -124,8 +124,8 @@ function bemEntry(entry, scope, index, total) {
         <button type="button" class="bem-mini bem-inline-primary" data-bem-rename-save>Speichern</button>
       </div>
     </div>
-    <button type="button" class="bem-entry-more" data-bem-more aria-expanded="false" aria-label="Aktionen für ${esc(entry.title)}" title="Weitere Aktionen">${bemMoreIcon()}</button>
-    <div class="bem-entry-actions">
+    <button type="button" class="bem-entry-more" data-bem-more aria-expanded="false" aria-controls="bem-actions-${scope}-${index}" aria-label="Aktionen für ${esc(entry.title)}" title="Weitere Aktionen">${bemMoreIcon()}</button>
+    <div class="bem-entry-actions" id="bem-actions-${scope}-${index}">
       ${sortable ? `<button type="button" class="bem-mini bem-move" data-bem-move="-1" aria-label="${esc(entry.title)} nach oben" aria-disabled="${index === 0}">↑</button>
       <button type="button" class="bem-mini bem-move" data-bem-move="1" aria-label="${esc(entry.title)} nach unten" aria-disabled="${index === total - 1}">↓</button>` : ''}
       ${isMarkdown ? '<button type="button" class="bem-mini" data-bem-edit>Text bearbeiten</button>' : ''}

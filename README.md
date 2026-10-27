@@ -895,6 +895,7 @@ public/
 ├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü; Admin-Einhängepunkte adminHooks)
 ├── aria-menu.js              Gemeinsame ARIA-Menükomponente (Tastatur, Escape, Außenklick, Fokus, Viewport)
 ├── admin-tasks.js            Nur Admin-Shell: Audio erzeugen (TTS), Archiv neu einlesen, Scrapen, Scrape-Log
+├── infographic-review.js     Nur Admin-Shell: Prüfmodus „Infografiken prüfen“ (Poster-Markierungen)
 ├── duplicates.js             Admin-Prüfung und Verknüpfung von Blog-/Quellen-Dubletten
 ├── article-editor.js         Dialoglogik für Artikel- und Abstract-Markdown
 ├── markdown-live-preview.js  CodeMirror-Live-Darstellung, Toolbar und Cursor-Navigation

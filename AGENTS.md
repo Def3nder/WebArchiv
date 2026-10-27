@@ -121,7 +121,10 @@ proxies may set `X-Forwarded-*`; `CSP_MODE` is `report` (default), `enforce` or 
 (`WebArchivAriaMenu.create` / `bindSelect`) — no hand-written open/close/Escape/outside-click logic and no
 `<details>` menus. Admin-only browser code goes into admin scripts (`data-admin-asset` in `index.html`
 and listed in `ADMIN_ASSET_PATHS` in `server.js`); `public/admin-tasks.js` holds TTS, reindex, scrape and
-log and plugs into `app.js` via `adminHooks` (empty for guests/users).
+log and plugs into `app.js` via `adminHooks` (empty for guests/users). `public/infographic-review.js` holds the
+"Infografiken prüfen" mode and fills the `infographicReview` placeholder in `app.js`. The markdown editor toolbar
+(`markdown-live-preview.js`, bundled — run `npm run build:editor` after changes) also uses `window.WebArchivAriaMenu`.
+The ⋯ button of the audiobook extras is an inline disclosure (actions row), not a popup menu.
 
 **Concurrent jobs:** all archive writes and index rebuilds go through the single lock in
 `archive-lock.cjs` (`archiveLock` in `server.js`). Jobs with their own state (reindex, scrape, editor,
