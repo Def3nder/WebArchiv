@@ -108,5 +108,6 @@ test('Die Browserintegration blättert per Cursortaste nur in der Kachelansicht'
   const app = readApp();
   assert.match(app, /pageSwipeMath\?\.keyDirection\(e\)/);
   assert.match(app, /currentLayout\(\) === 'list'[\s\S]*?state\.page \+ dir[\s\S]*?changeResultsPage\(targetPage\)/);
-  assert.match(app, /input, textarea, select, button, a, audio, video/);
+  assert.match(app, /const ARROW_KEY_CONTROLS = 'input, textarea, select, audio, video/);
+  assert.match(app, /target\?\.closest\(`\$\{ARROW_KEY_CONTROLS\}, button, a`\)/);
 });

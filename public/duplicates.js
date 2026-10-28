@@ -651,13 +651,15 @@ async function mutateDuplicate(action, blogId, facebookId) {
   updateDuplicateTools();
   duplicateStatus.textContent = action === 'migrate' ? 'Infografiken werden migriert und das Archiv neu eingelesen …' : 'Änderung wird gespeichert …';
   try {
-    await duplicateRequest('/api/duplicates', {
+    const result = await duplicateRequest('/api/duplicates', {
       method: 'POST',
       body: JSON.stringify({ action, blogId, facebookId }),
     });
     await loadDuplicates({ quiet: true, restoreScroll: true });
     closeDuplicateDetail();
     if (['reset', 'migrate'].includes(action) && typeof loadArticles === 'function') await loadArticles();
+    // Verknüpft ist trotzdem; nur die Lesezeichen zeigen noch auf den Quellartikel.
+    if (result?.warning) duplicateStatus.textContent = result.warning;
   } finally {
     duplicateUi.busy = false;
     updateDuplicateTools();
@@ -690,9 +692,9 @@ async function linkSelectedDuplicates(migrateImages = false) {
     duplicateUi.listScrollTop = 0;
     await loadDuplicates({ quiet: true });
     if (typeof loadArticles === 'function') await loadArticles();
-    duplicateStatus.textContent = result.failed?.length
+    duplicateStatus.textContent = (result.failed?.length
       ? `${result.linked} verknüpft, ${result.failed.length} fehlgeschlagen und weiter ausgewählt.`
-      : `${result.linked} Paare wurden verknüpft.`;
+      : `${result.linked} Paare wurden verknüpft.`) + (result.warning ? ` ${result.warning}` : '');
   } finally {
     duplicateUi.busy = false;
     updateDuplicateTools();

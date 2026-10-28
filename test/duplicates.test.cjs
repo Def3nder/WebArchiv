@@ -6,6 +6,7 @@ const fs = require('fs/promises');
 const {
   normalizeDuplicateText, buildDuplicateProfile, compareDuplicateProfiles,
   detectDuplicateCandidates, createDuplicateStore, decisionStillApplies, loadDuplicateConfig,
+  finishDuplicateLinks, BOOKMARK_MOVE_WARNING,
 } = require('../duplicates.cjs');
 
 const article = (author, id, title, body, date = '2026-01-01') => ({
@@ -92,4 +93,31 @@ test('Store speichert eine Sammelauswahl gemeinsam und behält nur ein Blogziel 
   assert.equal(store.all().length, 2);
   assert.equal(store.linkedCanonicalId('f1'), 'b3');
   assert.equal(store.linkedCanonicalId('f2'), 'b2');
+});
+
+test('Abschluss einer Verknüpfung: Lesezeichenfehler wird Hinweis, der Index wird trotzdem aktualisiert', async () => {
+  const calls = [];
+  const logged = [];
+  const log = { error: (...args) => logged.push(args) };
+  const migrations = [{ from: 'Infografiken/2025/a_1.png', to: 'Infografiken/2026/b_1.png' }];
+  const failingBookmarks = { replaceArticleIds: async () => { throw Object.assign(new Error('EACCES: bookmarks.json'), { code: 'EACCES' }); } };
+  const warning = await finishDuplicateLinks({
+    replacements: [{ oldId: 'f1', newId: 'b1' }], migrations, bookmarks: failingBookmarks, log,
+    refreshMigrations: async list => calls.push(['years', list]),
+    refreshState: () => calls.push('state'),
+  });
+  assert.equal(warning, BOOKMARK_MOVE_WARNING);
+  assert.deepEqual(calls, [['years', migrations]]);
+  assert.equal(logged.length, 1, 'Ursache steht im Log');
+
+  const moved = [];
+  const ok = await finishDuplicateLinks({
+    replacements: [{ oldId: 'f2', newId: 'b2' }], migrations: [], log,
+    bookmarks: { replaceArticleIds: async list => moved.push(...list) },
+    refreshMigrations: async () => calls.push('years'),
+    refreshState: () => calls.push('state'),
+  });
+  assert.equal(ok, null);
+  assert.deepEqual(moved, [{ oldId: 'f2', newId: 'b2' }]);
+  assert.deepEqual(calls.at(-1), 'state');
 });

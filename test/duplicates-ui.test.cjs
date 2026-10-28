@@ -174,9 +174,12 @@ test('Sammelverknüpfung liest nur betroffene Infografik-Jahre und reine Links g
   const batch = server.slice(server.indexOf("app.post('/api/duplicates/batch'"), server.indexOf("app.post('/api/duplicates',"));
   assert.match(batch, /for \(const item of items\)/);
   assert.match(batch, /duplicateStore\.setMany/);
-  assert.match(batch, /replaceArticleIds/);
-  assert.match(batch, /if \(migrations\.length\) await refreshInfographicsForYears\(infographicYearsFromMigrations\(migrations\)\);\s*else refreshDuplicateState\(\);/);
+  assert.match(batch, /await finishLinkedDuplicates\(prepared\)/);
   assert.doesNotMatch(batch, /await buildIndex\(\)/);
+  const finish = server.slice(server.indexOf('function finishLinkedDuplicates('), server.indexOf("app.get('/api/duplicates'"));
+  assert.match(finish, /refreshMigrations: migrations => refreshInfographicsForYears\(infographicYearsFromMigrations\(migrations\)\)/);
+  assert.match(finish, /refreshState: refreshDuplicateState/);
+  assert.doesNotMatch(finish, /buildIndex/);
 });
 
 test('Mobil wechselt nur Artikelkopf und Infografiken; der einspaltige Diff bleibt sichtbar', () => {

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const express = require('express');
 const { app } = require('../server.js');
 const { installTtsRoutes } = require('../tts/jobs.cjs');
+const { sendRouteError } = require('../lib/http-errors.cjs');
 
 async function listen(t, handler) {
   const server = await new Promise(resolve => { const s = handler.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -53,6 +54,60 @@ test('Anmelde- und Rechtefehler haben deutsche Meldungen und feste Codes', async
   const notAdmin = await fetch(`${base}/api/scrape/log`);
   assert.equal(notAdmin.status, 403);
   assert.deepEqual(await notAdmin.json(), { error: 'Nur für Administratoren.', code: 'admin_required' });
+});
+
+test('Scrape- und Reindex-Status nur für Administratoren', async t => {
+  const base = await listen(t, app);
+  for (const path of ['/api/scrape/status', '/api/reindex/status']) {
+    const response = await fetch(`${base}${path}`);
+    assert.equal(response.status, 403, path);
+    assert.deepEqual(await response.json(), { error: 'Nur für Administratoren.', code: 'admin_required' });
+  }
+});
+
+function fakeResponse() {
+  return {
+    statusCode: 200, body: null, headers: {},
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+    set(name, value) { this.headers[name] = value; return this; },
+  };
+}
+
+test('sendRouteError: eigene Meldungen gehen an die Oberfläche, interne nur ins Log', () => {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    const unexpected = fakeResponse();
+    sendRouteError(unexpected, new Error("ENOENT: rename '/opt/nodeapp/www/Infografiken/2026/a.png'"),
+      { label: 'Infografik-Verwaltung', fallback: 'Infografiken konnten nicht geändert werden.' });
+    assert.equal(unexpected.statusCode, 500);
+    assert.deepEqual(unexpected.body, { error: 'Infografiken konnten nicht geändert werden.' });
+    assert.equal(logged.length, 1);
+
+    const known = fakeResponse();
+    sendRouteError(known, Object.assign(new Error('Infografik nicht gefunden.'), { status: 404 }), { label: 'x', fallback: 'y' });
+    assert.equal(known.statusCode, 404);
+    assert.deepEqual(known.body, { error: 'Infografik nicht gefunden.' });
+    assert.equal(logged.length, 1, 'eigene Fehler werden nicht geloggt');
+
+    const rollback = fakeResponse();
+    sendRouteError(rollback, Object.assign(new Error('Zieldatei existiert bereits.'), { status: 409 }), {
+      label: 'x', fallback: 'y', rollbackError: new Error("EPERM: rename '/opt/nodeapp/www/geheim'"),
+    });
+    assert.equal(rollback.statusCode, 409);
+    assert.match(rollback.body.error, /^Zieldatei existiert bereits\. Wiederherstellung fehlgeschlagen; Details stehen im Server-Log\.$/);
+    assert.equal(logged.length, 2, 'Ursache der fehlgeschlagenen Wiederherstellung steht im Log');
+  } finally { console.error = original; }
+});
+
+test('server.js reicht keine rohen Fehlermeldungen an die Oberfläche weiter', () => {
+  const fs = require('node:fs');
+  const server = fs.readFileSync(require.resolve('../server.js'), 'utf8');
+  assert.doesNotMatch(server, /error: (?:err|error)\.message \|\|/);
+  assert.doesNotMatch(server, /\.status\((?:err|error)\.status \|\| \d+\)\.json/);
+  assert.doesNotMatch(server, /' Wiederherstellung fehlgeschlagen: ' \+ rollbackError\.message/);
 });
 
 test('Die Oberfläche reagiert auf Fehlercodes, nicht auf Meldungstexte', () => {

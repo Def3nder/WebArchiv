@@ -19,7 +19,7 @@ const { createLoginLimiter, tooManyAttemptsError } = require('./login-limiter.cj
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./security-headers.cjs');
 const { createArchiveLock } = require('./archive-lock.cjs');
 // Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
-const { httpError, isCrossSite, sendApiError } = require('./lib/http-errors.cjs');
+const { httpError, isCrossSite, sendApiError, sendRouteError } = require('./lib/http-errors.cjs');
 const { computeAppShellVersion, createAppShellVersion, createVersionedIndex, serviceWorkerSource } = require('./lib/app-shell.cjs');
 const { createArticleBodyCache } = require('./lib/article-body-cache.cjs');
 const { FileSessionStore } = require('./lib/session-file-store.cjs');
@@ -72,7 +72,7 @@ function resolveSessionSecret({ env = process.env, strict = false, log = console
 }
 const {
   loadDuplicateConfig, buildDuplicateProfile, detectDuplicateCandidates,
-  createDuplicateStore, decisionStillApplies,
+  createDuplicateStore, decisionStillApplies, finishDuplicateLinks,
 } = require('./duplicates.cjs');
 
 const app = express();
@@ -1306,7 +1306,8 @@ app.get('/api/meta', attachUser, (req, res) => {
   res.json({ authors, years: meta.years, categories: meta.categories });
 });
 
-app.get('/api/reindex/status', requireAuth, (_req, res) => res.json(reindexState));
+// Nur die Admin-Oberfläche fragt den Status ab (admin-tasks.js).
+app.get('/api/reindex/status', requireAdminAccess, (_req, res) => res.json(reindexState));
 
 const PROMPTS_DIR = path.join(__dirname, 'prompts');
 
@@ -1406,7 +1407,7 @@ app.get('/api/infographic-manager/*', requireAdminAccess, (req, res) => {
       })),
     });
   } catch (error) {
-    res.status(error.status || 500).json({ error: error.message || 'Infografiken konnten nicht geladen werden.' });
+    sendRouteError(res, error, { label: 'Infografik-Verwaltung', fallback: 'Infografiken konnten nicht geladen werden.' });
   }
 });
 
@@ -1451,9 +1452,9 @@ app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
       if ((undoOrder || undoTrash || undoInstagramPoster) && context) await refreshInfographicsForYear(context.year);
       if (trashFolder) await fs.promises.rmdir(trashFolder).catch(() => {});
     } catch (failed) { rollbackError = failed; }
-    res.status(error.status || 500).json({ error: rollbackError
-      ? (error.message + ' Wiederherstellung fehlgeschlagen: ' + rollbackError.message)
-      : (error.message || 'Infografiken konnten nicht geändert werden.') });
+    sendRouteError(res, error, {
+      label: 'Infografik-Verwaltung', fallback: 'Infografiken konnten nicht geändert werden.', rollbackError,
+    });
   } finally {
     release();
   }
@@ -1479,9 +1480,9 @@ app.post('/api/infographic-review', requireAdminAccess, async (req, res) => {
       if (undo) await undo();
       if (undo && years.length) await refreshInfographicsForYears(years);
     } catch (failed) { rollbackError = failed; }
-    return res.status(error.status || 500).json({ error: rollbackError
-      ? (error.message + ' Wiederherstellung fehlgeschlagen: ' + rollbackError.message)
-      : (error.message || 'Poster-Markierungen konnten nicht gespeichert werden.') });
+    return sendRouteError(res, error, {
+      label: 'Infografik-Prüfung', fallback: 'Poster-Markierungen konnten nicht gespeichert werden.', rollbackError,
+    });
   } finally {
     release();
   }
@@ -1555,7 +1556,7 @@ app.post(
       if (err.code === 'EEXIST') {
         return res.status(409).json({ error: 'Eine Infografik mit diesem Namen existiert bereits. Bitte erneut versuchen.' });
       }
-      res.status(500).json({ error: err.message || 'Infografik konnte nicht gespeichert werden.' });
+      sendRouteError(res, err, { label: 'Infografik hochladen', fallback: 'Infografik konnte nicht gespeichert werden.' });
     }
     } finally { release(); }
   }
@@ -1609,7 +1610,7 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
     res.json({ ok: true, id: [INFOGRAPHICS_AUTHOR, year, stem].join('/') });
   } catch (err) {
     if (err.code === 'EEXIST') return res.status(409).json({ error: 'Eine Datei mit diesem Namen existiert bereits. Bitte erneut speichern.' });
-    res.status(500).json({ error: err.message || 'Infografik konnte nicht gespeichert werden.' });
+    sendRouteError(res, err, { label: 'Neue Infografik', fallback: 'Infografik konnte nicht gespeichert werden.' });
   } finally { release(); }
 });
 
@@ -1619,7 +1620,8 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
 // eigenen node_modules; playwright bleibt aus den App-Abhängigkeiten heraus).
 // Läuft im Hintergrund; der Fortschritt wird über /api/scrape/status gepollt.
 
-app.get('/api/scrape/status', requireAuth, (_req, res) => res.json(scrapeState));
+// Die Ausgabe enthält Quellen, Pfade und Fehlermeldungen des Scrapers: nur für Admins.
+app.get('/api/scrape/status', requireAdminAccess, (_req, res) => res.json(scrapeState));
 
 app.post('/api/scrape', requireAdminAccess, (req, res) => {
   if (scrapeState.running) return res.json({ started: false, reason: 'already running' });
@@ -1739,6 +1741,19 @@ async function linkDuplicatePair({ blogId, facebookId, userEmail, migrateImages 
   return { blogId, facebookId, migrations: migrationResult.migrations, decision, rollback: migrationResult.rollback };
 }
 
+// Nach gespeicherten Verknüpfungen: Lesezeichen umziehen, dann nur die betroffenen
+// Infografik-Jahrgänge (oder bloß den Dublettenstatus) neu ableiten. Liefert einen
+// Hinweis, falls die Lesezeichen nicht umgezogen werden konnten.
+function finishLinkedDuplicates(linked) {
+  return finishDuplicateLinks({
+    replacements: linked.map(item => ({ oldId: item.facebookId, newId: item.blogId })),
+    migrations: linked.flatMap(item => item.migrations),
+    bookmarks,
+    refreshMigrations: migrations => refreshInfographicsForYears(infographicYearsFromMigrations(migrations)),
+    refreshState: refreshDuplicateState,
+  });
+}
+
 app.get('/api/duplicates', requireAdminAccess, (_req, res) => {
   res.set('Cache-Control', 'no-store');
   const decisions = duplicateStore.all();
@@ -1769,7 +1784,7 @@ app.get('/api/duplicates/compare', requireAdminAccess, async (req, res) => {
     const [blogView, facebookView] = await Promise.all([read(blog), read(facebook)]);
     res.json({ blog: blogView, facebook: facebookView, migration, migrationUnavailable });
   } catch (error) {
-    res.status(error.status || 500).json({ error: error.status ? error.message : 'Der Vergleich konnte nicht geladen werden.' });
+    sendRouteError(res, error, { label: 'Dublettenvergleich', fallback: 'Der Vergleich konnte nicht geladen werden.' });
   }
 });
 
@@ -1794,7 +1809,7 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
       facebookIds.add(item.facebookId);
     }
   } catch (error) {
-    return res.status(error.status || 400).json({ error: error.message });
+    return sendRouteError(res, error, { label: 'Dubletten-Sammelaktion', fallback: 'Die Auswahl konnte nicht geprüft werden.' });
   }
 
   // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
@@ -1822,16 +1837,11 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
       for (const item of [...prepared].reverse()) await item.rollback();
       throw error;
     }
-    if (prepared.length) {
-      await bookmarks.replaceArticleIds(prepared.map(item => ({ oldId: item.facebookId, newId: item.blogId })));
-    }
+    const warning = await finishLinkedDuplicates(prepared);
     const migrations = prepared.flatMap(item => item.migrations);
-    if (migrations.length) await refreshInfographicsForYears(infographicYearsFromMigrations(migrations));
-    else refreshDuplicateState();
-    return res.json({ ok: failed.length === 0, linked: prepared.length, failed, migrations });
+    return res.json({ ok: failed.length === 0, linked: prepared.length, failed, migrations, ...(warning ? { warning } : {}) });
   } catch (error) {
-    if (!error.status) console.error('Dubletten-Sammelaktion:', error);
-    return res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Sammelaktion ist fehlgeschlagen.' });
+    return sendRouteError(res, error, { label: 'Dubletten-Sammelaktion', fallback: 'Die Sammelaktion ist fehlgeschlagen.' });
   } finally {
     release();
   }
@@ -1871,13 +1881,10 @@ app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
       userEmail: req.session.user.email,
       migrateImages: !!req.body?.migrateImages || action === 'migrate',
     });
-    await bookmarks.replaceArticleId(facebookId, blogId);
-    if (result.migrations.length) await refreshInfographicsForYears(infographicYearsFromMigrations(result.migrations));
-    else refreshDuplicateState();
-    return res.json({ ok: true, migrations: result.migrations });
+    const warning = await finishLinkedDuplicates([result]);
+    return res.json({ ok: true, migrations: result.migrations, ...(warning ? { warning } : {}) });
   } catch (error) {
-    if (!error.status) console.error('Dublettenverwaltung:', error);
-    return res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Dublettenaktion ist fehlgeschlagen.' });
+    return sendRouteError(res, error, { label: 'Dublettenverwaltung', fallback: 'Die Dublettenaktion ist fehlgeschlagen.' });
   } finally {
     release();
   }

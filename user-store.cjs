@@ -95,11 +95,15 @@ function createUserStore({ usersFile, publicFile, settingsFile = null, privateAu
     queue = run.catch(() => {});
     return run;
   }
+  // Geändert wird eine Kopie; erst nach erfolgreichem Schreiben gilt sie auch im
+  // Speicher. Sonst bliebe z. B. ein nie gespeichertes Kennwort bis zum Neustart gültig.
   function mutateUsers(change) {
     return exclusive(async () => {
       loadUsers();
-      const result = await change(users);
-      await writeJsonAtomic(usersFile, usersShape ? { ...usersShape, users } : users, io, 0o600);
+      const draft = structuredClone(users);
+      const result = await change(draft);
+      await writeJsonAtomic(usersFile, usersShape ? { ...usersShape, users: draft } : draft, io, 0o600);
+      users = draft;
       return result;
     });
   }

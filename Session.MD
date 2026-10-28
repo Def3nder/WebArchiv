@@ -1881,3 +1881,38 @@ denselben Daten, hatte aber eigene Kopien der Logik.
 - Kopieren aus `public/`: `app.js`, `app-gallery.js`, `app-media.js`, `app-detail.js` (alle drei neu),
   `index.html`.
 - Browser neu laden genügt; ein Neustart des Dienstes ist nicht nötig.
+
+## 39. Aktualisierung 28.10.2026 – Befunde aus dem Review vom 28.10. (Tastatur, Fehlertexte, Dubletten, Nutzer, Status)
+
+Grundlage: `code-review_2026-01-28.md`, Punkte 2.1 bis 2.5.
+
+- **Tastatur bei offenem Dialog (2.1):** Liegt ein Dialog (`dialog[open]`) oder das TTS- bzw. Scrape-Fenster über
+  dem Artikel, schließt Escape nur diese Ebene, und die Pfeiltasten wechseln den Artikel nicht mehr. Vorher schloss
+  Escape im Anbieterdialog von „Audio erzeugen“ auch den Artikel, und die Pfeiltasten zwischen den Radiobuttons
+  sprangen zum Nachbarartikel. Aus Bedienelementen, die Pfeile selbst nutzen (Eingaben, Audio/Video, Regler),
+  blättern die Pfeile auch in der Artikelansicht nicht. Gemeinsame Hilfe `layerAboveContentOpen()` und
+  `ARROW_KEY_CONTROLS` in `public/app.js`.
+- **Keine internen Fehlertexte (2.2):** Neue Hilfe `sendRouteError` in `lib/http-errors.cjs`, die auch `jsonRoute`
+  nutzt: Fehler mit `status` gehen mit ihrer Meldung an die Oberfläche, unerwartete nur ins Dienst-Log. Ist auch
+  die Wiederherstellung fehlgeschlagen, steht deren Ursache nur im Log. Umgestellt sind die Infografik-Routen
+  (Verwaltung, Prüfmodus, Upload, neue Infografik) und die Dublettenrouten.
+- **Dubletten-Abschluss (2.3):** `finishDuplicateLinks` in `duplicates.cjs`. Scheitert das Umziehen der Lesezeichen,
+  bleibt die Verknüpfung gültig, der Index wird trotzdem aktualisiert, und die Antwort enthält `warning`
+  (Anzeige in der Statuszeile des Dublettendialogs). Vorher endete das mit 500 und einem veralteten Index.
+- **Nutzerverwaltung (2.4):** `mutateUsers` ändert eine Kopie und übernimmt sie erst nach dem Schreiben von
+  `users.json`. Ein nie gespeichertes Kennwort gilt dadurch nicht mehr bis zum Neustart.
+- **Status nur für Admins (2.5):** `GET /api/scrape/status` und `GET /api/reindex/status` verlangen
+  `requireAdminAccess`; die Scraper-Ausgabe ist für normale Nutzer nicht mehr lesbar. Die Oberfläche fragt den
+  Status ohnehin nur in `admin-tasks.js` ab.
+
+**Geprüft:**
+- Node-Suite 431/431, Python 14/14. Neu: `test/keyboard-layers.test.cjs` (Tastatursteuerung im VM-Sandkasten),
+  Tests für `sendRouteError`, `finishDuplicateLinks`, Schreibfehler im Nutzerspeicher und die Statusrouten.
+- Im Browser als Gast: Artikel geöffnet, Dialog darüber, Pfeil rechts und Escape wirken nur im Dialog; ohne Dialog
+  blättert der Pfeil weiter, und Escape schließt den Artikel. Statusrouten antworten mit 403 `admin_required`.
+  Keine Konsolenfehler. Der Anbieterdialog selbst (nur Admin) wurde nicht im Browser geprüft.
+
+**Deployment:**
+- Kopieren: `server.js`, `duplicates.cjs`, `user-store.cjs`, `lib/http-errors.cjs`, `public/app.js`,
+  `public/duplicates.js`.
+- Dienst neu starten (Serverdateien geändert).

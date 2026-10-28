@@ -212,6 +212,26 @@ function decisionStillApplies(decision, blog, facebook) {
     && decision.facebookHash === facebook.duplicateProfile.hash;
 }
 
+const BOOKMARK_MOVE_WARNING = 'Die Verknüpfung ist gespeichert, aber Lesezeichen konnten nicht auf den Blogartikel übertragen werden.';
+
+// Abschluss gespeicherter Verknüpfungen: Lesezeichen auf den Blogartikel umziehen,
+// danach den Index aktualisieren (umgezogene Infografik-Jahrgänge neu einlesen,
+// sonst nur den Dublettenstatus). Dateien und Entscheidung stehen zu diesem
+// Zeitpunkt schon fest; scheitert der Lesezeichen-Umzug, wird der Index trotzdem
+// aktualisiert, und die Oberfläche erhält einen Hinweis statt eines Fehlers.
+async function finishDuplicateLinks({ replacements, migrations, bookmarks, refreshMigrations, refreshState, log = console }) {
+  let warning = null;
+  try {
+    await bookmarks.replaceArticleIds(replacements);
+  } catch (error) {
+    log.error('Lesezeichen nicht auf den Blogartikel umgezogen:', error);
+    warning = BOOKMARK_MOVE_WARNING;
+  }
+  if (migrations.length) await refreshMigrations(migrations);
+  else refreshState();
+  return warning;
+}
+
 module.exports = {
   DEFAULT_CONFIG,
   loadDuplicateConfig,
@@ -225,4 +245,6 @@ module.exports = {
   detectDuplicateCandidates,
   createDuplicateStore,
   decisionStillApplies,
+  finishDuplicateLinks,
+  BOOKMARK_MOVE_WARNING,
 };

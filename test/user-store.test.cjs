@@ -100,6 +100,32 @@ test('Kennwort neu vergeben beendet alte Sitzungen und setzt die Änderungspflic
   assert.equal(f.store.sessionUser(kept).mustChangePassword, false);
 });
 
+test('Scheitert das Schreiben, bleiben Speicher und Datei beim alten Stand', async t => {
+  const f = await fixture(t);
+  let failWrites = true;
+  const io = { ...fs, rename: async (...args) => {
+    if (failWrites) throw Object.assign(new Error('Datenträger voll'), { code: 'ENOSPC' });
+    return fs.rename(...args);
+  } };
+  const store = createUserStore({ usersFile: f.usersFile, publicFile: f.publicFile, settingsFile: f.settingsFile, io });
+  store.load();
+  const old = await store.authenticate('leser@example.org', 'altes-kennwort');
+
+  await assert.rejects(store.setPassword('leser@example.org', { password: 'nie-gespeichert', mustChangePassword: false }), /Datenträger voll/);
+  assert.ok(store.sessionUser(old), 'bestehende Sitzung bleibt gültig');
+  assert.ok(await store.authenticate('leser@example.org', 'altes-kennwort'));
+  assert.equal(await store.authenticate('leser@example.org', 'nie-gespeichert'), null);
+  await assert.rejects(store.create(newUser), /Datenträger voll/);
+  await assert.rejects(store.update('leser@example.org', { role: 'admin' }, 'admin@example.org'), /Datenträger voll/);
+  assert.deepEqual(store.list().map(u => [u.email, u.role]), [['Admin@example.org', 'admin'], ['leser@example.org', 'user']]);
+  assert.equal((await f.readUsers()).users.length, 2);
+
+  // Danach funktioniert das Speichern wieder normal.
+  failWrites = false;
+  await store.update('leser@example.org', { role: 'admin' }, 'admin@example.org');
+  assert.equal(store.sessionUser(old).role, 'admin');
+});
+
 test('Eigenes Kennwort ändern prüft das alte Kennwort und hebt die Pflicht auf', async t => {
   const f = await fixture(t);
   await f.store.setPassword('leser@example.org', { password: 'start-kennwort', mustChangePassword: true });

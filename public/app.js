@@ -2041,9 +2041,19 @@ window.addEventListener('resize', () => {
   applyImageZoom();
 });
 
+// Ebenen über Artikel und Kacheln (Dialoge, TTS- und Scrape-Fenster) behalten ihre
+// Tasten: Escape schließt dann nur die Ebene selbst, die Pfeile blättern nicht.
+function layerAboveContentOpen() {
+  return !!document.querySelector('dialog[open]')
+    || !!($scrapeOverlay && !$scrapeOverlay.hidden) || !!($ttsOverlay && !$ttsOverlay.hidden);
+}
+// Bedienelemente, die Pfeiltasten selbst nutzen (Radiobuttons, Eingaben, Regler, Audio).
+const ARROW_KEY_CONTROLS = 'input, textarea, select, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]';
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (!document.getElementById('img-fullscreen').hidden) { closeImageFullscreen(); return; }
+    if (layerAboveContentOpen()) return;
     if (!$overlay.hidden) { closeOverlay(); return; }
     // Login-Dialog nur per ESC schließen, wenn Guest oder eingeloggt — nicht bei
     // initialem Pflicht-Login (kein currentUser).
@@ -2062,23 +2072,21 @@ document.addEventListener('keydown', e => {
     return;
   }
 
+  if (layerAboveContentOpen()) return;
+  const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
+
   if (!$overlay.hidden) {
     // In der Vollansicht erst durch die Bilder der Gruppe, danach zum Nachbarartikel.
-    navigateArticle(dir);
+    if (!target?.closest(ARROW_KEY_CONTROLS)) navigateArticle(dir);
     return;
   }
 
   // In der Kachelansicht blättern die Pfeiltasten wie eine Wischgeste um die
   // aktuell gewählte Anzahl Artikel. Bedienelemente und Dialoge behalten die Tasten.
-  const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
-  const interactive = target?.closest(
-    'input, textarea, select, button, a, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
-  );
+  const interactive = target?.closest(`${ARROW_KEY_CONTROLS}, button, a`);
   const reviewCheckbox = isInfographicReviewMode()
     && interactive?.matches('[data-review-poster-id]');
-  if (currentLayout() === 'list' || (interactive && !reviewCheckbox) || !$loginOverlay.hidden
-      || ($scrapeOverlay && !$scrapeOverlay.hidden) || ($ttsOverlay && !$ttsOverlay.hidden)
-      || document.querySelector('dialog[open]')) return;
+  if (currentLayout() === 'list' || (interactive && !reviewCheckbox) || !$loginOverlay.hidden) return;
 
   const targetPage = state.page + dir;
   if (targetPage < 1 || targetPage > state.pages) return;
