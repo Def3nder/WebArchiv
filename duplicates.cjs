@@ -216,6 +216,10 @@ module.exports = {
   DEFAULT_CONFIG,
   loadDuplicateConfig,
   normalizeDuplicateText,
+  // Auch vom Dubletten-Werkzeug (duplicates-tool/) genutzt.
+  wordShingles,
+  overlap,
+  dateDistanceDays,
   buildDuplicateProfile,
   compareDuplicateProfiles,
   detectDuplicateCandidates,

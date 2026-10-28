@@ -6,7 +6,7 @@ const fsSync = require('fs');
 const fs = require('fs/promises');
 const path = require('path');
 const express = require('express');
-const { marked } = require('marked');
+const { renderSafeMarkdown } = require('../html-sanitizer.cjs');
 const {
   DEFAULT_THRESHOLDS,
   normalizeThresholds,
@@ -233,7 +233,8 @@ app.use('/api', (req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 // Browser-Build des diff-Pakets (über „exports“ nicht auflösbar, daher direkter Pfad).
-app.get('/vendor/diff.min.js', (req, res) => res.sendFile(path.join(__dirname, 'node_modules', 'diff', 'dist', 'diff.min.js')));
+// Textvergleich aus dem WebArchiv (npm run build:duplicate-diff im Projektordner).
+app.get('/vendor/duplicate-diff.bundle.js', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'vendor', 'duplicate-diff.bundle.js')));
 
 const route = handler => (req, res) => Promise.resolve(handler(req, res)).catch(error => {
   if (!error.status) console.error(error);
@@ -319,7 +320,8 @@ app.get('/api/duplicates', route(async (req, res) => {
 app.get('/api/duplicates/compare', route((req, res) => {
   const { original, candidate } = pairFromRequest(req.query.originalId, req.query.candidateId);
   const match = scan.matches.find(item => item.original === original && item.candidate === candidate);
-  const view = article => ({ ...articleView(article), bodyHtml: marked.parse(article.body) });
+  // Dieselbe HTML-Bereinigung wie im WebArchiv: Die Texte stammen auch aus Facebook und Telegram.
+  const view = article => ({ ...articleView(article), bodyHtml: renderSafeMarkdown(article.body) });
   res.json({
     ...(match ? matchView(match) : {}),
     original: view(original),

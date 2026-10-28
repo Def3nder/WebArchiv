@@ -10,7 +10,7 @@ const { parseArticle } = require('../lib/article.cjs');
 const { buildDuplicateProfile, detectDuplicateCandidates, DEFAULT_THRESHOLDS } = require('../lib/duplicates.cjs');
 const { companionsFor, scanFolder } = require('../lib/scan.cjs');
 const { moveArticle, createMoveLog } = require('../lib/mover.cjs');
-const diff = require('../public/duplicate-diff.js');
+const diff = require('../../public/duplicate-diff.js');
 
 const BODY = Array.from({ length: 60 }, (_, i) => `Wort${i} steht hier im Satz Nummer ${i}.`).join(' ');
 
@@ -121,7 +121,7 @@ test('API: scannen, vergleichen, ignorieren, verschieben, rückgängig', async (
     const compare = await call(`/api/duplicates/compare?originalId=${encodeURIComponent(pair.original.id)}&candidateId=${encodeURIComponent(pair.candidate.id)}`);
     assert.match(compare.data.original.bodyHtml, /<p>/);
 
-    const vendor = await fetch(`${base}/vendor/diff.min.js`);
+    const vendor = await fetch(`${base}/vendor/duplicate-diff.bundle.js`);
     assert.equal(vendor.status, 200);
     assert.match(vendor.headers.get('content-type'), /javascript/);
 
@@ -273,4 +273,12 @@ test('API: Schwelle wird gespeichert, letzte fünf B- und Ziel-Ordner werden gem
     server.close();
     await fs.rm(root, { recursive: true, force: true });
   }
+});
+
+test('Vergleichsansicht bereinigt HTML wie das WebArchiv', () => {
+  const source = require('node:fs').readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(source, /bodyHtml: renderSafeMarkdown\(article\.body\)/);
+  assert.doesNotMatch(source, /require\('marked'\)/);
+  const { renderSafeMarkdown } = require('../../html-sanitizer.cjs');
+  assert.doesNotMatch(renderSafeMarkdown('Text <script>alert(1)</script><img src=x onerror=alert(1)>'), /<script|onerror/i);
 });

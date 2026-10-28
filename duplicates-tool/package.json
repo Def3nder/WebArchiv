@@ -2,7 +2,7 @@
   "name": "webarchiv-duplicates-tool",
   "version": "1.0.0",
   "private": true,
-  "description": "Eigenständiges Werkzeug: Markdown-Dubletten zwischen zwei Ordnern finden, vergleichen und verschieben",
+  "description": "Eigenständiges Werkzeug (nur Entwicklung): Markdown-Dubletten zwischen Ordnern finden, vergleichen und verschieben; nutzt die Module und Abhängigkeiten des WebArchiv",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,10 +10,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "dependencies": {
-    "diff": "^8.0.4",
-    "express": "^4.22.2",
-    "marked": "^9.1.6"
   }
 }

@@ -1,18 +1,23 @@
 # Dubletten-Werkzeug
 
 Eigenständige kleine Website, die Markdown-Artikel aus zwei Ordnern vergleicht und
-Dubletten aus Ordner B in einen Ziel-Ordner verschiebt. Erkennung und Vergleichsansicht
-stammen aus dem WebArchiv (`duplicates.cjs`, `public/duplicates.js`,
-`public/duplicate-diff.js`), das Werkzeug hat aber eigene `node_modules` und läuft
-unabhängig vom WebArchiv-Server.
+Dubletten aus Ordner B in einen Ziel-Ordner verschiebt. Nur für die Entwicklung, nicht für den
+Produktivbetrieb. Das Werkzeug läuft getrennt vom WebArchiv-Server, nutzt aber dessen Module und
+Abhängigkeiten (kein eigenes `npm install`):
+
+- Parser: `lib/article-parser.cjs` (Titel, Datum, Body wie im Archiv)
+- Wortgleiche Erkennung: `duplicates.cjs` (Profil, Shingles, Bewertung); hier ergänzt um die
+  inhaltliche Ähnlichkeit (TF-IDF) und eigene Entscheidungen
+- HTML der Vergleichsansicht: `html-sanitizer.cjs` (`renderSafeMarkdown`)
+- Textvergleich im Browser: `public/vendor/duplicate-diff.bundle.js` (`npm run build:duplicate-diff`)
+- JSON-Dateien: `lib/atomic-file.cjs`
 
 ## Start
 
 ```bash
-cd duplicates-tool
-npm install
-npm start          # http://localhost:3100
-npm test
+npm install                      # einmal im WebArchiv-Projektordner
+node duplicates-tool/server.js   # http://localhost:3100 (oder: cd duplicates-tool && npm start)
+npm test                         # im Projektordner; enthält die Tests des Werkzeugs
 ```
 
 ## Bedienung

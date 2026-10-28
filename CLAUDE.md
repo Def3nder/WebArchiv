@@ -28,7 +28,9 @@ npm test --prefix epub-tool
 ```
 
 Run the complete Node and Python test suite with `npm test`. Tests live under
-`test/`, `scraper/test/`, `epub-tool/test/`, and `tts/test/`. There is no linter or build.
+`test/`, `scraper/test/`, `epub-tool/test/`, `tts/test/` and `duplicates-tool/test/`. There is no linter or build.
+`duplicates-tool/` is a dev-only app (not deployed) that reuses `lib/article-parser.cjs`, `duplicates.cjs`,
+`html-sanitizer.cjs`, `lib/atomic-file.cjs` and the diff bundle — keep it working when changing those.
 `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button
 → `POST /api/reindex`, or restart). Frontend changes (`public/`) only need a browser reload;

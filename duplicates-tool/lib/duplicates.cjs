@@ -1,12 +1,15 @@
 // Dubletten zwischen Ordner A (Original) und Ordner B (Kandidat).
-// Erkennung übernommen aus WebArchiv/duplicates.cjs: Wort-Shingles, Enthaltensein,
-// Jaccard, Titelähnlichkeit und Datumsabstand. Kein Treffer wird automatisch verschoben.
+// Die wortgleiche Erkennung kommt aus WebArchiv/duplicates.cjs (Wort-Shingles, Enthaltensein,
+// Jaccard, Titelähnlichkeit, Datumsabstand); hier dazu die inhaltliche Ähnlichkeit (TF-IDF)
+// und die Entscheidungen des Werkzeugs. Kein Treffer wird automatisch verschoben.
 'use strict';
 
 const fsSync = require('fs');
 const fs = require('fs/promises');
-const crypto = require('crypto');
 const { writeJsonAtomic } = require('./json-file.cjs');
+const archiveDuplicates = require('../../duplicates.cjs');
+
+const { normalizeDuplicateText, overlap, dateDistanceDays } = archiveDuplicates;
 
 const DEFAULT_THRESHOLDS = Object.freeze({
   maxDateDistanceDays: 730,
@@ -54,85 +57,16 @@ function contentTerms(tokens) {
   return terms;
 }
 
-function normalizeDuplicateText(text) {
-  return String(text || '')
-    .normalize('NFKC')
-    .toLocaleLowerCase('de-DE')
-    .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/www\.\S+/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/[`*_>#~\[\](){}|]/g, ' ')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function wordShingles(tokens, size = 5) {
-  const result = new Set();
-  for (let i = 0; i <= tokens.length - size; i++) result.add(tokens.slice(i, i + size).join(' '));
-  return result;
-}
-
+// Profil des WebArchiv, ergänzt um die Inhaltswörter für die inhaltliche Ähnlichkeit.
 function buildDuplicateProfile(title, body) {
-  const normalized = normalizeDuplicateText(body);
-  const tokens = normalized ? normalized.split(' ') : [];
-  const titleNormalized = normalizeDuplicateText(title);
-  return {
-    hash: crypto.createHash('sha256').update(normalized).digest('hex'),
-    tokenCount: tokens.length,
-    shingles: wordShingles(tokens),
-    titleTokens: new Set(titleNormalized ? titleNormalized.split(' ') : []),
-    terms: contentTerms(tokens),
-  };
+  const { normalized, ...profile } = archiveDuplicates.buildDuplicateProfile(title, body);
+  return { ...profile, terms: contentTerms(normalized ? normalized.split(' ') : []) };
 }
 
-function overlap(left, right) {
-  if (!left?.size || !right?.size) return { shared: 0, containment: 0, jaccard: 0 };
-  const [small, large] = left.size <= right.size ? [left, right] : [right, left];
-  let shared = 0;
-  for (const item of small) if (large.has(item)) shared++;
-  return {
-    shared,
-    containment: shared / small.size,
-    jaccard: shared / (left.size + right.size - shared),
-  };
-}
-
-function dateDistanceDays(left, right) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(left || '') || !/^\d{4}-\d{2}-\d{2}$/.test(right || '')) return null;
-  return Math.round(Math.abs(Date.parse(left) - Date.parse(right)) / 86400000);
-}
-
+// Wortgleicher Treffer: Bewertung des WebArchiv (Seite A = „Blog“, Seite B = „Facebook“).
 function compareDuplicateProfiles(original, candidate, config = DEFAULT_THRESHOLDS) {
-  const left = original.duplicateProfile;
-  const right = candidate.duplicateProfile;
-  if (!left || !right || left.tokenCount < config.minimumTokens || right.tokenCount < config.minimumTokens) return null;
-  const days = dateDistanceDays(original.date, candidate.date);
-  const exact = left.hash === right.hash;
-  const body = overlap(left.shingles, right.shingles);
-  const title = overlap(left.titleTokens, right.titleTokens);
-  const dateScore = days === null ? 0.5 : Math.max(0, 1 - days / config.maxDateDistanceDays);
-  const score = exact ? 1 : (body.containment * 0.62 + body.jaccard * 0.23 + title.jaccard * 0.1 + dateScore * 0.05);
-  if (!exact && (body.shared < 8 || body.containment < 0.55 || score < 0.62)) return null;
-  if (!exact && days !== null && days > config.maxDateDistanceDays && body.containment < 0.9) return null;
-  const reasons = [];
-  if (exact) reasons.push('Normalisierte Wortfolge identisch');
-  else {
-    if (body.containment >= 0.85) reasons.push('Inhalt nahezu vollständig enthalten');
-    else reasons.push('Hohe Textüberschneidung');
-    if (title.jaccard >= 0.6) reasons.push('Ähnlicher Titel');
-  }
-  if (days !== null) reasons.push(`${days} Tag${days === 1 ? '' : 'e'} Abstand`);
-  return {
-    method: 'text',
-    score: Math.round(score * 1000) / 1000,
-    exact,
-    sharedShingles: body.shared,
-    containment: Math.round(body.containment * 1000) / 1000,
-    titleSimilarity: Math.round(title.jaccard * 1000) / 1000,
-    days,
-    reasons,
-  };
+  const result = archiveDuplicates.compareDuplicateProfiles(original, candidate, config);
+  return result && { method: 'text', ...result };
 }
 
 // ─── Inhaltliche Ähnlichkeit (unabhängig von Titel und Wortreihenfolge) ────

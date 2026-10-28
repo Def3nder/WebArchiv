@@ -1814,3 +1814,35 @@ Hinweis im Log.
    `--dry-run`. (Abweichende Pfade über `AUDIOBOOK_PROGRESS_FILE`/`AUDIOBOOK_PRIVATE_FILE` oder
    `--progress`/`--private`.)
 4. `sudo systemctl start nodeapp`; im Log darf kein Hinweis auf alte Privat-Markierungen stehen.
+
+## 37. Aktualisierung 28.10.2026 – Dubletten-Werkzeug nutzt die Module des WebArchiv
+
+Das Werkzeug `duplicates-tool/` läuft nur in der Entwicklung, nicht in Produktion. Es arbeitet mit
+denselben Daten, hatte aber eigene Kopien der Logik.
+
+- **HTML-Bereinigung:** Die Vergleichsansicht rendert mit `renderSafeMarkdown` statt mit ungefiltertem
+  `marked.parse`.
+- **Kopien entfernt:**
+  - Parser: `lib/article.cjs` ruft jetzt `lib/article-parser.cjs` auf.
+  - Wortgleiche Erkennung: `normalizeDuplicateText`, `wordShingles`, `overlap` und `dateDistanceDays` kommen
+    aus `duplicates.cjs`, das sie dafür zusätzlich exportiert.
+  - `buildDuplicateProfile` und `compareDuplicateProfiles` bauen auf denen des WebArchiv auf. Das Werkzeug
+    ergänzt nur die Inhaltswörter bzw. das Feld `method`.
+  - Diff-Modul: Die Kopie ist gelöscht; ausgeliefert wird `public/vendor/duplicate-diff.bundle.js`. Die
+    abweichenden Beschriftungen betrafen nur die zweispaltige Ansicht, die das Werkzeug nicht nutzt.
+  - JSON schreiben: `lib/atomic-file.cjs`.
+  - Bewusst eigen bleiben die inhaltliche Ähnlichkeit (TF-IDF), `decisionStillApplies` (A/B, ohne
+    „verknüpft“), Scan und Verschieben.
+- **Keine eigenen Abhängigkeiten mehr:** `package.json` ohne `dependencies`, `package-lock.json` gelöscht.
+  Das Werkzeug läuft mit den `node_modules` des Projektordners (geprüft mit umbenanntem
+  `duplicates-tool/node_modules`). Der lokale Ordner `duplicates-tool/node_modules` kann gelöscht werden.
+- **Tests:** `duplicates-tool/test/*.test.cjs` laufen in `npm test` mit; neu ist ein Test für die Bereinigung.
+
+**Geprüft:**
+- Node-Suite 420/420.
+- Vorher/Nachher mit der alten Fassung aus git auf denselben Ordnern („Joe Turan“ gegen „Facebook“):
+  identische 486 Treffer und Bewertungen; Titel, Datum und Text-Hash aller 1.360 Originale gleich.
+- Im Browser (zweite Instanz auf Port 3101, nur lesend): Das Werkzeug lädt mit dem gemeinsamen
+  Diff-Bundle, keine Konsolenfehler.
+
+**Hinweis:** Die bereits laufende Werkzeug-Instanz auf Port 3100 nutzt bis zu ihrem Neustart noch den alten Code.
