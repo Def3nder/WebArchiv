@@ -349,7 +349,7 @@ unten.) Fallback-Cover:
 `audio/Hoerbuecher/standard.jpg`/`.jpeg`/`.png`. Der Ordner heißt bewusst ohne Umlaute, angezeigt
 wird „Hörbücher“ (Alternativen: Ordner `Hörbücher` oder `audiobooks.directory` in
 `config.json`). Hörbücher sind keine Artikel: Sie erscheinen nur
-beim Autorenfilter „Hörbücher“ (Sortierung zuletzt gehört / Name / Datum), sind nie
+beim Autorenfilter „Hörbücher“ (Sortierung siehe unten), sind nie
 für Gäste sichtbar und werden über `allowedAuthors` freigegeben. Der Player spielt
 das ganze Buch, springt über Dateigrenzen (Weiten in `config.json`) und merkt sich
 Position und Tempo pro Nutzer und Buch in `audiobook-progress.json`. Fortschrittsbalken (Hörbuch und
@@ -359,7 +359,19 @@ Stelle, eine Sprechblase zeigt die Zielzeit, gesprungen wird beim Loslassen.
 **Reine eBooks (ohne Audio):** Ein Buchordner ohne Audiodateien, aber mit eBook-Text
 (`<Ordnername>.md`/`.txt`/`.pdf`), ist ebenfalls ein Buch. Die Kachel zeigt das Badge „eBook“ statt der
 Teile-Zahl; das Detail hat keinen Player, nur „Text lesen“ (mit Leseposition). Ein Ordner ohne Audio **und**
-ohne eBook-Datei bleibt unsichtbar. „Zuletzt gehört/gelesen“ berücksichtigt auch die Leseposition. Ein EPUB
+ohne eBook-Datei bleibt unsichtbar. „Zuletzt gehört/gelesen“ berücksichtigt auch die Leseposition.
+
+**Sortierungen der Hörbücher:** „Zuletzt gehört/gelesen“ (`recent`, Standard), „Zuletzt hinzugefügt“
+(`added`, nach Anlagezeit des Buchordners; wo das Dateisystem keine Erstellzeit kennt, nach Änderungszeit),
+„Nach Name“ (`title`) und „Nach Datum“ (`date`, aus `abstract.md`). Nur Admins sehen zusätzlich „Privat“ (`private`).
+
+**Private Hörbücher:** Admins können ein Hörbuch im Detail über „Aktionen → Als privat markieren“ für alle anderen ausblenden.
+Die Markierung ist global (nicht pro Nutzer) und liegt in `audiobook-private.json` (gitignored,
+`{ "version": 1, "books": { "<Buch-ID>": true } }`, Pfad über `AUDIOBOOK_PRIVATE_FILE`). Private Bücher
+erscheinen nur in der Admin-Sortierung „Privat“; für Nutzer fehlen sie in Liste, Detail, Medien
+(`/audio-files/…`) und Vorschau, als gäbe es sie nicht. Frühere Fassungen speicherten die Markierung in
+`audiobook-progress.json`; einmalig übernommen mit `node scripts/migrate-audiobook-private.js` (Dienst vorher
+stoppen, `--dry-run` zeigt nur an). Der Server liest das alte Format nicht mehr. Ein EPUB
 selbst wird nicht gelesen, sondern vorher mit `epub-tool/` in eine `.md` umgewandelt.
 
 **eBook-Text zum Hörbuch:** Liegt im Buchordner eine Datei mit dem Namen des Ordners und der
@@ -739,7 +751,7 @@ Editor- oder Menülogik einbezogen.
 | `POST /api/new-infographic` | Admin | Neue Infografik `{markdown, image(base64)}` → `{id}` |
 | `GET/PUT /api/tts/server-settings` | Admin | Qwen-Serverwerte live lesen beziehungsweise in `qwen_http_service_config.json` speichern |
 | `GET /api/prompts` · `GET /api/prompts/:file` | Soft | Prompt-Textbausteine aus `prompts/` (Copy-Menü) |
-| `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/title/date),page,limit` |
+| `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/added/title/date, Admin zusätzlich private),page,limit` |
 | `GET /api/audiobooks/*` | Auth + Autor | Hörbuch mit Tracks, Beschreibung, eigenem Fortschritt |
 | `GET /api/tts/provider` | Admin | Verfügbarkeit und Hinweise zu Qwen und OpenAI |
 | `GET`/`PUT /api/tts/settings` | Admin | Qwen-Stimmenkatalog lesen bzw. globale Stimme für neue Aufträge festlegen |
@@ -787,7 +799,7 @@ Neustart — offene Sessions bleiben erhalten). Da der Index im Speicher liegt,
 werden **neu hinzugefügte Dateien erst nach einem Reindex sichtbar**.
 
 Für die Medienzuordnung liest ein Scan jedes Verzeichnis nur einmal (`createDirectoryCache` in
-`server.js`): den Artikelordner, den parallelen Ordner unter `audio/` und den Autorenordner mit
+`lib/archive-files.cjs`): den Artikelordner, den parallelen Ordner unter `audio/` und den Autorenordner mit
 `standard.*`. Gesucht wird danach im Speicher, zuerst mit exaktem Namen, dann ohne Beachtung der
 Groß-/Kleinschreibung. Am lokalen Bestand (7.080 Einträge) sank das von rund 4.300 Verzeichnis-
 Lesungen und 39.000 `existsSync`-Aufrufen auf 26 bzw. 0; der vollständige Index wurde etwa 18 %
@@ -999,6 +1011,7 @@ npm test --prefix tts
 | `USERS_FILE` | `./users.json` | Abweichender Pfad der Nutzerdatei (z. B. für Tests) |
 | `PUBLIC_DIRS_FILE` | `./public-directories.txt` | Abweichender Pfad der Liste öffentlicher Autoren |
 | `AUDIOBOOK_PROGRESS_FILE` | `./audiobook-progress.json` | Abweichender Pfad des Hörfortschritts |
+| `AUDIOBOOK_PRIVATE_FILE` | `./audiobook-private.json` | Abweichender Pfad der Privat-Markierungen der Hörbücher |
 | `BOOKMARKS_FILE` | `./bookmarks.json` | Abweichender Pfad der Lesezeichen |
 | `DUPLICATES_FILE` | `./duplicate-decisions.json` | Abweichender Pfad der Dubletten-Entscheidungen |
 | `TTS_SETTINGS_FILE` | `./tts-settings.json` | Abweichender Pfad der globalen Qwen-Stimmenauswahl |

@@ -147,6 +147,7 @@ const archiveLock = createArchiveLock();
 const audiobookConfig = loadAudiobookConfig(CONFIG_FILE);
 const audiobookProgress = createProgressStore({
   file: process.env.AUDIOBOOK_PROGRESS_FILE || path.join(__dirname, 'audiobook-progress.json'),
+  privateFile: process.env.AUDIOBOOK_PRIVATE_FILE || path.join(__dirname, 'audiobook-private.json'),
 });
 audiobookProgress.load();
 // Lesezeichen pro Nutzer (nur angemeldet).

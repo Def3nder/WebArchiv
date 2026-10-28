@@ -617,7 +617,7 @@ Alle TTS-Routen sind Admin-geschützt; artikelbezogene Aufträge prüfen zusätz
 ### Providerwahl: letzter Stand vom 18.09.2026
 
 - Bei jedem Öffnen wird Qwen über den authentifizierten `/v1/health`-Endpunkt geprüft. Zeitbudget: drei Sekunden einschließlich Antwortkörper.
-- Nur eine passende v4-Antwort mit vollständigem Markdown und MP3-Unterstützung gilt als verfügbar. Das beweist noch keine erfolgreiche GPU-Synthese.
+- Nur eine passende v5-Antwort (`webarchiv-qwen-v5`) mit vollständigem Markdown, MP3- und Chunk-Fortschrittsunterstützung gilt als verfügbar. Das beweist noch keine erfolgreiche GPU-Synthese.
 - Für OpenAI wird nur geprüft, ob der konfigurierte API-Schlüssel vorhanden ist. Es erfolgt dabei keine Guthaben-, Gültigkeits- oder kostenpflichtige Syntheseprüfung.
 - Beide Provider erscheinen als **Radio-Buttons**, nicht als Dropdown. Nicht verfügbare Provider sind gesperrt.
 - **Qwen ist vorausgewählt, wenn verfügbar; der Fokus liegt auf dieser Auswahl.**
@@ -635,7 +635,7 @@ Am 25.09. lokal abgelesene Einstellungen: Modell `gpt-4o-mini-tts-2025-12-15`, S
 
 Die FFmpeg-Bitrate betrifft den lokalen Export langer OpenAI-Texte; sie steuert weder zwingend die direkte kurze MP3 des Anbieters noch den Qwen-Export. Vor längerer Verarbeitung werden FFmpeg/FFprobe geprüft. Ein `spawn ffmpeg ENOENT` allein belegt deshalb keinen bereits erfolgten kostenpflichtigen API-Aufruf.
 
-### Qwen v4: vollständiger Artikel auf dem Modellserver
+### Qwen v5: vollständiger Artikel auf dem Modellserver (Verarbeitung aus v4, seit 04.10. mit Chunk-Fortschritt)
 
 Auf ausdrücklichen Benutzerwunsch verarbeitet `generate_mp3_with_embedding.py` den gesamten Artikel selbst:
 
@@ -673,7 +673,8 @@ HTTP-Zeitlimits wurden mit 15 Sekunden, Abbruch mit fünf Sekunden dokumentiert;
 | v1 | Erste HTTP-Brücke mit Verarbeitung auf dem Modellserver | Durch spätere Vertragsversionen ersetzt |
 | v2 | WebArchiv zerlegt; Modellserver liefert je Aufruf WAV | Auf späteren Benutzerwunsch verworfen |
 | v3 | Gemeinsame GPU-Sitzung, Warmup einmal, gleicher Seed für Chunks/Kalibrierung | Durch Originalscript-Verarbeitung und dessen Seed-Strategie ersetzt |
-| v4 | Original-Markdown → Originalscript → fertige MP3 | Geltender Vertrag |
+| v4 | Original-Markdown → Originalscript → fertige MP3 | Verarbeitung gilt weiter; Protokoll durch v5 abgelöst |
+| v5 | Wie v4, zusätzlich nummerierter Chunk-Fortschritt (04.10.2026) | **Geltender Vertrag** (`webarchiv-qwen-v5`) |
 | Providerdialog | Erst automatische Vorentscheidung, dann freie Auswahl ohne Vorauswahl | Radio-Auswahl mit Qwen-Vorauswahl ist der letzte Stand |
 
 Quellen: [G10], [G11], [G14], [D5], [D6], [D7], [D8].
@@ -742,7 +743,7 @@ Die Environment-Datei wird mit `root:root` und Modus `600` geschützt. Keine Sch
 - Lokale individuelle `tts/config.json`-Werte vor Überschreiben abgleichen.
 - Die Kopierliste in `tts/DEPLOYMENT-NODE-SERVER.md` beschreibt ein Update auf einer bereits integrierten Installation. Sie ist keine vollständige Neuinstallationsliste.
 
-Bei älterem Qwen-Protokoll beide Python-Dateien gemeinsam aktualisieren und beide betroffenen Dienste neu starten. Für eine reine Änderung der Radio-Buttons oder Vorauswahl braucht ein bereits funktionierender v4-Modellserver kein Update.
+Bei älterem Qwen-Protokoll beide Python-Dateien gemeinsam aktualisieren und beide betroffenen Dienste neu starten. Für eine reine Änderung der Radio-Buttons oder Vorauswahl braucht ein bereits funktionierender v5-Modellserver kein Update.
 
 ### Neustart oder Reindex?
 
@@ -777,7 +778,7 @@ Als historischer Cron-Zeitpunkt ist `30 4 * * *` mit UTC-Serverzeit dokumentiert
 .\tts\Start-WebArchivQwen.ps1
 ```
 
-Der erste Helfer prüft Verbindung/Vertrag ohne Audioerzeugung. Erwartet wird v4 mit `full_markdown: true` und `audio_format: mp3`. Der zweite prüft Qwen und startet WebArchiv lokal. Beide fragen das Token verdeckt ab und konfigurieren keinen laufenden Debian-Dienst.
+Der erste Helfer prüft Verbindung/Vertrag ohne Audioerzeugung. Erwartet wird `webarchiv-qwen-v5` mit `full_markdown: true` und `audio_format: mp3`. Der zweite prüft Qwen und startet WebArchiv lokal. Beide fragen das Token verdeckt ab und konfigurieren keinen laufenden Debian-Dienst.
 
 Danach als Admin einen Artikel ohne MP3 öffnen und den Providerdialog prüfen. Ein Healthcheck ersetzt keinen tatsächlichen Modell- und Hörtest. Einen solchen Test bewusst starten und anschließend MP3, Anzeige und Aussprache prüfen.
 
@@ -857,13 +858,15 @@ Für eine echte Abnahme gezielt Rechte, vorhandene MP3, parallele Starts, Abbruc
 
 ### Konkret offen bzw. heute als Abweichung festgestellt
 
-1. **Cron-Wrapper:** `scraper/run-scrape.sh` enthält noch den harten Neustart. Soll und tatsächlichen lokalen sowie produktiven Stand abgleichen und bei einem entsprechenden Änderungsauftrag auf Reindex umstellen.
+1. ~~**Cron-Wrapper**~~ **Erledigt:** `scraper/run-scrape.sh` löst nach dem Scrapen per `systemctl kill -s HUP nodeapp` einen Reindex aus (kein Neustart; Sitzungen bleiben). Auf dem Server war die Datei zwischenzeitlich mit CRLF eingecheckt; seit `.gitattributes` (`*.sh text eol=lf`) bleibt sie LF.
 2. ~~**Qwen-v4-Liveabnahme**~~ **Erledigt (30.09.2026, vom Benutzer bestätigt):** Der Benutzer bestätigte, dass eine frühere Fassung den Modellserver aufrief und nach der Transport-/Chunkänderung funktionierte; die Liveabnahme der endgültigen v4-Verarbeitung mit der jüngsten Providerwahl wurde am 30.09.2026 vom Benutzer als durchgeführt gemeldet. Einzelheiten des Hörtests sind nicht protokolliert.
 3. **Produktionsstand:** In dieser Sitzung kein SSH-Zugriff, keine Prüfung der installierten Dateiversionen, Mountrechte, Dienstvariablen oder tatsächlichen Cron-Konfiguration.
 4. **Dokumentationswidersprüche:** `tts-server/QWEN-ANBINDUNG.md`, `tts/UEBERGABE-TTS.md` und `tts/DEPLOYMENT-NODE-SERVER.md` enthalten noch „keine Vorauswahl“. Geltend ist Qwen-Vorauswahl bei Verfügbarkeit. Die Übergabedatei enthält zusätzlich ausdrücklich historische v2-/v3-Abschnitte.
 5. **Frühe Projektnotizen:** Aussagen über ausschließlich `server.js`, fehlende Tests, frühere PDF.js-Pfade, zweigeteiltes Copy und offene kombinierte Datums-/Textsuche sind teilweise überholt. README und Setup-Datei enthalten noch alte Facebook-URL-Eingaben und ältere Strukturangaben.
 6. **BlogDownloader:** Spätere Übereinstimmung der Node- und Python-Scraper ist nicht erneut nachgewiesen. Die historisch beschlossene Synchronität bei künftigen Änderungen berücksichtigen.
-7. **Vorhandene lokale Änderungen:** Bereits zu Beginn dieser Dokumentationsarbeit waren `scraper/scrape_all.js` und `scraper/scraper-config.json` verändert; `www/Joe Turan Facebook/` war unversioniert. Diese Änderungen wurden nicht als eigene Arbeit übernommen oder zurückgesetzt. Ihre Aufnahme in Git bedarf einer gesonderten inhaltlichen Sichtung, besonders bei Archivdaten.
+7. **Audio-Reihenfolge (geprüft 28.10.2026):** Abschnitt 1, Abschnitt 6, README und Code stimmen überein: zuerst eine gleichnamige MP3 neben der `.md` unter `www/`, sonst der parallele `audio/`-Baum. Ein früher vermuteter Widerspruch besteht nicht mehr.
+8. **Commit `bfc6641` („Re-Indexierung in einem Web Worker“):** Die Nachricht ist ungenau. Es gibt weder `worker_threads` noch `new Worker`; der Reindex läuft im Hauptprozess mit `async`-Dateizugriffen und Verzeichnis-Cache (Abschnitt 24). Commit-Nachrichten werden nachträglich nicht umgeschrieben.
+9. **Vorhandene lokale Änderungen:** Bereits zu Beginn dieser Dokumentationsarbeit waren `scraper/scrape_all.js` und `scraper/scraper-config.json` verändert; `www/Joe Turan Facebook/` war unversioniert. Diese Änderungen wurden nicht als eigene Arbeit übernommen oder zurückgesetzt. Ihre Aufnahme in Git bedarf einer gesonderten inhaltlichen Sichtung, besonders bei Archivdaten.
 
 ### Frühere Ideen, keine zugesagten nächsten Implementierungen
 
@@ -1780,3 +1783,34 @@ Haken während eines nachgestellten Uploads umgeschaltet, Wert bleibt beim Neuau
 Speicheranfrage mit dem gewünschten Wert.
 
 **Deployment:** `public/infographic-manager.js` kopieren (Browser neu laden genügt, kein Neustart nötig).
+
+## 36. Aktualisierung 28.10.2026 – Dokumentation bereinigt, Privat-Markierung in eigener Datei
+
+- **Widersprüche in Session.MD behoben:**
+  - Abschnitt 13: Der Cron-Wrapper ist erledigt (Reindex per SIGHUP statt Neustart).
+  - Qwen-Abschnitte: Der geltende Vertrag heißt `webarchiv-qwen-v5`. Das ist die v4-Verarbeitung plus
+    Chunk-Fortschritt; die Tabelle der Stufen hat eine eigene v5-Zeile.
+  - Audio-Reihenfolge: geprüft, kein Widerspruch mehr (lokal neben der `.md` zuerst, dann `audio/`).
+  - Commit `bfc6641`: In Abschnitt 13 steht jetzt, dass es keinen Web Worker gibt.
+- **Dokumentiert:** private Hörbücher und alle Sortierungen (`recent`, `added`, `title`, `date`, Admin-only
+  `private`) im README und in CLAUDE.md, dazu `AUDIOBOOK_PRIVATE_FILE`.
+- **Privat-Markierung umgezogen:** von `audiobook-progress.json` (Nutzerdaten) nach `audiobook-private.json`
+  (`{ version: 1, books: { <Buch-ID>: true } }`, gitignored). Die Schnittstelle `isPrivate`/`setPrivate` bleibt.
+  - Der Server kennt nur noch die neue Datei; Altformat und Übernahmelogik sind entfernt.
+  - Einmal-Übernahme mit `scripts/migrate-audiobook-private.js` (`--dry-run`, mehrfach ausführbar):
+    erst `audiobook-private.json` schreiben (vorhandene Einträge bleiben), dann die alten Einträge
+    (`__global.__private`, `<E-Mail>.__private`) aus dem Hörfortschritt entfernen.
+  - Ein vorübergehender Hinweis im Log für nicht übernommene Einträge ist nach der erfolgreichen Migration
+    auf dem Server (28.10.2026, vom Benutzer bestätigt) wieder entfernt; der Server kennt das alte Format nicht mehr.
+
+**Geprüft:** Node-Suite 411/411. Skript-Test: Probelauf ändert nichts; Übernahme globaler und nutzerbezogener
+Markierungen; bestehende Einträge bleiben; Hörfortschritt bleibt; zweiter Lauf tut nichts. Dazu ein Test für den
+Hinweis im Log.
+
+**Deployment – Reihenfolge wichtig, sonst sind private Bücher kurz für alle sichtbar:**
+1. Dateien kopieren: `audiobooks.cjs`, `server.js`, `.gitignore`, `scripts/migrate-audiobook-private.js`.
+2. `sudo systemctl stop nodeapp`
+3. Im App-Verzeichnis als Dienstnutzer: `node scripts/migrate-audiobook-private.js --dry-run`, dann ohne
+   `--dry-run`. (Abweichende Pfade über `AUDIOBOOK_PROGRESS_FILE`/`AUDIOBOOK_PRIVATE_FILE` oder
+   `--progress`/`--private`.)
+4. `sudo systemctl start nodeapp`; im Log darf kein Hinweis auf alte Privat-Markierungen stehen.

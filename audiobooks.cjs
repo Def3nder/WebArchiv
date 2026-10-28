@@ -21,8 +21,6 @@ const SORTS = ['recent', 'added', 'title', 'date', 'private'];
 const EBOOK_EXTS = ['.md', '.txt', '.pdf'];
 const EBOOK_MAX_BYTES = 5 * 1024 * 1024;
 const TEXT_PROGRESS_KEY = '__text';   // je Nutzer: { <Buch-ID>: { format, position, updatedAt } }
-const GLOBAL_STATE_KEY = '__global';
-const PRIVATE_BOOKS_KEY = '__private'; // global: { <Buch-ID>: true }
 const DEFAULT_CONFIG = { skipLongSeconds: 600, skipShortSeconds: 30 };
 const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
 const emailKey = email => String(email || '').toLowerCase();
@@ -466,35 +464,22 @@ function resolveTrackIndex(book, entry) {
 
 // ─── Hörfortschritt pro Nutzer (audiobook-progress.json) ───────────────────
 
-function createProgressStore({ file, io = fs }) {
+const isPlainObject = value => !!value && typeof value === 'object' && !Array.isArray(value);
+
+// Hörfortschritt pro Nutzer (audiobook-progress.json) und, getrennt davon, die globale
+// Privat-Markierung der Hörbücher (audiobook-private.json: { version, books: { <Buch-ID>: true } }).
+// Die Markierung ist eine Admin-Einstellung und gehört nicht zu den Nutzerdaten.
+function createProgressStore({ file, privateFile = path.join(path.dirname(file), 'audiobook-private.json'), io = fs }) {
   // Änderungen wirken erst, wenn die Datei geschrieben ist (createJsonState).
-  const state = createJsonState({ file, io, fromDocument: parsed => (parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}) });
-
-  function migratePrivateBooks(data) {
-    const privateBooks = { ...(data[GLOBAL_STATE_KEY]?.[PRIVATE_BOOKS_KEY] || {}) };
-    let changed = false;
-    for (const [key, entry] of Object.entries(data)) {
-      if (key === GLOBAL_STATE_KEY || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
-      const legacy = entry[PRIVATE_BOOKS_KEY];
-      if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy)) continue;
-      for (const [bookId, value] of Object.entries(legacy)) {
-        if (value) privateBooks[bookId] = true;
-      }
-      delete entry[PRIVATE_BOOKS_KEY];
-      if (!Object.keys(entry).length) delete data[key];
-      changed = true;
-    }
-    if (Object.keys(privateBooks).length) {
-      data[GLOBAL_STATE_KEY] = { ...(data[GLOBAL_STATE_KEY] || {}), [PRIVATE_BOOKS_KEY]: privateBooks };
-    }
-    return changed;
-  }
-
+  const state = createJsonState({ file, io, fromDocument: parsed => (isPlainObject(parsed) ? parsed : {}) });
+  const privateState = createJsonState({
+    file: privateFile, io,
+    fromDocument: parsed => (isPlainObject(parsed?.books) ? { ...parsed.books } : {}),
+    toDocument: books => ({ version: 1, books }),
+  });
   function load() {
-    // Frühere Versionen speicherten „privat“ pro Nutzer. Die Vereinigung aller
-    // Markierungen wird global übernommen, damit beim Update nichts offengelegt wird.
-    // Die Migration gilt sofort im Speicher, auch wenn das Schreiben scheitert.
-    if (migratePrivateBooks(state.load())) state.save().catch(() => {});
+    state.load();
+    privateState.load();
   }
   const data = () => state.value;
 
@@ -536,19 +521,13 @@ function createProgressStore({ file, io = fs }) {
       return entry && entry.format === format ? entry.position : null;
     },
     isPrivate(bookId) {
-      return !!data()[GLOBAL_STATE_KEY]?.[PRIVATE_BOOKS_KEY]?.[bookId];
+      return !!privateState.value[bookId];
     },
     async setPrivate(bookId, value) {
       if (typeof value !== 'boolean') throw fail(400, 'Ungültige Privat-Markierung.');
-      return state.update(data => {
-        const globalState = { ...(data[GLOBAL_STATE_KEY] || {}) };
-        const privateBooks = { ...(globalState[PRIVATE_BOOKS_KEY] || {}) };
-        if (value) privateBooks[bookId] = true;
-        else delete privateBooks[bookId];
-        if (Object.keys(privateBooks).length) globalState[PRIVATE_BOOKS_KEY] = privateBooks;
-        else delete globalState[PRIVATE_BOOKS_KEY];
-        if (Object.keys(globalState).length) data[GLOBAL_STATE_KEY] = globalState;
-        else delete data[GLOBAL_STATE_KEY];
+      return privateState.update(books => {
+        if (value) books[bookId] = true;
+        else delete books[bookId];
         return { private: value };
       });
     },

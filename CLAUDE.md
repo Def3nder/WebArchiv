@@ -18,6 +18,7 @@ npm start              # run server.js → http://localhost:3000 (PORT env overr
 node scripts/hash-passwords.js   # hash plaintext passwords in users.json (see Auth below)
 node scripts/make-favicons.js    # regenerate public/favicon.ico + apple-touch-icon.png from favicon.svg
 node scripts/strip-infographic-categories.js [--dry-run]  # drop Kategorien: lines from infographic .md (backup in download/)
+node scripts/migrate-audiobook-private.js [--dry-run]    # one-time: move private flags from audiobook-progress.json to audiobook-private.json
 ```
 
 ```bash
@@ -124,6 +125,9 @@ object in `app.js`.
   `audio/Hoerbuecher/<book>/` (ASCII dir name, mapped to author `Hörbücher`; tracks + cover + optional `abstract.md`), has its own index and
   `/api/audiobooks*` routes (a book without tracks but with an ebook text file is an "ebook only" book: `trackCount: 0`, `ebookOnly: true`, no player), is never public (guests blocked in `canAccessAuthor`, filtered from
   `public-directories.txt`), and stores per-user playback position in `audiobook-progress.json`.
+  Admins can mark a book *private* (global, not per user) — stored separately in `audiobook-private.json`;
+  private books exist only for admins (list sort `private`, detail, media, preview). Sorts: `recent` (default),
+  `added` (book folder creation time), `title`, `date`.
 - **Bookmarks** (`bookmarks.cjs`): per-user, logged-in only, stored in `bookmarks.json` (gitignored).
   `PUT/DELETE /api/bookmarks/*`; `/api/articles?bookmarks=1` filters after the ACL pre-filter and
   also includes Telegram. Display settings (font, light/dark/auto, article text size) are per device

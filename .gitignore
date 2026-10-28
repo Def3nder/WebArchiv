@@ -40,6 +40,7 @@ __pycache__/
 ################
 users.json
 audiobook-progress.json
+audiobook-private.json
 bookmarks.json
 sessions.json
 duplicate-decisions.json

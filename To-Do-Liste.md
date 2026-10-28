@@ -24,5 +24,5 @@ dass ich den Bereich ganz oben klicke und halte und nach unten ziehe - geht das 
 Oct 27 18:11:10 nodejs node[28566]: Building article index<E2><80><A6>
 Oct 27 18:11:10 nodejs node[28566]: WebArchiv <E2><86><92> http://localhost:3000
 Oct 27 18:11:14 nodejs node[28566]: <E2><9C><93> 6038 articles, 42 H<C3><B6>rb<C3><BC>cher indexed in 4353ms
-* [ ] ...
+* [ ] Gibt es einen Grund, warum einige CJS-Module unter "lib/" liegen und andere im root des Projektes ?
 

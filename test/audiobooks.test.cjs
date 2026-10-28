@@ -256,27 +256,47 @@ test('Private Hörbücher sind global, nur für Administratoren sichtbar und ble
   const reloaded = createProgressStore({ file: path.join(dir, 'progress.json') });
   reloaded.load();
   assert.equal(reloaded.isPrivate(privateBook.id), true);
-  const saved = JSON.parse(await fs.readFile(path.join(dir, 'progress.json'), 'utf8'));
-  assert.equal(saved.__global.__private[privateBook.id], true);
+  // Die Markierung liegt getrennt vom Hörfortschritt in audiobook-private.json.
+  const saved = JSON.parse(await fs.readFile(path.join(dir, 'audiobook-private.json'), 'utf8'));
+  assert.deepEqual(saved, { version: 1, books: { [privateBook.id]: true } });
+  const progressFile = await fs.readFile(path.join(dir, 'progress.json'), 'utf8').catch(() => '{}');
+  assert.equal(JSON.parse(progressFile).__global, undefined);
 
   await progress.setPrivate(privateBook.id, false);
   assert.deepEqual(library.list(admin, { sort: 'private' }).items, []);
   assert.deepEqual(library.list(user, { sort: 'title' }).items.map(book => book.title), ['50 Fragen', 'Kommt Zusammen!']);
 });
 
-test('Alte nutzerbezogene Privat-Markierungen werden sicher global übernommen', async t => {
+test('Migrationsskript übernimmt frühere Privat-Markierungen nach audiobook-private.json', async t => {
+  const { migrate } = require('../scripts/migrate-audiobook-private.js');
   const dir = await tempDir(t);
   const file = path.join(dir, 'progress.json');
-  const bookId = 'Hörbücher/Altbestand';
-  await fs.writeFile(file, JSON.stringify({ 'alt@b.de': { __private: { [bookId]: true } } }));
+  const privateFile = path.join(dir, 'audiobook-private.json');
+  const oldUser = 'Hörbücher/Altbestand';
+  const oldGlobal = 'Hörbücher/Global';
+  const kept = 'Hörbücher/Schon privat';
+  const position = { file: '01.mp3', trackIndex: 0, position: 12, speed: 1, updatedAt: '2026-01-01T00:00:00.000Z' };
+  const legacy = {
+    'alt@b.de': { __private: { [oldUser]: true } },
+    'leser@b.de': { 'Hörbücher/Buch': position },
+    __global: { __private: { [oldGlobal]: true } },
+  };
+  await fs.writeFile(file, JSON.stringify(legacy));
+  await fs.writeFile(privateFile, JSON.stringify({ version: 1, books: { [kept]: true } }));
+  const log = () => {};
+
+  assert.deepEqual(await migrate({ progressFile: file, privateFile, dryRun: true, log }), { migrated: 2, dryRun: true });
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), legacy, 'Probelauf ändert nichts');
+
+  assert.deepEqual(await migrate({ progressFile: file, privateFile, log }), { migrated: 2 });
+  assert.deepEqual(JSON.parse(await fs.readFile(privateFile, 'utf8')),
+    { version: 1, books: { [kept]: true, [oldUser]: true, [oldGlobal]: true } });
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { 'leser@b.de': { 'Hörbücher/Buch': position } });
+  assert.deepEqual(await migrate({ progressFile: file, privateFile, log }), { migrated: 0 }, 'mehrfach ausführbar');
+
   const progress = createProgressStore({ file });
   progress.load();
-
-  assert.equal(progress.isPrivate(bookId), true);
-  await progress.setPrivate(bookId, true);
-  const saved = JSON.parse(await fs.readFile(file, 'utf8'));
-  assert.equal(saved.__global.__private[bookId], true);
-  assert.equal(saved['alt@b.de'], undefined);
+  for (const id of [kept, oldUser, oldGlobal]) assert.equal(progress.isPrivate(id), true);
 });
 
 test('Hörbuch-API erzwingt Privatsichtbarkeit unabhängig von der PWA-Version', async t => {
