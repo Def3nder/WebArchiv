@@ -2,9 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readApp = require('./support/read-app.cjs');
 
 const ROOT = path.join(__dirname, '..');
-const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+const app = readApp();
 const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
 const mediaRoutes = fs.readFileSync(path.join(ROOT, 'media-files.cjs'), 'utf8');
 
@@ -26,7 +27,17 @@ test('Artikel-Player zeigt Wiedergabe erst beim playing-Ereignis an', () => {
     app.indexOf("audio.addEventListener('playing'"),
   );
   assert.doesNotMatch(requested, /classList\.add\('playing'\)/);
-  assert.match(app, /audioEl\.paused \|\| !btn\.classList\.contains\('playing'\)/);
+  assert.match(app, /audio\.paused \|\| !btn\.classList\.contains\('playing'\)/);
+});
+
+test('Ereignisse eines gestoppten Players lesen nicht das globale audioEl', () => {
+  // stopAudio() setzt audioEl auf null; ein danach eintreffendes timeupdate darf es nicht lesen.
+  const source = app.replace(/\r\n/g, '\n');
+  const start = source.indexOf('function wireAudioPlayer(');
+  const wire = source.slice(start, source.indexOf('\n}\n', start));
+  assert.match(wire, /const audio = new Audio\(audioUrl\);[\s\S]*?audioEl = audio;/);
+  const afterAssignment = wire.slice(wire.indexOf('audioEl = audio;') + 'audioEl = audio;'.length);
+  assert.doesNotMatch(afterAssignment, /\baudioEl\b/);
 });
 
 test('Cache-Buster liefert die korrigierte Player-Version aus', () => {

@@ -4,9 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const readStyles = require('./support/read-styles.cjs');
+const readApp = require('./support/read-app.cjs');
 
 const root = path.join(__dirname, '..');
-const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
+const app = readApp();
 const css = readStyles();
 const start = app.indexOf('const modalOverlays =');
 const end = app.indexOf('\nconst dialogOpen', start);

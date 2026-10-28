@@ -4,13 +4,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const readStyles = require('./support/read-styles.cjs');
+const readApp = require('./support/read-app.cjs');
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 const gestures = read('public/touch-gestures.js');
 
 test('Dublettenprüfung ist als Admin-Dialog mit allen Entscheidungswegen eingebunden', () => {
   const html = read('public/index.html');
-  const app = read('public/app.js');
+  const app = readApp();
   const ui = read('public/duplicates.js');
   assert.match(html, /data-action="duplicates"[^>]*data-admin-only/);
   assert.match(html, /id="duplicate-review"[\s\S]*data-duplicate-tab="pending"[\s\S]*data-duplicate-tab="linked"[\s\S]*data-duplicate-tab="ignored"/);

@@ -1846,3 +1846,38 @@ denselben Daten, hatte aber eigene Kopien der Logik.
   Diff-Bundle, keine Konsolenfehler.
 
 **Hinweis:** Die bereits laufende Werkzeug-Instanz auf Port 3100 nutzt bis zu ihrem Neustart noch den alten Code.
+
+## 38. Aktualisierung 28.10.2026 – app.js aufgeteilt (Galerie, Medien, Detail)
+
+`app.js` (3.192 Zeilen) ist in vier klassische Skripte aufgeteilt:
+
+| Datei | Inhalt | Zeilen |
+|---|---|---|
+| `public/app-gallery.js` | Vollbild-Galerie mit Blättern, Zoom/Verschieben, Bild herunterladen/teilen | 220 |
+| `public/app-media.js` | Audio-, Video- und PDF-Player, Media Session | 232 |
+| `public/app-detail.js` | Artikel öffnen/schließen, Lesezeichen, `renderDetail` | 421 |
+| `public/app.js` | Zustand, Liste, Filter, Anmeldung, Navigation, Ereignisse, Start | 2.338 |
+
+- Die `app-*.js` werden vor `app.js` geladen und enthalten nur Deklarationen. Die Funktionen greifen zur
+  Laufzeit über den gemeinsamen globalen Gültigkeitsbereich auf Zustand und DOM-Referenzen aus `app.js` zu.
+- Verschoben wurde ohne inhaltliche Änderung. Ein Test (`test/app-split.test.cjs`) prüft Ladereihenfolge,
+  Zuständigkeit und dass auf oberster Ebene nur Deklarationen stehen.
+- Tests lesen alle Teile über `test/support/read-app.cjs`. Dafür war in 20 Testdateien nur die Einlesezeile
+  zu ändern, keine Prüfung selbst.
+- **Nebenbei behoben (bestehender Fehler):** Nach dem Stoppen eines Artikel-Audios konnte ein verspätetes
+  `timeupdate` `audioEl.currentTime` auf `null` lesen (Konsolenfehler). `wireAudioPlayer` nutzt jetzt
+  durchgehend das eigene Element statt des globalen `audioEl`; dazu gibt es einen Regressionstest.
+
+**Geprüft:**
+- Node-Suite 423/423.
+- Im Browser als Gast und mit Test-Admin:
+  - Detailansicht öffnen und schließen.
+  - Bildgruppe per Klick im Vollbild öffnen, mit der Pfeiltaste blättern (Hash `?bild=2`), mit Escape
+    schließen, Zoom.
+  - Audio-Player, Aktionsmenü und Lesezeichen vorhanden.
+  - Audio dreimal gestartet und gestoppt: Media-Session-Titel gesetzt, danach aufgeräumt, keine Konsolenfehler.
+
+**Deployment:**
+- Kopieren aus `public/`: `app.js`, `app-gallery.js`, `app-media.js`, `app-detail.js` (alle drei neu),
+  `index.html`.
+- Browser neu laden genügt; ein Neustart des Dienstes ist nicht nötig.

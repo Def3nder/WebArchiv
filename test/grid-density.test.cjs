@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const ROOT = path.join(__dirname, '..');
 const gridDensity = require('../public/grid-density.js');
 const readStyles = require('./support/read-styles.cjs');
+const readApp = require('./support/read-app.cjs');
 
 test('Browser-Script stellt die Berechnung vor app.js global bereit', () => {
   const context = { globalThis: {} };
@@ -20,7 +21,7 @@ test('Das gesamte Raster reserviert Pinch-Gesten und lässt vertikales Scrollen 
 });
 
 test('Kachel-Zoom verankert den Artikel unter Fingern oder Mauszeiger', () => {
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = readApp();
   assert.match(app, /async function changeGridColumns\(step, scaleAnchor = null\)/);
   assert.match(app, /changeGridColumns\(ratio < 1 \? 1 : -1, scaleAnchor\)/);
   assert.match(app, /changeGridColumns\(step, captureListScaleAnchor\(event\.clientX, event\.clientY\)\)/);
@@ -34,7 +35,7 @@ test('Drehen erhält ungefähr die Kachelbreite und erhöht die Spaltenzahl', ()
 });
 
 test('Die App merkt bereits die responsive Ausgangsbreite vor dem ersten Drehen', () => {
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = readApp();
   assert.match(app, /preferredWidth = Math\.max\(GRID_MIN_CARD_WIDTH/);
   assert.match(app, /state\.gridCardWidths = \{ \.\.\.state\.gridCardWidths, \[layout\]: preferredWidth \}/);
 });

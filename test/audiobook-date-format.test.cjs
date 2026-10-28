@@ -3,9 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const readApp = require('./support/read-app.cjs');
 
 const ROOT = path.join(__dirname, '..');
-const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+const app = readApp();
 const audiobooks = fs.readFileSync(path.join(ROOT, 'public', 'audiobooks.js'), 'utf8');
 const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 

@@ -909,7 +909,10 @@ package.json                  Deps: express, express-session, bcryptjs, fuse.js,
 test/                         Tests der Hauptanwendung
 public/
 ├── index.html                SPA-Servervorlage mit markierten Admin-Bereichen
-├── app.js                    SPA-Logik (Suche, Filter, Detail, Auth, Aktionen-Menü; Admin-Einhängepunkte adminHooks)
+├── app.js                    SPA-Logik (Suche, Filter, Liste, Auth, Navigation, Aktionen-Menü; adminHooks)
+├── app-gallery.js            Vollbild-Galerie: Blättern, Zoom, Bild herunterladen/teilen (vor app.js geladen)
+├── app-media.js              Artikel-Audio/-Video/-PDF und Media Session (vor app.js geladen)
+├── app-detail.js             Artikel öffnen/schließen, Lesezeichen, Detailansicht (vor app.js geladen)
 ├── aria-menu.js              Gemeinsame ARIA-Menükomponente (Tastatur, Escape, Außenklick, Fokus, Viewport)
 ├── admin-tasks.js            Nur Admin-Shell: Audio erzeugen (TTS), Archiv neu einlesen, Scrapen, Scrape-Log
 ├── infographic-review.js     Nur Admin-Shell: Prüfmodus „Infografiken prüfen“ (Poster-Markierungen)

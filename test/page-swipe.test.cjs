@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const ROOT = path.join(__dirname, '..');
 const pageSwipe = require('../public/page-swipe.js');
 const readStyles = require('./support/read-styles.cjs');
+const readApp = require('./support/read-app.cjs');
 
 function gesture(overrides = {}) {
   return {
@@ -96,7 +97,7 @@ test('Auch die Listenansicht reserviert horizontale Inhaltsgesten', () => {
 });
 
 test('Die Browserintegration übernimmt horizontale touchmove-Ereignisse aktiv', () => {
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = readApp();
   assert.match(app, /\$app\.addEventListener\('touchmove',[\s\S]*?event\.preventDefault\(\);[\s\S]*?passive:\s*false/);
   assert.match(app, /addEventListener\('touchcancel',\s*finishPageSwipe/);
   assert.doesNotMatch(app, /pageSwipeBlockedTarget\(target\)[\s\S]{0,300}card-gallery/);
@@ -104,7 +105,7 @@ test('Die Browserintegration übernimmt horizontale touchmove-Ereignisse aktiv',
 });
 
 test('Die Browserintegration blättert per Cursortaste nur in der Kachelansicht', () => {
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = readApp();
   assert.match(app, /pageSwipeMath\?\.keyDirection\(e\)/);
   assert.match(app, /currentLayout\(\) === 'list'[\s\S]*?state\.page \+ dir[\s\S]*?changeResultsPage\(targetPage\)/);
   assert.match(app, /input, textarea, select, button, a, audio, video/);

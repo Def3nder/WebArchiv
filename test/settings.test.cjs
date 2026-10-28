@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const readStyles = require('./support/read-styles.cjs');
+const readApp = require('./support/read-app.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const SETTINGS_SOURCE = fs.readFileSync(path.join(ROOT, 'public', 'settings.js'), 'utf8');
@@ -77,7 +78,7 @@ test('Gäste erhalten unabhängig vom gespeicherten Nutzerwert die Vorgabe', () 
 test('Dialog verwendet Dropdowns und die neuen Sichtbarkeitseinstellungen', () => {
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
   const css = readStyles();
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = readApp();
 
   assert.match(html, /Filter-Beschriftungen/);
   // Touch: natives Select; Desktop: ARIA-Menü als Spiegel (aria-menu.js, bindSelect).
@@ -113,7 +114,7 @@ test('Der Einstellungsdialog fokussiert kein Dropdown automatisch', () => {
 
 test('Listen-Zeilenhöhe lässt sich per Geste und Strg+Mausrad ändern', () => {
   const css = readStyles();
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = readApp();
   assert.match(css, /--list-row-height/);
   assert.match(css, /body\.layout-list \.card\s*\{[^}]*height:\s*var\(--list-row-height[^}]*min-height:\s*0;/s);
   assert.match(css, /@media \(max-width: 600px\), \(hover: none\) and \(pointer: coarse\)/);
@@ -139,7 +140,7 @@ test('Listen-Zeilenhöhe lässt sich per Geste und Strg+Mausrad ändern', () => 
 
 test('Die Listenansicht zeigt das Datum nach dem Autor', () => {
   const css = readStyles();
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = readApp();
   assert.match(app, /class="author-badge"[\s\S]*responsiveDateMarkup\(article\.date, 'card-date'\)/);
   assert.doesNotMatch(css, /body\.layout-list \.card-date,\s*body\.layout-list \.episode-num/);
 });

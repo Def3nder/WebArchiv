@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const { renderIndexForSession, requireAdminAccess } = require('../server.js');
+const readApp = require('./support/read-app.cjs');
 
 function request({ role = 'admin', method = 'POST', token, sessionToken = token, origin, fetchSite } = {}) {
   const headers = {
@@ -104,7 +105,7 @@ test('zentrale Admin-Middleware schützt Rolle, Herkunft und CSRF-Token', () => 
 });
 
 test('Frontend hängt das Admin-CSRF-Token zentral an schreibende API-Aufrufe', () => {
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = readApp();
   const editor = fs.readFileSync(path.join(ROOT, 'public', 'article-editor.js'), 'utf8');
   const infographic = fs.readFileSync(path.join(ROOT, 'public', 'infographic-new.js'), 'utf8');
   assert.match(app, /meta\[name="admin-csrf-token"\]/);
@@ -114,7 +115,7 @@ test('Frontend hängt das Admin-CSRF-Token zentral an schreibende API-Aufrufe', 
 });
 
 test('Admin-Aufgaben (TTS, Reindex, Scrape) liegen in admin-tasks.js und nur in der Admin-Shell', () => {
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = readApp();
   const admin = fs.readFileSync(path.join(ROOT, 'public', 'admin-tasks.js'), 'utf8');
   const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
   for (const name of ['runTts', 'showTtsJob', 'watchTts', 'chooseTtsProvider', 'runReindex', 'runScrape', 'showScrapeLog']) {

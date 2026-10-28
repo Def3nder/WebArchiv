@@ -3,12 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const readStyles = require('./support/read-styles.cjs');
+const readApp = require('./support/read-app.cjs');
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 
 test('Admin-Menü und nativer Dialog enthalten die vollständige Qwen-Stimmenverwaltung', () => {
   const html = read('public/index.html');
-  const app = read('public/app.js');
+  const app = readApp();
   const css = readStyles();
   assert.match(html, /data-action="tts-settings"[^>]*data-admin-only[^>]*>TTS-Einstellungen/);
   assert.match(html, /<dialog id="tts-settings-dialog"[^>]*aria-labelledby="tts-settings-title"/);

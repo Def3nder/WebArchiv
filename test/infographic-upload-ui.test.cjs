@@ -2,9 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readApp = require('./support/read-app.cjs');
 
 test('Artikel öffnen die Infografik-Verwaltung statt eines einzelnen Upload-Felds', () => {
-  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const app = readApp();
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   assert.match(app, /id="detail-infographic-btn" aria-label="Infografiken verwalten"/);
   assert.match(app, /window\.openInfographicManager\?\.\(article\)/);
@@ -25,7 +26,7 @@ test('Upload im Verwaltungsdialog aktualisiert Artikel und Grafikliste', () => {
 });
 
 test('Dialog kann per Escape und Pull-to-Close geschlossen werden', () => {
-  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const app = readApp();
   const manager = fs.readFileSync(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
   assert.match(app, /\['#infographic-manager', '#infographic-manager \[data-igm-close\]'\]/);
   assert.match(manager, /\$igm\.addEventListener\('cancel', event =>/);

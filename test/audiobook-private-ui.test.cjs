@@ -2,11 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const readApp = require('./support/read-app.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
 const books = fs.readFileSync(path.join(ROOT, 'public', 'audiobooks.js'), 'utf8');
-const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+const app = readApp();
 const server = fs.readFileSync(path.join(ROOT, 'audiobooks.cjs'), 'utf8');
 const sessionState = fs.readFileSync(path.join(ROOT, 'public', 'session-state.js'), 'utf8');
 

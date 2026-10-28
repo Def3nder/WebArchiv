@@ -3,11 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const readStyles = require('./support/read-styles.cjs');
+const readApp = require('./support/read-app.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
 const CSS = readStyles();
-const APP = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+const APP = readApp();
 
 test('Kopf und Filter bilden eine gemeinsam verschiebbare Navigation', () => {
   assert.match(HTML, /id="navigation-chrome"[\s\S]*class="site-header"[\s\S]*id="filter-bar"/);

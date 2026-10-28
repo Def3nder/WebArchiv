@@ -3,9 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const readStyles = require('./support/read-styles.cjs');
+const readApp = require('./support/read-app.cjs');
 
 const ROOT = path.join(__dirname, '..');
-const APP = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+const APP = readApp();
 const CSS = readStyles();
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
 

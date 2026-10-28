@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const sessionState = require('../public/session-state.js');
+const readApp = require('./support/read-app.cjs');
 
 function storage() {
   const values = new Map();
@@ -26,12 +27,12 @@ test('Eine neue Seitengröße behält die erste gerade sichtbare Kachel im Sicht
 });
 
 test('Der Limit-Handler sichert und restauriert die erste gerade sichtbare Kachel', () => {
-  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const app = readApp();
   assert.match(app, /const position = captureListPosition\(\)[\s\S]*?pageForLimitChange\([\s\S]*?position\.anchorIndex[\s\S]*?await loadArticles\(\)[\s\S]*?await restoreListPosition\(position\)/);
 });
 
 test('Ein alter App-Hash verdrängt nach Neustart und Anmeldung nicht den gespeicherten Zustand', () => {
-  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const app = readApp();
   const linkFunctions = app.slice(app.indexOf('function parseArticleHash('), app.indexOf('function updateNavButtons('));
   const startupLink = new Function('history', 'location', `${linkFunctions}\nreturn startupArticleLink();`);
   assert.equal(startupLink({ state: { webarchivView: true } }, { hash: '#/article/alt.md' }), null);
@@ -135,7 +136,7 @@ test('ein geöffneter Markdown-Extra-Text wird beim Neuladen eindeutig gespeiche
   assert.equal(normalized.view.kind, 'reader');
   assert.equal(normalized.view.readerExtraFile, 'Praxisübungen.md');
 
-  const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const app = readApp();
   assert.match(app, /readerExtraFile: kind === 'reader' \? readerExtraFile : ''/);
   assert.match(app, /extra\.type === 'markdown' && extra\.file === extraFile/);
   assert.match(app, /await fetchBookExtras\(currentBookDetail\)[\s\S]*?await openBookExtras\(currentBookDetail, extras\)[\s\S]*?openBookReader\(currentBookDetail, readerExtra\)/);

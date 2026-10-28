@@ -3,10 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const readStyles = require('./support/read-styles.cjs');
+const readApp = require('./support/read-app.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
-const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+const app = readApp();
 const books = fs.readFileSync(path.join(ROOT, 'public', 'audiobooks.js'), 'utf8');
 const manager = fs.readFileSync(path.join(ROOT, 'public', 'audiobook-extras-manager.js'), 'utf8');
 const editorEntry = fs.readFileSync(path.join(ROOT, 'public', 'markdown-editors.js'), 'utf8');
