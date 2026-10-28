@@ -14,10 +14,13 @@ test('Artikel öffnen die Infografik-Verwaltung statt eines einzelnen Upload-Fel
 
 test('Upload im Verwaltungsdialog aktualisiert Artikel und Grafikliste', () => {
   const manager = fs.readFileSync(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
-  assert.match(
-    manager,
-    /await uploadInfographic\(igmState\.article, file\)[\s\S]*?await igmLoad\(\)[\s\S]*?await igmRefreshArticle\(\)/,
-  );
+  assert.match(manager, /igmRun\(\(\) => uploadInfographic\(igmState\.article, file\)/);
+  // Gesperrt nur, solange der Server schreibt und die Liste neu lädt; die Artikelansicht
+  // wird danach aktualisiert, damit z. B. der Poster-Haken sofort gespeichert werden kann.
+  assert.match(manager, /async function igmRun\([\s\S]*?await task\(\);[\s\S]*?await igmLoad\(\);[\s\S]*?finally \{\s*igmBusy\(false\);[\s\S]*?await igmRefreshArticle\(\)/);
+  assert.match(manager, /function igmSave\([^)]*\) \{\s*return igmRun\(/);
+  // Neu gerenderte Checkboxen übernehmen den Sperrzustand.
+  assert.match(manager, /function igmRender\(\) \{[\s\S]*?igmBusy\(igmState\.busy\);\s*\}/);
   assert.match(manager, /const detailPosition = captureDetailPosition\(\)[\s\S]*?await loadArticles\(\)[\s\S]*?await openArticle\(articleId, \{ historyMode: 'none', detailPosition \}\)/);
 });
 

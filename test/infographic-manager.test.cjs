@@ -237,7 +237,12 @@ test('Manager bietet pro Grafik eine sofort gespeicherte Instagram-Markierung an
   const manager = await fs.readFile(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
   const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(manager, /data-igm-instagram/);
-  assert.match(manager, /action: 'instagram-poster', id: item\.id, enabled/);
+  assert.match(manager, /action: 'instagram-poster', id, enabled/);
+  // Während eines Uploads oder Speicherns bleibt der Haken bedienbar und wird vorgemerkt.
+  assert.match(manager, /const locked = value && control\.dataset\.igmInstagram === undefined;/);
+  assert.match(manager, /if \(instagram\) \{ igmTogglePoster\(item, instagram\.checked\); return; \}\s*if \(igmState\.busy\) return;/);
+  assert.match(manager, /function igmPosterValue\(item\) \{[\s\S]*?pendingPoster\.has\(item\.id\)/);
+  assert.match(manager, /finally \{\s*igmBusy\(false\);[\s\S]*?queueMicrotask\(igmFlushPoster\);/);
   // Die Markdown-Bearbeitung liegt in lib/infographics.cjs, die Route in server.js.
   const infographics = await fs.readFile(path.join(__dirname, '..', 'lib', 'infographics.cjs'), 'utf8');
   assert.match(infographics, /Instagram-Poster: Ja/);

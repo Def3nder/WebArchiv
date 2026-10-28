@@ -8,6 +8,10 @@ const $igmFile = $igm.querySelector('[data-igm-file]');
 const $igmStatus = document.getElementById('infographic-manager-status');
 const igmState = {
   article: null, items: [], busy: false, dragId: null, previewId: null, actionIndex: -1, returnFocus: null,
+  action: 0, // laufende Nummer der letzten Aktion; ältere Rückmeldungen überschreiben neuere nicht
+  // Poster-Haken, die während eines laufenden Vorgangs gesetzt wurden (Grafik-ID → gewünschter Wert).
+  // Sie bleiben beim Neuaufbau der Liste sichtbar und werden danach gespeichert.
+  pendingPoster: new Map(),
 };
 
 function igmPath() {
@@ -35,7 +39,9 @@ function igmBusy(value) {
     const row = control.closest('[data-igm-entry]');
     const movable = igmState.items.filter(item => !item.fixed);
     const index = row ? movable.findIndex(item => item.id === row.dataset.id) : -1;
-    control.disabled = value || (move !== undefined && (index < 0
+    // Der Poster-Haken bleibt bedienbar; während eines Vorgangs wird er vorgemerkt.
+    const locked = value && control.dataset.igmInstagram === undefined;
+    control.disabled = locked || (move !== undefined && (index < 0
       || index + Number(move) < 0 || index + Number(move) >= movable.length));
   });
   $igm.setAttribute('aria-busy', String(value));
@@ -49,6 +55,11 @@ function igmTrashIcon() {
   return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
 }
 
+// Angezeigter Wert: ein vorgemerkter Haken hat Vorrang vor dem Stand auf dem Server.
+function igmPosterValue(item) {
+  return igmState.pendingPoster.has(item.id) ? igmState.pendingPoster.get(item.id) : !!item.instagramPoster;
+}
+
 function igmEntry(item, index, total) {
   const movable = igmState.items.filter(candidate => !candidate.fixed);
   const movableIndex = movable.findIndex(candidate => candidate.id === item.id);
@@ -58,7 +69,7 @@ function igmEntry(item, index, total) {
     + '<button type="button" class="bem-entry-preview" data-igm-view aria-label="' + label + ' ansehen" title="Ansehen"><img src="' + esc(item.imageUrl) + '" alt="" loading="lazy"></button>'
     + '<div class="bem-entry-main"><span class="bem-entry-title">' + label + '</span><span class="bem-entry-file">' + esc(item.filename) + '</span>'
     + '<label class="igm-instagram-toggle"><input type="checkbox" data-igm-instagram'
-    + (item.instagramPoster ? ' checked' : '') + '><span>Instagram-Poster</span></label></div>'
+    + (igmPosterValue(item) ? ' checked' : '') + '><span>Instagram-Poster</span></label></div>'
     + (item.fixed ? '' : '<button type="button" class="bem-entry-more" data-igm-more aria-expanded="false" aria-label="Aktionen für ' + label + '" title="Weitere Aktionen">' + igmMoreIcon() + '</button>'
     + '<div class="bem-entry-actions">'
     + '<button type="button" class="bem-mini bem-move" data-igm-move="-1" aria-label="' + label + ' nach oben"' + (movableIndex === 0 ? ' disabled' : '') + '>↑</button>'
@@ -76,6 +87,9 @@ function igmRender() {
   const active = $igmList.querySelectorAll('[data-igm-entry]')[igmState.actionIndex];
   active?.classList.add('is-actions-open');
   active?.querySelector('[data-igm-more]')?.setAttribute('aria-expanded', 'true');
+  // Neu gerenderte Bedienelemente übernehmen den Sperrzustand. Sonst ließe sich ein
+  // Haken während des Speicherns setzen, ohne dass er gespeichert würde.
+  igmBusy(igmState.busy);
 }
 
 async function igmLoad() {
@@ -94,28 +108,67 @@ async function igmRefreshArticle() {
   }
 }
 
-async function igmSave(body, workingText, successText) {
+// Gesperrt ist der Dialog nur, solange der Server schreibt und die Liste neu lädt.
+// Die Artikelansicht dahinter wird danach im Hintergrund aktualisiert; weitere
+// Änderungen (z. B. der Poster-Haken direkt nach einem Upload) sind dann sofort möglich.
+async function igmRun(task, workingText, successText, savedPrefix) {
   if (igmState.busy) return;
+  const action = ++igmState.action;
   igmBusy(true);
   igmStatus(workingText);
   let saved = false;
   try {
-    await igmRequest(body);
+    await task();
     saved = true;
     await igmLoad();
-    try {
-      await igmRefreshArticle();
-      igmStatus(successText, 'success');
-    } catch {
-      igmStatus('Gespeichert. Die Artikelansicht konnte nicht aktualisiert werden; bitte die Seite neu laden.', 'error');
-    }
   } catch (error) {
     igmState.actionIndex = -1;
     igmRender();
     igmStatus(saved
-      ? 'Gespeichert. Die Liste konnte nicht aktualisiert werden; bitte die Seite neu laden.'
+      ? savedPrefix + ' Die Liste konnte nicht aktualisiert werden; bitte die Seite neu laden.'
       : (error.message || 'Die Änderung ist fehlgeschlagen.'), 'error');
-  } finally { igmBusy(false); }
+    return;
+  } finally {
+    igmBusy(false);
+    // Während des Vorgangs gesetzte Poster-Haken jetzt speichern.
+    queueMicrotask(igmFlushPoster);
+  }
+  igmStatus(successText, 'success');
+  try { await igmRefreshArticle(); }
+  catch {
+    if (action === igmState.action) {
+      igmStatus(savedPrefix + ' Die Artikelansicht konnte nicht aktualisiert werden; bitte die Seite neu laden.', 'error');
+    }
+  }
+}
+
+function igmSave(body, workingText, successText) {
+  return igmRun(() => igmRequest(body), workingText, successText, 'Gespeichert.');
+}
+
+// Poster-Haken: sofort speichern oder, solange ein Vorgang läuft, vormerken.
+function igmTogglePoster(item, enabled) {
+  igmState.pendingPoster.set(item.id, enabled);
+  if (igmState.busy) igmStatus('Die Instagram-Markierung wird nach dem laufenden Vorgang gespeichert.');
+  else igmFlushPoster();
+}
+
+// Speichert den nächsten vorgemerkten Haken, der vom Stand auf dem Server abweicht.
+// Weitere folgen nacheinander (igmRun ruft diese Funktion nach jedem Vorgang auf).
+function igmFlushPoster() {
+  if (igmState.busy) return;
+  for (const [id, enabled] of igmState.pendingPoster) {
+    igmState.pendingPoster.delete(id);
+    const item = igmState.items.find(candidate => candidate.id === id);
+    if (!item || !!item.instagramPoster === enabled) continue;
+    igmState.actionIndex = -1;
+    void igmSave(
+      { action: 'instagram-poster', id, enabled },
+      enabled ? 'Instagram-Poster wird markiert …' : 'Instagram-Markierung wird entfernt …',
+      enabled ? 'Als Instagram-Poster markiert.' : 'Instagram-Markierung entfernt.',
+    );
+    return;
+  }
 }
 
 function igmOrder(ids, actionIndex = -1) {
@@ -170,6 +223,7 @@ async function openInfographicManager(article) {
   igmState.returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   igmState.article = article;
   igmState.items = [];
+  igmState.pendingPoster.clear();
   igmState.dragId = null;
   igmState.actionIndex = -1;
   igmClosePreview();
@@ -193,24 +247,8 @@ $igmFile.addEventListener('change', async () => {
   $igmFile.value = '';
   if (!file || igmState.busy) return;
   igmState.actionIndex = -1;
-  igmBusy(true);
-  igmStatus('Grafik wird hochgeladen …');
-  let saved = false;
-  try {
-    await uploadInfographic(igmState.article, file);
-    saved = true;
-    await igmLoad();
-    try {
-      await igmRefreshArticle();
-      igmStatus('Grafik hinzugefügt.', 'success');
-    } catch {
-      igmStatus('Grafik gespeichert. Die Artikelansicht konnte nicht aktualisiert werden; bitte die Seite neu laden.', 'error');
-    }
-  } catch (error) {
-    igmStatus(saved
-      ? 'Grafik gespeichert. Die Liste konnte nicht aktualisiert werden; bitte die Seite neu laden.'
-      : (error.message || 'Upload fehlgeschlagen.'), 'error');
-  } finally { igmBusy(false); }
+  await igmRun(() => uploadInfographic(igmState.article, file),
+    'Grafik wird hochgeladen …', 'Grafik hinzugefügt.', 'Grafik gespeichert.');
 });
 $igm.addEventListener('cancel', event => {
   // Auch das Abbrechen des System-Dateidialogs kann ein bubbling cancel senden.
@@ -241,20 +279,11 @@ $igm.addEventListener('click', event => {
 
 $igmList.addEventListener('click', event => {
   const row = event.target.closest('[data-igm-entry]');
-  if (!row || igmState.busy) return;
-  const item = igmState.items.find(candidate => candidate.id === row.dataset.id);
+  const item = row && igmState.items.find(candidate => candidate.id === row.dataset.id);
   if (!item) return;
   const instagram = event.target.closest('[data-igm-instagram]');
-  if (instagram) {
-    igmState.actionIndex = -1;
-    const enabled = instagram.checked;
-    void igmSave(
-      { action: 'instagram-poster', id: item.id, enabled },
-      enabled ? 'Instagram-Poster wird markiert …' : 'Instagram-Markierung wird entfernt …',
-      enabled ? 'Als Instagram-Poster markiert.' : 'Instagram-Markierung entfernt.',
-    );
-    return;
-  }
+  if (instagram) { igmTogglePoster(item, instagram.checked); return; }
+  if (igmState.busy) return;
   if (event.target.closest('[data-igm-more]')) {
     const wasOpen = row.classList.contains('is-actions-open');
     $igmList.querySelectorAll('.is-actions-open').forEach(entry => {

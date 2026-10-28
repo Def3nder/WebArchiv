@@ -1758,3 +1758,25 @@ also weiterhin ohne Neustart, und gespeicherte Artikel erscheinen sofort.
 - Aus `public/`: `app.js`, `book-reader.js`, `password.js`, `user-admin.js`, `audiobook-extras-manager.js`,
   `vendor/article-editor.bundle.js`.
 - Danach den Dienst neu starten.
+
+## 35. Aktualisierung 27.10.2026 – Infografik-Verwaltung: Poster-Haken direkt nach dem Upload
+
+**Fehler:** Direkt nach einem Upload (oder einer anderen Änderung) baute der Dialog die Liste neu auf, während er
+noch als beschäftigt galt, solange im Hintergrund die Artikelansicht neu geladen wurde. Die neu gerenderten
+Checkboxen waren dabei nicht gesperrt: Der Haken „Instagram-Poster“ ließ sich setzen, der Klick wurde aber
+wegen `busy` still verworfen und nie gespeichert.
+
+**Behoben in `public/infographic-manager.js`:**
+- `igmRender` übernimmt den Sperrzustand für neu gerenderte Bedienelemente (außer dem Poster-Haken, siehe unten).
+- Upload und Änderungen laufen über `igmRun`: Gesperrt ist nur, solange der Server schreibt und die Liste neu
+  lädt. Die Artikelansicht wird danach im Hintergrund aktualisiert, der Poster-Haken ist sofort speicherbar.
+- Ältere Rückmeldungen überschreiben die Statuszeile einer neueren Aktion nicht.
+- **Poster-Haken auch während eines Vorgangs:** Der Haken bleibt beim Hochladen und Speichern bedienbar. Ein
+  Klick wird vorgemerkt (`pendingPoster`), beim Neuaufbau der Liste zeigt die Checkbox den vorgemerkten Wert,
+  und nach dem Vorgang wird er gespeichert, sofern er vom Stand auf dem Server abweicht (`igmFlushPoster`).
+
+**Geprüft:** Node-Suite 410/410. Im Browser mit Test-Admin ohne Dateiänderungen (Speicheranfrage abgefangen):
+Haken während eines nachgestellten Uploads umgeschaltet, Wert bleibt beim Neuaufbau erhalten, danach genau eine
+Speicheranfrage mit dem gewünschten Wert.
+
+**Deployment:** `public/infographic-manager.js` kopieren (Browser neu laden genügt, kein Neustart nötig).
