@@ -838,10 +838,10 @@ async function processBlogListingPage(page, context, source, processedUrls, skip
         processedUrls.add(articleUrl);
         processedThisPage += 1;
         skipState.count += 1;
-        logger.info(`  -> uebersprungen (${skipState.count}/${SKIP_LIMIT}), existiert bereits: ${mdPath}`);
+        logger.info(`[SKIP] ${path.basename(mdPath)} existiert bereits`);
         if (skipState.count >= SKIP_LIMIT) {
           skipState.stop = true;
-          logger.info(`[Ende] ${SKIP_LIMIT} Artikel uebersprungen, Abbruch wie konfiguriert.`);
+          logger.info(`${SKIP_LIMIT} bereits vorhandene Artikel übersprungen – fertig.`);
         }
         continue;
       }
@@ -851,17 +851,18 @@ async function processBlogListingPage(page, context, source, processedUrls, skip
       processedUrls.add(articleUrl);
       processedThisPage += 1;
       if (mdWritten) skipState.saved += 1;
+      const mdName = path.basename(mdPath);
       if (mdWritten && jpgWritten) {
-        logger.info(`  -> gespeichert: ${mdWritten} (+ ${path.basename(jpgWritten)})`);
+        logger.info(`[OK]   ${mdName}  (+ Bild)`);
       } else if (mdWritten) {
-        logger.info(`  -> gespeichert: ${mdWritten} (Bild existierte bereits)`);
+        logger.info(`[OK]   ${mdName}  (Bild existierte bereits)`);
       } else if (jpgWritten) {
-        logger.info(`  -> Bild nachgeladen: ${jpgWritten} (Markdown existierte bereits)`);
+        logger.info(`[OK]   ${mdName}  (nur Bild nachgeladen)`);
       } else {
-        logger.info(`  -> nichts zu tun fuer ${mdPath}`);
+        logger.info(`[SKIP] ${mdName} nichts zu tun`);
       }
     } catch (exc) {
-      logger.error(`  -> Fehler bei ${articleUrl}: ${exc}`);
+      logger.error(`[FEHLER] ${articleUrl}: ${exc}`);
     } finally {
       await articlePage.close();
     }
@@ -1485,8 +1486,8 @@ async function scrapeFacebook(browser, source, cookiesFile, changedFiles) {
           }
         }
 
-        const source = permalink || url;
-        const markdown = renderPostMarkdown(title, source, dateStr, text);
+        const postUrl = permalink || url;
+        const markdown = renderPostMarkdown(title, postUrl, dateStr, text);
         await fs.promises.writeFile(outPath, markdown, "utf-8");
         changedFiles.add(path.resolve(outPath));
         saved += 1;
