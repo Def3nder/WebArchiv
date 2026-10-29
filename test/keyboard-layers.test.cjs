@@ -4,9 +4,23 @@ const vm = require('node:vm');
 const readApp = require('./support/read-app.cjs');
 const pageSwipe = require('../public/page-swipe.js');
 
+// Tastatur der Artikel- und Bildvollansicht (Ebenen am Stapel) und der Kachelansicht
+// (Grundansicht). Die Reihenfolge Element → oberste Ebene → Grundansicht sowie der
+// Schutz offener, nicht angemeldeter Dialoge prüft test/layer-stack.test.cjs.
 const app = readApp();
-const start = app.indexOf('function layerAboveContentOpen()');
-const end = app.indexOf('});', app.indexOf('void changeResultsPage(targetPage);', start)) + 3;
+const slice = (startMarker, endMarker) => {
+  const start = app.indexOf(startMarker);
+  const end = app.indexOf(endMarker, start);
+  assert.ok(start >= 0 && end > start, startMarker);
+  return app.slice(start, end);
+};
+// Eine Funktion bis zu ihrer schließenden Klammer am Zeilenanfang.
+const fn = name => {
+  const start = app.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, name);
+  return app.slice(start, app.indexOf('\n}', start) + 2);
+};
+const ARROW_KEY_CONTROLS = app.match(/const ARROW_KEY_CONTROLS = '([^']+)'/)[1];
 
 // Ein Element, dessen closest() nur auf seinen eigenen Tag-Namen reagiert.
 const element = tag => ({
@@ -14,84 +28,70 @@ const element = tag => ({
   closest(selector) { return selector.split(',').map(part => part.trim()).includes(tag) ? this : null; },
   matches() { return false; },
 });
+const key = (key, target = element('div')) => ({ key, target, preventDefault() { this.prevented = true; } });
 
-function setup({ overlayOpen = false } = {}) {
+test('Artikelansicht: ←/→ blättern zum Nachbarartikel, Bedienelemente behalten die Pfeile', () => {
   const calls = [];
-  const layers = { dialog: false, tts: { hidden: true }, scrape: { hidden: true } };
-  let handler;
-  const imgFullscreen = { hidden: true };
-  const document = {
-    querySelector(selector) {
-      assert.equal(selector, 'dialog[open]');
-      return layers.dialog ? {} : null;
-    },
-    getElementById(id) {
-      assert.equal(id, 'img-fullscreen');
-      return imgFullscreen;
-    },
-    addEventListener(type, listener) {
-      if (type === 'keydown') handler = listener;
-    },
-  };
-  vm.runInNewContext(app.slice(start, end), {
-    document, Node: { ELEMENT_NODE: 1 },
-    pageSwipeMath: pageSwipe,
-    $overlay: { hidden: !overlayOpen }, $imgFullscreen: imgFullscreen, $loginOverlay: { hidden: true },
-    $scrapeOverlay: layers.scrape, $ttsOverlay: layers.tts,
-    currentUser: { role: 'admin' },
-    state: { page: 2, pages: 3 },
-    currentLayout: () => 'tall',
-    isInfographicReviewMode: () => false,
-    closeImageFullscreen: () => calls.push('closeImageFullscreen'),
-    closeOverlay: () => calls.push('closeOverlay'),
+  const context = { pageSwipeMath: pageSwipe, Node: { ELEMENT_NODE: 1 }, ARROW_KEY_CONTROLS,
+    navigateArticle: dir => calls.push(dir) };
+  vm.runInNewContext(fn('articleLayerKey'), context);
+  assert.equal(context.articleLayerKey(key('ArrowRight', element('button'))), true);
+  assert.equal(context.articleLayerKey(key('ArrowLeft')), true);
+  for (const tag of ['input', 'select', 'textarea', 'audio', 'video', '[role="slider"]']) {
+    assert.equal(context.articleLayerKey(key('ArrowRight', element(tag))), true, `${tag}: nicht weiterreichen`);
+  }
+  assert.equal(context.articleLayerKey(key('ArrowUp')), false);
+  assert.equal(context.articleLayerKey(key('Escape')), false, 'Escape übernimmt der Stapel (closeOverlay)');
+  assert.deepEqual(calls, [1, -1]);
+});
+
+test('Bildvollansicht: ←/→ blättern durch die Bilder', () => {
+  const steps = [];
+  const context = { pageSwipeMath: pageSwipe, stepFullscreen: dir => steps.push(dir) };
+  vm.runInNewContext(fn('fullscreenLayerKey'), context);
+  const right = key('ArrowRight');
+  assert.equal(context.fullscreenLayerKey(right), true);
+  assert.equal(right.prevented, true);
+  assert.equal(context.fullscreenLayerKey(key(' ')), false, 'Leertaste bleibt für den Prüfmodus');
+  assert.deepEqual(steps, [1]);
+});
+
+function base({ dialog = false, scrape = false, login = true } = {}) {
+  const calls = [];
+  const context = {
+    pageSwipeMath: pageSwipe, Node: { ELEMENT_NODE: 1 }, ARROW_KEY_CONTROLS,
+    document: { querySelector: selector => (selector === 'dialog[open]' && dialog ? {} : null) },
+    $scrapeOverlay: { hidden: !scrape }, $ttsOverlay: { hidden: true }, $loginOverlay: { hidden: login },
+    currentUser: { role: 'user' }, state: { page: 2, pages: 3 },
+    currentLayout: () => 'tall', isInfographicReviewMode: () => false,
     hideLogin: () => calls.push('hideLogin'),
-    stepFullscreen: dir => calls.push(['stepFullscreen', dir]),
-    navigateArticle: dir => calls.push(['navigateArticle', dir]),
     changeResultsPage: page => calls.push(['changeResultsPage', page]),
-  });
-  assert.equal(typeof handler, 'function');
-  const press = (key, target = element('div')) => handler({ key, target, preventDefault() {} });
-  return { calls, layers, press };
+    WebArchivLayers: { setBase() {} },
+  };
+  vm.runInNewContext(slice('function layerAboveContentOpen()', 'WebArchivLayers.setBase(baseViewKey);'), context);
+  return { calls, press: (...args) => context.baseViewKey(key(...args)) };
 }
 
-test('Artikelansicht: Escape und Pfeile wirken nicht durch einen offenen Dialog hindurch', () => {
-  const f = setup({ overlayOpen: true });
-  f.layers.dialog = true; // z. B. Anbieterauswahl von „Audio erzeugen“
-  f.press('Escape', element('button'));
-  f.press('ArrowRight', element('input'));
-  f.press('ArrowLeft', element('button'));
-  assert.deepEqual(f.calls, []);
-
-  f.layers.dialog = false;
-  f.layers.tts.hidden = false;
-  f.press('Escape');
-  f.press('ArrowRight');
-  assert.deepEqual(f.calls, []);
-});
-
-test('Artikelansicht: Pfeile blättern nicht aus Bedienelementen, die sie selbst nutzen', () => {
-  const f = setup({ overlayOpen: true });
-  for (const tag of ['input', 'select', 'textarea', 'audio', 'video', '[role="slider"]']) {
-    f.press('ArrowRight', element(tag));
-  }
-  assert.deepEqual(f.calls, []);
-  // Nach einem Klick auf einen Knopf der Detailansicht bleibt das Blättern erhalten.
-  f.press('ArrowRight', element('button'));
-  f.press('ArrowLeft');
-  f.press('Escape');
-  assert.deepEqual(f.calls, [['navigateArticle', 1], ['navigateArticle', -1], 'closeOverlay']);
-});
-
-test('Kachelansicht: Pfeile blättern nur ohne offene Ebene und außerhalb von Bedienelementen', () => {
-  const f = setup();
-  f.layers.dialog = true;
-  f.press('ArrowRight');
-  f.layers.dialog = false;
-  f.layers.scrape.hidden = false;
-  f.press('ArrowRight');
-  f.layers.scrape.hidden = true;
+test('Kachelansicht: Pfeile blättern nur ohne offenes Fenster und außerhalb von Bedienelementen', () => {
+  assert.deepEqual((() => { const f = base({ dialog: true }); f.press('ArrowRight'); return f.calls; })(), []);
+  assert.deepEqual((() => { const f = base({ scrape: true }); f.press('ArrowRight'); return f.calls; })(), []);
+  const f = base();
   f.press('ArrowRight', element('a'));
+  f.press('ArrowRight', element('input'));
   assert.deepEqual(f.calls, []);
   f.press('ArrowRight');
   assert.deepEqual(f.calls, [['changeResultsPage', 3]]);
+});
+
+test('Kachelansicht: Escape schließt das Login-Fenster nur, wenn schon jemand angemeldet ist', () => {
+  const f = base({ login: false });
+  f.press('Escape');
+  assert.deepEqual(f.calls, ['hideLogin']);
+});
+
+test('app.js meldet die Grundansicht am Stapel an und hat keinen eigenen keydown-Handler mehr', () => {
+  assert.match(app, /WebArchivLayers\.setBase\(baseViewKey\);/);
+  assert.match(app, /WebArchivLayers\.open\(\$overlay, \{ name: 'article', onEscape: closeOverlay, onKey: articleLayerKey \}\)/);
+  assert.match(app, /WebArchivLayers\.open\(fullscreen, \{[\s\S]*?name: 'image', onEscape: closeImageFullscreen, onKey: fullscreenLayerKey/);
+  assert.doesNotMatch(app, /document\.addEventListener\('keydown', e => \{\s*if \(e\.key === 'Escape'\)/);
 });

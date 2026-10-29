@@ -195,8 +195,11 @@ The ⋯ button of the audiobook extras is an inline disclosure (actions row), no
 registered with `public/layer-stack.js` (`WebArchivLayers.open(dialog, { onEscape, onKey, returnFocus })`,
 `close`, `setBase` for tile/article keys, `float` for elements that must stay usable above a layer such as the
 mini-player). The stack owns keyboard order (element → top layer → base), Escape/`cancel` and focus return.
-Whoever handles Escape calls `preventDefault()`, otherwise the browser also closes the next dialog. Until the
-migration is finished, the remaining layers still use their own handlers.
+Whoever handles Escape calls `preventDefault()`, otherwise the browser also closes the next dialog. Already on the
+stack: article view, image fullscreen, eBook reader, extras (class `app-layer`; state is `.open`, never `.hidden`).
+The article view keeps its history depth in `history.state.articleDepth` and closes via `history.go(-depth)`
+(`closeOverlay`; the real work is `finishCloseOverlay`, also used by popstate). Login, scrape and TTS windows are still
+divs floated into the top layer; the other native dialogs still use their own handlers until they are migrated.
 
 **Concurrent jobs:** all archive writes and index rebuilds go through the single lock in
 `archive-lock.cjs` (`archiveLock` in `server.js`). Jobs with their own state (reindex, scrape, editor,

@@ -103,7 +103,7 @@ async function igmRefreshArticle() {
   const articleId = igmState.article.id;
   const detailPosition = captureDetailPosition();
   await loadArticles();
-  if (!$overlay.hidden && currentViewItemId === articleId) {
+  if ($overlay.open && currentViewItemId === articleId) {
     await openArticle(articleId, { historyMode: 'none', detailPosition });
   }
 }

@@ -227,7 +227,7 @@
   </aside>
 
   <!-- Article detail overlay -->
-  <div id="article-overlay" class="overlay" role="dialog" aria-modal="true" hidden>
+  <dialog id="article-overlay" class="overlay app-layer" aria-label="Artikel">
     <div class="overlay-backdrop" id="overlay-backdrop"></div>
     <button class="overlay-nav overlay-prev" id="overlay-prev" aria-label="Vorheriger Artikel">‹</button>
     <button class="overlay-nav overlay-next" id="overlay-next" aria-label="Nächster Artikel">›</button>
@@ -239,7 +239,7 @@
       </button>
       <div id="article-detail"></div>
     </div>
-  </div>
+  </dialog>
 
   <!-- Hörbuch-Miniplayer: läuft weiter, wenn die Detailansicht geschlossen ist -->
   <div id="mini-player" class="mini-player" role="region" aria-label="Hörbuch-Wiedergabe" hidden>
@@ -261,7 +261,7 @@
   </div>
 
   <!-- Image fullscreen overlay -->
-  <div id="img-fullscreen" class="img-fullscreen" role="dialog" aria-modal="true" aria-label="Bildvollansicht" tabindex="-1" hidden>
+  <dialog id="img-fullscreen" class="img-fullscreen app-layer" aria-label="Bildvollansicht" tabindex="-1">
     <img id="img-fullscreen-img" src="" alt="" />
     <!-- ADMIN_ONLY_START -->
     <label id="img-fullscreen-poster-toggle" class="poster-review-toggle poster-review-toggle-fullscreen" hidden>
@@ -276,7 +276,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0l-4-4m4 4l4-4"/><rect x="4" y="18" width="16" height="2" rx="1"/></svg>
     </a>
     <div id="img-fullscreen-counter" class="img-fullscreen-counter" aria-live="polite" hidden></div>
-  </div>
+  </dialog>
 
   <!-- Loading spinner -->
   <div id="loading" class="loading-screen" hidden>

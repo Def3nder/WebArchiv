@@ -192,7 +192,7 @@ function navigationChromeMustStayVisible() {
   return Date.now() < navigationVisibleUntil
     || active === $searchInput
     || !$adminMenu.hidden
-    || !!document.querySelector('dialog[open]');
+    || !!document.querySelector('dialog[open]:not(.app-layer)');
 }
 
 function setNavigationChromeOffset(offset, returning = false) {
@@ -334,7 +334,7 @@ async function restoreDetailPosition(position) {
 
 function activeViewKind() {
   if (typeof bookReader !== 'undefined' && bookReader.el) return 'reader';
-  return !$overlay.hidden && currentViewItemId ? 'detail' : 'list';
+  return $overlay.open && currentViewItemId ? 'detail' : 'list';
 }
 
 function snapshotSessionView() {
@@ -597,8 +597,8 @@ async function ensurePasswordChanged() {
 function clearActiveViewForAccountSwitch() {
   if (typeof closeBookReader === 'function') closeBookReader();
   if (typeof closeBookExtras === 'function') closeBookExtras(false);
-  if (!document.getElementById('img-fullscreen').hidden) closeImageFullscreen();
-  $overlay.hidden = true;
+  if (document.getElementById('img-fullscreen').open) closeImageFullscreen();
+  hideArticleLayer();
   $detail.replaceChildren();
   document.body.style.overflow = '';
   currentViewItemId = '';
@@ -1947,10 +1947,10 @@ $resetFilters.addEventListener('click', () => {
 document.querySelector('.site-logo').addEventListener('click', event => {
   event.preventDefault();
   event.currentTarget.blur();
-  if (!$imgFullscreen.hidden) closeImageFullscreen();
-  if (!$overlay.hidden) {
+  if ($imgFullscreen.open) closeImageFullscreen();
+  if ($overlay.open) {
     closeOverlay();
-    if (!$overlay.hidden) return;   // Editor mit ungespeicherten Änderungen: abgebrochen
+    if ($overlay.open) return;   // Editor mit ungespeicherten Änderungen: abgebrochen
   }
   $resetFilters.click();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2047,13 +2047,13 @@ window.addEventListener('mouseup', () => {
   $imgFullscreenImg.classList.remove('is-dragging');
 });
 window.addEventListener('resize', () => {
-  if ($imgFullscreen.hidden || imageZoom.scale <= 1) return;
+  if (!$imgFullscreen.open || imageZoom.scale <= 1) return;
   clampImagePan();
   applyImageZoom();
 });
 
-// Ebenen über Artikel und Kacheln (Dialoge, TTS- und Scrape-Fenster) behalten ihre
-// Tasten: Escape schließt dann nur die Ebene selbst, die Pfeile blättern nicht.
+// Noch nicht am Ebenen-Stapel angemeldete Fenster (Dialoge, TTS- und Scrape-Fenster)
+// behalten ihre Tasten: Die Kachelansicht blättert dann nicht.
 function layerAboveContentOpen() {
   return !!document.querySelector('dialog[open]')
     || !!($scrapeOverlay && !$scrapeOverlay.hidden) || !!($ttsOverlay && !$ttsOverlay.hidden);
@@ -2061,36 +2061,20 @@ function layerAboveContentOpen() {
 // Bedienelemente, die Pfeiltasten selbst nutzen (Radiobuttons, Eingaben, Regler, Audio).
 const ARROW_KEY_CONTROLS = 'input, textarea, select, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]';
 
-document.addEventListener('keydown', e => {
+// Tastatur der Grundansicht (Kacheln). Artikel- und Bildvollansicht sind Ebenen mit
+// eigener Tastatur (articleLayerKey, fullscreenLayerKey); solange eine Ebene offen
+// ist, ruft der Stapel diese Funktion nicht auf.
+function baseViewKey(e) {
   if (e.key === 'Escape') {
-    if (!document.getElementById('img-fullscreen').hidden) { closeImageFullscreen(); return; }
-    if (layerAboveContentOpen()) return;
-    if (!$overlay.hidden) { closeOverlay(); return; }
     // Login-Dialog nur per ESC schließen, wenn Guest oder eingeloggt — nicht bei
     // initialem Pflicht-Login (kein currentUser).
-    if (!$loginOverlay.hidden && currentUser) { hideLogin(); return; }
+    if (!$loginOverlay.hidden && currentUser) { e.preventDefault(); hideLogin(); }
     return;
   }
 
   const dir = pageSwipeMath?.keyDirection(e) || 0;
-  if (!dir) return;
-
-  // Poster können direkt aus der Kachelansicht vollflächig geöffnet werden.
-  // Dort blättern die Pfeiltasten zuerst durch die begrenzte Poster-Liste.
-  if (!$imgFullscreen.hidden) {
-    e.preventDefault();
-    stepFullscreen(dir);
-    return;
-  }
-
-  if (layerAboveContentOpen()) return;
+  if (!dir || layerAboveContentOpen()) return;
   const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
-
-  if (!$overlay.hidden) {
-    // In der Vollansicht erst durch die Bilder der Gruppe, danach zum Nachbarartikel.
-    if (!target?.closest(ARROW_KEY_CONTROLS)) navigateArticle(dir);
-    return;
-  }
 
   // In der Kachelansicht blättern die Pfeiltasten wie eine Wischgeste um die
   // aktuell gewählte Anzahl Artikel. Bedienelemente und Dialoge behalten die Tasten.
@@ -2107,7 +2091,8 @@ document.addEventListener('keydown', e => {
   if (targetPage < 1 || targetPage > state.pages) return;
   e.preventDefault();
   void changeResultsPage(targetPage);
-});
+}
+WebArchivLayers.setBase(baseViewKey);
 
 // Returns false when the user is panning within a zoomed viewport and hasn't reached the edge yet.
 function swipeAllowed(delta) {
@@ -2181,26 +2166,33 @@ $imgFs.addEventListener('touchend', e => {
 
 // Alle modalen Ebenen sperren die Seite dahinter. Offene Dialoge können gestapelt
 // sein; erst nach dem Schließen der letzten Ebene darf die Seite wieder scrollen.
-const modalOverlays = [$overlay, $loginOverlay, $scrapeOverlay, $ttsOverlay,
-  document.getElementById('img-fullscreen')];
+// Artikel, Bildvollansicht, Reader und Extras sind Dialoge; die übrigen Fenster noch divs.
+const modalOverlays = [$loginOverlay, $scrapeOverlay, $ttsOverlay];
 function syncModalPageScroll() {
   const modalOpen = !!document.querySelector('dialog[open]')
     || modalOverlays.some(overlay => overlay && !overlay.hidden);
   document.documentElement.classList.toggle('modal-open', modalOpen);
-  document.documentElement.classList.toggle('overlay-open', !$overlay.hidden);
+  document.documentElement.classList.toggle('overlay-open', $overlay.open);
 }
 new MutationObserver(syncModalPageScroll).observe(document.body, {
   attributes: true, attributeFilter: ['hidden', 'open'], subtree: true,
 });
+WebArchivLayers.onChange(syncModalPageScroll);
 syncModalPageScroll();
 
-const dialogOpen = () => !!document.querySelector('dialog[open]') || ($ttsOverlay && !$ttsOverlay.hidden);
+// Bis sie selbst Dialoge sind (Schritt 4), liegen Login-, Scrape- und TTS-Fenster in der
+// obersten Ebene; außerhalb des obersten modalen Dialogs wären sie verdeckt.
+for (const overlay of modalOverlays) if (overlay) WebArchivLayers.float(overlay);
+
+// Ein Dialog über dem Artikel, der noch nicht am Stapel hängt, oder das TTS-Fenster.
+const dialogOpen = () => !!document.querySelector('dialog[open]:not(.app-layer)') || ($ttsOverlay && !$ttsOverlay.hidden);
 enablePullToClose({
   scroller: $overlayPanel,
   moving: $overlayPanel,
   fading: $overlayBdrop,
-  // Nicht aus der wischbaren Bildleiste, nicht bei offener Vollansicht oder Dialogen.
-  canStart: e => $imgFs.hidden && !dialogOpen() && !e.target.closest?.('.detail-gallery.is-scrollable, textarea, input'),
+  // Nur wenn der Artikel oben liegt; nicht aus der wischbaren Bildleiste.
+  canStart: e => WebArchivLayers.top()?.name === 'article' && !dialogOpen()
+    && !e.target.closest?.('.detail-gallery.is-scrollable, textarea, input'),
   onClose: closeOverlay,
 });
 enablePullToClose({
@@ -2253,20 +2245,21 @@ for (const [panelSel, closeSel, fadeSel] of PULL_DIALOGS) {
 
 // Handle back button
 window.addEventListener('popstate', () => {
+  // closeOverlay hat die Ansicht schon geschlossen und nimmt nur noch Verlaufseinträge
+  // zurück. Ist inzwischen wieder ein Artikel offen, bleibt er offen.
+  if (closingArticleHistory) {
+    closingArticleHistory = false;
+    saveCurrentViewState();
+    return;
+  }
   if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) {
-    history.pushState(APP_VIEW_HISTORY_STATE, '', articleEditorState.url);
+    history.pushState(articleHistoryState((history.state?.articleDepth || 0) + 1), '', articleEditorState.url);
     return;
   }
   const hash = location.hash;
   if (!hash || hash === '#/' || hash === '#') {
-    if (!$overlay.hidden) {
-      $overlay.hidden = true;
-      document.body.style.overflow = '';
-      currentViewItemId = '';
-      lastDetailPosition = null;
-      stopAudio();
-      stopVideo();
-    }
+    // Zurück im Browser (z. B. Wischgeste in Safari): wie Schließen, ohne weitere Navigation.
+    if ($overlay.open) finishCloseOverlay();
     saveCurrentViewState();
   } else if (hash.startsWith('#/article/')) {
     const link = parseArticleHash(hash);
@@ -2278,7 +2271,7 @@ window.addEventListener('popstate', () => {
 // während der Bedienung speichern; pagehide/visibilitychange sind nur die letzte Sicherung.
 window.addEventListener('scroll', () => {
   scheduleNavigationChromeUpdate();
-  if ($overlay.hidden && (typeof bookReader === 'undefined' || !bookReader.el)) {
+  if (!$overlay.open && (typeof bookReader === 'undefined' || !bookReader.el)) {
     lastListPosition = captureListPosition();
     scheduleCurrentViewSave();
   }

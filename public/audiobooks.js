@@ -3,6 +3,9 @@
 const BOOK_SPEEDS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const BOOK_SAVE_INTERVAL_MS = 15000;
 const $miniPlayer = document.getElementById('mini-player');
+// Der Miniplayer bleibt über eBook-Reader und Extras bedienbar: Er wandert in deren
+// Dialog (oberste modale Ebene) und beim Schließen zurück an seinen Platz.
+WebArchivLayers.float($miniPlayer, { when: layer => layer.name === 'reader' || layer.name === 'extras' });
 const $bookSort = document.getElementById('filter-book-sort');
 const BOOK_SORTS = ['recent', 'added', 'title', 'date', 'private'];
 
@@ -309,11 +312,10 @@ async function fetchBookExtras(book) {
 async function openBookExtras(book, prefetchedExtras = null) {
   const existing = document.getElementById('book-extras');
   if (existing) return existing.extrasPromise || [];
-  const el = document.createElement('div');
+  // Modaler <dialog> am Ebenen-Stapel: liegt damit auch über der Hörbuchansicht.
+  const el = document.createElement('dialog');
   el.id = 'book-extras';
-  el.className = 'book-reader book-extras';
-  el.setAttribute('role', 'dialog');
-  el.setAttribute('aria-modal', 'true');
+  el.className = 'book-reader book-extras app-layer';
   el.setAttribute('aria-label', 'Extras: ' + book.title);
   el.innerHTML = `
     <header class="book-reader-head">
@@ -324,6 +326,8 @@ async function openBookExtras(book, prefetchedExtras = null) {
     <div class="book-extras-scroll"><p class="book-reader-status" data-extras-status>Extras werden geladen …</p></div>`;
   document.body.appendChild(el);
   document.body.classList.add('book-reader-open');
+  // Fokus-Rückgabe übernimmt closeBookExtras (Knopf „Extras“ der Hörbuchansicht).
+  WebArchivLayers.open(el, { name: 'extras', onEscape: () => closeBookExtras(), returnFocus: false });
   el.querySelector('[data-extras-close]').addEventListener('click', closeBookExtras);
   el.querySelector('[data-extras-manage]')?.addEventListener('click', () => {
     closeBookExtras(false);
@@ -386,30 +390,14 @@ function closeBookExtras(restoreFocus = true) {
   el.style.pointerEvents = 'none';
   el.style.display = 'none';
   void el.offsetHeight;
+  WebArchivLayers.close(el, { restoreFocus: false });
   el.remove();
   if (!bookReader?.el) document.body.classList.remove('book-reader-open');
   void $detail.offsetHeight;
   if (restoreFocus !== false) requestAnimationFrame(() => $detail.querySelector('[data-book-extras]')?.focus({ preventScroll: true }));
 }
-
-document.addEventListener('keydown', event => {
-  if (!document.getElementById('book-extras') || bookReader?.el) return;
-  // Bild-Vollansicht und Markdown-Reader liegen über den Extras und behalten ihre
-  // eigene Tastatursteuerung. In der Übersicht darf die globale Artikelnavigation
-  // das Hörbuch im Hintergrund dagegen nicht wechseln.
-  const imageFullscreen = document.getElementById('img-fullscreen');
-  if (imageFullscreen && !imageFullscreen.hidden) return;
-  if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight')
-      && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    return;
-  }
-  if (event.key !== 'Escape') return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  closeBookExtras();
-}, true);
+// Tastatur der Extras regelt der Ebenen-Stapel: Escape schließt sie, Pfeiltasten
+// erreichen die Artikelnavigation darunter nicht.
 
 function bookConfig(book = bookPlayer.book) {
   return book?.config || { skipLongSeconds: 600, skipShortSeconds: 30 };
@@ -714,7 +702,7 @@ function bookFmt(s) {
 function bookUpdateUi() {
   const book = bookPlayer.book;
   const audio = bookPlayer.audio;
-  const detailBook = currentBookDetail && !$overlay.hidden && document.getElementById('book-player') ? currentBookDetail : null;
+  const detailBook = currentBookDetail && $overlay.open && document.getElementById('book-player') ? currentBookDetail : null;
   const active = book && detailBook && book.id === detailBook.id;
 
   // Detailansicht: aktives Buch live, sonst gespeicherter Stand.
@@ -765,7 +753,7 @@ function bookUpdateUi() {
 }
 
 // Detail geschlossen/gewechselt → Miniplayer neu bewerten.
-new MutationObserver(() => bookUpdateUi()).observe($overlay, { attributes: true, attributeFilter: ['hidden'] });
+new MutationObserver(() => bookUpdateUi()).observe($overlay, { attributes: true, attributeFilter: ['open'] });
 new MutationObserver(() => {
   if (!$detail.querySelector('[data-book-detail]')) currentBookDetail = null;
   bookUpdateUi();

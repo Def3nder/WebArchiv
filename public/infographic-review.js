@@ -208,7 +208,7 @@ window.addEventListener('beforeunload', event => {
 // gezeigten Bildes. Hat die Checkbox selbst den Fokus, bleibt ihre native
 // Tastaturbedienung zuständig, damit die Markierung nicht doppelt wechselt.
 document.addEventListener('keydown', e => {
-  if ((e.key === ' ' || e.code === 'Space') && !$imgFullscreen.hidden
+  if ((e.key === ' ' || e.code === 'Space') && $imgFullscreen.open
       && isInfographicReviewMode() && $fullscreenPosterToggle && !$fullscreenPosterToggle.hidden) {
     if (e.target === $fullscreenPosterCheckbox) return;
     const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;

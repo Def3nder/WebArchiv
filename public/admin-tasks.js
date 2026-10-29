@@ -24,7 +24,7 @@ const $ttsActivity = document.getElementById('tts-activity');
 const $ttsReindex = document.getElementById('tts-reindex');
 
 function updateTtsActions() {
-  const disabled = !selectedTtsArticle || $overlay.hidden || ttsStarting || ttsActive;
+  const disabled = !selectedTtsArticle || !$overlay.open || ttsStarting || ttsActive;
   const startMenu = document.getElementById('tts-start-menu');
   if (startMenu) startMenu.disabled = disabled;
   document.querySelectorAll('[data-tts-action="start"]').forEach(button => { button.disabled = disabled; });
@@ -63,9 +63,9 @@ function openTtsModal() {
 function closeTtsModal() {
   ++ttsPollGeneration;
   $ttsOverlay.hidden = true;
-  document.body.style.overflow = $overlay.hidden ? '' : 'hidden';
+  document.body.style.overflow = !$overlay.open ? '' : 'hidden';
   if (ttsReturnFocus?.isConnected) ttsReturnFocus.focus();
-  else if (!$overlay.hidden) $overlayClose.focus();
+  else if ($overlay.open) $overlayClose.focus();
   else $reindexBtn.focus();
 }
 function chooseTtsProvider(article, providers) {
@@ -116,7 +116,7 @@ function chooseTtsProvider(article, providers) {
 
 async function runTts() {
   const article = selectedTtsArticle;
-  if (!article || $overlay.hidden || currentUser?.role !== 'admin' || ttsStarting || ttsActive) return;
+  if (!article || !$overlay.open || currentUser?.role !== 'admin' || ttsStarting || ttsActive) return;
   ttsStarting = true;
   let startUncertain = false;
   updateTtsActions();
@@ -124,9 +124,9 @@ async function runTts() {
     const providerResponse = await apiFetch('/api/tts/provider');
     const info = await providerResponse.json();
     if (!providerResponse.ok) throw new Error(info.error || 'TTS-Provider nicht verfügbar.');
-    if (currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
+    if (currentUser?.role !== 'admin' || !$overlay.open || selectedTtsArticle?.id !== article.id) return;
     const provider = await chooseTtsProvider(article, info.providers);
-    if (!provider || currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
+    if (!provider || currentUser?.role !== 'admin' || !$overlay.open || selectedTtsArticle?.id !== article.id) return;
     const startRequest = async replaceExisting => {
       const response = await apiFetch('/api/tts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -140,7 +140,7 @@ async function runTts() {
       startUncertain = false;
       const replace = window.confirm('Für diesen Artikel ist bereits eine Audiodatei vorhanden. Soll sie durch eine neu erzeugte Version ersetzt werden? Die vorhandene Datei wird nach erfolgreicher Erzeugung in den Papierkorb verschoben.');
       if (!replace) return;
-      if (currentUser?.role !== 'admin' || $overlay.hidden || selectedTtsArticle?.id !== article.id) return;
+      if (currentUser?.role !== 'admin' || !$overlay.open || selectedTtsArticle?.id !== article.id) return;
       startUncertain = true;
       ({ response, data } = await startRequest(true));
     }
@@ -192,9 +192,9 @@ async function showTtsJob() {
 async function refreshTtsArticle(articleId) {
   await loadMeta();
   await loadArticles();
-  if (!$overlay.hidden && selectedTtsArticle?.id === articleId) {
+  if ($overlay.open && selectedTtsArticle?.id === articleId) {
     const article = await fetchArticle(articleId);
-    if (!$overlay.hidden && selectedTtsArticle?.id === articleId) {
+    if ($overlay.open && selectedTtsArticle?.id === articleId) {
       stopAudio();
       stopVideo();
       renderDetail(article);

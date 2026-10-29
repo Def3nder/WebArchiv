@@ -39,11 +39,13 @@ test('Ein alter App-Hash verdrängt nach Neustart und Anmeldung nicht den gespei
   assert.deepEqual(startupLink({ state: null }, { hash: '#/article/neu.md?bild=2' }), { id: 'neu.md', image: 2 });
   const historyCalls = [...app.matchAll(/history\.(?:pushState|replaceState)\(([^,]+),/g)];
   assert.ok(historyCalls.length > 0);
-  assert.ok(historyCalls.every(match => match[1] === 'APP_VIEW_HISTORY_STATE'));
+  // Jeder Eintrag trägt die App-Kennung, auch die der Artikelansicht (mit Verlaufstiefe).
+  assert.ok(historyCalls.every(match => match[1] === 'APP_VIEW_HISTORY_STATE' || match[1].startsWith('articleHistoryState(')));
+  assert.match(app, /function articleHistoryState\(depth\) \{\s*return \{ \.\.\.APP_VIEW_HISTORY_STATE, articleDepth: depth \};/);
 
   const login = app.slice(app.indexOf('async function login('), app.indexOf('async function logout('));
   assert.match(login, /clearActiveViewForAccountSwitch\(\);[\s\S]*currentUser = data;[\s\S]*await restoreSessionView\(\{ explicitDeepLink: pendingLoginDeepLink \}\)/);
-  assert.match(app, /function clearActiveViewForAccountSwitch\(\) \{[\s\S]*\$overlay\.hidden = true;[\s\S]*currentViewItemId = '';/);
+  assert.match(app, /function clearActiveViewForAccountSwitch\(\) \{[\s\S]*hideArticleLayer\(\);[\s\S]*currentViewItemId = '';/);
   assert.match(app, /pendingLoginDeepLink = parseArticleHash\(location\.hash\);[\s\S]*showLogin\('Dieser Artikel ist geschützt/);
   assert.match(app, /async function restoreSessionView\(\{ explicitDeepLink = null \} = \{\}\)/);
   assert.match(app, /sessionViewStore\?\.load\(deviceStorage\(\), currentUser\)\s*\|\| sessionViewStore\?\.normalize\(\{ version: sessionViewStore\.VERSION \}\)/);

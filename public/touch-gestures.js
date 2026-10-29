@@ -33,8 +33,10 @@ function showScrubBubble(bar, clientX, html) {
   if (!$scrubBubble) {
     $scrubBubble = document.createElement('div');
     $scrubBubble.className = 'scrub-bubble';
-    document.body.appendChild($scrubBubble);
   }
+  // In die oberste modale Ebene (z. B. eBook-Reader), sonst läge sie verdeckt darunter.
+  const host = window.WebArchivLayers?.host() || document.body;
+  if ($scrubBubble.parentNode !== host) host.appendChild($scrubBubble);
   $scrubBubble.innerHTML = html;
   $scrubBubble.hidden = false;
   const r = bar.getBoundingClientRect();

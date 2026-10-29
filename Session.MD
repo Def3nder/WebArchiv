@@ -2076,3 +2076,39 @@ geladen, keine Konsolenfehler, Artikelnavigation und Escape unverändert.
 Extras, 4 Login/Scrape/TTS, 5 vorhandene Dialoge, 6 Aufräumen und Regeltest.
 
 **Deployment:** `public/layer-stack.js` und `public/index.html` kopieren; Browser neu laden genügt.
+
+## 46. Aktualisierung 29.10.2026 – Ebenen-Stapel, Schritt 2: Artikel, Bild, Reader und Extras als Dialog
+
+**Umfang:** Schritt 2 umfasst auch Reader und Extras (bisher Schritt 3). Sie öffnen sich über der Artikelansicht;
+als div lägen sie unter einem modalen Dialog und wären nicht bedienbar.
+
+- **Als modaler `<dialog>` am Stapel:** Artikelansicht (`#article-overlay`), Bildvollansicht (`#img-fullscreen`),
+  eBook-Reader und Extras (Klasse `app-layer`). Zustand ist `.open` statt `.hidden` (rund 30 Stellen umgestellt).
+  CSS setzt die Browser-Vorgaben für diese Dialoge zurück (`:where(...)`), der eigene Hintergrund bleibt im Dialog.
+- **Tastatur:** Der globale keydown-Handler in `app.js` entfällt. Artikel (`articleLayerKey`: ←/→ blättern) und
+  Bildvollansicht (`fullscreenLayerKey`) sind Ebenen mit eigener Taste, die Kachelansicht ist die Grundansicht
+  (`baseViewKey`, `WebArchivLayers.setBase`). Reader (`bookReaderKey`: ←/→ auf der Fortschrittslinie) und Extras
+  verlieren ihre eigenen Capture-Handler.
+- **Neu im Stapel:** Tasten aus einem noch nicht angemeldeten Dialog (z. B. TTS-Anbieter, Einstellungen) erreichen
+  weder die Ebene darunter noch die Grundansicht. Damit ist auch der frühere Fehler 2.1 dauerhaft abgesichert.
+- **Entscheidung A umgesetzt:** Öffnen und Blättern im Artikel speichern die Tiefe in `history.state.articleDepth`.
+  `closeOverlay` (X, Escape, Herunterziehen, Android-Zurück-Geste) schließt sofort und nimmt die Einträge per
+  `history.go(-Tiefe)` zurück; Zurück führt danach in die Liste, nicht wieder in den Artikel. Browser-Zurück
+  (z. B. Wischgeste in Safari) schließt über `finishCloseOverlay` dieselbe Logik.
+- **Schwebende Elemente:** Der Miniplayer wandert in Reader und Extras (`float`), die Sprechblase in die oberste
+  Ebene (`host()`). Login-, Scrape- und TTS-Fenster sind bis Schritt 4 noch divs und hängen solange per `float` in
+  der obersten Ebene (sonst lägen sie unter dem Artikel).
+- **Seitensperre:** `html.modal-open` aus offenen Dialogen und den drei div-Fenstern; `overlay-open` aus `$overlay.open`.
+
+**Geprüft:** Node 453/453, Python 14/14 (Tests für Tastatur, Seitensperre und Verlauf an das neue Verhalten
+angepasst; neuer Stapel-Test für nicht angemeldete Dialoge). Im Browser als Gast: Artikel per Klick, Blättern
+(Tiefe 1 → 3), Vollansicht darüber, Escape schließt je eine Ebene, Schließen springt zur Liste (`#/`), Pfeil blättert
+danach Kachelseiten, Browser-Zurück schließt, Vor öffnet wieder, simuliertes `cancel` schließt. Als Admin (Handy-
+Format): Reader mit Miniplayer (Play per Klick), Escape schließt nur den Reader; TTS-Anbieterdialog über dem Artikel
+(Pfeil und Escape erreichen den Artikel nicht); TTS-Fenster sichtbar über dem Artikel; Infografik-Manager per Escape;
+Extras → Bild → Escape → Escape mit Fokus zurück auf „Extras“. Keine Konsolenfehler aus der App. Am iPhone nach
+diesem Stand noch nicht geprüft (der Probelauf vom selben Tag deckte Artikel, Bild, Reader und Extras ab).
+
+**Deployment:** aus `public/` kopieren: `index.html`, `layer-stack.js`, `app.js`, `app-detail.js`, `app-gallery.js`,
+`admin-tasks.js`, `audiobooks.js`, `audiobook-extras-manager.js`, `book-reader.js`, `infographic-manager.js`,
+`infographic-review.js`, `pwa-update.js`, `touch-gestures.js`, `css/detail.css`. Browser neu laden genügt.

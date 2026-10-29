@@ -160,7 +160,7 @@ test('Bestätigung: Ablehnen startet nichts; Zustimmung übermittelt Provider', 
   for (const provider of ['qwen', 'openai']) for (const accepted of [false, true]) {
     const calls = [];
     const context = vm.createContext({ selectedTtsArticle: { id: 'a', title: 'Titel' },
-      $overlay: { hidden: false }, currentUser: { role: 'admin' }, ttsStarting: false, ttsActive: false,
+      $overlay: { open: true }, currentUser: { role: 'admin' }, ttsStarting: false, ttsActive: false,
       updateTtsActions() {}, openTtsModal() {}, $ttsStatus: {}, $ttsActivity: {}, $ttsOverlay: { hidden: true },
       document: { getElementById: () => ({}) }, chooseTtsProvider: async (_article, providers) => {
         assert.equal(providers.length, 2);
@@ -185,7 +185,7 @@ test('Vorhandenes Artikel-Audio wird nur nach ausdrücklicher Bestätigung erset
   for (const accepted of [false, true]) {
     const calls = [];
     const context = vm.createContext({ selectedTtsArticle: { id: 'a', title: 'Titel' },
-      $overlay: { hidden: false }, currentUser: { role: 'admin' }, ttsStarting: false, ttsActive: false,
+      $overlay: { open: true }, currentUser: { role: 'admin' }, ttsStarting: false, ttsActive: false,
       updateTtsActions() {}, openTtsModal() {}, $ttsStatus: {}, $ttsActivity: {}, $ttsOverlay: { hidden: true },
       document: { getElementById: () => ({}) }, chooseTtsProvider: async (_article, providers) => providers[0],
       rememberTtsJob() {}, window: { confirm: () => accepted },

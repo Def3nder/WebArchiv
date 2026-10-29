@@ -670,6 +670,6 @@ $bem.addEventListener('close', async () => {
   try {
     const updated = await fetchArticle(bemState.book.id);
     currentBookDetail = updated;
-    if (!$overlay.hidden) renderBookDetail(updated);
+    if ($overlay.open) renderBookDetail(updated);
   } catch { /* Detail wird beim nächsten Öffnen aktualisiert */ }
 });

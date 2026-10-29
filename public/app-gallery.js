@@ -120,13 +120,22 @@ function showFullscreenImage(index) {
   }
   prepareImageFile(url);
   if (fsGallery.articleId && count > 1) {
-    history.replaceState(APP_VIEW_HISTORY_STATE, '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
+    history.replaceState(articleHistoryState(articleHistoryDepth()), '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
   }
+}
+
+// ←/→ blättern durch die Bilder (am Rand zum Nachbarartikel, siehe stepFullscreen).
+function fullscreenLayerKey(event) {
+  const dir = pageSwipeMath?.keyDirection(event) || 0;
+  if (!dir) return false;
+  event.preventDefault();
+  stepFullscreen(dir);
+  return true;
 }
 function openGalleryFullscreen(urls, index = 0, articleId = null, bounded = false, returnFocus = null, reviewIds = []) {
   if (!urls.length) return;
   const fullscreen = document.getElementById('img-fullscreen');
-  if (fullscreen.hidden) fsGallery.previousBodyOverflow = document.body.style.overflow;
+  if (!fullscreen.open) fsGallery.previousBodyOverflow = document.body.style.overflow;
   fsGallery.urls = urls;
   fsGallery.articleId = articleId;
   fsGallery.bounded = bounded;
@@ -134,7 +143,12 @@ function openGalleryFullscreen(urls, index = 0, articleId = null, bounded = fals
   fsGallery.reviewIds = reviewIds;
   showFullscreenImage(Math.max(0, Math.min(urls.length - 1, index)));
   document.body.style.overflow = 'hidden';
-  fullscreen.hidden = false;
+  // Eigene Fokus-Rückgabe über fsGallery.returnFocus (closeImageFullscreen).
+  if (!fullscreen.open) {
+    WebArchivLayers.open(fullscreen, {
+      name: 'image', onEscape: closeImageFullscreen, onKey: fullscreenLayerKey, returnFocus: false,
+    });
+  }
   fullscreen.focus({ preventScroll: true });
 }
 function openImageFullscreen(src) {
@@ -142,10 +156,11 @@ function openImageFullscreen(src) {
 }
 function closeImageFullscreen() {
   const returnFocus = fsGallery.returnFocus;
-  document.getElementById('img-fullscreen').hidden = true;
+  const fullscreen = document.getElementById('img-fullscreen');
+  if (fullscreen.open) WebArchivLayers.close(fullscreen, { restoreFocus: false });
   resetImageZoom();
   if (fsGallery.articleId && location.hash.includes('?bild=')) {
-    history.replaceState(APP_VIEW_HISTORY_STATE, '', `#/article/${sanitizeForId(fsGallery.articleId)}`);
+    history.replaceState(articleHistoryState(articleHistoryDepth()), '', `#/article/${sanitizeForId(fsGallery.articleId)}`);
   }
   fsGallery.articleId = null;
   fsGallery.bounded = false;

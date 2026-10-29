@@ -50,11 +50,10 @@ async function openBookReader(book, extra = null) {
         <button type="button" class="book-btn" data-reader="smaller" aria-label="Schrift kleiner" title="Schrift kleiner">A−</button>
         <button type="button" class="book-btn" data-reader="larger" aria-label="Schrift größer" title="Schrift größer">A+</button>
       </span>`;
-  const el = document.createElement('div');
+  // Modaler <dialog> am Ebenen-Stapel: liegt damit auch über der Hörbuchansicht.
+  const el = document.createElement('dialog');
   el.id = 'book-reader';
-  el.className = 'book-reader';
-  el.setAttribute('role', 'dialog');
-  el.setAttribute('aria-modal', 'true');
+  el.className = 'book-reader app-layer';
   el.setAttribute('aria-label', (extra ? 'Extra: ' + extra.title : 'Text: ' + book.title));
   el.innerHTML = `
     <header class="book-reader-head">
@@ -68,6 +67,7 @@ async function openBookReader(book, extra = null) {
   document.body.appendChild(el);
   document.body.classList.add('book-reader-open');
   bookReader.el = el;
+  WebArchivLayers.open(el, { name: 'reader', onEscape: closeBookReader, onKey: bookReaderKey });
   if (typeof saveCurrentViewState === 'function') saveCurrentViewState();
   el.addEventListener('click', onBookReaderClick);
   const head = el.querySelector('.book-reader-head');
@@ -389,6 +389,7 @@ function closeBookReader() {
   clearInterval(bookReader.pollTimer);
   bookReaderSave({ keepalive: true });   // Position lesen, bevor der Reiter entfernt wird
   bookReader.token++;
+  WebArchivLayers.close(bookReader.el);
   bookReader.el.remove();
   bookReader.el = null;
   bookReader.loaded = false;
@@ -415,18 +416,16 @@ function onBookReaderClick(event) {
   if (scroller) scroller.scrollTop = fraction * (scroller.scrollHeight - scroller.clientHeight);
 }
 
-// Escape schließt nur den Text; Pfeiltasten dürfen im Hintergrund keinen Artikel wechseln.
-document.addEventListener('keydown', event => {
-  if (!bookReader.el) return;
-  if (event.key === 'Escape') { event.stopImmediatePropagation(); closeBookReader(); }
-  else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    event.stopImmediatePropagation();
-    if (event.target.classList?.contains('book-reader-progress') && bookReader.stepProgress) {
-      event.preventDefault();
-      bookReader.stepProgress(event.key === 'ArrowRight' ? 0.01 : -0.01);
-    }
+// Tasten des Readers (Ebenen-Stapel): ←/→ auf der Fortschrittslinie springen um 1 %.
+// Escape schließt nur den Text; andere Tasten erreichen den Artikel darunter nicht.
+function bookReaderKey(event) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return false;
+  if (event.target.classList?.contains('book-reader-progress') && bookReader.stepProgress) {
+    event.preventDefault();
+    bookReader.stepProgress(event.key === 'ArrowRight' ? 0.01 : -0.01);
   }
-}, true);
+  return true;
+}
 
 window.addEventListener('pagehide', () => bookReaderSave({ keepalive: true }));
 document.addEventListener('visibilitychange', () => {
@@ -434,7 +433,7 @@ document.addEventListener('visibilitychange', () => {
 });
 // Wird das Artikel-Overlay geschlossen (Zurück-Taste, Abmelden), endet auch der Text-Reiter.
 new MutationObserver(() => {
-  if (!$overlay.hidden) return;
+  if ($overlay.open) return;
   closeBookReader();
   if (typeof closeBookExtras === 'function') closeBookExtras();
-}).observe($overlay, { attributes: true, attributeFilter: ['hidden'] });
+}).observe($overlay, { attributes: true, attributeFilter: ['open'] });

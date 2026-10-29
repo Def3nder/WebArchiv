@@ -54,6 +54,10 @@ class Node {
     return node.tagName === '#DOCUMENT';
   }
   focus() { this.root().activeElement = this; }
+  closest(selector) {
+    for (let node = this; node; node = node.parentNode) if (node.tagName === selector.toUpperCase()) return node;
+    return null;
+  }
   root() { let node = this; while (node.parentNode) node = node.parentNode; return node; }
   addEventListener(type, fn) { this.listeners.push({ type, fn }); }
   dispatchEvent(event) {
@@ -263,6 +267,26 @@ test('Schwebende Elemente wandern in die oberste passende Ebene und zurück an i
   layers.close(article);
   assert.equal(layers.host(), doc.body);
   assert.deepEqual(changes, [1, 2, 3, 4, 3, 2, 1, 0]);
+});
+
+test('Tasten aus einem nicht angemeldeten Dialog erreichen weder die Ebene darunter noch die Grundansicht', () => {
+  const { layers, dialog, button } = setup();
+  const baseKeys = [];
+  layers.setBase(event => baseKeys.push(event.key));
+  // Noch nicht umgestellter Dialog ohne Ebene darunter (z. B. Einstellungen über den Kacheln).
+  const settings = dialog('settings');
+  settings.showModal();
+  button(settings).key('ArrowRight');
+  assert.deepEqual(baseKeys, []);
+
+  // Über dem Artikel: Escape im Anbieterdialog darf nicht den Artikel schließen.
+  const article = dialog('article');
+  layers.open(article);
+  const provider = dialog('provider');
+  provider.showModal();
+  const escape = button(provider).key('Escape');
+  assert.equal(article.open, true);
+  assert.equal(escape.defaultPrevented, false, 'der Dialog schließt sich selbst (natives cancel)');
 });
 
 test('Zweites open derselben Ebene ändert nichts; close ohne Fokus-Rückgabe', () => {

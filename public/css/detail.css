@@ -7,7 +7,24 @@
   align-items: flex-start;
   justify-content: center;
 }
-.overlay[hidden] { display: none; }
+/* Artikel, Bildvollansicht, eBook-Reader und Extras sind modale <dialog> (layer-stack.js).
+   Browser-Vorgaben für dialog ohne Gewicht zurücksetzen, damit die eigenen Regeln
+   greifen; der eigene Hintergrund liegt im Dialog, ::backdrop bleibt leer. */
+:where(dialog.overlay, dialog.img-fullscreen, dialog.book-reader) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+}
+:where(dialog.overlay, dialog.img-fullscreen, dialog.book-reader)::backdrop { background: transparent; }
+dialog.overlay:not([open]),
+dialog.img-fullscreen:not([open]) { display: none; }
 /* Seite hinter modalen Dialogen sperren (auch das Federn in Safari). */
 html.overlay-open,
 html.overlay-open body,
@@ -252,7 +269,6 @@ html.modal-open body {
   cursor: zoom-out;
   animation: fadeIn .2s ease;
 }
-.img-fullscreen[hidden] { display: none; }
 .img-fullscreen img {
   display: block;
   width: 100%;

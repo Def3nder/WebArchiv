@@ -6,6 +6,37 @@
  * und dabei app.js braucht. */
 
 // ── Article detail overlay ─────────────────────────────────────────────────
+// Die Artikelansicht ist ein modaler <dialog> am Ebenen-Stapel (layer-stack.js).
+// Escape, Android-Zurück-Geste, X und Herunterziehen laufen über closeOverlay.
+
+// Verlaufseinträge, die die offene Artikelansicht angelegt hat (Öffnen und Blättern
+// je einer). Sie stehen im History-Eintrag selbst und stimmen so auch nach Zurück/Vor.
+function articleHistoryDepth() {
+  return $overlay.open ? (history.state?.articleDepth || 0) : 0;
+}
+function articleHistoryState(depth) {
+  return { ...APP_VIEW_HISTORY_STATE, articleDepth: depth };
+}
+
+function showArticleLayer() {
+  if ($overlay.open) return;
+  WebArchivLayers.open($overlay, { name: 'article', onEscape: closeOverlay, onKey: articleLayerKey });
+}
+
+function hideArticleLayer() {
+  if ($overlay.open) WebArchivLayers.close($overlay, { restoreFocus: false });
+}
+
+// ←/→ blättern zum Nachbarartikel; Bedienelemente mit eigener Pfeilbedienung
+// (Eingaben, Audio, Regler) behalten die Tasten.
+function articleLayerKey(event) {
+  const dir = pageSwipeMath?.keyDirection(event) || 0;
+  if (!dir) return false;
+  const target = event.target?.nodeType === Node.ELEMENT_NODE ? event.target : event.target?.parentElement;
+  if (!target?.closest(ARROW_KEY_CONTROLS)) navigateArticle(dir);
+  return true;
+}
+
 // dir: Richtung beim Blättern (für die Vollansicht: erstes/letztes Bild);
 // image/deepLink: Link auf ein Bild der Gruppe → direkt in der Vollansicht öffnen.
 async function openArticle(id, {
@@ -17,11 +48,12 @@ async function openArticle(id, {
   restoring = false,
 } = {}) {
   if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) return;
-  if ($overlay.hidden) lastListPosition = captureListPosition();
+  if (!$overlay.open) lastListPosition = captureListPosition();
   if (!detailPosition) lastDetailPosition = null;
+  const depth = articleHistoryDepth();
   selectedTtsArticle = null;
   adminHooks.articleChanged();
-  $overlay.hidden = false;
+  showArticleLayer();
   document.body.style.overflow = 'hidden';
   // Beim Artikel-Wechsel laufende Medien stoppen
   stopAudio();
@@ -30,15 +62,15 @@ async function openArticle(id, {
 
   // Beim Wiederherstellen/Zurücknavigieren keinen zusätzlichen Verlaufseintrag erzeugen.
   const articleHash = `#/article/${sanitizeForId(id)}`;
-  if (historyMode === 'replace') history.replaceState(APP_VIEW_HISTORY_STATE, '', articleHash);
-  else if (historyMode === 'push') history.pushState(APP_VIEW_HISTORY_STATE, '', articleHash);
+  if (historyMode === 'replace') history.replaceState(articleHistoryState(depth), '', articleHash);
+  else if (historyMode === 'push') history.pushState(articleHistoryState(depth + 1), '', articleHash);
 
   try {
     const article = await fetchArticle(id);
     // Eine gruppierte Infografik liefert ihre Gruppe (requestedId = angefragtes Bild).
     state.currentArticleIdx = state.currentItems.findIndex(a => a.id === id);
     if (state.currentArticleIdx < 0) state.currentArticleIdx = state.currentItems.findIndex(a => a.id === article.id);
-    if (article.id !== id) history.replaceState(APP_VIEW_HISTORY_STATE, '', `#/article/${sanitizeForId(article.id)}`);
+    if (article.id !== id) history.replaceState(articleHistoryState(articleHistoryDepth()), '', `#/article/${sanitizeForId(article.id)}`);
     currentViewItemId = article.id;
     updateNavButtons();
     renderDetail(article);
@@ -55,7 +87,7 @@ async function openArticle(id, {
       openGalleryFullscreen(urls, image - 1, article.id);
     } else if (deepLink && requestedIdx >= 0 && urls.length > 1) {
       openGalleryFullscreen(urls, requestedIdx, article.id);
-    } else if (!$fs.hidden) {
+    } else if ($fs.open) {
       // Blättern in der Vollansicht: beim nächsten Artikel mit Bild 1, rückwärts mit dem letzten.
       if (urls.length) openGalleryFullscreen(urls, dir < 0 ? urls.length - 1 : 0, article.id);
       else closeImageFullscreen();
@@ -68,7 +100,7 @@ async function openArticle(id, {
     // Overlay ausblenden, aber Deep-Link im Hash lassen, damit die Anmeldung den
     // Artikel danach automatisch öffnet (siehe login()).
     if (err && err.status === 403 && (!currentUser || currentUser.role === 'guest')) {
-      $overlay.hidden = true;
+      hideArticleLayer();
       stopAudio();
       stopVideo();
       pendingLoginDeepLink = parseArticleHash(location.hash);
@@ -76,7 +108,7 @@ async function openArticle(id, {
       return false;
     }
     if (restoring) {
-      $overlay.hidden = true;
+      hideArticleLayer();
       document.body.style.overflow = '';
       currentViewItemId = '';
       lastDetailPosition = null;
@@ -88,17 +120,33 @@ async function openArticle(id, {
   }
 }
 
+// Schließen auf Wunsch des Nutzers (X, Escape, Zurück-Geste, Herunterziehen, Kategorie).
+// Die beim Öffnen und Blättern angelegten Verlaufseinträge werden zurückgenommen: Zurück
+// führt danach in die Ansicht vor dem Artikel, nicht wieder in den Artikel.
+let closingArticleHistory = false;
 function closeOverlay() {
   if (typeof leaveArticleEditor === 'function' && !leaveArticleEditor()) return;
+  if (!$overlay.open) return;
+  const depth = articleHistoryDepth();
+  finishCloseOverlay();
+  if (depth > 0) {
+    closingArticleHistory = true;
+    history.go(-depth);
+  } else {
+    history.replaceState(APP_VIEW_HISTORY_STATE, '', '#/');
+  }
+}
+
+// Die Ansicht tatsächlich schließen, auch wenn der Browser zurücknavigiert hat (popstate).
+function finishCloseOverlay() {
   selectedTtsArticle = null;
   adminHooks.articleChanged();
-  $overlay.hidden = true;
+  hideArticleLayer();
   document.body.style.overflow = '';
   currentViewItemId = '';
   lastDetailPosition = null;
   stopAudio();
   stopVideo();
-  history.pushState(APP_VIEW_HISTORY_STATE, '', '#/');
   // Hörfortschritt und „zuletzt gehört“ in der Liste auffrischen.
   if (isBookMode()) loadArticles();
   // Lesezeichen-Ansicht: entfernte Lesezeichen erst nach dem Schließen aus der Liste

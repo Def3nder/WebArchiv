@@ -83,7 +83,7 @@ test('Klassische Infografiken verwenden dieselben 9:16-Bildkacheln und Badges wi
 
 test('Poster öffnen die begrenzte Vollbildliste ohne sichtbare Navigation', () => {
   assert.match(app, /Number\(posterIndex\), null, true, card/);
-  assert.match(app, /if \(!\$imgFullscreen\.hidden\)[\s\S]*stepFullscreen\(dir\)/);
+  assert.match(app, /function fullscreenLayerKey\(event\)[\s\S]*stepFullscreen\(dir\)/);
   assert.doesNotMatch(html, /img-fullscreen-(?:prev|next)/);
 });
 

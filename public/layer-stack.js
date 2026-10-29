@@ -136,6 +136,10 @@
 
     function onKeydown(event) {
       if (event.defaultPrevented) return;
+      // Tasten aus einem (noch) nicht angemeldeten Dialog gehören diesem Dialog:
+      // nicht die angemeldete Ebene darunter schließen, nicht in der Grundansicht blättern.
+      const owner = event.target?.closest?.('dialog');
+      if (owner && !entryFor(owner)) return;
       const entry = top();
       if (!entry) {
         base?.(event);

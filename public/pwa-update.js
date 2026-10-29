@@ -94,7 +94,7 @@
 
   updateButton.addEventListener('click', () => {
     if (!waitingWorker || applyingUpdate) return;
-    if (document.querySelector('dialog[open]')) {
+    if (document.querySelector('dialog[open]:not(.app-layer)')) {
       if (updateMessage) updateMessage.textContent = 'Bitte zuerst den geöffneten Dialog schließen.';
       return;
     }
