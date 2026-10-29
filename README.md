@@ -1072,23 +1072,40 @@ npx playwright install --with-deps chromium
 Empfohlener Wrapper für `/opt/nodeapp/scraper/run-scrape.sh` (als `ralf`, danach
 `chmod +x`):
 
-**Ist-Zustand des eingecheckten Skripts:** `scraper/run-scrape.sh` sendet nach
-dem Scrape per `systemctl kill -s HUP nodeapp` ein `SIGHUP`. Dadurch bleibt der
-Serverprozess samt Sessions bestehen. Der externe Cron-Lauf löst weiterhin
-einen vollständigen Reindex aus, weil sein Änderungsmanifest nicht über den
-Web-UI-Kindprozess an den Server übertragen wird. Vor dem Einsatz die
-tatsächlich installierte Produktionsdatei prüfen.
+Das eingecheckte `scraper/run-scrape.sh` sendet nach dem Scrape ein `SIGHUP`
+direkt an den Hauptprozess des Dienstes, **ohne sudo**. Dadurch bleibt der
+Serverprozess samt Sessions bestehen. Der externe Cron-Lauf löst einen
+vollständigen Reindex aus, weil sein Änderungsmanifest nicht über den
+Web-UI-Kindprozess an den Server übertragen wird. Läuft beim Signal noch ein
+Auftrag (z. B. Audio-Erzeugung), holt der Server den Reindex nach, sobald das
+Archiv frei ist.
+
+> **Nicht** `sudo systemctl kill -s HUP nodeapp` verwenden: Ohne passende
+> sudoers-Regel fragt sudo im Cron nach einem Kennwort und bricht still ab. So
+> kam das Signal vom 26. bis 28.10.2026 nie an, und die gescrapten Artikel
+> erschienen erst nach einem manuellen Reindex.
 
 ```bash
 #!/usr/bin/env bash
 export PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-cd /opt/nodeapp/scraper
-/usr/bin/node scrape_all.js >> /opt/nodeapp/scraper/cron-scrape.log 2>&1
-echo "$(date '+%F %T') Scraper exit $?" >> /opt/nodeapp/scraper/cron-scrape.log
+LOG=/opt/nodeapp/scraper/cron-scrape.log
+cd /opt/nodeapp/scraper || exit 1
+/usr/bin/node scrape_all.js >> "$LOG" 2>&1
+echo "$(date '+%F %T') Scraper exit $?" >> "$LOG"
 
-# Reindex OHNE Neustart (Sessions bleiben erhalten):
-sudo /usr/bin/systemctl kill -s HUP nodeapp
+# Reindex OHNE Neustart (Sessions bleiben erhalten), Ergebnis im Log:
+PID=$(/usr/bin/systemctl show -p MainPID --value nodeapp)
+if [ "${PID:-0}" -gt 0 ] 2>/dev/null && kill -HUP "$PID" 2>> "$LOG"; then
+  echo "$(date '+%F %T') SIGHUP an nodeapp (PID $PID) gesendet" >> "$LOG"
+else
+  echo "$(date '+%F %T') FEHLER: SIGHUP an nodeapp nicht gesendet (MainPID '${PID}')" >> "$LOG"
+  exit 1
+fi
 ```
+
+Prüfen nach einem Lauf: `tail -n 5 /opt/nodeapp/scraper/cron-scrape.log` zeigt
+„SIGHUP an nodeapp … gesendet“, `journalctl -u nodeapp --since today | grep -E
+'SIGHUP|articles'` zeigt „SIGHUP empfangen -> Reindex“ und danach „[OK] … articles“.
 
 Crontab von `ralf` (`crontab -e`), täglich 04:30 **UTC** (nicht durchgehend
 04:30 Uhr deutscher Ortszeit):

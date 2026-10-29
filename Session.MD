@@ -767,7 +767,9 @@ PID=$(systemctl show -p MainPID --value nodeapp)
 [ "${PID:-0}" -gt 0 ] && kill -HUP "$PID"
 ```
 
-**Behoben am 26.10.2026:** `scraper/run-scrape.sh` verwendet nun `sudo /usr/bin/systemctl kill -s HUP nodeapp` statt eines Dienstneustarts. Sessions und laufender Prozess bleiben dadurch erhalten. Dieser externe Cron-Weg benötigt weiterhin den vollständigen `SIGHUP`-Reindex; nur ein vom Server als Kindprozess gestarteter Web-UI-Scrape kann sein Änderungsmanifest direkt für den gezielten Teilindex übergeben. Der Produktionsstand des Wrappers muss beim Deployment weiterhin geprüft werden.
+**Korrigiert am 29.10.2026 (siehe Abschnitt 40):** `run-scrape.sh` sendet `kill -HUP` an die MainPID, ohne sudo. Die Variante mit sudo kam im Cron nie an.
+
+**Behoben am 26.10.2026 (überholt):** `scraper/run-scrape.sh` verwendet nun `sudo /usr/bin/systemctl kill -s HUP nodeapp` statt eines Dienstneustarts. Sessions und laufender Prozess bleiben dadurch erhalten. Dieser externe Cron-Weg benötigt weiterhin den vollständigen `SIGHUP`-Reindex; nur ein vom Server als Kindprozess gestarteter Web-UI-Scrape kann sein Änderungsmanifest direkt für den gezielten Teilindex übergeben. Der Produktionsstand des Wrappers muss beim Deployment weiterhin geprüft werden.
 
 Als historischer Cron-Zeitpunkt ist `30 4 * * *` mit UTC-Serverzeit dokumentiert. Das ist nicht automatisch 04:30 Uhr deutscher Ortszeit. Teilfehler einer Scraperquelle sollen den anschließenden Reindex bereits gespeicherter anderer Quellen nicht verhindern.
 
@@ -1916,3 +1918,31 @@ Grundlage: `code-review_2026-01-28.md`, Punkte 2.1 bis 2.5.
 - Kopieren: `server.js`, `duplicates.cjs`, `user-store.cjs`, `lib/http-errors.cjs`, `public/app.js`,
   `public/duplicates.js`.
 - Dienst neu starten (Serverdateien geändert).
+
+## 40. Aktualisierung 29.10.2026 – Cron-Scrape: Reindex kam nicht an
+
+**Symptom:** Nach dem nächtlichen `run-scrape.sh` blieb der Artikelstand gleich, obwohl der Scraper neue Artikel
+gespeichert hatte. Erst ein manueller Reindex zeigte sie.
+
+**Ursache:** Seit 26.10.2026 sendete das Skript `sudo /usr/bin/systemctl kill -s HUP nodeapp`. Der Cron läuft
+als `ralf` ohne Terminal; ohne sudoers-Regel genau für diesen Befehl fragt sudo nach einem Kennwort und bricht
+ab. Die Fehlermeldung ging nicht ins Log (die Zeile hatte keine Umleitung). Vorher lief
+`sudo systemctl restart nodeapp`, für das offenbar eine passende Regel existiert.
+
+**Behoben:**
+- `scraper/run-scrape.sh` sendet `kill -HUP` an die `MainPID` des Dienstes, ohne sudo (Dienst und Cron laufen
+  beide als `ralf`). Erfolg oder Fehler stehen jetzt in `cron-scrape.log`; im Fehlerfall endet das Skript mit 1.
+- **Zweiter Weg zum gleichen Symptom:** Lief beim Signal ein Auftrag (z. B. eine lange Audio-Erzeugung), wurde der
+  Reindex bisher nur protokolliert und entfiel. Jetzt merkt der Server ihn vor und holt ihn nach, sobald das Archiv
+  frei ist (`archiveLock.whenIdle`, Prüfung alle 30 s, mehrere Signale werden zusammengefasst).
+
+**Geprüft:** Node-Suite grün, neue Tests für `whenIdle` und für das Skript (kein sudo, LF, Protokollzeilen);
+`bash -n` und die PID-Bedingung mit Ersatzwerten. Auf dem LXC selbst nicht geprüft.
+
+**Deployment:**
+- `server.js`, `archive-lock.cjs` und `scraper/run-scrape.sh` kopieren; das Skript muss ausführbar bleiben
+  (`chmod +x`) und LF-Zeilenenden haben.
+- Dienst neu starten.
+- Einmal von Hand als `ralf` (ohne sudo) prüfen: `/opt/nodeapp/scraper/run-scrape.sh`, danach
+  `tail -n 5 /opt/nodeapp/scraper/cron-scrape.log` und
+  `journalctl -u nodeapp --since '-10 min' | grep -E 'SIGHUP|articles'`.

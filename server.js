@@ -2080,13 +2080,14 @@ if (require.main === module) {
   // läuft weiter, bestehende Sessions bleiben erhalten. Aus Cron als derselbe
   // User (ralf) ohne sudo aufrufbar:
   //   kill -HUP "$(systemctl show -p MainPID --value nodeapp)"
+  // Läuft beim Signal noch ein Auftrag (z. B. Audio-Erzeugung), wird der Reindex
+  // nachgeholt, sobald das Archiv frei ist; früher entfiel er dann bis zum nächsten Tag.
   process.on('SIGHUP', () => {
-  console.log('SIGHUP empfangen -> Reindex');
-    if (archiveLock.busy) {
-      console.warn(`SIGHUP-Reindex übersprungen: Es läuft bereits ${archiveLock.current}.`);
-      return;
-    }
-    buildIndex().catch(console.error);
+    console.log('SIGHUP empfangen -> Reindex');
+    const scheduled = archiveLock.whenIdle(() => buildIndex().catch(console.error), {
+      onWait: current => console.warn(`SIGHUP-Reindex wartet auf: ${current} (neuer Versuch alle 30 s)`),
+    });
+    if (!scheduled) console.log('SIGHUP-Reindex ist bereits vorgemerkt.');
   });
 
   buildIndex().catch(console.error);

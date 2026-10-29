@@ -13,6 +13,7 @@
 function createArchiveLock() {
   const sources = [];
   let holder = null;
+  let idleTimer = null;
 
   const lock = {
     register(label, isActive) {
@@ -48,6 +49,26 @@ function createArchiveLock() {
       if (!release) throw lock.conflictError();
       try { return await task(); }
       finally { release(); }
+    },
+    // task ausführen, sobald nichts mehr läuft; bis dahin alle intervalMs erneut
+    // prüfen (z. B. SIGHUP-Reindex während einer Audio-Erzeugung). onWait meldet
+    // einmal, worauf gewartet wird. Wartet bereits ein Aufruf, wird der neue mit
+    // ihm zusammengefasst (Rückgabe false).
+    whenIdle(task, { intervalMs = 30 * 1000, onWait = null } = {}) {
+      if (idleTimer) return false;
+      const attempt = () => {
+        const current = lock.current;
+        if (current) {
+          if (!idleTimer) onWait?.(current);
+          idleTimer = setTimeout(attempt, intervalMs);
+          idleTimer.unref?.();
+          return;
+        }
+        idleTimer = null;
+        task();
+      };
+      attempt();
+      return true;
     },
   };
   return lock;

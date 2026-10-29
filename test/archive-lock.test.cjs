@@ -116,5 +116,38 @@ test('server.js: keine verstreuten Busy-Prüfungen mehr, alle Aufträge an der z
     assert.match(server, new RegExp(`archiveLock\\.tryAcquire\\('${label}'\\)`));
   }
   assert.match(server, /exclusive: \(label, task\) => archiveLock\.run\(label, task\)/);
-  assert.match(server, /SIGHUP-Reindex übersprungen: Es läuft bereits/);
+  assert.match(server, /process\.on\('SIGHUP'[\s\S]*?archiveLock\.whenIdle\(\(\) => buildIndex\(\)/);
+  assert.match(server, /SIGHUP-Reindex wartet auf: \$\{current\}/);
+});
+
+test('Sperre: whenIdle holt einen Auftrag nach, sobald das Archiv frei ist', async () => {
+  const lock = createArchiveLock();
+  let tts = true;
+  lock.register('Audio-Erzeugung', () => tts);
+  const runs = [];
+  const waits = [];
+  const options = { intervalMs: 5, onWait: label => waits.push(label) };
+  assert.equal(lock.whenIdle(() => runs.push('reindex'), options), true);
+  // Ein zweites Signal, während der erste noch wartet, wird zusammengefasst.
+  assert.equal(lock.whenIdle(() => runs.push('doppelt'), options), false);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(runs, []);
+  assert.deepEqual(waits, ['Audio-Erzeugung'], 'Warten wird nur einmal gemeldet');
+  tts = false;
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(runs, ['reindex']);
+
+  // Ist nichts belegt, startet der Auftrag sofort.
+  assert.equal(lock.whenIdle(() => runs.push('sofort')), true);
+  assert.deepEqual(runs, ['reindex', 'sofort']);
+});
+
+test('run-scrape.sh signalisiert den Dienst ohne sudo und protokolliert das Ergebnis', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'scraper', 'run-scrape.sh'), 'utf8');
+  assert.doesNotMatch(script, /\r\n/, 'LF-Zeilenenden für bash');
+  assert.doesNotMatch(script, /^\s*sudo\b/m, 'sudo fragt im Cron nach einem Kennwort');
+  assert.match(script, /PID=\$\(\/usr\/bin\/systemctl show -p MainPID --value nodeapp\)/);
+  assert.match(script, /kill -HUP "\$PID"/);
+  assert.match(script, /SIGHUP an nodeapp \(PID \$PID\) gesendet/);
+  assert.match(script, /FEHLER: SIGHUP an nodeapp nicht gesendet/);
 });
