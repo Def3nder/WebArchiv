@@ -27,7 +27,7 @@ Diese Datei ist eine thematische Zusammenfassung, kein wortgetreues Transkript. 
 | Sitzungsansicht (05.10.) | Pro Benutzer und Gerät werden Suche, Filter, Seite, Layout, Listen-/Detailposition sowie geöffneter Artikel, Hörbuch oder eBook-Reader lokal wiederhergestellt. Abmelden löscht diesen lokalen Benutzerstand. |
 | Providerwechsel | Kein automatischer Wechsel eines laufenden Auftrags zu OpenAI und keine erneute Synthese wegen eines Reindex-Fehlers. |
 | PDF.js | Lokal unter `public/vendor/pdfjs`; der zuvor erwogene CDN-Umbau wurde nicht umgesetzt. |
-| Inhaltsaktualisierung | Reindex statt Dienstneustart. Beim Cron-Wrapper besteht noch eine Abweichung vom dokumentierten Soll, siehe Abschnitt 10. |
+| Inhaltsaktualisierung | Reindex statt Dienstneustart. Der Cron-Wrapper `scraper/run-scrape.sh` sendet nach dem Scrape `kill -HUP` an die MainPID, ohne sudo (seit 29.10.2026, siehe Abschnitt 40). |
 | Benutzerverwaltung (25.09.) | Admin pflegt Nutzer, Rechte, Kennwörter und öffentliche Autoren über Aktionen → *Benutzerverwaltung*; jeder Nutzer kann sein Kennwort ändern. Siehe Abschnitt 4a. |
 | Öffentliche Autoren (25.09.) | Angemeldete Nutzer mit Autorenliste sehen öffentliche Autoren immer zusätzlich. |
 | „Neue Grafik“ (25.09.) | Für alle Autoren außer `Infografiken` selbst, auch für öffentliche Autoren. |
@@ -443,7 +443,7 @@ Nawal Boussi wurde zunächst als Facebook-Quelle ergänzt. Später erklärte der
 - `scrape_all.js` schreibt Dateien und beendet sich. Es löst selbst keinen Reindex aus.
 - Beim Start aus der Admin-Oberfläche spawnt `server.js` den Scraper, zeigt dessen Live-Ausgabe und stößt nach Prozessende den Reindex an.
 - Bei CLI/Cron muss der Aufrufer anschließend den laufenden WebArchiv-Prozess zum Reindex auffordern.
-- Der dokumentierte Sollweg ist `SIGHUP`; der tatsächliche Wrapper weicht noch ab, siehe Abschnitt 10.
+- Der Weg ist `SIGHUP`: `scraper/run-scrape.sh` sendet `kill -HUP` an die MainPID, ohne sudo (Abschnitt 40).
 
 Quellen: [G2], [G4], [G13], [D2], [D3], [D4].
 
@@ -2006,3 +2006,22 @@ des Scrapers. Im Browser als Gast: Kacheln und Artikel laden, `esc` korrekt, kei
   `scripts/migrate-audio.js`, `scripts/migrate-infographic-names.js`, `public/app.js`, `public/admin-tasks.js`,
   `public/duplicates.js`.
 - Dienst neu starten.
+
+## 43. Aktualisierung 29.10.2026 – Review-Punkt 2.10: Doku an den Code angeglichen
+
+- **Sitzungsinhalt:** `CLAUDE.md` beschreibt jetzt, was tatsächlich in der Sitzung (und in `sessions.json`) steht:
+  das aufgelöste Nutzerobjekt. Maßgeblich sind nur `email` und `sessionVersion`; Rolle und Rechte werden bei
+  jeder Anfrage neu aus `users.json` aufgelöst. Am Code ändert sich nichts.
+- **Umlaute im Journal:** Die `<E2>…`-Folgen erzeugt `journalctl` selbst, wenn die Locale der lesenden Shell nicht
+  UTF-8 ist. Texte auf ASCII umzustellen hilft nicht vollständig, weil Buchtitel, Dateinamen und Auftragsnamen
+  Umlaute mitbringen. Neuer Abschnitt „Stolperfalle: Umlaute im Journal“ in `LXC-container node.js Setup.md`
+  (`LANG=C.UTF-8` in `/etc/default/locale`); Hinweis beim erledigten Punkt in `To-Do-Liste.md`.
+- **Cron-Wrapper:** Die zwei veralteten Aussagen „weicht noch ab“ (Übersichtstabelle und Abschnitt 7) verweisen
+  jetzt auf den `kill -HUP`-Weg aus Abschnitt 40.
+- **`tts/UEBERGABE-TTS.md`:** als historisches Übergabedokument gekennzeichnet; der Healthcheck nennt den
+  geltenden Vertrag `webarchiv-qwen-v5`.
+
+**Geprüft:** reine Doku-Änderung, kein Code betroffen.
+
+**Auf dem LXC (einmalig):** `echo 'LANG=C.UTF-8' | sudo tee /etc/default/locale`, neu anmelden, mit
+`locale | head -1` prüfen.

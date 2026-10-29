@@ -1,7 +1,12 @@
 # TTS in WebArchiv – Umsetzung, Betrieb und spätere Qwen3-TTS-Anbindung
 
+> **Historisches Übergabedokument (Stand Ende September 2026).** Der geltende Vertrag
+> ist `webarchiv-qwen-v5` (v4-Verarbeitung plus Chunk-Fortschritt, seit 04.10.2026);
+> maßgeblich sind [QWEN-ANBINDUNG.md](../tts-server/QWEN-ANBINDUNG.md) und
+> Session.MD. Versionsangaben unten (v2–v4) beschreiben Zwischenstände.
+
 **Aktuell: freie Auswahl verfügbarer Anbieter.** WebArchiv prüft vor jeder
-Generierung den authentifizierten Qwen-v4-Healthcheck (3 s) und das Vorhandensein
+Generierung den authentifizierten Qwen-Healthcheck (3 s, heute `webarchiv-qwen-v5`) und das Vorhandensein
 des OpenAI-Schlüssels, unabhängig vom CLI-Standard. Ein Dialog zeigt beide
 Anbieter mit Status; nicht verfügbare Einträge sind gesperrt. Ohne Vorauswahl
 wählt der Benutzer den Anbieter, liest dessen Übertragungs-/Kostenhinweis und

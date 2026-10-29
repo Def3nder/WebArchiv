@@ -93,7 +93,7 @@ Legende: ✅ umgesetzt · ⚠️ teilweise · ❌ offen
 
 Sortiert nach Wichtigkeit.
 
-> **Nachtrag:** 2.1 bis 2.5 sind behoben und mit Tests abgesichert (Details in Session.MD, Abschnitt 39). 2.6, 2.7, 2.9 und 2.11 folgen in Abschnitt 42. Offen sind noch 2.8 (CSP scharf schalten) und 2.10 (Doku).
+> **Nachtrag:** 2.1 bis 2.5 sind behoben und mit Tests abgesichert (Details in Session.MD, Abschnitt 39). 2.6, 2.7, 2.9 und 2.11 folgen in Abschnitt 42, 2.10 in Abschnitt 43. Offen ist nur noch 2.8 (CSP scharf schalten, eine Betriebsentscheidung auf dem LXC).
 
 ### 2.1 Tastatur: Detailansicht reagiert auf Pfeiltasten und Escape, obwohl ein Dialog darüber offen ist (Fehler) – ✅ behoben
 
@@ -187,7 +187,7 @@ Der eigentliche XSS-Schutz der CSP greift erst mit `enforce`. Der Bestand sprich
 
 `if (reindexState.running) …` bzw. `if (scrapeState.running) …` stehen jeweils vor `archiveLock.busy`. Die Antwort ist dadurch leicht unterschiedlich (`reason: 'already running'` statt 409), funktional ist das harmlos. `CLAUDE.md` verbietet solche Prüfungen aber ausdrücklich.
 
-### 2.10 Doku passt nicht ganz zum Code
+### 2.10 Doku passt nicht ganz zum Code – ✅ behoben
 
 - **Sitzungsinhalt:** `CLAUDE.md` sagt „The session stores only `{email, sessionVersion}`“. Tatsächlich speichern [server.js:1061](server.js:1061) und [:1157](server.js:1157) das vollständig aufgelöste Nutzerobjekt (Rolle, `allowedAuthors`, …), und es landet so in `sessions.json`. Das ist unschädlich, weil die Daten bei jeder Anfrage neu aufgelöst werden. Entweder die Doku anpassen oder nur `{ email, sessionVersion }` speichern und `req.user` getrennt setzen.
 - **Journal-Meldungen:** In der To-Do-Liste ist der Punkt „Journal-Meldungen ohne Sonderzeichen“ abgehakt. Weiterhin Nicht-ASCII enthalten zum Beispiel [server.js:1674](server.js:1674) (`—`, `…`), [:2079](server.js:2079) (`übersprungen`, `läuft`), [:1352](server.js:1352) (`„…“`), [:126](server.js:126) und [lib/atomic-file.cjs:70](lib/atomic-file.cjs:70). Ursache ist eher eine fehlende UTF-8-Locale im Journal als der Text. Beides angleichen oder die Locale setzen.

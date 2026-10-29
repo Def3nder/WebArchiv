@@ -108,9 +108,11 @@ object in `app.js`.
 - **User management** (`user-store.cjs` + `public/user-admin.js`): admins manage users and the
   public-author list in the UI (header "Aktionen" menu); every user can change their own password.
   `users.json` and `public-directories.txt` are written at runtime (atomic temp+rename, re-read
-  before each change). The session stores only `{email, sessionVersion}`; a middleware in
-  `server.js` re-resolves role/rights from the store on every request, so changes apply at once and
-  a bumped `sessionVersion` (new password) ends other sessions. While `mustChangePassword` is set,
+  before each change). `req.session.user` holds the resolved user (`email`, `role`,
+  `allowedAuthors`, `mustChangePassword`, `sessionVersion`, also persisted in `sessions.json`), but
+  only `email` and `sessionVersion` are authoritative: a middleware in `server.js` re-resolves
+  role/rights from the store on every request, so changes apply at once and a bumped `sessionVersion`
+  (new password) ends other sessions. While `mustChangePassword` is set,
   only `/api/me`, `/api/me/password`, `/api/login`, `/api/logout` are allowed.
 - **Guests (no session)** get the authors listed in `public-directories.txt` (JSON, key
   `public-directories`). If that list is empty, unauthenticated requests get 401. Logged-in users

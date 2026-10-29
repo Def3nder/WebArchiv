@@ -737,3 +737,33 @@ cat -A datei.sh | head -1
 ```
 
 Für `scrape_all.js` (Node) ist CRLF unkritisch — nur Shell-Shebangs stören.
+
+---
+
+# Stolperfalle: Umlaute im Journal
+
+Symptom in `journalctl -u nodeapp`:
+
+```text
+Oct 27 18:11:10 nodejs node[28566]: Building article index<E2><80><A6>
+```
+
+Der Dienst schreibt korrektes UTF-8. Die `<E2>…`-Folgen erzeugt `journalctl` selbst, wenn die Locale
+der **lesenden** Shell nicht UTF-8 ist; ein Debian-LXC hat ohne Einrichtung oft nur `POSIX`.
+Umlaute lassen sich in den Meldungen nicht vermeiden (Buchtitel, Dateinamen, Auftragsnamen wie
+„Hörbuch-Verwaltung“). Deshalb die Locale einstellen, nicht die Texte ändern:
+
+```bash
+locale | head -1          # zeigt z. B. LANG= oder LANG=POSIX
+echo 'LANG=C.UTF-8' | sudo tee /etc/default/locale
+```
+
+`C.UTF-8` ist unter Debian immer vorhanden, ein `locales`-Paket ist nicht nötig. Danach ab- und
+wieder anmelden (bzw. neue SSH-Sitzung) und prüfen:
+
+```bash
+locale | head -1          # LANG=C.UTF-8
+journalctl -u nodeapp -n 20 --no-pager
+```
+
+Für eine einzelne Abfrage ohne Systemänderung: `LANG=C.UTF-8 journalctl -u nodeapp -n 20`.
