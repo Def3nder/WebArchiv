@@ -191,6 +191,13 @@ log and plugs into `app.js` via `adminHooks` (empty for guests/users). `public/i
 (`markdown-live-preview.js`, bundled — run `npm run build:editor` after changes) also uses `window.WebArchivAriaMenu`.
 The ⋯ button of the audiobook extras is an inline disclosure (actions row), not a popup menu.
 
+**Layers (migration in progress, Session.MD §45):** every layer over the page becomes a modal `<dialog>`
+registered with `public/layer-stack.js` (`WebArchivLayers.open(dialog, { onEscape, onKey, returnFocus })`,
+`close`, `setBase` for tile/article keys, `float` for elements that must stay usable above a layer such as the
+mini-player). The stack owns keyboard order (element → top layer → base), Escape/`cancel` and focus return.
+Whoever handles Escape calls `preventDefault()`, otherwise the browser also closes the next dialog. Until the
+migration is finished, the remaining layers still use their own handlers.
+
 **Concurrent jobs:** all archive writes and index rebuilds go through the single lock in
 `archive-lock.cjs` (`archiveLock` in `server.js`). Jobs with their own state (reindex, scrape, editor,
 TTS) are `register`ed once; new write routes use `archiveLock.tryAcquire(label)` + `release()` in

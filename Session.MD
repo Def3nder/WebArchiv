@@ -2047,3 +2047,32 @@ einer frischen Erkennung. Weiterhin vollständig gerechnet wird, wenn ein Blog- 
 Gleichheit mit frischer Erkennung und alle Auslöser für eine Neuberechnung.
 
 **Deployment:** `duplicates.cjs` und `server.js` kopieren, Dienst neu starten.
+
+## 45. Aktualisierung 29.10.2026 – Ebenen-Stapel, Schritt 1 (Review-Idee 3.2)
+
+**Plan (abgestimmt):** Alle Ebenen über der Seite werden modale `<dialog>` und melden sich bei einem zentralen
+Stapel an. Der iPhone-Probelauf (Branch `spike/dialog-ebenen`, nur lokal) mit Artikelansicht, Bildvollansicht,
+eBook-Reader und Extras als `<dialog>` war in allen sieben Prüfpunkten in Ordnung. Erkenntnis daraus: Wer Escape
+behandelt, muss `preventDefault()` aufrufen, sonst schließt der Browser mit demselben Tastendruck zusätzlich den
+nun obersten Dialog. Entscheidung A: Ebenen mit eigenem History-Eintrag (Artikel, Bild) schließen künftig per
+`history.back()` (umgesetzt in Schritt 2).
+
+**Schritt 1 (dieser Stand):** neues gekapseltes Skript `public/layer-stack.js` (`window.WebArchivLayers`), in
+`index.html` direkt nach `aria-menu.js` geladen, noch ohne Nutzer und damit ohne Verhaltensänderung.
+- `open(dialog, { name, onEscape, onKey, returnFocus })`, `close(dialog, { restoreFocus })`, `top()`, `isOpen()`, `count`.
+- Tastatur in fester Reihenfolge: Element (wer behandelt, ruft `preventDefault`/`stopPropagation`) → oberste
+  Ebene (`onKey`, dann Escape) → Grundansicht (`setBase`, nur ohne offene Ebene). Ein Listener am Dokument in
+  der Bubble-Phase.
+- `cancel` des Dialogs selbst (Escape, Android-Zurück-Geste) läuft über dieselbe Schließlogik; `cancel` aus
+  Dateifeldern wird ignoriert. Direkt per `dialog.close()` geschlossene oder offen entfernte Dialoge fallen heraus.
+- Fokus-Rückgabe an das beim Öffnen fokussierte Element.
+- `float(element, { when })` hängt schwebende Elemente (Miniplayer, Sprechblase) in die oberste passende Ebene und
+  zurück an ihren Platz; `host()` für kurz angezeigte Elemente; `onChange` für Seitensperre und Klassen.
+
+**Geprüft:** neue Tests `test/layer-stack.test.cjs` (8 Fälle); Node-Suite 450/450, Python 14/14. Im Browser: Modul
+geladen, keine Konsolenfehler, Artikelnavigation und Escape unverändert.
+
+**Nächste Schritte:** 2 Artikel- und Bildvollansicht als `<dialog>` am Stapel (inkl. `history.back()`), 3 Reader und
+Extras, 4 Login/Scrape/TTS, 5 vorhandene Dialoge, 6 Aufräumen und Regeltest.
+
+**Deployment:** `public/layer-stack.js` und `public/index.html` kopieren; Browser neu laden genügt.
