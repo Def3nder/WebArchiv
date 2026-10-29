@@ -285,9 +285,9 @@
   </div>
 
   <!-- Login overlay (z-index 300) -->
-  <div id="login-overlay" class="login-overlay" hidden>
+  <dialog id="login-overlay" class="login-overlay app-layer" aria-labelledby="login-title">
     <div class="login-backdrop"></div>
-    <div class="login-panel" role="dialog" aria-modal="true" aria-labelledby="login-title">
+    <div class="login-panel">
       <button type="button" id="login-close" class="login-close" aria-label="Schließen" title="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/>
@@ -316,13 +316,13 @@
         </button>
       </form>
     </div>
-  </div>
+  </dialog>
 
   <!-- ADMIN_ONLY_START -->
   <!-- Scrape-Ergebnis overlay (Admin, z-index 300) -->
-  <div id="scrape-overlay" class="scrape-overlay" hidden>
+  <dialog id="scrape-overlay" class="scrape-overlay app-layer" aria-labelledby="scrape-title">
     <div class="scrape-backdrop" id="scrape-backdrop"></div>
-    <div class="scrape-panel" role="dialog" aria-modal="true" aria-labelledby="scrape-title">
+    <div class="scrape-panel">
       <button type="button" id="scrape-close" class="login-close" aria-label="Schließen" title="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <line x1="18" y1="6" x2="6" y2="18"/>
@@ -333,12 +333,12 @@
       <p id="scrape-status" class="scrape-status"></p>
       <pre id="scrape-output" class="scrape-output"></pre>
     </div>
-  </div>
+  </dialog>
 
   <!-- Audio-Auftrag: Schließen beendet nur die Anzeige. -->
-  <div id="tts-overlay" class="scrape-overlay" hidden>
+  <dialog id="tts-overlay" class="scrape-overlay app-layer" aria-labelledby="tts-title">
     <div id="tts-backdrop" class="scrape-backdrop"></div>
-    <div class="scrape-panel" role="dialog" aria-modal="true" aria-labelledby="tts-title">
+    <div class="scrape-panel">
       <button type="button" id="tts-close" class="login-close" aria-label="Schließen">✕</button>
       <h2 id="tts-title" class="login-title">Audio erzeugen</h2>
       <p id="tts-article"></p>
@@ -353,7 +353,7 @@
         <a id="tts-audio" class="detail-cat-pill" target="_blank" rel="noopener" hidden>MP3 anhören / herunterladen</a>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <dialog id="tts-provider-dialog" aria-labelledby="tts-provider-title">
     <form method="dialog">

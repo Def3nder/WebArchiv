@@ -38,7 +38,23 @@
   align-items: center;
   justify-content: center;
 }
-.scrape-overlay[hidden] { display: none; }
+/* Login-, Scrape- und TTS-Fenster sind modale <dialog> (layer-stack.js); Browser-
+   Vorgaben ohne Gewicht zurücksetzen, der eigene Hintergrund liegt im Dialog. */
+:where(dialog.scrape-overlay, dialog.login-overlay) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+}
+:where(dialog.scrape-overlay, dialog.login-overlay)::backdrop { background: transparent; }
+dialog.scrape-overlay:not([open]),
+dialog.login-overlay:not([open]) { display: none; }
 
 .scrape-backdrop {
   position: absolute;
@@ -90,7 +106,6 @@
   align-items: center;
   justify-content: center;
 }
-.login-overlay[hidden] { display: none; }
 
 .login-backdrop {
   position: absolute;

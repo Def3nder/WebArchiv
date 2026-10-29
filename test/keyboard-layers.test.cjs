@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
+const fs = require('node:fs');
+const path = require('node:path');
 const readApp = require('./support/read-app.cjs');
 const pageSwipe = require('../public/page-swipe.js');
 
@@ -56,15 +58,13 @@ test('Bildvollansicht: ←/→ blättern durch die Bilder', () => {
   assert.deepEqual(steps, [1]);
 });
 
-function base({ dialog = false, scrape = false, login = true } = {}) {
+function base({ dialog = false } = {}) {
   const calls = [];
   const context = {
     pageSwipeMath: pageSwipe, Node: { ELEMENT_NODE: 1 }, ARROW_KEY_CONTROLS,
     document: { querySelector: selector => (selector === 'dialog[open]' && dialog ? {} : null) },
-    $scrapeOverlay: { hidden: !scrape }, $ttsOverlay: { hidden: true }, $loginOverlay: { hidden: login },
-    currentUser: { role: 'user' }, state: { page: 2, pages: 3 },
+    state: { page: 2, pages: 3 },
     currentLayout: () => 'tall', isInfographicReviewMode: () => false,
-    hideLogin: () => calls.push('hideLogin'),
     changeResultsPage: page => calls.push(['changeResultsPage', page]),
     WebArchivLayers: { setBase() {} },
   };
@@ -72,21 +72,25 @@ function base({ dialog = false, scrape = false, login = true } = {}) {
   return { calls, press: (...args) => context.baseViewKey(key(...args)) };
 }
 
-test('Kachelansicht: Pfeile blättern nur ohne offenes Fenster und außerhalb von Bedienelementen', () => {
+test('Kachelansicht: Pfeile blättern nur ohne offenen Dialog und außerhalb von Bedienelementen', () => {
   assert.deepEqual((() => { const f = base({ dialog: true }); f.press('ArrowRight'); return f.calls; })(), []);
-  assert.deepEqual((() => { const f = base({ scrape: true }); f.press('ArrowRight'); return f.calls; })(), []);
   const f = base();
   f.press('ArrowRight', element('a'));
   f.press('ArrowRight', element('input'));
+  f.press('Escape');
   assert.deepEqual(f.calls, []);
   f.press('ArrowRight');
   assert.deepEqual(f.calls, [['changeResultsPage', 3]]);
 });
 
-test('Kachelansicht: Escape schließt das Login-Fenster nur, wenn schon jemand angemeldet ist', () => {
-  const f = base({ login: false });
-  f.press('Escape');
-  assert.deepEqual(f.calls, ['hideLogin']);
+test('Login, Scrape- und TTS-Fenster sind Ebenen am Stapel ohne eigene Tastatur-Handler', () => {
+  const admin = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin-tasks.js'), 'utf8');
+  // Pflicht-Anmeldung ohne Sitzung bleibt bei Escape offen.
+  assert.match(app, /WebArchivLayers\.open\(\$loginOverlay, \{\s*name: 'login', onEscape: \(\) => \{ if \(currentUser\) hideLogin\(\); \}/);
+  assert.match(admin, /WebArchivLayers\.open\(\$ttsOverlay, \{ name: 'tts', onEscape: closeTtsModal/);
+  assert.match(admin, /WebArchivLayers\.open\(\$scrapeOverlay, \{ name: 'scrape', onEscape: closeScrapeModal \}\)/);
+  assert.doesNotMatch(admin, /addEventListener\('keydown'/);
+  assert.doesNotMatch(app + admin, /\$(login|scrape|tts)Overlay\.hidden/);
 });
 
 test('app.js meldet die Grundansicht am Stapel an und hat keinen eigenen keydown-Handler mehr', () => {

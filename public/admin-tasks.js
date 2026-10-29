@@ -41,15 +41,19 @@ function clearTtsUI() {
   rememberTtsJob(null);
   ttsActive = false;
   if (!$ttsOverlay) return;
-  $ttsOverlay.hidden = true;
+  if ($ttsOverlay.open) WebArchivLayers.close($ttsOverlay, { restoreFocus: false });
   $ttsOutput.textContent = '';
   $ttsStatus.textContent = '';
   $ttsAudio.hidden = true;
 }
+// Dialog am Ebenen-Stapel: Escape schließt nur die Anzeige, Tab bleibt im Dialog
+// (nativ), andere Tasten erreichen den Artikel darunter nicht.
 function openTtsModal() {
   ++ttsPollGeneration;
-  if ($ttsOverlay.hidden) ttsReturnFocus = document.activeElement;
-  $ttsOverlay.hidden = false;
+  if (!$ttsOverlay.open) {
+    ttsReturnFocus = document.activeElement;
+    WebArchivLayers.open($ttsOverlay, { name: 'tts', onEscape: closeTtsModal, returnFocus: false });
+  }
   document.body.style.overflow = 'hidden';
   $ttsOutput.textContent = '';
   $ttsStatus.textContent = 'Auftrag wird geladen …';
@@ -62,7 +66,7 @@ function openTtsModal() {
 }
 function closeTtsModal() {
   ++ttsPollGeneration;
-  $ttsOverlay.hidden = true;
+  if ($ttsOverlay.open) WebArchivLayers.close($ttsOverlay, { restoreFocus: false });
   document.body.style.overflow = !$overlay.open ? '' : 'hidden';
   if (ttsReturnFocus?.isConnected) ttsReturnFocus.focus();
   else if ($overlay.open) $overlayClose.focus();
@@ -154,7 +158,7 @@ async function runTts() {
     $ttsStatus.textContent = 'Audio-Auftrag wurde gestartet.';
     rememberTtsJob(data.jobId);
     ttsActive = true;
-    if (!$ttsOverlay.hidden) watchTts(data.jobId);
+    if ($ttsOverlay.open) watchTts(data.jobId);
   } catch (error) {
     openTtsModal();
     $ttsActivity.hidden = true;
@@ -216,7 +220,7 @@ function formatTtsOutput(output) {
 async function watchTts(jobId) {
   const generation = ++ttsPollGeneration;
   let failures = 0;
-  while (generation === ttsPollGeneration && !$ttsOverlay.hidden) {
+  while (generation === ttsPollGeneration && $ttsOverlay.open) {
     try {
       const response = await apiFetch(`/api/tts/${encodeURIComponent(jobId)}/status`);
       if (generation !== ttsPollGeneration) return;
@@ -276,7 +280,7 @@ document.getElementById('tts-backdrop')?.addEventListener('click', closeTtsModal
 document.getElementById('tts-refresh')?.addEventListener('click', showTtsJob);
 $ttsReindex?.addEventListener('click', async () => {
   await runReindex();
-  if (ttsJobId && !$ttsOverlay.hidden) watchTts(ttsJobId);
+  if (ttsJobId && $ttsOverlay.open) watchTts(ttsJobId);
 });
 $ttsCancel?.addEventListener('click', async () => {
   if (!ttsJobId || $ttsCancel.disabled) return;
@@ -298,19 +302,6 @@ document.addEventListener('click', event => {
   if (button.dataset.ttsAction === 'start') runTts();
   else showTtsJob();
 });
-document.addEventListener('keydown', event => {
-  if (!$ttsOverlay || $ttsOverlay.hidden) return;
-  // Keine Navigation oder Schließen des darunterliegenden Artikels.
-  event.stopImmediatePropagation();
-  if (event.key === 'Escape') { event.preventDefault(); closeTtsModal(); }
-  if (event.key === 'Tab') {
-    const controls = [...$ttsOverlay.querySelectorAll('button, a[href], [tabindex="0"]')]
-      .filter(element => !element.disabled && !element.hidden);
-    const first = controls[0], last = controls[controls.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  }
-}, true);
 
 async function runReindex() {
   if (!confirm('Archiv neu indizieren?')) return;
@@ -344,22 +335,20 @@ async function runReindex() {
   }
 }
 
+// Scrape-Fenster: Dialog am Ebenen-Stapel (Escape schließt, Fokus zurück zum Auslöser).
 function openScrapeModal(title) {
-  $scrapeOverlay.hidden = false;
+  if (!$scrapeOverlay.open) WebArchivLayers.open($scrapeOverlay, { name: 'scrape', onEscape: closeScrapeModal });
   document.body.style.overflow = 'hidden';
   if ($scrapeTitle) $scrapeTitle.textContent = title || 'Scrapen';
   $scrapeOutput.textContent = '';
   $scrapeStatus.textContent = '';
 }
 function closeScrapeModal() {
-  $scrapeOverlay.hidden = true;
+  if ($scrapeOverlay.open) WebArchivLayers.close($scrapeOverlay);
   document.body.style.overflow = '';
 }
 $scrapeClose?.addEventListener('click', closeScrapeModal);
 $scrapeBackdrop?.addEventListener('click', closeScrapeModal);
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && $scrapeOverlay && !$scrapeOverlay.hidden) closeScrapeModal();
-});
 
 async function runScrape() {
   if (!confirm('Neue Beiträge scrapen (Blog, Facebook, Telegram)? Das kann einige Minuten dauern.')) return;

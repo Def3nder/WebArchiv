@@ -161,7 +161,7 @@ test('Bestätigung: Ablehnen startet nichts; Zustimmung übermittelt Provider', 
     const calls = [];
     const context = vm.createContext({ selectedTtsArticle: { id: 'a', title: 'Titel' },
       $overlay: { open: true }, currentUser: { role: 'admin' }, ttsStarting: false, ttsActive: false,
-      updateTtsActions() {}, openTtsModal() {}, $ttsStatus: {}, $ttsActivity: {}, $ttsOverlay: { hidden: true },
+      updateTtsActions() {}, openTtsModal() {}, $ttsStatus: {}, $ttsActivity: {}, $ttsOverlay: { open: false },
       document: { getElementById: () => ({}) }, chooseTtsProvider: async (_article, providers) => {
         assert.equal(providers.length, 2);
         return accepted ? providers.find(p => p.provider === provider) : null;
@@ -186,7 +186,7 @@ test('Vorhandenes Artikel-Audio wird nur nach ausdrücklicher Bestätigung erset
     const calls = [];
     const context = vm.createContext({ selectedTtsArticle: { id: 'a', title: 'Titel' },
       $overlay: { open: true }, currentUser: { role: 'admin' }, ttsStarting: false, ttsActive: false,
-      updateTtsActions() {}, openTtsModal() {}, $ttsStatus: {}, $ttsActivity: {}, $ttsOverlay: { hidden: true },
+      updateTtsActions() {}, openTtsModal() {}, $ttsStatus: {}, $ttsActivity: {}, $ttsOverlay: { open: false },
       document: { getElementById: () => ({}) }, chooseTtsProvider: async (_article, providers) => providers[0],
       rememberTtsJob() {}, window: { confirm: () => accepted },
       apiFetch: async (url, options) => {
@@ -273,7 +273,7 @@ test('Status-Polling lässt unverändertes Log und manuelle Scrollposition stehe
     get textContent() { return value; },
     set textContent(next) { writes++; value = next; this.scrollTop = 0; } };
   const context = vm.createContext({ ttsPollGeneration: 0, ttsActive: true,
-    $ttsOverlay: { hidden: false }, $ttsOutput: output, $ttsStatus: {}, $ttsCancel: {}, $ttsActivity: {}, $ttsReindex: {},
+    $ttsOverlay: { open: true }, $ttsOutput: output, $ttsStatus: {}, $ttsCancel: {}, $ttsActivity: {}, $ttsReindex: {},
     document: { getElementById: () => ({}) }, updateTtsActions() {}, setTimeout: callback => callback(),
     apiFetch: async () => ({ ok: true, status: 200, json: async () => {
       polls++;

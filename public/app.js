@@ -540,8 +540,14 @@ function esc(value) {
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────
+// Login ist ein Dialog am Ebenen-Stapel. Escape schließt ihn nur, wenn schon jemand
+// angemeldet ist (oder als Gast); die Pflicht-Anmeldung ohne Sitzung bleibt offen.
 function showLogin(errorMsg) {
-  $loginOverlay.hidden = false;
+  if (!$loginOverlay.open) {
+    WebArchivLayers.open($loginOverlay, {
+      name: 'login', onEscape: () => { if (currentUser) hideLogin(); }, returnFocus: false,
+    });
+  }
   document.body.style.overflow = 'hidden';
   $loginEmail.value = '';
   $loginPassword.value = '';
@@ -551,7 +557,7 @@ function showLogin(errorMsg) {
 }
 
 function hideLogin() {
-  $loginOverlay.hidden = true;
+  if ($loginOverlay.open) WebArchivLayers.close($loginOverlay, { restoreFocus: false });
   document.body.style.overflow = '';
   $loginError.hidden = true;
 }
@@ -2052,26 +2058,18 @@ window.addEventListener('resize', () => {
   applyImageZoom();
 });
 
-// Noch nicht am Ebenen-Stapel angemeldete Fenster (Dialoge, TTS- und Scrape-Fenster)
-// behalten ihre Tasten: Die Kachelansicht blättert dann nicht.
+// Noch nicht am Ebenen-Stapel angemeldete Dialoge behalten ihre Tasten: Die
+// Kachelansicht blättert dann nicht.
 function layerAboveContentOpen() {
-  return !!document.querySelector('dialog[open]')
-    || !!($scrapeOverlay && !$scrapeOverlay.hidden) || !!($ttsOverlay && !$ttsOverlay.hidden);
+  return !!document.querySelector('dialog[open]');
 }
 // Bedienelemente, die Pfeiltasten selbst nutzen (Radiobuttons, Eingaben, Regler, Audio).
 const ARROW_KEY_CONTROLS = 'input, textarea, select, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]';
 
-// Tastatur der Grundansicht (Kacheln). Artikel- und Bildvollansicht sind Ebenen mit
-// eigener Tastatur (articleLayerKey, fullscreenLayerKey); solange eine Ebene offen
-// ist, ruft der Stapel diese Funktion nicht auf.
+// Tastatur der Grundansicht (Kacheln). Artikel, Bildvollansicht, Login, Scrape- und
+// TTS-Fenster sind Ebenen mit eigener Tastatur; solange eine Ebene offen ist, ruft der
+// Stapel diese Funktion nicht auf.
 function baseViewKey(e) {
-  if (e.key === 'Escape') {
-    // Login-Dialog nur per ESC schließen, wenn Guest oder eingeloggt — nicht bei
-    // initialem Pflicht-Login (kein currentUser).
-    if (!$loginOverlay.hidden && currentUser) { e.preventDefault(); hideLogin(); }
-    return;
-  }
-
   const dir = pageSwipeMath?.keyDirection(e) || 0;
   if (!dir || layerAboveContentOpen()) return;
   const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
@@ -2084,8 +2082,7 @@ function baseViewKey(e) {
   const reviewCheckbox = isInfographicReviewMode()
     && interactive?.matches('[data-review-poster-id]');
   const closedMenuTrigger = interactive?.matches('[aria-haspopup="menu"]:not([aria-expanded="true"])');
-  if (currentLayout() === 'list' || (interactive && !reviewCheckbox && !closedMenuTrigger)
-      || !$loginOverlay.hidden) return;
+  if (currentLayout() === 'list' || (interactive && !reviewCheckbox && !closedMenuTrigger)) return;
 
   const targetPage = state.page + dir;
   if (targetPage < 1 || targetPage > state.pages) return;
@@ -2164,28 +2161,20 @@ $imgFs.addEventListener('touchend', e => {
   }
 }, { passive: true });
 
-// Alle modalen Ebenen sperren die Seite dahinter. Offene Dialoge können gestapelt
+// Alle Ebenen sind modale Dialoge und sperren die Seite dahinter. Sie können gestapelt
 // sein; erst nach dem Schließen der letzten Ebene darf die Seite wieder scrollen.
-// Artikel, Bildvollansicht, Reader und Extras sind Dialoge; die übrigen Fenster noch divs.
-const modalOverlays = [$loginOverlay, $scrapeOverlay, $ttsOverlay];
 function syncModalPageScroll() {
-  const modalOpen = !!document.querySelector('dialog[open]')
-    || modalOverlays.some(overlay => overlay && !overlay.hidden);
-  document.documentElement.classList.toggle('modal-open', modalOpen);
+  document.documentElement.classList.toggle('modal-open', !!document.querySelector('dialog[open]'));
   document.documentElement.classList.toggle('overlay-open', $overlay.open);
 }
 new MutationObserver(syncModalPageScroll).observe(document.body, {
-  attributes: true, attributeFilter: ['hidden', 'open'], subtree: true,
+  attributes: true, attributeFilter: ['open'], subtree: true,
 });
 WebArchivLayers.onChange(syncModalPageScroll);
 syncModalPageScroll();
 
-// Bis sie selbst Dialoge sind (Schritt 4), liegen Login-, Scrape- und TTS-Fenster in der
-// obersten Ebene; außerhalb des obersten modalen Dialogs wären sie verdeckt.
-for (const overlay of modalOverlays) if (overlay) WebArchivLayers.float(overlay);
-
-// Ein Dialog über dem Artikel, der noch nicht am Stapel hängt, oder das TTS-Fenster.
-const dialogOpen = () => !!document.querySelector('dialog[open]:not(.app-layer)') || ($ttsOverlay && !$ttsOverlay.hidden);
+// Ein Dialog über dem Artikel, der noch nicht am Stapel hängt.
+const dialogOpen = () => !!document.querySelector('dialog[open]:not(.app-layer)');
 enablePullToClose({
   scroller: $overlayPanel,
   moving: $overlayPanel,

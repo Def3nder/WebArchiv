@@ -2112,3 +2112,24 @@ diesem Stand noch nicht geprüft (der Probelauf vom selben Tag deckte Artikel, B
 **Deployment:** aus `public/` kopieren: `index.html`, `layer-stack.js`, `app.js`, `app-detail.js`, `app-gallery.js`,
 `admin-tasks.js`, `audiobooks.js`, `audiobook-extras-manager.js`, `book-reader.js`, `infographic-manager.js`,
 `infographic-review.js`, `pwa-update.js`, `touch-gestures.js`, `css/detail.css`. Browser neu laden genügt.
+
+## 47. Aktualisierung 29.10.2026 – Ebenen-Stapel, Schritt 4: Login-, Scrape- und TTS-Fenster als Dialog
+
+- **Als modaler `<dialog>` am Stapel:** `#login-overlay`, `#scrape-overlay`, `#tts-overlay` (Klasse `app-layer`).
+  Der eigene Hintergrund (Klick schließt) bleibt im Dialog; CSS setzt die Browser-Vorgaben zurück (`dialogs.css`).
+- **Login:** `onEscape` schließt nur, wenn schon jemand angemeldet ist oder als Gast unterwegs ist; die
+  Pflicht-Anmeldung ohne Sitzung bleibt offen. Der Escape-Zweig in der Grundansicht entfällt.
+- **TTS:** eigener Capture-Handler samt selbst gebauter Fokusfalle entfällt; Tab bleibt nativ im modalen Dialog,
+  Escape schließt nur die Anzeige, andere Tasten erreichen den Artikel darunter nicht. Fokus-Rückgabe wie bisher.
+- **Scrape-Log:** eigener Escape-Handler entfällt; Fokus kehrt über den Stapel zum Auslöser zurück.
+- **Aufgeräumt:** `float()` für die drei Fenster, die Liste `modalOverlays` und die Sonderfälle in
+  `layerAboveContentOpen`/`dialogOpen` entfallen. Die Seitensperre folgt allein `dialog[open]`.
+
+**Geprüft:** Node 453/453, Python 14/14 (Tests für Seitensperre, Tastatur und TTS angepasst). Im Browser als Gast:
+Login öffnet modal mit Fokus im E-Mail-Feld, Pfeil im Feld blättert nicht, Escape schließt; Pflicht-Anmeldung ohne
+Sitzung bleibt bei Escape offen. Als Admin: Scrape-Log über das Menü, Pfeil blättert nicht dahinter, Escape schließt
+mit Fokus zurück aufs Konto-Menü; TTS-Fenster über dem Artikel sichtbar, Tab achtmal bleibt im Fenster, Pfeil wechselt
+keinen Artikel, Escape schließt nur das Fenster. Keine Konsolenfehler aus der App. Am iPhone nicht geprüft.
+
+**Deployment:** `public/index.html`, `public/app.js`, `public/admin-tasks.js`, `public/css/dialogs.css` kopieren;
+Browser neu laden genügt.
