@@ -1123,6 +1123,33 @@ abgelaufene FB-Cookies) endet der Scraper mit Exit 1, die übrigen Quellen sind
 trotzdem gespeichert und werden indexiert. Nur bestimmte Quellen: Flags anhängen
 (`--blog --telegram`).
 
+### Laufenden Scrape abbrechen
+
+Die App bietet keinen Abbruch, weder in der Oberfläche noch per API. Ein laufender
+Scrape wird auf dem LXC über den Prozess `scrape_all.js` beendet. Das gilt
+gleichermaßen für Läufe aus der Web-Oberfläche und aus dem Cron.
+
+1. Prüfen, ob ein Scrape läuft:
+
+   ```bash
+   pgrep -af scrape_all.js
+   ```
+
+2. Scrape beenden (SIGTERM, damit Playwright Chromium selbst schließt):
+
+   ```bash
+   pkill -TERM -f scrape_all.js
+   ```
+
+3. Prüfen, ob noch Chromium-Prozesse übrig sind:
+
+   ```bash
+   pgrep -af chrom
+   ```
+
+Hängt dort noch etwas vom Scraper: `pkill -KILL -f scrape_all.js` und danach die
+Chromium-PIDs einzeln mit `kill` beenden.
+
 Alle Schritte, Fehlerbilder und Befehle (systemd, Rechte, Playwright-Systemlibs,
 `SIGHUP`-Reindex, cron, CRLF-Stolperfalle) stehen ausführlich in
 **`LXC-container node.js Setup.md`**.
