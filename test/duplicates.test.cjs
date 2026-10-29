@@ -6,7 +6,7 @@ const fs = require('fs/promises');
 const {
   normalizeDuplicateText, buildDuplicateProfile, compareDuplicateProfiles,
   detectDuplicateCandidates, createDuplicateStore, decisionStillApplies, loadDuplicateConfig,
-  finishDuplicateLinks, BOOKMARK_MOVE_WARNING,
+  finishDuplicateLinks, BOOKMARK_MOVE_WARNING, createDuplicateDetection, DEFAULT_CONFIG,
 } = require('../duplicates.cjs');
 
 const article = (author, id, title, body, date = '2026-01-01') => ({
@@ -120,4 +120,50 @@ test('Abschluss einer Verknüpfung: Lesezeichenfehler wird Hinweis, der Index wi
   assert.equal(ok, null);
   assert.deepEqual(moved, [{ oldId: 'f2', newId: 'b2' }]);
   assert.deepEqual(calls.at(-1), 'state');
+});
+
+test('Erkennung mit Zwischenspeicher: rechnet nur neu, wenn sich Blog- oder Quellartikel ändern', () => {
+  const base = 'Berührung kann den Körper beruhigen und Sicherheit vermitteln. '.repeat(12);
+  const facebook = article('Facebook', 'Facebook/2026/a', 'Berührung und Heilung', base, '2026-01-02');
+  const blog = article('Joe Turan', 'Joe Turan/2026/a', 'Berührung und Heilung', base, '2026-01-08');
+  const other = article('Joe Turan', 'Joe Turan/2026/b', 'Etwas ganz anderes', 'Völlig anderer Text über Gärten und Bäume. '.repeat(12));
+  const infographic = { author: 'Infografiken', id: 'Infografiken/2026/x', title: 'Grafik', date: '2026-01-08', duplicateProfile: null };
+  let runs = 0;
+  const detection = createDuplicateDetection({ detect: (list, config) => { runs++; return detectDuplicateCandidates(list, config); } });
+  // Jede Veröffentlichung erzeugt Kopien der Artikel, die Profile bleiben dieselben Objekte.
+  const publish = list => list.map(item => ({ ...item }));
+
+  const first = detection.candidates(publish([facebook, blog, other, infographic]), DEFAULT_CONFIG);
+  assert.equal(first.reused, false);
+  assert.equal(first.candidates.length, 1);
+
+  // Infografik geändert oder hinzugekommen: kein neuer Lauf, Ergebnis zeigt auf die neuen Objekte.
+  const current = publish([facebook, blog, other, { ...infographic, title: 'Neu' }, { ...infographic, id: 'Infografiken/2026/y' }]);
+  const second = detection.candidates(current, DEFAULT_CONFIG);
+  assert.equal(second.reused, true);
+  assert.equal(runs, 1);
+  assert.equal(second.candidates[0].blog, current[1]);
+  assert.equal(second.candidates[0].facebook, current[0]);
+  assert.deepEqual(
+    second.candidates.map(({ blog: b, facebook: f, ...rest }) => ({ blog: b.id, facebook: f.id, ...rest })),
+    detectDuplicateCandidates(current).map(({ blog: b, facebook: f, ...rest }) => ({ blog: b.id, facebook: f.id, ...rest })),
+    'wiederverwendetes Ergebnis entspricht einer frischen Erkennung');
+
+  // Jede relevante Änderung löst eine neue Erkennung aus.
+  const changes = [
+    [facebook, { ...blog, duplicateProfile: buildDuplicateProfile(blog.title, base + ' Neuer Absatz.') }, other],
+    [facebook, { ...blog, date: '2026-03-01' }, other],
+    [facebook, blog],
+    [facebook, blog, other, article('Facebook', 'Facebook/2026/neu', 'Neu', base)],
+    [blog, facebook, other],
+  ];
+  for (const list of changes) {
+    const before = runs;
+    assert.equal(detection.candidates(publish(list), DEFAULT_CONFIG).reused, false);
+    assert.equal(runs, before + 1);
+  }
+  // Andere Konfiguration: ebenfalls neu.
+  const config = { ...DEFAULT_CONFIG };
+  assert.equal(detection.candidates(publish([blog, facebook, other]), config).reused, false);
+  assert.equal(detection.candidates(publish([blog, facebook, other]), config).reused, true);
 });

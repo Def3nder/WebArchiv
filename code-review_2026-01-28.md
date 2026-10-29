@@ -229,7 +229,13 @@ Heute hängen **elf** `keydown`-Handler am Dokument, die meisten in der Capture-
 
 Die heute verteilte Logik in `syncModalPageScroll`, `dialogOpen()` und `PULL_DIALOGS` würde sich darin bündeln.
 
-### 3.3 Teil-Reindex günstiger machen
+### 3.3 Teil-Reindex günstiger machen – ✅ umgesetzt (die ersten beiden Schritte)
+
+> **Nachtrag 29.10.2026:** `createDuplicateDetection` in `duplicates.cjs` rechnet die Kandidaten nur neu, wenn
+> sich Reihenfolge, Autor, Datum oder Profil eines Blog- oder Quellartikels geändert haben. Infografik-Änderungen,
+> Poster-Haken, Autoren-Priorität und Dublettenentscheidungen nutzen das letzte Ergebnis: gemessen **ca. 1 ms statt
+> ca. 620 ms**, Ergebnis identisch mit einer frischen Erkennung. Das Speichern eines Blog- oder Quellartikels und
+> Scraper-Läufe rechnen weiter vollständig (ca. 0,6 s); die inkrementelle Variante (dritter Schritt) ist nicht umgesetzt.
 
 Jede noch so kleine Änderung führt `publishArticleIndex` über den **gesamten** Bestand aus, etwa ein Poster-Haken, ein gespeicherter Artikel oder eine einzelne Dublettenentscheidung. Dabei laufen jedes Mal `linkInfographics`, ein neuer Fuse-Index und die komplette Dublettenerkennung. Das ist korrekt und einfach.
 

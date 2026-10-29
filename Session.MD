@@ -2025,3 +2025,25 @@ des Scrapers. Im Browser als Gast: Kacheln und Artikel laden, `esc` korrekt, kei
 
 **Auf dem LXC (einmalig):** `echo 'LANG=C.UTF-8' | sudo tee /etc/default/locale`, neu anmelden, mit
 `locale | head -1` prüfen.
+
+## 44. Aktualisierung 29.10.2026 – Review-Idee 3.3: Teil-Reindex ohne erneute Dublettenerkennung
+
+**Ausgangslage:** Jeder Teil-Reindex (Poster-Haken, Infografik-Upload oder -Umordnung, Dublettenentscheidung,
+Autoren-Priorität, Editor, TTS) veröffentlicht den ganzen Index neu. Davon kostete die Dublettenerkennung beim
+lokalen Bestand (7.113 Einträge) rund 620 ms, in denen der Server keine Anfrage beantwortet; Fuse rund 20 ms,
+die Infografik-Verknüpfung rund 10 ms.
+
+**Umsetzung:** `createDuplicateDetection()` in `duplicates.cjs`, genutzt von `refreshDuplicateState` in `server.js`.
+Die Erkennung hängt nur von Reihenfolge, Autor, Datum und Profil der Blog- und Quellartikel ab. Ein Artikel behält
+sein Profil-Objekt, solange er nicht neu eingelesen wird. Sind diese Eingaben unverändert, wird das letzte Ergebnis
+wiederverwendet und auf die aktuellen Artikelobjekte umgestellt (die bei jeder Veröffentlichung als Kopien neu
+entstehen). Entscheidungen (verknüpft, ignoriert) werden wie bisher danach angewendet.
+
+**Gemessen:** erster Lauf 623 ms, danach 1 ms je Teil-Reindex; die Kandidatenliste (465 Paare) ist identisch mit
+einer frischen Erkennung. Weiterhin vollständig gerechnet wird, wenn ein Blog- oder Quellartikel neu eingelesen wird
+(Editor, TTS-Audio an einem solchen Artikel, Scraper, Voll-Reindex).
+
+**Geprüft:** Node-Suite 441/441, Python 14/14; neuer Test für Wiederverwendung, Umstellung auf neue Objekte,
+Gleichheit mit frischer Erkennung und alle Auslöser für eine Neuberechnung.
+
+**Deployment:** `duplicates.cjs` und `server.js` kopieren, Dienst neu starten.

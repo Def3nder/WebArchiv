@@ -72,7 +72,7 @@ function resolveSessionSecret({ env = process.env, strict = false, log = console
   return crypto.randomBytes(32).toString('hex');
 }
 const {
-  loadDuplicateConfig, buildDuplicateProfile, detectDuplicateCandidates,
+  loadDuplicateConfig, buildDuplicateProfile, createDuplicateDetection,
   createDuplicateStore, decisionStillApplies, finishDuplicateLinks,
 } = require('./duplicates.cjs');
 
@@ -161,6 +161,8 @@ const duplicateStore = createDuplicateStore({
   file: process.env.DUPLICATES_FILE || path.join(__dirname, 'duplicate-decisions.json'),
 });
 duplicateStore.load();
+// Rechnet die Kandidaten nur neu, wenn sich Blog- oder Quellartikel geändert haben.
+const duplicateDetection = createDuplicateDetection();
 const audiobooks = createAudiobookLibrary({
   audioRoot: AUDIO_DIR,
   directory: audiobookConfig.directory,
@@ -334,7 +336,7 @@ function refreshDuplicateState() {
     nextCanonical.set(facebook.id, blog.id);
   }
   duplicateCanonicalOf = nextCanonical;
-  duplicateCandidates = detectDuplicateCandidates(articles, duplicateConfig).filter(candidate => {
+  duplicateCandidates = duplicateDetection.candidates(articles, duplicateConfig).candidates.filter(candidate => {
     if (duplicateCanonicalOf.has(candidate.facebook.id)) return false;
     const decision = duplicateStore.find(candidate.blog.id, candidate.facebook.id);
     return !decisionStillApplies(decision, candidate.blog, candidate.facebook);

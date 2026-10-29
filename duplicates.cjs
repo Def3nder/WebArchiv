@@ -146,6 +146,46 @@ function detectDuplicateCandidates(articles, config = DEFAULT_CONFIG) {
   return result.sort((a, b) => b.score - a.score || String(b.facebook.date).localeCompare(String(a.facebook.date)));
 }
 
+// Erkennung mit Zwischenspeicher für Teil-Reindexe. Sie kostet beim heutigen
+// Bestand rund 0,6 s und hängt nur von Reihenfolge, Autor, Datum und Profil der
+// Blog- und Quellartikel ab. Ein Artikel behält sein Profil-Objekt, solange er
+// nicht neu eingelesen wird. Sind alle diese Eingaben unverändert (z. B. nach
+// einer Infografik-Änderung, einem Poster-Haken oder einer Dublettenentscheidung),
+// wird das letzte Ergebnis wiederverwendet und nur auf die aktuellen
+// Artikelobjekte umgestellt, die bei jeder Veröffentlichung neu entstehen.
+function createDuplicateDetection({ detect = detectDuplicateCandidates } = {}) {
+  let lastConfig = null;
+  let lastInputs = [];
+  let lastCandidates = [];
+  const relevantFor = (articles, config) => articles.filter(article => article.duplicateProfile
+    && (article.author === config.blogAuthor || config.facebookAuthors.includes(article.author)));
+  const unchanged = (relevant, config) => config === lastConfig && relevant.length === lastInputs.length
+    && relevant.every((article, index) => {
+      const previous = lastInputs[index];
+      return previous.id === article.id && previous.profile === article.duplicateProfile
+        && previous.date === article.date && previous.author === article.author;
+    });
+  return {
+    // { candidates, reused }: reused = true, wenn nicht neu gerechnet wurde.
+    candidates(articles, config = DEFAULT_CONFIG) {
+      const relevant = relevantFor(articles, config);
+      if (unchanged(relevant, config)) {
+        const byId = new Map(relevant.map(article => [article.id, article]));
+        const candidates = lastCandidates.map(candidate => ({
+          ...candidate, blog: byId.get(candidate.blog.id), facebook: byId.get(candidate.facebook.id),
+        }));
+        return { candidates, reused: true };
+      }
+      lastCandidates = detect(articles, config);
+      lastConfig = config;
+      lastInputs = relevant.map(article => ({
+        id: article.id, profile: article.duplicateProfile, date: article.date, author: article.author,
+      }));
+      return { candidates: lastCandidates, reused: false };
+    },
+  };
+}
+
 function createDuplicateStore({ file, io = fs }) {
   // Änderungen wirken erst, wenn die Datei geschrieben ist (createJsonState).
   const state = createJsonState({
@@ -243,6 +283,7 @@ module.exports = {
   buildDuplicateProfile,
   compareDuplicateProfiles,
   detectDuplicateCandidates,
+  createDuplicateDetection,
   createDuplicateStore,
   decisionStillApplies,
   finishDuplicateLinks,
