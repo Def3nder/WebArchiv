@@ -36,10 +36,8 @@
   will-change: transform;
 }
 .duplicate-chrome.is-returning { transition: transform 180ms cubic-bezier(.4, 0, .2, 1); }
-.duplicate-chrome.is-returning + .duplicate-content { transition: margin-top 180ms cubic-bezier(.4, 0, .2, 1); }
 @media (prefers-reduced-motion: reduce) {
   .duplicate-chrome.is-returning { transition-duration: 1ms; }
-  .duplicate-chrome.is-returning + .duplicate-content { transition-duration: 1ms; }
 }
 .duplicate-heading {
   display: flex;
@@ -97,7 +95,12 @@ body[data-theme="light"] .duplicate-search-input { background: var(--bg); }
 .duplicate-filter-menu .header-menu-item[role="menuitemcheckbox"][aria-checked="mixed"]::before { content: '−'; }
 .duplicate-filter-menu .duplicate-author-all { border-bottom: 1px solid var(--border); border-radius: 0; }
 .duplicate-selection-count { margin-left: auto; color: var(--accent); font-size: .76rem; white-space: nowrap; }
-.duplicate-content { flex: 1; min-height: 0; margin-top: calc(var(--duplicate-chrome-height, 0px) - var(--duplicate-chrome-offset, 0px)); overflow-y: auto; padding: clamp(10px, 2vw, 22px); }
+/* Die Liste bleibt fest stehen und läuft unter dem Kopf hindurch; ein Platzhalter in
+   Kopfhöhe hält den Anfang frei. Früher schrumpfte margin-top beim Scrollen mit dem
+   Kopf: Die Liste bewegte sich dadurch doppelt so schnell wie der Kopf, und jedes Bild
+   brauchte ein neues Layout (Ruckeln beim Schwungscrollen auf dem iPhone). */
+.duplicate-content { flex: 1; min-height: 0; overflow-y: auto; padding: clamp(10px, 2vw, 22px); }
+.duplicate-content::before { content: ''; display: block; height: var(--duplicate-chrome-height, 0px); }
 body[data-filter-labels="hidden"] .duplicate-filter-caption { display: none; }
 @media (max-width: 600px) {
   .duplicate-filter-caption { display: none; }

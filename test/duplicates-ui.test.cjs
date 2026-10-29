@@ -163,9 +163,14 @@ test('Dublettenfilter folgen den Beschriftungseinstellungen und der Kopf reagier
   assert.match(ui, /duplicateContent\.addEventListener\('scroll'/);
   assert.match(ui, /direction > 0[\s\S]*setDuplicateChromeOffset\(duplicateChromeOffset \+ delta\)/);
   assert.match(ui, /duplicateChromeTravel >= DUPLICATE_CHROME_SCROLL_THRESHOLD\) showDuplicateChrome\(true\)/);
-  assert.match(ui, /duplicateDialog\.style\.setProperty\('--duplicate-chrome-offset'/);
-  assert.match(css, /\.duplicate-content \{[^}]*margin-top: calc\(var\(--duplicate-chrome-height, 0px\) - var\(--duplicate-chrome-offset, 0px\)\);[^}]*overflow-y: auto;[^}]*padding: clamp/);
-  assert.match(css, /\.duplicate-chrome\.is-returning \+ \.duplicate-content \{ transition: margin-top/);
+  // Nur der Kopf bewegt sich; die Liste steht fest und läuft unter ihm hindurch.
+  // Ein mitschrumpfender margin-top ließ sie früher doppelt so schnell laufen wie den Kopf.
+  assert.match(ui, /duplicateChrome\.style\.setProperty\('--duplicate-chrome-translate', `\$\{-duplicateChromeOffset\}px`\)/);
+  assert.doesNotMatch(ui, /--duplicate-chrome-offset/);
+  assert.match(css, /\.duplicate-content \{[^}]*overflow-y: auto;[^}]*padding: clamp/);
+  assert.doesNotMatch(css, /\.duplicate-content \{[^}]*margin-top/);
+  assert.match(css, /\.duplicate-content::before \{ content: ''; display: block; height: var\(--duplicate-chrome-height, 0px\); \}/);
+  assert.doesNotMatch(css, /\.duplicate-chrome\.is-returning \+ \.duplicate-content/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.duplicate-content \{ padding: 8px; \}/);
 });
 

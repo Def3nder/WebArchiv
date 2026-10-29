@@ -69,8 +69,8 @@ function setDuplicateChromeOffset(offset, returning = false) {
   const height = Math.max(1, duplicateChrome.offsetHeight);
   duplicateChromeOffset = Math.max(0, Math.min(height, offset));
   duplicateChrome.classList.toggle('is-returning', returning);
+  // Nur der Kopf bewegt sich (transform); die Liste darunter scrollt unverändert weiter.
   duplicateChrome.style.setProperty('--duplicate-chrome-translate', `${-duplicateChromeOffset}px`);
-  duplicateDialog.style.setProperty('--duplicate-chrome-offset', `${duplicateChromeOffset}px`);
 }
 
 function showDuplicateChrome(returning = false) {
