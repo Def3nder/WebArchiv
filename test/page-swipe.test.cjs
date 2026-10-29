@@ -111,3 +111,11 @@ test('Die Browserintegration blättert per Cursortaste nur in der Kachelansicht'
   assert.match(app, /const ARROW_KEY_CONTROLS = 'input, textarea, select, audio, video/);
   assert.match(app, /target\?\.closest\(`\$\{ARROW_KEY_CONTROLS\}, button, a`\)/);
 });
+
+test('Ein geschlossener Menü-Auslöser mit Fokus blockiert das Blättern nicht', () => {
+  const app = readApp();
+  assert.match(app, /const closedMenuTrigger = interactive\?\.matches\('\[aria-haspopup="menu"\]:not\(\[aria-expanded="true"\]\)'\)/);
+  assert.match(app, /interactive && !reviewCheckbox && !closedMenuTrigger/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8'),
+    /id="reindex-btn"[^>]*aria-haspopup="menu"/);
+});

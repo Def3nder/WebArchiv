@@ -8,8 +8,9 @@
  * Einpassen in den sichtbaren Fensterbereich. Es ist immer höchstens ein Menü offen.
  *
  * Fachliche Inhalte bleiben beim Aufrufer: onSelect(item, event) führt die Aktion
- * aus. Das Menü schließt sich vorher und gibt den Fokus an den Auslöser zurück,
- * damit ein von der Aktion geöffneter Dialog den Fokus behält. keepOpen(item)
+ * aus. Das Menü schließt sich vorher; nur bei Bedienung per Tastatur kehrt der Fokus
+ * zum Auslöser zurück (damit ein von der Aktion geöffneter Dialog den Fokus behält),
+ * nach einem Mausklick behält das Menü keinen Fokus. keepOpen(item)
  * hält das Menü stattdessen offen (Mehrfachauswahl, laufende Anfrage).
  */
 (function exposeAriaMenu(root, factory) {
@@ -140,7 +141,12 @@
       if (!item || item.disabled || !menu.contains(item)) return;
       // Kein stopPropagation: Einträge wie „Artikel editieren“ oder „Audio erzeugen“
       // werden zusätzlich über delegierte Klick-Handler am Dokument bedient.
-      if (!keepOpen?.(item)) controller.close({ restoreFocus: true });
+      // Per Tastatur (detail 0) zurück zum Auslöser, per Maus behält das Menü keinen Fokus.
+      if (!keepOpen?.(item)) {
+        const byKeyboard = event.detail === 0;
+        controller.close({ restoreFocus: byKeyboard });
+        if (!byKeyboard && menu.contains(document.activeElement)) document.activeElement.blur?.();
+      }
       onSelect?.(item, event);
     });
     menu.addEventListener('keydown', event => {

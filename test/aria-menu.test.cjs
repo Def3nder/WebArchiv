@@ -64,6 +64,7 @@ class Node {
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   getBoundingClientRect() { return this.rect; }
   focus() { document.activeElement = this; }
+  blur() { if (document.activeElement === this) document.activeElement = document.body; }
   addEventListener(type, fn, capture = false) { this.listeners.push({ type, fn, capture: capture === true || capture?.capture === true }); }
   dispatchEvent(event) {
     event.target = this;
@@ -208,7 +209,7 @@ test('Per Tastatur ausgelöster Klick (detail 0) fokussiert den ersten Eintrag',
   f.cleanup();
 });
 
-test('Auswahl: Menü schließt vor der Aktion, Fokus beim Auslöser, delegierte Handler laufen weiter', async () => {
+test('Auswahl: Menü schließt vor der Aktion, Fokus nur per Tastatur beim Auslöser, delegierte Handler laufen weiter', async () => {
   const seen = [];
   let delegated = 0;
   document.addEventListener('click', event => { if (event.target.closest?.('[data-index]')) delegated++; });
@@ -217,17 +218,22 @@ test('Auswahl: Menü schließt vor der Aktion, Fokus beim Auslöser, delegierte 
   });
   f.trigger.click();
   await tick();
+  f.buttons[2].focus();
   f.buttons[2].click();
   assert.equal(seen.length, 1);
   assert.equal(seen[0].index, '2');
   assert.equal(seen[0].hidden, true, 'Menü ist bei der Aktion schon geschlossen');
-  assert.equal(seen[0].focus, f.trigger, 'Fokus liegt vor der Aktion beim Auslöser');
+  assert.equal(seen[0].focus, document.body, 'nach Mausklick behält das Menü keinen Fokus');
   assert.equal(delegated, 1, 'kein stopPropagation');
+  f.trigger.click(0);
+  await tick();
+  f.buttons[1].click(0);
+  assert.equal(seen[1].focus, f.trigger, 'per Tastatur liegt der Fokus vor der Aktion beim Auslöser');
   f.trigger.click();
   await tick();
   f.buttons[0].disabled = true;
   f.buttons[0].click();
-  assert.equal(seen.length, 1, 'gesperrte Einträge lösen nichts aus');
+  assert.equal(seen.length, 2, 'gesperrte Einträge lösen nichts aus');
   f.cleanup();
 });
 

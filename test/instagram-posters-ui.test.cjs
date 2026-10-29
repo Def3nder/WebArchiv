@@ -112,7 +112,7 @@ test('Prüfkacheln trennen große Checkbox-Touchfläche und Vollbildöffnung', (
 
 test('Fokussierte Poster-Checkbox blockiert die Seitennavigation per Cursortaste nicht', () => {
   assert.match(app, /const reviewCheckbox = isInfographicReviewMode\(\)[\s\S]*interactive\?\.matches\('\[data-review-poster-id\]'\)/);
-  assert.match(app, /\(interactive && !reviewCheckbox\)/);
+  assert.match(app, /\(interactive && !reviewCheckbox && !closedMenuTrigger\)/);
 });
 
 test('Poster-Markierung ist auch in der Vollbildansicht verfügbar', () => {

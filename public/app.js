@@ -2094,10 +2094,14 @@ document.addEventListener('keydown', e => {
 
   // In der Kachelansicht blättern die Pfeiltasten wie eine Wischgeste um die
   // aktuell gewählte Anzahl Artikel. Bedienelemente und Dialoge behalten die Tasten.
+  // Ein geschlossener Menü-Auslöser (Fokus nach Escape oder Menüauswahl) nutzt
+  // links/rechts nicht und blättert deshalb mit.
   const interactive = target?.closest(`${ARROW_KEY_CONTROLS}, button, a`);
   const reviewCheckbox = isInfographicReviewMode()
     && interactive?.matches('[data-review-poster-id]');
-  if (currentLayout() === 'list' || (interactive && !reviewCheckbox) || !$loginOverlay.hidden) return;
+  const closedMenuTrigger = interactive?.matches('[aria-haspopup="menu"]:not([aria-expanded="true"])');
+  if (currentLayout() === 'list' || (interactive && !reviewCheckbox && !closedMenuTrigger)
+      || !$loginOverlay.hidden) return;
 
   const targetPage = state.page + dir;
   if (targetPage < 1 || targetPage > state.pages) return;
