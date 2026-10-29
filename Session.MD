@@ -1946,3 +1946,22 @@ ab. Die Fehlermeldung ging nicht ins Log (die Zeile hatte keine Umleitung). Vorh
 - Einmal von Hand als `ralf` (ohne sudo) prüfen: `/opt/nodeapp/scraper/run-scrape.sh`, danach
   `tail -n 5 /opt/nodeapp/scraper/cron-scrape.log` und
   `journalctl -u nodeapp --since '-10 min' | grep -E 'SIGHUP|articles'`.
+
+## 41. Aktualisierung 29.10.2026 – Dialoge scrollen nicht mehr in die Seite dahinter
+
+**Symptom:** Im Dialog „Scrape-Log anzeigen“ scrollte ein weiterer Touch-Wisch am Ende des Logs die Artikelliste im
+Hintergrund. Dasselbe galt für andere Scrollbereiche ohne eigene Angabe (Audio-Auftrag, Benutzerverwaltung,
+Hörbuch-Extras, Dubletten-Listen, Infografik-Manager u. a.).
+
+**Ursache:** Scroll-Verkettung. Nur einzelne Bereiche (Artikel-Panel, eBook-Reader, Bildvollansicht) hatten
+`overscroll-behavior`; `html.modal-open { overflow: hidden }` verhindert das Weiterreichen in Safari per Touch nicht.
+
+**Behoben:** Eine gemeinsame Regel in `public/css/dialogs.css` setzt `overscroll-behavior: contain` für alle
+`dialog`-Elemente, die Ebenen `.overlay`, `.scrape-overlay` (Scrape- und TTS-Fenster), `.login-overlay`,
+`.img-fullscreen`, `.book-reader` (eBook und Extras) und alle ihre Nachfahren. Per `:where()` ohne Gewicht, damit
+eigene Angaben wie `overscroll-behavior-y: none` am Artikel-Panel Vorrang behalten.
+
+**Geprüft:** Test in `test/modal-scroll-lock.test.cjs`; im Browser die berechneten Werte (Dialoge und Ebenen
+`contain`, Artikel-Panel weiter `none` in y, Seite selbst unverändert). Auf einem iPhone nicht geprüft.
+
+**Deployment:** `public/css/dialogs.css` kopieren; Browser neu laden genügt.

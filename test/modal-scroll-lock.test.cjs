@@ -12,6 +12,21 @@ const css = readStyles();
 const start = app.indexOf('const modalOverlays =');
 const end = app.indexOf('\nconst dialogOpen', start);
 
+test('Scrollbereiche aller Dialoge und Ebenen verketten nicht in die Seite dahinter', () => {
+  const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
+  const layers = ['dialog', '.overlay', '.scrape-overlay', '.login-overlay', '.img-fullscreen', '.book-reader'];
+  const list = layers.map(layer => layer.replace('.', '\\.')).join(', ');
+  assert.match(css, new RegExp(`:where\\(${list}\\),\\s*:where\\(${list}\\) \\* \\{\\s*overscroll-behavior: contain;\\s*\\}`));
+  // Jede Ebene aus index.html trägt eine der Klassen; der Hörbuch-Reader und die Extras
+  // entstehen per Skript mit class „book-reader“.
+  for (const id of ['article-overlay', 'img-fullscreen', 'login-overlay', 'scrape-overlay', 'tts-overlay']) {
+    const tag = html.match(new RegExp(`<div id="${id}" class="([^"]+)"`));
+    assert.ok(tag && layers.some(layer => tag[1].split(' ').includes(layer.slice(1))), id);
+  }
+  // Eigene Angaben (kein Federn am Artikel-Panel) behalten Vorrang.
+  assert.match(css, /\.overlay-panel \{[^}]*overscroll-behavior-y: none;/);
+});
+
 test('alle modalen Ebenen sperren den Seiten-Scrollbereich bis zum letzten Schließen', () => {
   assert.ok(start >= 0 && end > start);
   assert.match(css, /html\.modal-open,\s*html\.modal-open body \{\s*overflow: hidden;\s*overscroll-behavior: none;/);
