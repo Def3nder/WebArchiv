@@ -76,21 +76,25 @@ test('zentrale Admin-Middleware schützt Rolle, Herkunft und CSRF-Token', () => 
   requireAdminAccess(request({ token: undefined }), res, () => { nextCalled = true; });
   assert.equal(res.statusCode, 403);
   assert.match(res.body.error, /Sicherheitstoken/);
+  assert.equal(res.body.code, 'csrf_invalid');
 
   res = response();
   requireAdminAccess(request({ token: 'secret', fetchSite: 'cross-site' }), res, () => { nextCalled = true; });
   assert.equal(res.statusCode, 403);
   assert.match(res.body.error, /Archiv/);
+  assert.equal(res.body.code, 'cross_site');
 
   res = response();
   requireAdminAccess(request({ token: 'secret', origin: 'https://evil.example' }), res, () => { nextCalled = true; });
   assert.equal(res.statusCode, 403);
   assert.match(res.body.error, /Anfrageherkunft/);
+  assert.equal(res.body.code, 'invalid_origin');
 
   res = response();
   requireAdminAccess(request({ token: 'wrong', sessionToken: 'secret' }), res, () => { nextCalled = true; });
   assert.equal(res.statusCode, 403);
   assert.match(res.body.error, /Sicherheitstoken/);
+  assert.equal(res.body.code, 'csrf_invalid');
 
   nextCalled = false;
   res = response();

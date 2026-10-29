@@ -61,19 +61,33 @@ test('TRUST_PROXY: Vorgabe ist Loopback plus NPMplus, „true“ wird abgelehnt'
 
 // ─── Login-Begrenzung ──────────────────────────────────────────────────────
 
-test('Login-Begrenzung: Sperre pro Konto nach 5 Fehlversuchen, Ablauf nach der Sperrzeit', () => {
+test('Login-Begrenzung: 5 Fehlversuche sperren Konto + IP, der Inhaber kommt von seiner Adresse weiter rein', () => {
   let time = 0;
   const limiter = createLoginLimiter({ now: () => time });
   for (let i = 0; i < 4; i++) limiter.failure('1.1.1.1', 'A@Example.test');
   assert.equal(limiter.check('1.1.1.1', 'a@example.test').allowed, true);
-  limiter.failure('2.2.2.2', 'a@example.test');
-  // Gesperrt unabhängig von IP und Groß-/Kleinschreibung.
-  const blocked = limiter.check('3.3.3.3', 'A@EXAMPLE.TEST');
+  limiter.failure('1.1.1.1', 'a@example.test');
+  // Gesperrt für diese Adresse, unabhängig von Groß-/Kleinschreibung …
+  const blocked = limiter.check('1.1.1.1', 'A@EXAMPLE.TEST');
   assert.equal(blocked.allowed, false);
   assert.equal(blocked.retryAfterSeconds, 15 * 60);
-  assert.equal(limiter.check('3.3.3.3', 'b@example.test').allowed, true);
-  time += 15 * 60 * 1000;
+  // … aber nicht für den Inhaber an einer anderen Adresse und nicht für andere Konten.
   assert.equal(limiter.check('3.3.3.3', 'a@example.test').allowed, true);
+  assert.equal(limiter.check('1.1.1.1', 'b@example.test').allowed, true);
+  time += 15 * 60 * 1000;
+  assert.equal(limiter.check('1.1.1.1', 'a@example.test').allowed, true);
+});
+
+test('Login-Begrenzung: verteiltes Durchprobieren eines Kontos sperrt es nach 50 Fehlversuchen überall', () => {
+  let time = 0;
+  const limiter = createLoginLimiter({ now: () => time });
+  for (let i = 0; i < 49; i++) limiter.failure(`10.0.0.${i}`, 'admin@example.test');
+  assert.equal(limiter.check('10.0.1.1', 'admin@example.test').allowed, true);
+  limiter.failure('10.0.0.99', 'admin@example.test');
+  assert.equal(limiter.check('10.0.1.1', 'admin@example.test').allowed, false);
+  assert.equal(limiter.check('10.0.1.1', 'leser@example.test').allowed, true);
+  time += 15 * 60 * 1000;
+  assert.equal(limiter.check('10.0.1.1', 'admin@example.test').allowed, true);
 });
 
 test('Login-Begrenzung: Erfolg setzt das Konto zurück, IP-Grenze gilt für viele Konten', () => {

@@ -683,9 +683,11 @@ Editor- oder Menülogik einbezogen.
   neu vergeben. Die Server-Sessions liegen im RAM: Ein Dienstneustart macht
   bestehende Logins ungültig, auch wenn die lokal gespeicherte Ansicht nach
   erneuter Anmeldung wiederhergestellt werden kann.
-- **Login-Begrenzung** (`login-limiter.cjs`): Nach 5 falschen Kennwörtern für ein Konto bzw.
-  30 Fehlversuchen von einer IP innerhalb von 15 Minuten antworten `/api/login` und
-  `/api/me/password` 15 Minuten lang mit `429` und `Retry-After`. Gesperrt wird vor der
+- **Login-Begrenzung** (`login-limiter.cjs`): Nach 5 falschen Kennwörtern für ein Konto von
+  derselben IP, 50 für ein Konto insgesamt (verteilte Angriffe) bzw. 30 Fehlversuchen von
+  einer IP innerhalb von 15 Minuten antworten `/api/login` und `/api/me/password` 15 Minuten
+  lang mit `429` und `Retry-After`. Wer nur die E-Mail kennt, sperrt so nicht mehr den
+  Inhaber an dessen eigener Adresse aus. Gesperrt wird vor der
   bcrypt-Prüfung; die Zähler liegen im Arbeitsspeicher. Die IP stammt aus `req.ip`, das
   `X-Forwarded-For` nur von den in `TRUST_PROXY` genannten Proxys übernimmt.
 - **HTML-Bereinigung** (`html-sanitizer.cjs`, `sanitize-html`): Artikel, Dublettenvergleich,

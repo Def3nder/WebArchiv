@@ -110,6 +110,43 @@ test('server.js reicht keine rohen Fehlermeldungen an die Oberfläche weiter', (
   assert.doesNotMatch(server, /' Wiederherstellung fehlgeschlagen: ' \+ rollbackError\.message/);
 });
 
+test('Unbehandelte Fehler: API-Pfade erhalten JSON ohne Stacktrace, andere Pfade bleiben bei Express', async t => {
+  const { handleRequestError } = require('../server.js');
+  const testApp = express();
+  testApp.get('/api/kaputt', () => { throw new Error("ENOENT: open '/opt/nodeapp/www/geheim.md'"); });
+  testApp.get('/api/abgelehnt', () => { throw Object.assign(new Error('bad charset utf-7'), { status: 415 }); });
+  testApp.get('/seite', () => { throw new Error('Seitenfehler'); });
+  testApp.use(handleRequestError);
+  testApp.use((err, _req, res, _next) => res.status(599).send('express'));
+  const base = await listen(t, testApp);
+  t.mock.method(console, 'error', () => {});
+
+  const broken = await fetch(`${base}/api/kaputt`);
+  assert.equal(broken.status, 500);
+  assert.deepEqual(await broken.json(), { error: 'Die Anfrage ist fehlgeschlagen.', code: 'internal' });
+  assert.equal(console.error.mock.callCount(), 1, 'Ursache steht im Log');
+
+  const rejected = await fetch(`${base}/api/abgelehnt`);
+  assert.equal(rejected.status, 415);
+  assert.deepEqual(await rejected.json(), { error: 'Ungültige Anfrage.' });
+
+  const page = await fetch(`${base}/seite`);
+  assert.equal(page.status, 599);
+});
+
+test('Zu große Anfragen nennen die passende Grenze für Artikel und Markdown-Extras', () => {
+  const { handleRequestError } = require('../server.js');
+  const tooLarge = { type: 'entity.too.large' };
+  const sent = route => {
+    const res = { headersSent: false, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+    handleRequestError(tooLarge, { path: route, method: 'PUT' }, res, () => { throw new Error('nicht erwartet'); });
+    return [res.code, res.body.error];
+  };
+  assert.deepEqual(sent('/api/article-markdown/a'), [413, 'Die Anfrage ist zu groß. Artikel dürfen höchstens 1 MB enthalten.']);
+  assert.deepEqual(sent('/api/audiobook-extra-source/b'), [413, 'Die Anfrage ist zu groß. Markdown-Extras dürfen höchstens 1 MB enthalten.']);
+  assert.deepEqual(sent('/api/audiobook-extra-create/b'), [413, 'Die Anfrage ist zu groß. Markdown-Extras dürfen höchstens 1 MB enthalten.']);
+});
+
 test('Die Oberfläche reagiert auf Fehlercodes, nicht auf Meldungstexte', () => {
   const fs = require('node:fs');
   const path = require('node:path');
@@ -117,6 +154,8 @@ test('Die Oberfläche reagiert auf Fehlercodes, nicht auf Meldungstexte', () => 
   const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(app, /data\?\.code === 'admin_required'/);
   assert.match(app, /data\?\.code === 'password_change_required'/);
+  // Veraltetes CSRF-Token: neu laden statt einer unverständlichen Meldung.
+  assert.match(app, /data\?\.code === 'csrf_invalid'\) \{\s*location\.reload\(\);/);
   for (const file of ['app.js', 'book-reader.js', 'password.js', 'user-admin.js', 'audiobook-extras-manager.js']) {
     const source = fs.readFileSync(path.join(publicDir, file), 'utf8');
     assert.doesNotMatch(source, /'Session expired'|'Admin only'/, file);

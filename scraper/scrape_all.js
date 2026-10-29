@@ -32,6 +32,9 @@ import { chromium } from "playwright";
 import sharp from "sharp";
 import TurndownService from "turndown";
 
+// Gemeinsame Pfadprüfung des Archivs (nur Node-Bordmittel, keine weiteren Abhängigkeiten).
+import { isPathInside } from "../lib/archive-files.cjs";
+
 // ---------------------------------------------------------------------------
 // Konfiguration
 // ---------------------------------------------------------------------------
@@ -81,8 +84,7 @@ function sourceOutputDir(outputPath) {
     throw new Error(`OutputPath muss relativ zum Scraper-Script sein: ${outputPath}`);
   }
   const outputDir = path.resolve(SCRIPT_DIR, outputPath);
-  const outputRoot = path.resolve(WWW_DIR);
-  if (outputDir === outputRoot || !outputDir.startsWith(outputRoot + path.sep)) {
+  if (!isPathInside(WWW_DIR, outputDir)) {
     throw new Error(`OutputPath liegt außerhalb von www/: ${outputPath}`);
   }
   return outputDir;

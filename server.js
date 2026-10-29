@@ -23,6 +23,7 @@ const { httpError, isCrossSite, sendApiError, sendRouteError } = require('./lib/
 const { computeAppShellVersion, createAppShellVersion, createVersionedIndex, serviceWorkerSource } = require('./lib/app-shell.cjs');
 const { createArticleBodyCache } = require('./lib/article-body-cache.cjs');
 const { FileSessionStore } = require('./lib/session-file-store.cjs');
+const { writeFileAtomic } = require('./lib/atomic-file.cjs');
 const {
   parseArticleSearchQuery, bodyExcerpt, mergeCategories, autoCategorize,
   extractSourceUrl, parseArticle,
@@ -173,7 +174,7 @@ const ttsVoiceSettings = createTtsVoiceSettings();
 const markdownEditor = createMarkdownEditor({
   // Artikel liegen unter www/, die abstract.md der Hörbücher unter audio/.
   root: [WWW_DIR, AUDIO_DIR],
-  getArticle: id => articles.find(a => a.id === id) || audiobooks.get(id),
+  getArticle: id => articleById.get(id) || audiobooks.get(id),
   canAccessAuthor,
   busy: () => archiveLock.busy,
   reindex: refreshMarkdownIndex,
@@ -181,7 +182,7 @@ const markdownEditor = createMarkdownEditor({
 const ttsJobs = createTtsJobs({
   root: WWW_DIR,
   audioRoot: AUDIO_DIR,
-  getArticle: id => articles.find(a => a.id === id),
+  getArticle: id => articleById.get(id),
   canAccessAuthor,
   busy: () => archiveLock.busy,
   reindex: refreshMarkdownIndex,
@@ -735,7 +736,7 @@ async function prepareInfographicPosterBatch(changes) {
   const mappings = [];
   const years = new Set();
   const updated = [];
-  const root = path.resolve(WWW_DIR, INFOGRAPHICS_AUTHOR) + path.sep;
+  const root = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR);
 
   for (const change of changes) {
     const id = typeof change?.id === 'string' ? change.id : '';
@@ -747,7 +748,7 @@ async function prepareInfographicPosterBatch(changes) {
     const article = articleById.get(id);
     const mdPath = article?.filePath ? path.resolve(article.filePath) : '';
     if (!article || article.author !== INFOGRAPHICS_AUTHOR || !article.ownImage
-        || !mdPath.startsWith(root) || path.extname(mdPath).toLowerCase() !== '.md') {
+        || !isPathInside(root, mdPath) || path.extname(mdPath).toLowerCase() !== '.md') {
       throw httpError(404, 'Infografik nicht gefunden: ' + id);
     }
     const current = article.instagramPoster === true;
@@ -887,10 +888,16 @@ async function migrateDuplicateInfographics(blog, facebook) {
   const overwrittenMarkdown = [];
   const archiveRoot = await fs.promises.realpath(WWW_DIR);
   const isInsideArchive = file => isPathInside(archiveRoot, file);
+  // Jeder Schritt läuft auch, wenn ein früherer scheitert; Fehler stehen im Log.
+  const logFailure = label => error => console.error(`Dubletten-Migration zurückrollen (${label}):`, error);
   const rollback = async () => {
-    for (const file of [...created].reverse()) await fs.promises.unlink(file).catch(() => {});
-    for (const item of [...overwrittenMarkdown].reverse()) await fs.promises.writeFile(item.path, item.content).catch(() => {});
-    for (const mapping of [...moved].reverse()) await fs.promises.rename(mapping.target, mapping.source).catch(() => {});
+    for (const file of [...created].reverse()) await fs.promises.unlink(file).catch(logFailure(file));
+    for (const item of [...overwrittenMarkdown].reverse()) {
+      await writeFileAtomic(item.path, item.content).catch(logFailure(item.path));
+    }
+    for (const mapping of [...moved].reverse()) {
+      await fs.promises.rename(mapping.target, mapping.source).catch(logFailure(mapping.target));
+    }
   };
   try {
     for (const bundle of plan) {
@@ -919,7 +926,7 @@ async function migrateDuplicateInfographics(blog, facebook) {
       const mdTarget = path.join(bundle.dir, bundle.stem + '.md');
       if (mdMapping) {
         overwrittenMarkdown.push({ path: mdTarget, content: await fs.promises.readFile(mdTarget) });
-        await fs.promises.writeFile(mdTarget, buildInfographicMarkdown(blogContent, bundle.ordinal));
+        await writeFileAtomic(mdTarget, buildInfographicMarkdown(blogContent, bundle.ordinal));
       } else {
         await fs.promises.writeFile(mdTarget, buildInfographicMarkdown(blogContent, bundle.ordinal), { flag: 'wx' });
         created.push(mdTarget);
@@ -976,16 +983,13 @@ function sameStringSecret(actual, expected) {
 function requireAdminAccess(req, res, next) {
   return requireAdmin(req, res, () => {
     if (SAFE_HTTP_METHODS.has(req.method)) return next();
-    if (isCrossSite(req)) {
-      return res.status(403).json({ error: 'Änderungen sind nur aus dem Archiv erlaubt.' });
-    }
+    if (isCrossSite(req)) return sendApiError(res, 'cross_site');
     const origin = req.get('origin');
     const expectedOrigin = `${req.protocol}://${req.get('host')}`;
-    if (origin && origin !== expectedOrigin) {
-      return res.status(403).json({ error: 'Ungültige Anfrageherkunft.' });
-    }
+    if (origin && origin !== expectedOrigin) return sendApiError(res, 'invalid_origin');
+    // Veraltetes Token (z. B. Seite aus einer früheren Sitzung): die Oberfläche lädt neu.
     if (!sameStringSecret(req.get('x-csrf-token'), req.session.adminCsrfToken)) {
-      return res.status(403).json({ error: 'Ungültiges oder fehlendes Sicherheitstoken.' });
+      return sendApiError(res, 'csrf_invalid');
     }
     next();
   });
@@ -1381,7 +1385,7 @@ app.get('/api/prompts/:file', attachUser, (req, res) => {
 });
 
 app.post('/api/reindex', requireAdminAccess, (req, res) => {
-  if (reindexState.running) return res.json({ started: false, reason: 'already running' });
+  // Ein laufender Reindex ist bei der Sperre registriert; die 409-Antwort nennt ihn.
   if (archiveLock.busy) return sendArchiveBusy(res, { started: false });
   // withReindexState setzt reindexState.running synchron und belegt damit die Sperre.
   buildIndex().catch(console.error);
@@ -1624,8 +1628,7 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
 app.get('/api/scrape/status', requireAdminAccess, (_req, res) => res.json(scrapeState));
 
 app.post('/api/scrape', requireAdminAccess, (req, res) => {
-  if (scrapeState.running) return res.json({ started: false, reason: 'already running' });
-  if (reindexState.running) return res.json({ started: false, reason: 'reindex running' });
+  // Scrape und Reindex sind bei der Sperre registriert; die 409-Antwort nennt den Auftrag.
   if (archiveLock.busy) return sendArchiveBusy(res, { started: false });
   // scrapeState.running wird unten synchron gesetzt und belegt damit die Sperre.
 
@@ -2053,27 +2056,35 @@ installAudiobookRoutes(app, {
   exclusive: (label, task) => archiveLock.run(label, task),
 });
 
-app.use((err, _req, res, next) => {
-  if (_req.path.startsWith('/api/audiobook-extra-upload/') && err?.type === 'entity.too.large') {
+function handleRequestError(err, req, res, next) {
+  if (req.path.startsWith('/api/audiobook-extra-upload/') && err?.type === 'entity.too.large') {
     return res.status(413).json({ error: 'Die Datei ist größer als 20 MB.' });
   }
-  if (_req.path.startsWith('/api/article-markdown/')
-      || _req.path.startsWith('/api/audiobook-extra-source/')
-      || _req.path.startsWith('/api/audiobook-extra-create/')) {
-    if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Die Anfrage ist zu groß. Artikel dürfen höchstens 1 MB enthalten.' });
+  const isArticle = req.path.startsWith('/api/article-markdown/');
+  const isExtra = req.path.startsWith('/api/audiobook-extra-source/') || req.path.startsWith('/api/audiobook-extra-create/');
+  if (isArticle || isExtra) {
+    if (err?.type === 'entity.too.large') {
+      return res.status(413).json({ error: `Die Anfrage ist zu groß. ${isArticle ? 'Artikel' : 'Markdown-Extras'} dürfen höchstens 1 MB enthalten.` });
+    }
     if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Ungültige Speicheranfrage.' });
   }
   if (err?.type === 'entity.too.large') {
-    const message = _req.path.startsWith('/api/infographics/') || _req.path.startsWith('/api/new-infographic')
+    const message = req.path.startsWith('/api/infographics/') || req.path.startsWith('/api/new-infographic')
       ? 'Die Bilddatei ist größer als 10 MB.'
-      : _req.path.startsWith('/api/tts/voices')
+      : req.path.startsWith('/api/tts/voices')
         ? 'Die Aufnahme ist größer als 10 MB.'
         : 'Die Anfrage ist zu groß.';
     return res.status(413).json({ error: message });
   }
   if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Ungültige Anfrage.' });
-  next(err);
-});
+  // Alle übrigen Fehler: API-Aufrufe erhalten JSON ohne interne Details (Stacktrace,
+  // Pfade); die Ursache steht im Dienst-Log. Andere Pfade behandelt Express selbst.
+  if (!req.path.startsWith('/api/') || res.headersSent) return next(err);
+  if (err?.status >= 400 && err.status < 500) return res.status(err.status).json({ error: 'Ungültige Anfrage.' });
+  console.error(`${req.method} ${req.path}:`, err);
+  sendApiError(res, 'internal');
+}
+app.use(handleRequestError);
 
 if (require.main === module) {
   // Reindex ohne Neustart: SIGHUP löst einen Index-Neuaufbau aus – der Prozess
@@ -2118,7 +2129,7 @@ module.exports = {
   buildInfographicMarkdown, removeCategoryLines, slugify,
   normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
   computeAppShellVersion, serviceWorkerSource,
-  renderIndexForSession, requireAdminAccess,
+  renderIndexForSession, requireAdminAccess, handleRequestError,
   infographicAttachmentStem, firstAvailableInfographicOrdinal,
   canUploadInfographic, conflictingInfographicBase, retitleInfographicMarkdown,
   moveInfographicFiles, reorderManagedInfographics,

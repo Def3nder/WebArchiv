@@ -2,19 +2,24 @@
 
 // Begrenzung fehlgeschlagener Kennwortprüfungen (Anmeldung, eigenes Kennwort
 // ändern). Rein im Arbeitsspeicher: Ein Neustart setzt alle Zähler zurück.
-// Gezählt wird pro Konto (E-Mail) und zusätzlich pro IP, damit weder ein
-// einzelnes Konto noch viele Konten von einer Adresse aus durchprobiert werden.
+// Drei Zähler:
+//  - Konto + IP (5): sperrt den Angreifer für dieses Konto, nicht den Inhaber.
+//    Wer nur die E-Mail kennt, kann ein Konto damit nicht mehr aussperren.
+//  - Konto gesamt (50): bremst verteiltes Durchprobieren von vielen Adressen.
+//  - IP (30): bremst das Durchprobieren vieler Konten von einer Adresse.
 
 const MINUTE = 60 * 1000;
 
 function createLoginLimiter({
-  windowMs = 15 * MINUTE, lockMs = 15 * MINUTE, maxPerAccount = 5, maxPerIp = 30,
+  windowMs = 15 * MINUTE, lockMs = 15 * MINUTE, maxPerAccountIp = 5, maxPerAccount = 50, maxPerIp = 30,
   maxEntries = 10000, now = Date.now,
 } = {}) {
   const buckets = new Map();
 
-  const accountKey = account => `a:${String(account || '').trim().toLowerCase()}`;
+  const normalizedAccount = account => String(account || '').trim().toLowerCase();
+  const accountKey = account => `a:${normalizedAccount(account)}`;
   const ipKey = ip => `i:${String(ip || 'unbekannt')}`;
+  const pairKey = (ip, account) => `p:${String(ip || 'unbekannt')}|${normalizedAccount(account)}`;
 
   function current(key) {
     const bucket = buckets.get(key);
@@ -49,6 +54,7 @@ function createLoginLimiter({
     check(ip, account) {
       const time = now();
       const lockedUntil = Math.max(
+        current(pairKey(ip, account))?.lockedUntil || 0,
         current(accountKey(account))?.lockedUntil || 0,
         current(ipKey(ip))?.lockedUntil || 0,
       );
@@ -56,12 +62,14 @@ function createLoginLimiter({
       return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((lockedUntil - time) / 1000)) };
     },
     failure(ip, account) {
+      count(pairKey(ip, account), maxPerAccountIp);
       count(accountKey(account), maxPerAccount);
       count(ipKey(ip), maxPerIp);
       prune();
     },
-    // Erfolgreiche Prüfung setzt nur den Kontozähler zurück; die IP-Grenze bleibt.
-    success(_ip, account) {
+    // Erfolgreiche Prüfung setzt die Kontozähler zurück; die IP-Grenze bleibt.
+    success(ip, account) {
+      buckets.delete(pairKey(ip, account));
       buckets.delete(accountKey(account));
     },
   };

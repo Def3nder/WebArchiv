@@ -108,6 +108,12 @@ test('server.js: keine verstreuten Busy-Prüfungen mehr, alle Aufträge an der z
   assert.doesNotMatch(server, /infographicWrites/);
   // Zustände der laufenden Aufträge erscheinen außerhalb der Registrierung nicht in Busy-Ketten.
   assert.doesNotMatch(server, /\.running \|\| \w+(State)?\.running/);
+  // Start von Reindex und Scrape prüft nur die Sperre (409 mit Auftragsname).
+  assert.doesNotMatch(server, /if \((reindex|scrape)State\.running\) return res/);
+  for (const route of ["app.post('/api/reindex'", "app.post('/api/scrape'"]) {
+    const start = server.indexOf(route);
+    assert.match(server.slice(start, start + 400), /if \(archiveLock\.busy\) return sendArchiveBusy\(res, \{ started: false \}\);/, route);
+  }
   for (const label of ['Index-Neuaufbau', 'Scraper-Lauf', 'Artikel speichern', 'Audio-Erzeugung']) {
     assert.match(server, new RegExp(`archiveLock\\.register\\('${label}'`));
   }

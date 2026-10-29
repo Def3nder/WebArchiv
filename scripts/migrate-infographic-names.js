@@ -8,6 +8,7 @@ const path = require('node:path');
 const { parseArticle } = require('../lib/article-parser.cjs');
 const { linkInfographics, infographicAttachmentStem,
   retitleInfographicMarkdown, moveInfographicFiles } = require('../lib/infographics.cjs');
+const { isPathInside: inside } = require('../lib/archive-files.cjs');
 
 const DEFAULT_WWW = path.join(__dirname, '..', 'www');
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
@@ -19,11 +20,6 @@ function selectedForMigration(member, anchor, section) {
   if (section === '1.1') return anchor.author !== 'Infografiken' && !member.hasBody;
   if (section === '1.2') return anchor.author !== 'Infografiken' && member.hasBody;
   return true;
-}
-
-function inside(root, file) {
-  const relative = path.relative(root, file);
-  return relative !== '' && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
 }
 
 // _1 wurde erst durch diese Migration eingeführt. Auch eine einzelne Datei ist

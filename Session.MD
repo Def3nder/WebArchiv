@@ -265,11 +265,11 @@ Die alte Ablage von Stefan Hiene bleibt dadurch unverändert verwendbar. Die urs
 ### Migration eines ausgewählten Autors
 
 ```powershell
-node migrate-audio.js "Joe Turan" --dry-run
-node migrate-audio.js "Joe Turan"
+node scripts/migrate-audio.js "Joe Turan" --dry-run
+node scripts/migrate-audio.js "Joe Turan"
 ```
 
-Das Skript im Projektroot sucht rekursiv nach `.mp3` einschließlich abweichender Groß-/Kleinschreibung. Es spiegelt den relativen Pfad unter `audio/<Autor>/`, behandelt Autorennamen mit Leerzeichen, überschreibt vorhandene Ziele nicht und protokolliert nach `migrate-audio.log`. Markdown und Bilder werden nicht verschoben.
+Das Skript (`scripts/migrate-audio.js`, arbeitet auf `www/` und `audio/` im Projektroot) sucht rekursiv nach `.mp3` einschließlich abweichender Groß-/Kleinschreibung. Es spiegelt den relativen Pfad unter `audio/<Autor>/`, behandelt Autorennamen mit Leerzeichen, überschreibt vorhandene Ziele nicht und protokolliert nach `migrate-audio.log`. Markdown und Bilder werden nicht verschoben.
 
 Ein tatsächlicher Debian-Fehler war `EXDEV: cross-device link not permitted`: `www/` und `audio/` lagen auf verschiedenen Dateisystemen. Deshalb gibt es nach einem fehlgeschlagenen `rename` wegen `EXDEV` einen Fallback: kopieren, Dateigröße vergleichen, erst danach die Quelle entfernen. Ein Größenvergleich ist kein kryptografischer Inhaltsvergleich.
 
@@ -1965,3 +1965,44 @@ eigene Angaben wie `overscroll-behavior-y: none` am Artikel-Panel Vorrang behalt
 `contain`, Artikel-Panel weiter `none` in y, Seite selbst unverändert). Auf einem iPhone nicht geprüft.
 
 **Deployment:** `public/css/dialogs.css` kopieren; Browser neu laden genügt.
+
+## 42. Aktualisierung 29.10.2026 – Review-Punkte 2.6, 2.7, 2.9 und 2.11
+
+Grundlage: `code-review_2026-01-28.md`.
+
+- **Pfadprüfungen (2.6):** Alle handgeschriebenen `startsWith(... + path.sep)`- bzw. `'..'`-Prüfungen nutzen jetzt
+  `isPathInside` aus `lib/archive-files.cjs`: `article-editor.cjs`, `tts/jobs.cjs`, `server.js` (Prüfmodus),
+  `scripts/migrate-audio.js`, `scripts/migrate-infographic-names.js` (eigene Kopie entfernt),
+  `duplicates-tool/lib/scan.cjs` und `scraper/scrape_all.js` (ESM-Import der CJS-Datei).
+  Neuer Regeltest `test/code-rules.test.cjs` verbietet das Muster in allen Quellordnern.
+  - **Nebenbei behoben:** `scripts/migrate-audio.js` suchte seit dem Umzug nach `scripts/` (07.10.2026) unter
+    `scripts/www` und fand kein Autorenverzeichnis. Aufruf jetzt `node scripts/migrate-audio.js "<Autor>"`.
+- **Infografik-Dateien (2.7):** Die Dubletten-Migration überschreibt die `.md` per `writeFileAtomic`; ihr
+  Rollback führt jeden Schritt aus und protokolliert Fehler. `moveInfographicFiles` rollt pro Datei zurück, auch
+  wenn ein Schritt scheitert, und meldet dann mit Status 500, welche Dateien unter welchem Temp-Namen
+  liegengeblieben sind (Details im Log). Regeltest: `fs.promises.writeFile` in `server.js` nur mit `flag: 'wx'`.
+- **Doppelte Busy-Prüfungen (2.9):** `POST /api/reindex` und `POST /api/scrape` prüfen nur noch `archiveLock.busy`;
+  die 409-Antwort nennt den laufenden Auftrag. `admin-tasks.js` zeigt diese Meldung statt eigener Texte.
+- **Kleinigkeiten (2.11):**
+  - Admin-Schutz antwortet mit festen Codes `cross_site`, `invalid_origin`, `csrf_invalid`; bei `csrf_invalid`
+    lädt `apiFetch` die Seite neu (frisches Token).
+  - Letzter Fehler-Handler (`handleRequestError`): unbehandelte Fehler unter `/api/*` liefern JSON
+    `{ error, code: 'internal' }` ohne Stacktrace, die Ursache steht im Log.
+  - 413-Meldung nennt bei Hörbuch-Extras „Markdown-Extras“ statt „Artikel“.
+  - Login-Begrenzung: 5 Fehlversuche sperren nur noch Konto **+ IP**; ein Konto insgesamt erst nach 50
+    (verteilte Angriffe), eine IP weiter nach 30. Wer nur die E-Mail kennt, sperrt den Inhaber nicht mehr aus.
+  - Ungenutzte Re-Exporte entfernt (`writeJsonAtomic` aus `user-store.cjs`, `isPathInside` aus `media-files.cjs`).
+  - Editor und TTS finden Artikel über `articleById` statt linearer Suche.
+  - `esc` in `app.js` behandelt Zahlen und `'` wie die bisherige Kopie `duplicateEsc`; `duplicates.js` nutzt `esc`.
+  - `normalizeDate` in `audiobooks.cjs` heißt `normalizeAbstractDate` und erklärt die abweichende Regel.
+
+**Geprüft:** Node-Suite 440/440, Python 14/14 (neu: Regeltests, Rollback mit fehlschlagender Datei,
+Fehler-Handler, 413-Meldungen, CSRF-Codes, neue Login-Grenzen). `node --check` für die geänderten Skripte, ESM-Import
+des Scrapers. Im Browser als Gast: Kacheln und Artikel laden, `esc` korrekt, keine neuen Konsolenfehler.
+
+**Deployment:**
+- Kopieren: `server.js`, `article-editor.cjs`, `audiobooks.cjs`, `login-limiter.cjs`, `media-files.cjs`,
+  `user-store.cjs`, `lib/http-errors.cjs`, `lib/infographics.cjs`, `tts/jobs.cjs`, `scraper/scrape_all.js`,
+  `scripts/migrate-audio.js`, `scripts/migrate-infographic-names.js`, `public/app.js`, `public/admin-tasks.js`,
+  `public/duplicates.js`.
+- Dienst neu starten.

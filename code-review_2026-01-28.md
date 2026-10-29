@@ -93,7 +93,7 @@ Legende: ✅ umgesetzt · ⚠️ teilweise · ❌ offen
 
 Sortiert nach Wichtigkeit.
 
-> **Nachtrag:** 2.1 bis 2.5 sind behoben und mit Tests abgesichert (Details in Session.MD, Abschnitt 39). 2.6 bis 2.11 sind noch offen.
+> **Nachtrag:** 2.1 bis 2.5 sind behoben und mit Tests abgesichert (Details in Session.MD, Abschnitt 39). 2.6, 2.7, 2.9 und 2.11 folgen in Abschnitt 42. Offen sind noch 2.8 (CSP scharf schalten) und 2.10 (Doku).
 
 ### 2.1 Tastatur: Detailansicht reagiert auf Pfeiltasten und Escape, obwohl ein Dialog darüber offen ist (Fehler) – ✅ behoben
 
@@ -154,7 +154,7 @@ Die nächste Änderung lädt die Datei neu und heilt den Zustand. Bis dahin weic
 
 **Lösung:** `requireAdminAccess` verwenden. Das Frontend fragt den Status ohnehin nur im Admin-Skript ab.
 
-### 2.6 Pfadprüfung per `startsWith` an fünf Stellen (Regelverstoß)
+### 2.6 Pfadprüfung per `startsWith` an fünf Stellen (Regelverstoß) – ✅ behoben
 
 `CLAUDE.md` legt fest: „never write `startsWith(root + path.sep)`“. Noch vorhanden sind:
 
@@ -168,7 +168,7 @@ Funktional ist das hier überwiegend korrekt, weil beide Seiten über `realpath`
 
 **Lösung:** Überall `isPathInside` bzw. `resolveUnder` aus `lib/archive-files.cjs` verwenden.
 
-### 2.7 Infografik-Dateien: zwei nicht atomare Stellen
+### 2.7 Infografik-Dateien: zwei nicht atomare Stellen – ✅ behoben
 
 - **[server.js:922](server.js:922):** `migrateDuplicateInfographics` überschreibt die bereits verschobene `.md` per `fs.promises.writeFile`. Auch der Rollback in [:892](server.js:892) schreibt so. Ein Absturz mitten im Schreiben hinterlässt eine halbe Datei. Dafür passt `writeFileAtomic`.
 - **[lib/infographics.cjs:391–400](lib/infographics.cjs:391):** Schlägt im Rollback von `moveInfographicFiles` ein `rename` fehl, bricht die Schleife ab. Die übrigen Dateien bleiben dann unter `.infographic-<token>-N.tmp` liegen und sind für Index und Nutzer unsichtbar. Der ursprüngliche Fehler wird geworfen, der Rollback-Fehler verschluckt. Besser: Den Rollback pro Datei in `try/catch` fassen, alle Fehler sammeln und die liegengebliebenen Temp-Namen in der Meldung nennen.
@@ -181,7 +181,7 @@ Der eigentliche XSS-Schutz der CSP greift erst mit `enforce`. Der Bestand sprich
 
 **Empfehlung:** Das Dienstprotokoll auf `CSP-Verstoß` prüfen (`journalctl -u nodeapp | grep CSP`). Gibt es keine Meldungen, `enforce` setzen.
 
-### 2.9 Doppelte Prüfungen neben der Archiv-Sperre
+### 2.9 Doppelte Prüfungen neben der Archiv-Sperre – ✅ behoben
 
 **Wo:** [server.js:1383](server.js:1383), [server.js:1626](server.js:1626)
 
@@ -194,7 +194,7 @@ Der eigentliche XSS-Schutz der CSP greift erst mit `enforce`. Der Bestand sprich
 - **[Session.MD:30](Session.MD:30):** Cron-Wrapper (siehe Abschnitt 1).
 - **[tts/UEBERGABE-TTS.md:4](tts/UEBERGABE-TTS.md:4):** nennt den „Qwen-v4-Healthcheck“, der Code verlangt v5. Falls die Datei als historisch gilt, sollte das oben vermerkt sein.
 
-### 2.11 Kleinigkeiten
+### 2.11 Kleinigkeiten – ✅ behoben
 
 - **CSRF-Fehler ohne `code`:** Die 403-Antworten von `requireAdminAccess` ([server.js:980–988](server.js:980)) haben kein `code`. Ein veraltetes CSRF-Token zeigt deshalb nur „Ungültiges oder fehlendes Sicherheitstoken.“, und die Seite lädt nicht neu. Ein Code wie `csrf_invalid` plus Behandlung in `apiFetch` wäre robuster.
 - **Kein JSON-Fehler-Handler am Ende:** [server.js:2068](server.js:2068) reicht unbehandelte Fehler mit `next(err)` an Express weiter. Ohne `NODE_ENV=production` liefert das HTML mit Stacktrace. Ein letzter Handler für `/api/*` mit `{ error, code }` wäre konsistent.

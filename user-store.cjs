@@ -315,4 +315,4 @@ function installUserRoutes(app, {
   }));
 }
 
-module.exports = { createUserStore, installUserRoutes, writeJsonAtomic, MIN_PASSWORD };
+module.exports = { createUserStore, installUserRoutes, MIN_PASSWORD };

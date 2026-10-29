@@ -531,8 +531,12 @@ function sanitizeForId(id) {
   return encodeURIComponent(id);
 }
 
-function esc(str) {
-  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// HTML-Escape für Text und Attributwerte in Templates; auch von den Admin-Skripten
+// (z. B. duplicates.js) genutzt. Zahlen bleiben erhalten, null/undefined werden leer.
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]);
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────
@@ -724,6 +728,13 @@ async function apiFetch(url, options) {
     if (data?.code === 'admin_required') {
       location.reload();
       throw Object.assign(new Error('Die Admin-Sitzung ist abgelaufen.'), { code: 'session_expired' });
+    }
+    // Das Sicherheitstoken der geladenen Seite passt nicht mehr zur Sitzung (z. B.
+    // nach erneuter Anmeldung in einem anderen Tab): neu laden holt ein frisches.
+    if (data?.code === 'csrf_invalid') {
+      location.reload();
+      throw Object.assign(new Error('Die Seite war veraltet und wird neu geladen. Bitte die Aktion wiederholen.'),
+        { code: 'session_expired' });
     }
     if (data?.code === 'password_change_required') {
       currentUser = { ...currentUser, mustChangePassword: true };

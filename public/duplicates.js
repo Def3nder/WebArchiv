@@ -120,12 +120,6 @@ duplicateChrome.addEventListener('focusin', () => showDuplicateChrome(true));
 if (typeof ResizeObserver !== 'undefined') new ResizeObserver(updateDuplicateChromeHeight).observe(duplicateChrome);
 window.addEventListener('resize', updateDuplicateChromeHeight);
 
-function duplicateEsc(value) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[char]);
-}
-
 function duplicateDate(value) {
   if (!value) return 'ohne Datum';
   const date = new Date(`${value}T12:00:00`);
@@ -166,7 +160,7 @@ function duplicatePairKey(item) {
 
 function duplicatePairAttrs(item) {
   const { blogId, facebookId } = duplicatePairIds(item);
-  return `data-blog-id="${duplicateEsc(blogId)}" data-facebook-id="${duplicateEsc(facebookId)}"`;
+  return `data-blog-id="${esc(blogId)}" data-facebook-id="${esc(facebookId)}"`;
 }
 
 function loadDuplicateSelection() {
@@ -194,12 +188,12 @@ function duplicateInfographics(article) {
 
 function duplicateInfographicGallery(article, side) {
   const items = duplicateInfographics(article);
-  const sideLabel = side === 'blog' ? 'Blog' : duplicateEsc(duplicateSourceLabel(article));
+  const sideLabel = side === 'blog' ? 'Blog' : esc(duplicateSourceLabel(article));
   return `<details class="duplicate-infographic-gallery" data-duplicate-infographic-side="${side}" aria-label="${sideLabel}-Infografiken"${duplicateUi.infographicsOpen ? ' open' : ''}>
     <summary class="duplicate-infographic-heading"><strong>Infografiken</strong><span>${duplicateInfographicLabel(article)}</span></summary>
     <div class="duplicate-infographic-thumbs">
       ${items.length ? items.map((item, index) => `<button type="button" class="duplicate-infographic-thumb" data-duplicate-action="open-infographic" data-side="${side}" data-index="${index}" aria-label="${sideLabel}-Infografik ${index + 1} in Vollansicht öffnen">
-        <img src="${duplicateEsc(item.imageUrl)}" alt="${sideLabel}-Infografik ${index + 1}" loading="lazy" decoding="async">
+        <img src="${esc(item.imageUrl)}" alt="${sideLabel}-Infografik ${index + 1}" loading="lazy" decoding="async">
         <span>${index + 1}</span>
       </button>`).join('') : '<span class="duplicate-infographic-empty">Keine Infografik vorhanden</span>'}
     </div>
@@ -252,10 +246,10 @@ function duplicateArticleMini(article, side) {
   if (!article) return `<article class="duplicate-side is-missing"><p>Artikel fehlt</p></article>`;
   return `<article class="duplicate-side duplicate-side-${side}">
     <div class="duplicate-side-copy">
-      <div class="duplicate-side-kicker"><span class="duplicate-source">${side === 'blog' ? 'BLOG · ORIGINAL' : `${duplicateEsc(duplicateSourceLabel(article).toLocaleUpperCase('de-DE'))} · QUELLE`}</span><span class="duplicate-infographic-count">${duplicateInfographicLabel(article)}</span></div>
-      <h3>${duplicateEsc(article.title)}</h3>
+      <div class="duplicate-side-kicker"><span class="duplicate-source">${side === 'blog' ? 'BLOG · ORIGINAL' : `${esc(duplicateSourceLabel(article).toLocaleUpperCase('de-DE'))} · QUELLE`}</span><span class="duplicate-infographic-count">${duplicateInfographicLabel(article)}</span></div>
+      <h3>${esc(article.title)}</h3>
       <p class="duplicate-meta">${duplicateDate(article.date)}${article.hasOwnImage ? ' · mit Artikelbild' : ''}</p>
-      <p class="duplicate-excerpt">${duplicateEsc(article.excerpt || '')}</p>
+      <p class="duplicate-excerpt">${esc(article.excerpt || '')}</p>
     </div>
   </article>`;
 }
@@ -322,8 +316,8 @@ function duplicateCard(item, status) {
   return `<article class="duplicate-card${item.changed ? ' is-changed' : ''}${selected ? ' is-selected' : ''}" ${duplicatePairAttrs(item)}>
     <header class="duplicate-card-head">
       ${status === 'pending' ? `<label class="duplicate-select"><input type="checkbox" data-duplicate-select ${selected ? 'checked' : ''}><span>Auswählen</span></label>` : ''}
-      <div class="duplicate-score" ${item.exact ? 'title="Gleiche normalisierte Wortfolge; Absätze und Satzzeichen können abweichen"' : ''}><strong>${duplicateEsc(score || (status === 'linked' ? '✓' : '–'))}</strong><span>${score ? item.exact ? 'Wortfolge gleich' : 'Übereinstimmung' : status === 'linked' ? 'verknüpft' : 'Entscheidung'}</span></div>
-      <div class="duplicate-reasons">${notes.map(note => `<span>${duplicateEsc(note)}</span>`).join('')}</div>
+      <div class="duplicate-score" ${item.exact ? 'title="Gleiche normalisierte Wortfolge; Absätze und Satzzeichen können abweichen"' : ''}><strong>${esc(score || (status === 'linked' ? '✓' : '–'))}</strong><span>${score ? item.exact ? 'Wortfolge gleich' : 'Übereinstimmung' : status === 'linked' ? 'verknüpft' : 'Entscheidung'}</span></div>
+      <div class="duplicate-reasons">${notes.map(note => `<span>${esc(note)}</span>`).join('')}</div>
       ${status === 'pending' ? duplicateActions(item, status) : ''}
     </header>
     <div class="duplicate-pair">
@@ -362,7 +356,7 @@ function renderDuplicateAuthorFilter() {
     duplicateUi.authorOptionsKey = key;
     duplicateUi.filters.authors = null;
     duplicateAuthorOptions.innerHTML = `<button type="button" class="header-menu-item duplicate-author-all" role="menuitemcheckbox" aria-checked="true" data-duplicate-author-all>Alle Autoren</button>
-      ${authors.map(author => `<button type="button" class="header-menu-item" role="menuitemcheckbox" aria-checked="true" data-duplicate-author="${duplicateEsc(author)}">${duplicateEsc(author)}</button>`).join('')}`;
+      ${authors.map(author => `<button type="button" class="header-menu-item" role="menuitemcheckbox" aria-checked="true" data-duplicate-author="${esc(author)}">${esc(author)}</button>`).join('')}`;
     const summary = new Option('Alle Autoren', '');
     summary.disabled = true;
     duplicateAuthorNative.replaceChildren(
@@ -542,7 +536,7 @@ function duplicateComparisonRows(pair) {
     });
   if (!rows.length) return '<div class="duplicate-comparison-message">Keine Artikeltexte vorhanden.</div>';
   return rows.map(row => {
-    if (row.kind === 'identical') return `<div class="duplicate-comparison-message is-identical">${duplicateEsc(row.text)}</div>`;
+    if (row.kind === 'identical') return `<div class="duplicate-comparison-message is-identical">${esc(row.text)}</div>`;
     if (row.kind === 'fold') {
       return `<details class="duplicate-diff-fold">
         <summary><span class="duplicate-diff-fold-arrow" aria-hidden="true">▸</span><strong>${row.count} unveränderte${row.count === 1 ? 'r Abschnitt' : ' Abschnitte'}</strong><span class="duplicate-diff-fold-label">Aufklappen</span><span class="duplicate-diff-fold-label is-open">Zuklappen</span></summary>
@@ -557,8 +551,8 @@ function renderDuplicateDetail(pair) {
   duplicateUi.detail = pair;
   duplicateTools.hidden = true;
   const migration = pair.migration || [];
-  const sourceLabel = duplicateEsc(duplicateSourceLabel(pair.facebook));
-  const sourceKicker = duplicateEsc(duplicateSourceLabel(pair.facebook).toLocaleUpperCase('de-DE'));
+  const sourceLabel = esc(duplicateSourceLabel(pair.facebook));
+  const sourceKicker = esc(duplicateSourceLabel(pair.facebook).toLocaleUpperCase('de-DE'));
   duplicateDetailContent.innerHTML = `<div class="duplicate-detail" data-mobile-side="${duplicateUi.mobileSide}">
     <div class="duplicate-detail-nav">
       <button type="button" class="duplicate-back" data-duplicate-action="back">← Zur Trefferliste</button>
@@ -569,8 +563,8 @@ function renderDuplicateDetail(pair) {
       </div>
     </div>
     <div class="duplicate-detail-header-grid">
-      <article data-duplicate-side="blog"><span class="duplicate-source">BLOG · ORIGINAL</span><h3 title="${duplicateEsc(pair.blog.title)}">${duplicateEsc(pair.blog.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.blog.date)}</p>${duplicateInfographicGallery(pair.blog, 'blog')}</article>
-      <article data-duplicate-side="facebook"><span class="duplicate-source">${sourceKicker} · QUELLE</span><h3 title="${duplicateEsc(pair.facebook.title)}">${duplicateEsc(pair.facebook.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.facebook.date)}</p>${duplicateInfographicGallery(pair.facebook, 'facebook')}</article>
+      <article data-duplicate-side="blog"><span class="duplicate-source">BLOG · ORIGINAL</span><h3 title="${esc(pair.blog.title)}">${esc(pair.blog.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.blog.date)}</p>${duplicateInfographicGallery(pair.blog, 'blog')}</article>
+      <article data-duplicate-side="facebook"><span class="duplicate-source">${sourceKicker} · QUELLE</span><h3 title="${esc(pair.facebook.title)}">${esc(pair.facebook.title)}</h3><p class="duplicate-meta">${duplicateDate(pair.facebook.date)}</p>${duplicateInfographicGallery(pair.facebook, 'facebook')}</article>
     </div>
     <div class="duplicate-comparison-scroll" tabindex="0" aria-label="Änderungen zwischen ${sourceLabel} und Blog">
       <div class="duplicate-diff-legend"><span class="is-removed">− Nur ${sourceLabel}</span><span class="is-added">+ Nur Blog</span><small>Abschnitte: ${sourceLabel} · Blog</small></div>
@@ -578,8 +572,8 @@ function renderDuplicateDetail(pair) {
     </div>
     ${migration.length ? `<details class="duplicate-migration-note">
       <summary>${migration.length} Infografik${migration.length === 1 ? ' kann' : 'en können'} migriert werden · Dateinamen</summary>
-      <ul>${migration.map(item => `<li>${duplicateEsc(item.target)} · ${item.files.map(duplicateEsc).join(', ')}</li>`).join('')}</ul>
-    </details>` : `<aside class="duplicate-migration-note">${pair.migrationUnavailable ? duplicateEsc(pair.migrationUnavailable) : 'Keine migrierbare Infografik erkannt'}</aside>`}
+      <ul>${migration.map(item => `<li>${esc(item.target)} · ${item.files.map(file => esc(file)).join(', ')}</li>`).join('')}</ul>
+    </details>` : `<aside class="duplicate-migration-note">${pair.migrationUnavailable ? esc(pair.migrationUnavailable) : 'Keine migrierbare Infografik erkannt'}</aside>`}
     ${duplicateActions(pair, duplicateUi.tab, { detail: true })}
   </div>`;
   if (!duplicateDetailDialog.open) duplicateDetailDialog.showModal();
@@ -715,7 +709,7 @@ async function openDuplicateReview() {
   try { await loadDuplicates(); }
   catch (error) {
     duplicateStatus.textContent = 'Fehler';
-    duplicateContent.innerHTML = `<div class="duplicate-empty"><h3>Dubletten konnten nicht geladen werden</h3><p>${duplicateEsc(error.message)}</p></div>`;
+    duplicateContent.innerHTML = `<div class="duplicate-empty"><h3>Dubletten konnten nicht geladen werden</h3><p>${esc(error.message)}</p></div>`;
   }
 }
 

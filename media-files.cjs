@@ -79,4 +79,4 @@ function installMediaRoutes(app, {
   });
 }
 
-module.exports = { isPathInside, resolveMediaRequest, installMediaRoutes };
+module.exports = { resolveMediaRequest, installMediaRoutes };

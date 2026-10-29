@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { writeFileAtomic } = require('./lib/atomic-file.cjs');
+const { isPathInside } = require('./lib/archive-files.cjs');
 const { httpError: fail, jsonRoute } = require('./lib/http-errors.cjs');
 
 const MAX_BYTES = 1024 * 1024;
@@ -18,7 +19,7 @@ function createMarkdownEditor({ root, getArticle, canAccessAuthor, busy, reindex
     if (!article.filePath) throw fail(404, 'Zu diesem Eintrag gibt es keine Markdown-Datei.');
     const bases = await Promise.all([].concat(root).map(dir => io.realpath(dir).catch(() => null)));
     const filename = await io.realpath(article.filePath);
-    if (!bases.some(base => base && filename.startsWith(base + path.sep)) || path.extname(filename) !== '.md') {
+    if (!bases.some(base => base && isPathInside(base, filename)) || path.extname(filename) !== '.md') {
       throw fail(403, 'Ungültiger Artikelpfad.');
     }
     // Ein Austausch würde sonst den Link statt der Originaldatei ersetzen.

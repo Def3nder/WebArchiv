@@ -320,7 +320,7 @@ async function runReindex() {
     const r = await apiFetch('/api/reindex', { method: 'POST' });
     const data = await r.json();
     if (!data.started) {
-      alert(data.error || 'Re-Index läuft bereits.');
+      alert(data.error || 'Ein anderer Auftrag läuft bereits.');
       return;
     }
     await new Promise(resolve => {
@@ -371,9 +371,8 @@ async function runScrape() {
     const r = await apiFetch('/api/scrape', { method: 'POST' });
     const data = await r.json();
     if (!data.started) {
-      $scrapeStatus.textContent = data.error || (data.reason === 'reindex running'
-        ? 'Re-Index läuft gerade – bitte kurz warten.'
-        : 'Ein Scrape-Lauf läuft bereits.');
+      // Die Sperre meldet, was gerade läuft (Scrape, Reindex, Audio …).
+      $scrapeStatus.textContent = data.error || 'Ein anderer Auftrag läuft bereits.';
       return;
     }
     // 1) Scrape-Lauf: Ausgabe live anzeigen, bis fertig.

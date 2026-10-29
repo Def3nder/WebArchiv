@@ -5,6 +5,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { parseArticle, bodyExcerpt } = require('./article.cjs');
 const { buildDuplicateProfile } = require('./duplicates.cjs');
+const { isPathInside } = require('../../lib/archive-files.cjs');
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg']);
 
@@ -13,9 +14,9 @@ function splitName(name) {
   return { stem: name.slice(0, name.length - ext.length), ext: ext.toLowerCase() };
 }
 
+// Liegt child in parent oder ist parent selbst?
 function isInside(child, parent) {
-  const relative = path.relative(parent, child);
-  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+  return path.resolve(child) === path.resolve(parent) || isPathInside(parent, child);
 }
 
 // Begleitdateien: gleicher Basisname (foo.jpg) oder Infografik-Variante (foo_1.jpg),

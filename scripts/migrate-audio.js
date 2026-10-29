@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const { isPathInside } = require('../lib/archive-files.cjs');
 
-const ROOT_DIR = __dirname;
+// Das Skript liegt in scripts/; Archiv und Log liegen im Projekt-Root.
+const ROOT_DIR = path.join(__dirname, '..');
 const WWW_DIR = path.join(ROOT_DIR, 'www');
 const AUDIO_DIR = path.join(ROOT_DIR, 'audio');
 const LOG_FILE = path.join(ROOT_DIR, 'migrate-audio.log');
@@ -40,14 +42,8 @@ function writeLog() {
 }
 
 function usage() {
-  console.error('Nutzung: node migrate-audio.js <Autorenname> [--dry-run]');
-  console.error('Beispiel: node migrate-audio.js "Joe Turan" --dry-run');
-}
-
-function ensureInside(baseDir, targetPath) {
-  const resolvedBase = path.resolve(baseDir);
-  const resolvedTarget = path.resolve(targetPath);
-  return resolvedTarget === resolvedBase || resolvedTarget.startsWith(resolvedBase + path.sep);
+  console.error('Nutzung: node scripts/migrate-audio.js <Autorenname> [--dry-run]');
+  console.error('Beispiel: node scripts/migrate-audio.js "Joe Turan" --dry-run');
 }
 
 async function walk(dir, onFile) {
@@ -99,13 +95,13 @@ async function moveAudioFile(sourcePath, sourceAuthorDir, targetAuthorDir) {
   const relPath = path.relative(sourceAuthorDir, sourcePath);
   const targetPath = path.join(targetAuthorDir, relPath);
 
-  if (!ensureInside(sourceAuthorDir, sourcePath)) {
+  if (!isPathInside(sourceAuthorDir, sourcePath)) {
     summary.errors++;
     log(`FEHLER: Quelle verlaesst Autorenverzeichnis: ${sourcePath}`);
     return;
   }
 
-  if (!ensureInside(targetAuthorDir, targetPath)) {
+  if (!isPathInside(targetAuthorDir, targetPath)) {
     summary.errors++;
     log(`FEHLER: Ziel verlaesst Audio-Autorenverzeichnis: ${targetPath}`);
     return;
@@ -152,7 +148,7 @@ async function main() {
   log(`Quelle: ${sourceAuthorDir}`);
   log(`Ziel: ${targetAuthorDir}`);
 
-  if (!ensureInside(WWW_DIR, sourceAuthorDir) || !ensureInside(AUDIO_DIR, targetAuthorDir)) {
+  if (!isPathInside(WWW_DIR, sourceAuthorDir) || !isPathInside(AUDIO_DIR, targetAuthorDir)) {
     log('FEHLER: Autorenname ergibt einen Pfad ausserhalb der erlaubten Verzeichnisse.');
     process.exitCode = 1;
     return;

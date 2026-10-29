@@ -143,6 +143,43 @@ test('Ein belegtes Ziel wird vor der ersten Dateibewegung abgewiesen', async () 
   });
 });
 
+test('Scheitert das Zurückrollen bei einer Datei, laufen die übrigen weiter und die Reste werden genannt', async t => {
+  await fixture(async dir => {
+    const markdown = path.join(dir, 'a.md');
+    const image = path.join(dir, 'b.png');
+    await fs.writeFile(markdown, 'alt');
+    await fs.writeFile(image, 'Bild');
+    // Der Zielordner des Bildes fehlt: das Verschieben scheitert nach dem Markdown.
+    const mappings = [
+      { source: markdown, target: path.join(dir, 'a_1.md'), content: 'neu' },
+      { source: image, target: path.join(dir, 'fehlt', 'b.png') },
+    ];
+    const rename = fs.rename;
+    t.mock.method(fs, 'rename', async (from, to) => {
+      if (to === markdown && path.basename(from).startsWith('.infographic-')) {
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      }
+      return rename(from, to);
+    });
+    t.mock.method(console, 'error', () => {});
+
+    await assert.rejects(moveInfographicFiles(mappings), error => {
+      assert.equal(error.status, 500);
+      assert.match(error.message, /nicht vollständig wiederhergestellt/);
+      assert.match(error.message, /Betroffen: \.infographic-[0-9a-f]+-0\.tmp → a\.md\./);
+      assert.equal(error.cause.code, 'ENOENT');
+      return true;
+    });
+    // Das Bild ist trotz des Fehlers beim Markdown zurück an seinem Platz.
+    assert.equal(await fs.readFile(image, 'utf8'), 'Bild');
+    await assert.rejects(fs.stat(markdown), { code: 'ENOENT' });
+    await assert.rejects(fs.stat(path.join(dir, 'a_1.md')), { code: 'ENOENT' });
+    const leftover = (await fs.readdir(dir)).filter(name => name.startsWith('.infographic-'));
+    assert.equal(leftover.length, 1);
+    assert.equal(await fs.readFile(path.join(dir, leftover[0]), 'utf8'), 'alt', 'Originalinhalt zurückgesetzt');
+  });
+});
+
 test('Manager bleibt auf Artikelgruppen beschränkt und der Papierkorb bleibt unsichtbar', async () => {
   const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(server, /if \(author === INFOGRAPHICS_AUTHOR && fullPath === INFOGRAPHIC_TRASH_DIR\) continue/);

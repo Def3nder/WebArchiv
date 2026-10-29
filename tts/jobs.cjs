@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { startTts } = require('./spawn_tts.cjs');
+const { isPathInside } = require('../lib/archive-files.cjs');
 
 function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, reindex, mediaUrl,
   selectedVoice = async () => null, start = startTts }) {
@@ -48,25 +49,23 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
       const archive = await fs.realpath(root);
       const source = path.resolve(article.filePath);
       const input = await fs.realpath(source);
-      const inside = p => p.startsWith(archive + path.sep);
+      const inside = p => isPathInside(archive, p);
       // Auch Autorengrenzen dürfen durch Dateisymlinks nicht umgangen werden.
       const authorRoot = await fs.realpath(path.join(root, article.author));
-      if (!inside(input) || authorRoot !== path.join(archive, article.author) || !input.startsWith(authorRoot + path.sep)
+      if (!inside(input) || authorRoot !== path.join(archive, article.author) || !isPathInside(authorRoot, input)
           || path.extname(source).toLowerCase() !== '.md' || !(await fs.stat(input)).isFile()) {
         throw fail('Ungültiger Artikelpfad.', 403);
       }
       const parent = await fs.realpath(path.dirname(source));
-      if (!inside(parent) || (!parent.startsWith(authorRoot + path.sep) && parent !== authorRoot)) {
+      if (!inside(parent) || (parent !== authorRoot && !isPathInside(authorRoot, parent))) {
         throw fail('Ungültiges Ausgabeverzeichnis.', 403);
       }
       const basename = path.basename(source, path.extname(source)) + '.mp3';
       const names = await fs.readdir(parent);
       const legacyName = names.find(name => name.toLowerCase() === basename.toLowerCase());
       const legacyOutput = legacyName ? path.join(parent, legacyName) : null;
+      if (!isPathInside(root, source)) throw fail('Ungültiger Artikelpfad.', 403);
       const relative = path.relative(path.resolve(root), source);
-      if (relative.startsWith('..' + path.sep) || path.isAbsolute(relative) || relative === '..') {
-        throw fail('Ungültiger Artikelpfad.', 403);
-      }
       // Spiegelstruktur unter audio/. Jeden vorhandenen Elternpfad vor dem
       // Anlegen weiterer Ordner prüfen, damit Symlinks kein fremdes Ziel öffnen.
       await fs.mkdir(audioRoot, { recursive: true });
@@ -120,13 +119,11 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
           const moved = [];
           try {
             for (const sourceFile of existingFiles) {
-              const inAudio = sourceFile === audioArchive || sourceFile.startsWith(audioArchive + path.sep);
+              const inAudio = isPathInside(audioArchive, sourceFile);
               const origin = inAudio ? 'audio' : 'www';
               const base = inAudio ? audioArchive : archive;
+              if (!isPathInside(base, sourceFile)) throw fail('Ungültiger Pfad der vorhandenen Audiodatei.', 403);
               const relativeSource = path.relative(base, sourceFile);
-              if (relativeSource.startsWith('..' + path.sep) || path.isAbsolute(relativeSource) || relativeSource === '..') {
-                throw fail('Ungültiger Pfad der vorhandenen Audiodatei.', 403);
-              }
               const trashFile = path.join(batch, origin, relativeSource);
               await fs.mkdir(path.dirname(trashFile), { recursive: true });
               await fs.rename(sourceFile, trashFile);

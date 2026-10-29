@@ -27,7 +27,10 @@ const emailKey = email => String(email || '').toLowerCase();
 
 // ─── abstract.md ───────────────────────────────────────────────────────────
 
-function normalizeDate(raw) {
+// Bewusst eigene Regel (nicht normalizeDate aus lib/article-parser.cjs): Das
+// Datum steht am Zeilenanfang, ein Erscheinungsjahr allein wird zu JJJJ-01-01,
+// und ohne Datum bleibt das Feld null statt ''.
+function normalizeAbstractDate(raw) {
   const s = String(raw || '').trim();
   let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
@@ -54,7 +57,7 @@ function parseAbstract(content) {
     }
     if (key === 'titel') result.title = value;
     else if (key === 'autor') result.author = value;
-    else result.date = normalizeDate(value);
+    else result.date = normalizeAbstractDate(value);
   }
   return result;
 }
