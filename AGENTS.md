@@ -127,7 +127,9 @@ data on an external mounted disk. See `session-context.md` and `LXC-container no
 for the full setup log (SSH keys, systemd unit, mount/permission notes). HTTPS terminates at the
 NPMplus reverse proxy (192.168.1.14). With `NODE_ENV=production` the server refuses to start without a
 `SESSION_SECRET` of at least 32 chars. `TRUST_PROXY` (default `loopback, 192.168.1.14`) limits which
-proxies may set `X-Forwarded-*`; `CSP_MODE` is `report` (default), `enforce` or `off`.
+proxies may set `X-Forwarded-*`; `CSP_MODE` is `report` (default), `enforce` or `off`;
+production runs `enforce` (since 30.10.2026), so new frontend code must work under the CSP (no inline handlers or
+scripts without nonce, no external sources).
 
 **Browser script forms (keep to these three, don't add a fourth):**
 - *Shared classic scripts* (`touch-gestures.js` — loaded before `app.js`, generic touch helpers —, `app-gallery.js`

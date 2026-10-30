@@ -2264,3 +2264,21 @@ danach schließt Ziehen den Artikel (`#/`). Prüfmodus: Kachel antippen → Voll
 Poster-Markierung, Escape schließt das Vollbild. Keine Konsolenfehler.
 
 **Deployment:** `public/app.js`, `public/app-gallery.js`, `public/infographic-review.js` kopieren; Browser neu laden.
+
+## 53. Aktualisierung 30.10.2026 – CSP im Betrieb scharf geschaltet (Review-Punkt 2.8)
+
+Auf dem LXC steht in `/etc/nodeapp/webarchiv.env` jetzt `CSP_MODE=enforce` (vorher `report`); Dienst neu gestartet.
+Der Browser blockiert damit Verstöße, statt sie nur zu melden.
+
+**Geprüft auf dem LXC:**
+- `curl -sI http://localhost:3000/ | grep -i content-security-policy` zeigt `Content-Security-Policy:` (ohne
+  `-Report-Only`) mit Nonce, `report-uri /api/csp-report`.
+- Durchgeklickt: Artikel mit PDF, Video und Audio, Hörbuch, Editor als Admin. Danach enthält
+  `journalctl -u nodeapp | grep -i csp` keine Meldung „CSP-Verstoß“ – auch keine aus der Zeit im `report`-Modus.
+
+**Falls später etwas nicht lädt:** Grund steht im Journal („CSP-Verstoß: <Richtlinie> blockiert <Adresse> auf <Seite>“);
+die Richtlinie liegt in `security-headers.cjs`. Rückweg: `CSP_MODE=report`, `sudo systemctl restart nodeapp`.
+
+**Doku nachgezogen:** `LXC-container node.js Setup.md` (Env-Datei mit `enforce`, Prüf- und Rückweg), `README.md`,
+`CLAUDE.md`/`AGENTS.md` (Produktion läuft mit `enforce`), `code-review_2026-01-28.md` (2.8 und 3.2 als erledigt).
+Damit sind alle Punkte aus Teil 2 des Reviews umgesetzt.

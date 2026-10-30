@@ -28,7 +28,7 @@ Legende: ✅ umgesetzt · ⚠️ teilweise · ❌ offen
 | Login-Begrenzung | ✅ | `login-limiter.cjs` zählt pro Konto und pro IP und sperrt vor bcrypt. Gilt auch für `/api/me/password` ([user-store.cjs:299](user-store.cjs:299)). |
 | `trust proxy` konfigurierbar | ✅ | `TRUST_PROXY`, Standard `loopback, 192.168.1.14`; „true“ wird abgelehnt ([server.js:47](server.js:47)) |
 | `SESSION_SECRET` Pflicht, `secure: 'auto'` | ✅ | [server.js:62](server.js:62), [server.js:1054](server.js:1054) |
-| CSP und weitere Header | ⚠️ | Technisch umgesetzt, mit eigener Richtlinie für PDF.js, Nonce für `/a/*` und ohne Inline-Handler. In Produktion läuft die CSP laut Doku aber **weiter nur im Report-Modus** (siehe 2.8). |
+| CSP und weitere Header | ✅ | Technisch umgesetzt, mit eigener Richtlinie für PDF.js, Nonce für `/a/*` und ohne Inline-Handler. Seit 30.10.2026 in Produktion mit `CSP_MODE=enforce` (siehe 2.8). |
 | TTS-Routen ohne interne Fehlertexte | ✅ | Unerwartete Fehler gehen ins Log, der Client bekommt eine allgemeine Meldung ([tts/jobs.cjs:210](tts/jobs.cjs:210)). Das **gleiche Problem steckt jetzt in den Infografik-Routen** (siehe 2.2). |
 
 ### Fehler und Randfälle
@@ -93,7 +93,7 @@ Legende: ✅ umgesetzt · ⚠️ teilweise · ❌ offen
 
 Sortiert nach Wichtigkeit.
 
-> **Nachtrag:** 2.1 bis 2.5 sind behoben und mit Tests abgesichert (Details in Session.MD, Abschnitt 39). 2.6, 2.7, 2.9 und 2.11 folgen in Abschnitt 42, 2.10 in Abschnitt 43. Offen ist nur noch 2.8 (CSP scharf schalten, eine Betriebsentscheidung auf dem LXC).
+> **Nachtrag:** 2.1 bis 2.5 sind behoben und mit Tests abgesichert (Details in Session.MD, Abschnitt 39). 2.6, 2.7, 2.9 und 2.11 folgen in Abschnitt 42, 2.10 in Abschnitt 43. 2.8 ist seit 30.10.2026 im Betrieb umgesetzt (Abschnitt 53). Damit sind alle Punkte aus Teil 2 erledigt.
 
 ### 2.1 Tastatur: Detailansicht reagiert auf Pfeiltasten und Escape, obwohl ein Dialog darüber offen ist (Fehler) – ✅ behoben
 
@@ -173,7 +173,9 @@ Funktional ist das hier überwiegend korrekt, weil beide Seiten über `realpath`
 - **[server.js:922](server.js:922):** `migrateDuplicateInfographics` überschreibt die bereits verschobene `.md` per `fs.promises.writeFile`. Auch der Rollback in [:892](server.js:892) schreibt so. Ein Absturz mitten im Schreiben hinterlässt eine halbe Datei. Dafür passt `writeFileAtomic`.
 - **[lib/infographics.cjs:391–400](lib/infographics.cjs:391):** Schlägt im Rollback von `moveInfographicFiles` ein `rename` fehl, bricht die Schleife ab. Die übrigen Dateien bleiben dann unter `.infographic-<token>-N.tmp` liegen und sind für Index und Nutzer unsichtbar. Der ursprüngliche Fehler wird geworfen, der Rollback-Fehler verschluckt. Besser: Den Rollback pro Datei in `try/catch` fassen, alle Fehler sammeln und die liegengebliebenen Temp-Namen in der Meldung nennen.
 
-### 2.8 CSP läuft in Produktion weiter nur im Report-Modus
+### 2.8 CSP läuft in Produktion weiter nur im Report-Modus – ✅ umgestellt
+
+> **Nachtrag 30.10.2026:** Im Journal stand keine einzige Meldung „CSP-Verstoß“. Der LXC läuft jetzt mit `CSP_MODE=enforce`; der Header heißt `Content-Security-Policy` (ohne `-Report-Only`). Nach Tests mit PDF, Video, Audio, Hörbuch und Editor gab es weiterhin keine Meldungen (Session.MD, Abschnitt 53).
 
 **Wo:** [LXC-container node.js Setup.md:379](LXC-container%20node.js%20Setup.md:379) (`CSP_MODE=report`), [Session.MD:1312](Session.MD:1312) („`enforce` wurde nur in Tests geprüft“)
 
@@ -219,7 +221,9 @@ Einen sachlichen Grund für die heutige Aufteilung gibt es nicht. Sie ist histor
 - Dabei die Routen gleich auf `jsonRoute` umstellen. Damit erledigen sich 2.2 und der Rest der „route()-Hüllen“ von selbst.
 - `duplicates-tool` und Skripte importieren `html-sanitizer.cjs` und `duplicates.cjs` aus dem Root. Die Pfade müssten also mitwandern, die Tests decken das ab.
 
-### 3.2 Zentrale Verwaltung für Tastatur und Ebenen
+### 3.2 Zentrale Verwaltung für Tastatur und Ebenen – ✅ umgesetzt
+
+> **Nachtrag 30.10.2026:** Umgesetzt als `public/layer-stack.js` (`WebArchivLayers`); alle Ebenen sind modale `<dialog>` am Stapel, eigene Tastenhandler am Dokument gibt es nur noch in `aria-menu.js` (abgesichert durch `test/layer-rules.test.cjs`). Details in Session.MD, Abschnitte 45–52.
 
 Heute hängen **elf** `keydown`-Handler am Dokument, die meisten in der Capture-Phase mit `stopImmediatePropagation`. Ob sie richtig zusammenspielen, hängt von der Ladereihenfolge der Skripte ab, und 2.1 ist genau so entstanden. Ein kleiner Ebenen-Stapel als gekapseltes Skript würde das lösen, etwa `layerStack.push({ el, onEscape, trapsArrows })`:
 

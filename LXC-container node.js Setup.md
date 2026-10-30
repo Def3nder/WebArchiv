@@ -370,13 +370,13 @@ und leitet an den LXC (Port 3000) weiter. NPMplus muss `X-Forwarded-For` und
 `X-Forwarded-Proto` setzen (Standard). Die Option „Disable URI Sanitisation“ ist aktiv;
 der Server schützt seine Medienrouten unabhängig davon (siehe README, `media-files.cjs`).
 
-### Sicherheits-Umgebung (Stand 26.10.2026)
+### Sicherheits-Umgebung (Stand 30.10.2026)
 
 Datei `/etc/nodeapp/webarchiv.env` (root, Modus 600) anlegen:
 
 ```bash
 sudo install -d -m 755 /etc/nodeapp
-sudo sh -c 'umask 077; printf "SESSION_SECRET=%s\nTRUST_PROXY=192.168.1.14\nCSP_MODE=report\n" "$(openssl rand -hex 32)" > /etc/nodeapp/webarchiv.env'
+sudo sh -c 'umask 077; printf "SESSION_SECRET=%s\nTRUST_PROXY=192.168.1.14\nCSP_MODE=enforce\n" "$(openssl rand -hex 32)" > /etc/nodeapp/webarchiv.env'
 ```
 
 Per Drop-in einbinden (`sudo systemctl edit nodeapp`):
@@ -391,8 +391,11 @@ Danach `sudo systemctl daemon-reload` und `sudo systemctl restart nodeapp`.
 * Mit `NODE_ENV=production` startet der Dienst ohne gültiges `SESSION_SECRET` (≥ 32 Zeichen) nicht.
 * Ein neues Secret meldet alle Nutzer einmalig ab.
 * `TRUST_PROXY` muss die Adresse von NPMplus enthalten; ändert sie sich, Datei anpassen.
-* CSP-Meldungen prüfen: `journalctl -u nodeapp --since "1 day ago" | grep "CSP-Verstoß"`.
-  Ohne Meldungen `CSP_MODE=enforce` setzen und den Dienst neu starten.
+* CSP: Seit 30.10.2026 läuft `CSP_MODE=enforce` (zuvor `report`, ohne eine einzige Meldung).
+  Prüfen, ob die Richtlinie blockiert (Header ohne `-Report-Only`):
+  `curl -sI http://localhost:3000/ | grep -i content-security-policy`.
+  Lädt etwas nicht, steht der Grund im Journal: `journalctl -u nodeapp --since "1 day ago" | grep "CSP-Verstoß"`
+  (Richtlinie, blockierte Adresse, Seite). Notfalls zurück auf `CSP_MODE=report` und den Dienst neu starten.
 * Empfehlung: Port 3000 im LXC nur für 192.168.1.14 freigeben.
 
 ---

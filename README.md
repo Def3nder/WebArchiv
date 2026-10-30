@@ -1048,7 +1048,7 @@ npx playwright install --with-deps chromium
   Admin-Speichervorgänge scheitern an der Herkunftsprüfung.
 - Sicherheits-Umgebung in `/etc/nodeapp/webarchiv.env` (root, Modus 600), per systemd-Drop-in
   `EnvironmentFile=/etc/nodeapp/webarchiv.env` eingebunden: `SESSION_SECRET`,
-  `TRUST_PROXY=192.168.1.14`, `CSP_MODE=report` (nach Prüfung `enforce`).
+  `TRUST_PROXY=192.168.1.14`, `CSP_MODE=enforce` (seit 30.10.2026; zuvor `report` ohne Meldungen).
 - **Serverdienst steuern**:
   ```bash
   sudo systemctl restart nodeapp          # nach Codeänderungen neu starten
