@@ -77,7 +77,6 @@ function chooseTtsProvider(article, providers) {
   const options = document.getElementById('tts-provider-options');
   const start = document.getElementById('tts-provider-start');
   const description = document.getElementById('tts-provider-description');
-  const status = document.getElementById('tts-provider-status');
   document.getElementById('tts-provider-article').textContent = article.title;
   options.replaceChildren();
   const radios = [];
@@ -96,7 +95,6 @@ function chooseTtsProvider(article, providers) {
   }
   const selectedProvider = () => providers.find(p => p.available
     && radios.some(radio => radio.checked && radio.value === p.provider));
-  status.textContent = providers.map(p => `${p.label}: ${p.status}`).join('\n');
   const update = () => {
     const selected = selectedProvider();
     start.disabled = !selected;

@@ -382,3 +382,12 @@ test('HTTP: abgeschnittener Stream und Abbruch werden zu behandelbaren Fehlern',
     } finally { await new Promise(r => server.close(r)); }
   }
 });
+
+test('Anbieterdialog bleibt kompakt: keine eigene Statuszeile, Titel fett', async () => {
+  const html = await fs.readFile(path.join(root, '../public/index.html'), 'utf8');
+  const tasks = await fs.readFile(path.join(root, '../public/admin-tasks.js'), 'utf8');
+  const css = await fs.readFile(path.join(root, '../public/css/dialogs.css'), 'utf8');
+  assert.doesNotMatch(html + tasks + css, /tts-provider-status/);
+  assert.match(css, /#tts-provider-dialog \.login-title \{ margin: 0 0 -8px; \}/);
+  assert.match(css, /#tts-provider-article \{ font-weight: 700; \}/);
+});

@@ -291,7 +291,10 @@ dialog.login-overlay:not([open]) { display: none; }
 #tts-provider-dialog::backdrop { background: #0009; backdrop-filter: blur(4px); }
 #tts-provider-dialog form { display: flex; flex-direction: column; gap: 16px; }
 #tts-provider-dialog p { margin: 0; overflow-wrap: anywhere; }
-#tts-provider-status { white-space: pre-line; color: var(--text-muted); font-size: .85rem; }
+/* Kompakt, damit der Dialog auf dem iPhone ohne Scrollen passt. Die Verfügbarkeit zeigen
+   die Auswahlfelder selbst („– nicht verfügbar“). */
+#tts-provider-dialog .login-title { margin: 0 0 -8px; }
+#tts-provider-article { font-weight: 700; }
 .tts-provider-choices { border: 0; padding: 0; margin: 0; min-width: 0; }
 .tts-provider-choices legend { margin-bottom: 10px; }
 #tts-provider-options { display: grid; gap: 10px; }

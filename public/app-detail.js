@@ -24,7 +24,12 @@ function showArticleLayer() {
 }
 
 function hideArticleLayer() {
-  if ($overlay.open) WebArchivLayers.close($overlay, { restoreFocus: false });
+  if (!$overlay.open) return;
+  WebArchivLayers.close($overlay, { restoreFocus: false });
+  // Der Browser gibt den Fokus beim Schließen an die geöffnete Kachel zurück. Dort nützt er
+  // nichts (die Pfeiltasten blättern Seiten) und zeigte nur einen Rahmen. Tab geht nach
+  // blur() trotzdem von dieser Stelle aus weiter.
+  if ($app.contains(document.activeElement)) document.activeElement.blur();
 }
 
 // ←/→ blättern zum Nachbarartikel; Bedienelemente mit eigener Pfeilbedienung

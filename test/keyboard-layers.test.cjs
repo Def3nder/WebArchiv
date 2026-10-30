@@ -99,3 +99,21 @@ test('app.js meldet die Grundansicht am Stapel an und hat keinen eigenen keydown
   assert.match(app, /WebArchivLayers\.open\(fullscreen, \{[\s\S]*?name: 'image', onEscape: closeImageFullscreen, onKey: fullscreenLayerKey/);
   assert.doesNotMatch(app, /document\.addEventListener\('keydown', e => \{\s*if \(e\.key === 'Escape'\)/);
 });
+
+test('Artikel schließen: Die zurückgegebene Kachel behält keinen Fokus (kein Rahmen), andere Ziele schon', () => {
+  const run = activeInGrid => {
+    const active = { blurred: false, blur() { this.blurred = true; } };
+    const context = {
+      $overlay: { open: true },
+      $app: { contains: node => activeInGrid && node === active },
+      document: { activeElement: active },
+      WebArchivLayers: { close(dialog, options) { dialog.open = false; context.closeOptions = options; } },
+    };
+    vm.runInNewContext(fn('hideArticleLayer'), context);
+    context.hideArticleLayer();
+    assert.equal(context.closeOptions.restoreFocus, false);
+    return active.blurred;
+  };
+  assert.equal(run(true), true, 'Kachel in der Übersicht');
+  assert.equal(run(false), false, 'z. B. Suchfeld oder Menü-Knopf');
+});

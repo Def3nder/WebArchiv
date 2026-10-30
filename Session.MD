@@ -2214,3 +2214,28 @@ Browser neu laden.
   ← blättert bis zur ersten Grafik und bleibt dort, Escape und Wischen nach unten (künstliche Touch-Ereignisse)
   führen in den Manager zurück, danach schließt „×“ den Manager, der Artikel bleibt offen. Keine Konsolenfehler.
   **Deployment zusätzlich:** `public/layer-stack.js`, `public/css/account.css`, `public/index.html`.
+
+## 50. Aktualisierung 30.10.2026 – Dialog „Audio erzeugen“ kompakter
+
+Auf dem iPhone musste man im Anbieterdialog scrollen. **Geändert:** Die Statuszeilen je Anbieter
+(`#tts-provider-status`, z. B. „Qwen-TTS: …“, „OpenAI API: …“) entfallen; die Verfügbarkeit zeigen die
+Auswahlfelder selbst („– nicht verfügbar“, gesperrt). Weniger Abstand zwischen „Audio erzeugen“ und dem Titel
+(8 px statt 44 px), der Titel ist fett.
+
+**Geprüft:** Node 457/457, Python 14/14 (neuer Test: keine Statuszeile, Abstand, Fettschrift). Im Browser in
+iPhone-Größe (375 × 812) mit langem Titel und zwei Anbietern: Dialog 478 px hoch, kein Scrollen.
+
+**Deployment:** `public/index.html`, `public/admin-tasks.js`, `public/css/dialogs.css` kopieren; Browser neu laden.
+
+## 51. Aktualisierung 30.10.2026 – Kein Fokusrahmen auf der Kachel nach dem Schließen eines Artikels
+
+**Symptom:** Nach dem Zurückkehren aus einem Artikel war die geöffnete Kachel blau umrandet, ohne Nutzen (die
+Pfeiltasten blättern Seiten). **Ursache:** Seit die Artikelansicht ein modaler `<dialog>` ist, gibt der Browser beim
+Schließen den Fokus an das Element zurück, das ihn beim Öffnen hatte – die Kachel (`tabindex="0"`); nach Escape
+zeigt er dazu den Fokusrahmen. **Behoben:** `hideArticleLayer` nimmt den Fokus wieder weg, wenn er in der Übersicht
+(`#app`) gelandet ist. Andere Ziele (Suchfeld, Menü-Knopf) behalten ihn; Tab geht von der Kachel aus weiter.
+
+**Geprüft:** Node 458/458, Python 14/14 (neuer Test). Im Browser: Kachel per Tastatur geöffnet, mit Escape
+geschlossen → Fokus auf `body`, kein Rahmen; → blättert die Seite, Tab springt wieder in die Kacheln.
+
+**Deployment:** `public/app-detail.js` kopieren; Browser neu laden.
