@@ -63,6 +63,20 @@ test('Metadaten-Refresh übernimmt den aktuellen Filterzustand in Select und ARI
   assert.match(reindex, /await loadMeta\(\);[\s\S]*?state\.page = 1;[\s\S]*?await loadArticles\(\)/);
 });
 
+test('Hörbücher und Infografiken stehen oben im Autorenfilter, hervorgehoben und abgesetzt', () => {
+  assert.match(APP, /const PINNED_AUTHOR_MARKS = \{ \[AUDIOBOOK_AUTHOR\]: 'audiobooks', \[INFOGRAPHICS_AUTHOR\]: 'infographics' \};/);
+  const loadMeta = APP.slice(APP.indexOf('async function loadMeta()'), APP.indexOf('function applySavedListState('));
+  assert.match(loadMeta, /\[\.\.\.pinned, \.\.\.authors\.filter\(a => !pinned\.includes\(a\)\)\]/);
+  assert.match(loadMeta, /opt\.dataset\.menuMark = PINNED_AUTHOR_MARKS\[a\]/);
+  assert.match(loadMeta, /i === pinned\.length\) opt\.dataset\.menuSeparator = 'before'/);
+  // Hover und aktuelle Auswahl schlagen die Tönung (niedrige Spezifität über :where).
+  assert.match(CSS, /\.header-menu-item:where\(\[data-menu-mark\]\) \{[\s\S]*?background: var\(--accent-glow\);/);
+  for (const mark of ['audiobooks', 'infographics']) {
+    assert.match(CSS, new RegExp(`\\.header-menu-item\\[data-menu-mark="${mark}"\\] \\{\\s*--menu-mark-icon: url\\("data:image/svg\\+xml`));
+  }
+  assert.match(CSS, /\.header-menu-separator \{/);
+});
+
 test('Menüzeilen sind am Desktop kompakt, Touch behält größere Tippflächen', () => {
   const desktop = CSS.match(/@media \(hover: hover\) and \(pointer: fine\) \{\s*\.header-menu-item, \.copy-prompt-item \{([^}]+)\}/)?.[1] || '';
   assert.match(desktop, /padding: 5px 12px;/);

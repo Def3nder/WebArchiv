@@ -24,6 +24,8 @@ const state = {
 // Hörbücher sind kein Artikel-Autor: eigene Liste, eigene Detailansicht (audiobooks.js).
 const AUDIOBOOK_AUTHOR = 'Hörbücher';
 const INFOGRAPHICS_AUTHOR = 'Infografiken';
+// Oben angepinnte Autoren im Autorenfilter → Symbol im Desktop-Menü (filters.css).
+const PINNED_AUTHOR_MARKS = { [AUDIOBOOK_AUTHOR]: 'audiobooks', [INFOGRAPHICS_AUTHOR]: 'infographics' };
 const isAudiobookId = id => String(id || '').startsWith(AUDIOBOOK_AUTHOR + '/');
 const isBookMode = () => state.author === AUDIOBOOK_AUTHOR;
 const isInstagramPosterMode = () => state.author === INFOGRAPHICS_AUTHOR
@@ -1203,12 +1205,15 @@ async function loadMeta() {
   $filterAuthor.appendChild(audioOpt);
 
   authors.forEach((a, i) => { authorHueMap[a] = Math.round(i * hueStep); });
-  // „Hörbücher“ direkt unter „mit Audio“, danach die übrigen Autoren alphabetisch.
-  const ordered = [...authors.filter(a => a === AUDIOBOOK_AUTHOR), ...authors.filter(a => a !== AUDIOBOOK_AUTHOR)];
-  ordered.forEach(a => {
+  // Die meistgewählten Autoren direkt unter „mit Audio“, im Desktop-Menü mit Symbol
+  // und Tönung und durch eine Trennlinie abgesetzt; danach die übrigen alphabetisch.
+  const pinned = Object.keys(PINNED_AUTHOR_MARKS).filter(a => authors.includes(a));
+  [...pinned, ...authors.filter(a => !pinned.includes(a))].forEach((a, i) => {
     const opt = document.createElement('option');
     opt.value = a;
     opt.textContent = a.replace(/_/g, ' ');
+    if (PINNED_AUTHOR_MARKS[a]) opt.dataset.menuMark = PINNED_AUTHOR_MARKS[a];
+    else if (pinned.length && i === pinned.length) opt.dataset.menuSeparator = 'before';
     $filterAuthor.appendChild(opt);
   });
 

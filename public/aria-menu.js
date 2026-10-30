@@ -167,6 +167,8 @@
 
   // Desktop-Menü als Spiegel eines nativen <select> (Touch-Geräte nutzen das Select
   // selbst). Beide Varianten teilen denselben Wert; Auswahl löst „change“ aus.
+  // Optionen mit data-menu-mark werden im Menü hervorgehoben (Stil im CSS),
+  // data-menu-separator="before" setzt eine Trennlinie vor den Eintrag.
   const selectMenus = new Map();
 
   function syncSelect(select) {
@@ -177,7 +179,14 @@
     const visibleOptions = [...select.options].filter(option => !option.hidden);
     const selected = visibleOptions.find(option => option.value === select.value) || visibleOptions[0];
     if (value) value.textContent = selected?.textContent || '';
-    controller.menu.replaceChildren(...visibleOptions.map(option => {
+    controller.menu.replaceChildren(...visibleOptions.flatMap((option, index) => {
+      const nodes = [];
+      if (option.dataset.menuSeparator === 'before' && index > 0) {
+        const separator = document.createElement('div');
+        separator.className = 'header-menu-separator';
+        separator.setAttribute('role', 'separator');
+        nodes.push(separator);
+      }
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'header-menu-item';
@@ -186,7 +195,9 @@
       item.setAttribute('aria-checked', String(option.value === select.value));
       item.disabled = option.disabled;
       item.textContent = option.textContent;
-      return item;
+      if (option.dataset.menuMark) item.dataset.menuMark = option.dataset.menuMark;
+      nodes.push(item);
+      return nodes;
     }));
     controller.trigger.title = selected?.textContent || '';
   }

@@ -321,3 +321,28 @@ test('Select-Spiegel: sichtbare Optionen als menuitemradio, Auswahl setzt Wert u
   controller.close();
   root.remove();
 });
+
+test('Select-Spiegel: data-menu-mark wird übernommen, data-menu-separator setzt eine Trennlinie davor', () => {
+  const select = new Node('select');
+  select.value = '';
+  const option = (value, dataset = {}) => Object.assign(new Node('option'), { value, textContent: value, dataset });
+  select.options = [
+    option('', { menuSeparator: 'before' }),
+    option('Hörbücher', { menuMark: 'audiobooks' }),
+    option('Coaching', { menuSeparator: 'before' }),
+  ];
+  const root = new Node('div');
+  const trigger = new Node('button');
+  const menu = new Node('div', { role: 'menu', hidden: true });
+  root.append(trigger, menu);
+  document.body.append(root);
+  root.querySelector = selector => (selector === '.filter-menu-trigger' ? trigger : Node.prototype.querySelector.call(root, selector));
+  const controller = bindSelect(select, root);
+  // Keine Trennlinie vor dem ersten Eintrag; Trennlinien sind keine Menüeinträge.
+  assert.deepEqual(menu.children.map(node => [node.getAttribute('role'), node.textContent, node.dataset.menuMark]),
+    [['menuitemradio', '', undefined], ['menuitemradio', 'Hörbücher', 'audiobooks'],
+      ['separator', '', undefined], ['menuitemradio', 'Coaching', undefined]]);
+  assert.equal(menu.children[2].className, 'header-menu-separator');
+  controller.close();
+  root.remove();
+});
