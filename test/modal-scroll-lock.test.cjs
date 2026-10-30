@@ -15,8 +15,20 @@ const end = app.indexOf('\nconst dialogOpen', start);
 test('Scrollbereiche aller Dialoge und Ebenen verketten nicht in die Seite dahinter', () => {
   const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
   const layers = ['dialog', '.overlay', '.scrape-overlay', '.login-overlay', '.img-fullscreen', '.book-reader'];
-  const list = layers.map(layer => layer.replace('.', '\\.')).join(', ');
-  assert.match(css, new RegExp(`:where\\(${list}\\),\\s*:where\\(${list}\\) \\* \\{\\s*overscroll-behavior: contain;\\s*\\}`));
+  const rule = css.match(/:where\(([^)]*)\) \{\s*overscroll-behavior: contain;\s*\}/);
+  assert.ok(rule, 'Regel gegen Scroll-Verkettung');
+  const contained = rule[1].split(',').map(selector => selector.trim().replace(/\s+/g, ' '));
+  for (const layer of layers) assert.ok(contained.includes(layer), layer);
+  // Nicht alle Nachfahren: overflow: hidden (z. B. Dublettenkarten) schluckte sonst das Mausrad.
+  assert.doesNotMatch(css, /:where\([^)]*\) \* \{\s*overscroll-behavior: contain;/);
+  // Jeder Scrollbereich (overflow: auto/scroll) steht in der Liste oder ist selbst ein Dialog.
+  const plain = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const scrollers = [...plain.matchAll(/(^|\})\s*([^{}@]+?)\s*\{[^}]*overflow(?:-y)?: *(?:auto|scroll)/g)]
+    .flatMap(match => match[2].split(',').map(selector => selector.trim().replace(/\s+/g, ' ')));
+  assert.ok(scrollers.length > 10);
+  for (const selector of scrollers) {
+    assert.ok(contained.includes(selector) || /dialog$/.test(selector), `Scrollbereich fehlt in der Liste: ${selector}`);
+  }
   // Jede Ebene aus index.html trägt eine der Klassen; der Hörbuch-Reader und die Extras
   // entstehen per Skript mit class „book-reader“.
   for (const id of ['article-overlay', 'img-fullscreen', 'login-overlay', 'scrape-overlay', 'tts-overlay']) {

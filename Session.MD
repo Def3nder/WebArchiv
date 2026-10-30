@@ -2133,3 +2133,27 @@ keinen Artikel, Escape schließt nur das Fenster. Keine Konsolenfehler aus der A
 
 **Deployment:** `public/index.html`, `public/app.js`, `public/admin-tasks.js`, `public/css/dialogs.css` kopieren;
 Browser neu laden genügt.
+
+## 48. Aktualisierung 30.10.2026 – Dublettendialog reagierte kaum auf Mausrad und Tastatur
+
+**Symptom:** Im Dialog „Dubletten prüfen“ scrollte die Liste mit dem Mausrad nicht (auf dem iPhone fühlte sich
+das Wischen ähnlich zäh an), und Bild-ab/Pfeiltasten taten nichts.
+
+**Ursache 1 (Rad, Wischen) – Folge von Abschnitt 41:** Die Regel gegen Scroll-Verkettung setzte
+`overscroll-behavior: contain` auf **alle** Nachfahren von Dialogen. Elemente mit `overflow: hidden` (z. B. die
+Dublettenkarten) gelten für den Browser ebenfalls als Scrollbereich; über ihnen blieb das Rad hängen, statt an die
+Liste weiterzugehen. Gemessen: Rad über einer Karte 0 px, mit Gegenregel 300 px.
+**Behoben:** Die Regel gilt nur noch für die Ebenen selbst und die echten Scrollbereiche (`overflow: auto`) in
+Dialogen, als Liste in `public/css/dialogs.css`. Ein Test prüft, dass jeder Scrollbereich in den Stylesheets in
+dieser Liste steht (oder selbst ein Dialog ist), und dass es keine Regel für alle Nachfahren mehr gibt.
+
+**Ursache 2 (Tastatur, schon vorher so):** Nach einem Klick in die Liste lag der Fokus auf dem Dialog selbst;
+Bild-ab und Pfeile scrollten dann den (nicht scrollenden) Dialog. **Behoben:** `#duplicate-content` hat
+`tabindex="-1"` (ohne Fokusrahmen); ein Klick gibt der Liste den Fokus.
+
+**Geprüft:** Node 453/453, Python 14/14. Im Browser als Admin: Rad über einer Karte scrollt (0 → 500 px), Kopf fährt
+aus und beim Hochscrollen wieder ein; nach Klick in die Liste scrollen Bild-ab und Pfeil (0 → 689 px), Escape
+schließt. Artikelansicht scrollt per Rad weiterhin. Die Verkettung in die Seite (Abschnitt 41) ist am iPhone nach
+dieser Änderung noch nicht erneut geprüft.
+
+**Deployment:** `public/css/dialogs.css`, `public/css/duplicates.css`, `public/index.html` kopieren; Browser neu laden.

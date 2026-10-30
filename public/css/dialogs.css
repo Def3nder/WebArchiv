@@ -1,9 +1,19 @@
 /* Scrollbereiche in Dialogen und Vollbild-Ebenen: Am Ende des Inhalts nicht die
    Seite dahinter weiterscrollen (Scroll-Verkettung, v. a. per Touch in Safari;
-   html.modal-open allein verhindert das dort nicht). :where() hält die Regel ohne
-   Gewicht, damit eigene Angaben wie overscroll-behavior-y: none Vorrang behalten. */
-:where(dialog, .overlay, .scrape-overlay, .login-overlay, .img-fullscreen, .book-reader),
-:where(dialog, .overlay, .scrape-overlay, .login-overlay, .img-fullscreen, .book-reader) * {
+   html.modal-open allein verhindert das dort nicht).
+   Nur die Ebenen selbst und ihre echten Scrollbereiche, nicht alle Nachfahren: Ein
+   Element mit overflow: hidden (z. B. eine Dublettenkarte) zählt sonst ebenfalls als
+   Scrollbereich und schluckt Mausrad und Wischen, statt sie an die Liste darüber
+   weiterzureichen. Neue Scrollbereiche (overflow: auto) in Dialogen hier eintragen.
+   :where() hält die Regel ohne Gewicht, damit eigene Angaben wie
+   overscroll-behavior-y: none Vorrang behalten. */
+:where(dialog, .overlay, .scrape-overlay, .login-overlay, .img-fullscreen, .book-reader,
+  .overlay-panel, .book-track-list, .book-reader-scroll, .book-extras-scroll,
+  .scrape-output, #tts-overlay .scrape-panel, .markdown-live-editor .cm-scroller,
+  .user-admin-panel, .ua-author-list, .tts-settings-voice-menu .header-menu-dropdown,
+  .bem-library, .bem-editor, .bem-preview-pane, .bem-image-preview, .bem-text-preview-scroll,
+  .duplicate-content, .duplicate-comparison-scroll, .duplicate-migration-note ul,
+  .duplicate-filter-menu .header-menu-dropdown) {
   overscroll-behavior: contain;
 }
 

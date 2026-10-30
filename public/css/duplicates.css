@@ -101,6 +101,8 @@ body[data-theme="light"] .duplicate-search-input { background: var(--bg); }
    brauchte ein neues Layout (Ruckeln beim Schwungscrollen auf dem iPhone). */
 .duplicate-content { flex: 1; min-height: 0; overflow-y: auto; padding: clamp(10px, 2vw, 22px); }
 .duplicate-content::before { content: ''; display: block; height: var(--duplicate-chrome-height, 0px); }
+/* Fokus nur zum Scrollen per Tastatur (tabindex="-1"), kein Rahmen um die ganze Liste. */
+.duplicate-content:focus { outline: none; }
 body[data-filter-labels="hidden"] .duplicate-filter-caption { display: none; }
 @media (max-width: 600px) {
   .duplicate-filter-caption { display: none; }
