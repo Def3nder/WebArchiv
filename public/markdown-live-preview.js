@@ -632,7 +632,9 @@ function createLinkDialog(view, applyEdit) {
       urlInput.value = target.url;
       submit.textContent = target.url ? 'Übernehmen' : 'Einfügen';
       validate();
-      dialog.showModal();
+      // Am Ebenen-Stapel der App (Escape schließt nur den Link-Dialog); ohne Stapel nativ.
+      if (globalThis.WebArchivLayers) globalThis.WebArchivLayers.open(dialog, { name: 'md-link', returnFocus: false });
+      else dialog.showModal();
       requestAnimationFrame(() => (target.text ? urlInput : textInput).focus());
     },
     destroy() { dialog.remove(); },

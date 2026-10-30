@@ -56,7 +56,9 @@ test('Eingefügte Textbilder verwenden URL-sichere Dateinamen', () => {
 });
 
 test('Abbruch einer Dateiauswahl schließt den Extras-Dialog nicht', () => {
-  assert.match(manager, /addEventListener\('cancel',[\s\S]*?event\.target !== \$bem[\s\S]*?event\.preventDefault\(\)[\s\S]*?bemTryClose\(\)/);
+  // Der Ebenen-Stapel wertet nur das cancel des Dialogs selbst aus (layer-stack.test.cjs).
+  assert.match(manager, /WebArchivLayers\.open\(\$bem, \{ name: 'extras-manager', onEscape: bemTryClose \}\)/);
+  assert.doesNotMatch(manager, /addEventListener\('cancel'/);
 });
 
 test('Klick neben die Extras-Verwaltung schließt wie bei den übrigen Dialogen', () => {
@@ -156,8 +158,8 @@ test('Reiter, Bereich und Scrollposition bleiben nach Änderungen erhalten', () 
 });
 
 test('Escape und Herunterziehen schließen zuerst nur den Markdown-Editor', () => {
-  assert.match(manager, /\$bem\.addEventListener\('cancel',[\s\S]*?event\.preventDefault\(\)[\s\S]*?bemTryClose\(\)/);
-  assert.match(manager, /document\.addEventListener\('keydown', event => \{[\s\S]*?!\$bem\.open \|\| event\.key !== 'Escape'[\s\S]*?event\.stopImmediatePropagation\(\);[\s\S]*?\}, true\)/);
+  assert.match(manager, /WebArchivLayers\.open\(\$bem, \{ name: 'extras-manager', onEscape: bemTryClose \}\)/);
+  assert.doesNotMatch(manager, /document\.addEventListener\('keydown'|stopImmediatePropagation/);
   assert.match(manager, /function bemTryClose\(\) \{[\s\S]*?if \(!\$bemEditor\.hidden\) \{[\s\S]*?bemCloseEditor\(\);[\s\S]*?return;[\s\S]*?\$bem\.close\(\)/);
   assert.match(app, /\['#book-extras-manager', '#book-extras-manager \[data-bem-close\]'\]/);
   assert.match(app, /onClose: \(\) => closeBtn\.click\(\)/);

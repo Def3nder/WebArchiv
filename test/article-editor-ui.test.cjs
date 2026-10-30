@@ -18,7 +18,9 @@ test('Artikeleditor verwendet die lokale Markdown-Live-Vorschau', () => {
   assert.match(EDITOR, /createMarkdownInput/);
   assert.match(EDITOR, /markdownInput\.getValue\(\)/);
   assert.match(EDITOR, /markdownInput\.setValue\(result\.markdown\)/);
-  assert.match(EDITOR, /insideEditor && event\.key !== 'Escape'/);
+  assert.match(EDITOR, /WebArchivLayers\.open\(\$articleEditor, \{ name: 'article-editor', onEscape: leaveArticleEditor/);
+  assert.match(EDITOR, /\$articleEditor\.addEventListener\('keydown', event => \{[\s\S]*?event\.key !== 'Enter'[\s\S]*?saveEditorFile\(\);[\s\S]*?\}, true\)/);
+  assert.doesNotMatch(EDITOR, /document\.addEventListener\('keydown'|addEventListener\('cancel'/);
   assert.match(EDITOR, /\$editorText\.addEventListener\('keydown'/);
 });
 

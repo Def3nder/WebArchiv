@@ -94,7 +94,8 @@ function openSettingsDialog() {
       if (typeof WebArchivAriaMenu === 'object') WebArchivAriaMenu.syncSelect(control);
     }
   }
-  $settingsDialog.showModal();
+  // Ebenen-Stapel: Escape schließt; Fokus kehrt über closeSettingsDialog zurück.
+  WebArchivLayers.open($settingsDialog, { name: 'settings', onEscape: closeSettingsDialog, returnFocus: false });
   // Den Dialog selbst fokussieren. Insbesondere mobile Browser öffnen sonst
   // beim showModal()-Autofokus sofort das erste Auswahlfeld.
   $settingsDialog.focus({ preventScroll: true });
@@ -111,10 +112,6 @@ $settingsForm.addEventListener('change', event => {
   if (control.matches?.('select[name]')) setDisplaySetting(control.name, control.value);
 });
 $settingsForm.addEventListener('submit', event => {
-  event.preventDefault();
-  closeSettingsDialog();
-});
-$settingsDialog.addEventListener('cancel', event => {
   event.preventDefault();
   closeSettingsDialog();
 });

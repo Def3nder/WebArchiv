@@ -29,6 +29,5 @@ test('Dialog kann per Escape und Pull-to-Close geschlossen werden', () => {
   const app = readApp();
   const manager = fs.readFileSync(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
   assert.match(app, /\['#infographic-manager', '#infographic-manager \[data-igm-close\]'\]/);
-  assert.match(manager, /\$igm\.addEventListener\('cancel', event =>/);
-  assert.match(manager, /document\.addEventListener\('keydown'[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)[\s\S]*}, true\)/);
+  assert.match(manager, /WebArchivLayers\.open\(\$igm, \{ name: 'infographic-manager', onEscape: igmClose/);
 });

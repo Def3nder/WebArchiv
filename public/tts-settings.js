@@ -524,7 +524,8 @@
   }
 
   window.openTtsSettingsDialog = async function openTtsSettingsDialog() {
-    if (!dialog.open) dialog.showModal();
+    // Ebenen-Stapel: Escape schließt (close räumt Aufnahme und Vorschau auf).
+    if (!dialog.open) WebArchivLayers.open(dialog, { name: 'tts-settings', onEscape: close, returnFocus: false });
     dialog.focus({ preventScroll: true });
     await Promise.all([loadSettings(), loadServerSettings()]);
     const pending = sessionStorage.getItem('wa-tts-voice-job');
@@ -571,7 +572,6 @@
   }
   serverSaveButton.addEventListener('click', saveServerSettings);
   closeButton.addEventListener('click', close);
-  dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
   dialog.addEventListener('click', event => {
     if (event.target !== dialog) return;
     const rect = dialog.getBoundingClientRect();

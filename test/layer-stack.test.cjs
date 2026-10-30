@@ -302,3 +302,42 @@ test('Zweites open derselben Ebene ändert nichts; close ohne Fokus-Rückgabe', 
   first.close({ restoreFocus: false });
   assert.equal(doc.activeElement, other, 'z. B. wenn gleich die Extras-Verwaltung übernimmt');
 });
+
+test('Wischen ohne Scrollbereich in der obersten Ebene erreicht die Seite nicht; Scrollbereiche, Zoom und Regler bleiben frei', () => {
+  const { doc, layers, dialog } = setup();
+  const styles = new Map();
+  doc.defaultView = { getComputedStyle: node => styles.get(node) || {}, visualViewport: { scale: 1 } };
+  const swipe = (target, touches = 1) => {
+    doc.body.dispatchEvent(Object.assign(new FakeEvent('touchstart'), {}));
+    const event = new FakeEvent('touchmove', { touches: Array(touches).fill({}), cancelable: true });
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const page = new Node('div');
+  doc.body.append(page);
+  assert.equal(swipe(page), false, 'ohne Ebene scrollt die Seite normal');
+
+  const password = dialog('password');
+  layers.open(password);
+  const field = new Node('input');
+  password.append(field);
+  assert.equal(swipe(field), true, 'kleines Fenster: Wischen ginge sonst an die Seite');
+  assert.equal(swipe(field, 2), false, 'zwei Finger: Zoomen bleibt möglich');
+  doc.defaultView.visualViewport.scale = 2;
+  assert.equal(swipe(field), false, 'vergrößert: Ausschnitt verschieben bleibt möglich');
+  doc.defaultView.visualViewport.scale = 1;
+  const slider = new Node('input');
+  slider.type = 'range';
+  password.append(slider);
+  assert.equal(swipe(slider), false);
+
+  const list = new Node('div');
+  Object.assign(list, { scrollHeight: 900, clientHeight: 300 });
+  styles.set(list, { overflowY: 'auto' });
+  const row = new Node('div');
+  list.append(row);
+  password.append(list);
+  assert.equal(swipe(row), false, 'echter Scrollbereich: overscroll-behavior regelt das Ende');
+  Object.assign(list, { scrollHeight: 300 });
+  assert.equal(swipe(row), true, 'Scrollbereich ohne Überlauf zählt nicht');
+});

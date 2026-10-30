@@ -2,12 +2,10 @@
 
 const $igm = document.getElementById('infographic-manager');
 const $igmList = $igm.querySelector('[data-igm-list]');
-const $igmLibrary = $igm.querySelector('[data-igm-library]');
-const $igmPreview = $igm.querySelector('[data-igm-preview]');
 const $igmFile = $igm.querySelector('[data-igm-file]');
 const $igmStatus = document.getElementById('infographic-manager-status');
 const igmState = {
-  article: null, items: [], busy: false, dragId: null, previewId: null, actionIndex: -1, returnFocus: null,
+  article: null, items: [], busy: false, dragId: null, actionIndex: -1, returnFocus: null,
   action: 0, // laufende Nummer der letzten Aktion; ältere Rückmeldungen überschreiben neuere nicht
   // Poster-Haken, die während eines laufenden Vorgangs gesetzt wurden (Grafik-ID → gewünschter Wert).
   // Sie bleiben beim Neuaufbau der Liste sichtbar und werden danach gespeichert.
@@ -187,35 +185,16 @@ function igmMove(id, offset) {
   igmOrder(ids, target);
 }
 
-function igmClosePreview() {
-  igmState.previewId = null;
-  $igmPreview.hidden = true;
-  $igmLibrary.hidden = false;
-  $igm.querySelector('[data-igm-preview-body]').replaceChildren();
-}
-
-function igmOpenPreview(item) {
-  igmState.previewId = item.id;
-  $igm.querySelector('[data-igm-preview-title]').textContent = item.title || 'Infografik';
-  const image = document.createElement('img');
-  image.src = item.imageUrl;
-  image.alt = item.title || 'Infografik';
-  $igm.querySelector('[data-igm-preview-body]').replaceChildren(image);
-  $igmLibrary.hidden = true;
-  $igmPreview.hidden = false;
-  $igm.querySelector('[data-igm-preview-close]').focus();
+// Wie in den Extras der Hörbücher: Grafiken im gemeinsamen Vollbild (blättern, zoomen).
+// Escape oder Wischen nach unten führt zurück in den Manager, der Fokus auf die Vorschau.
+function igmShowImage(item, button) {
+  const urls = igmState.items.map(entry => entry.imageUrl);
+  openGalleryFullscreen(urls, igmState.items.indexOf(item), null, true, button);
 }
 
 function igmClose() {
   if (igmState.busy) return;
-  igmClosePreview();
   $igm.close();
-}
-
-function igmEscape() {
-  if (igmState.busy) return;
-  if (!$igmPreview.hidden) igmClosePreview();
-  else igmClose();
 }
 
 async function openInfographicManager(article) {
@@ -226,17 +205,15 @@ async function openInfographicManager(article) {
   igmState.pendingPoster.clear();
   igmState.dragId = null;
   igmState.actionIndex = -1;
-  igmClosePreview();
   igmRender();
   igmStatus();
-  $igm.showModal();
+  WebArchivLayers.open($igm, { name: 'infographic-manager', onEscape: igmClose, returnFocus: false });
   try { await igmLoad(); }
   catch (error) { igmStatus(error.message, 'error'); }
 }
 window.openInfographicManager = openInfographicManager;
 
 $igm.querySelector('[data-igm-close]').addEventListener('click', igmClose);
-$igm.querySelector('[data-igm-preview-close]').addEventListener('click', igmClosePreview);
 $igm.querySelector('[data-igm-add]').addEventListener('click', () => {
   if (igmState.busy) return;
   $igmFile.value = '';
@@ -250,25 +227,12 @@ $igmFile.addEventListener('change', async () => {
   await igmRun(() => uploadInfographic(igmState.article, file),
     'Grafik wird hochgeladen …', 'Grafik hinzugefügt.', 'Grafik gespeichert.');
 });
-$igm.addEventListener('cancel', event => {
-  // Auch das Abbrechen des System-Dateidialogs kann ein bubbling cancel senden.
-  if (event.target !== $igm) return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  igmEscape();
-});
 $igm.addEventListener('close', () => {
   const returnFocus = igmState.returnFocus;
   igmState.returnFocus = null;
   if (returnFocus?.isConnected) returnFocus.focus();
   else if (!document.getElementById('article-overlay').hidden) document.getElementById('overlay-close').focus();
 });
-document.addEventListener('keydown', event => {
-  if (!$igm.open || event.key !== 'Escape') return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  igmEscape();
-}, true);
 $igm.addEventListener('click', event => {
   if (event.target !== $igm) return;
   const rect = $igm.getBoundingClientRect();
@@ -295,7 +259,8 @@ $igmList.addEventListener('click', event => {
     igmState.actionIndex = wasOpen ? -1 : igmState.items.indexOf(item);
     return;
   }
-  if (event.target.closest('[data-igm-view]')) { igmOpenPreview(item); return; }
+  const view = event.target.closest('[data-igm-view]');
+  if (view) { igmShowImage(item, view); return; }
   const move = event.target.closest('[data-igm-move]');
   if (move) { igmMove(item.id, Number(move.dataset.igmMove)); return; }
   if (event.target.closest('[data-igm-trash]')

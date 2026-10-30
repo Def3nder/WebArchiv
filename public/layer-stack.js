@@ -13,6 +13,7 @@
  *    preventDefault quittiert; ohne das schlösse der Browser mit demselben
  *    Tastendruck zusätzlich den nun obersten Dialog.
  *  - Fokus-Rückgabe an den Auslöser beim Schließen.
+ *  - Wischen, das in der obersten Ebene nichts scrollen kann, erreicht die Seite nicht.
  *  - Schwebende Elemente (Miniplayer, Sprechblase): Alles außerhalb des obersten
  *    modalen Dialogs liegt darunter und ist nicht bedienbar. float() hängt ein
  *    Element in die oberste passende Ebene und beim Schließen zurück an seinen Platz.
@@ -154,6 +155,36 @@
     }
 
     doc.addEventListener('keydown', onKeydown);
+
+    // Kann eine Wischgeste in der obersten Ebene nichts scrollen (z. B. das kleine
+    // Kennwortfenster), gäbe Safari sie an die Seite dahinter weiter: Weder
+    // html.modal-open noch overscroll-behavior (wirkt nur an echten Scrollbereichen)
+    // verhindern das. Entschieden wird einmal je Geste, bei der ersten Bewegung.
+    function scrollsWithin(target, dialog) {
+      const style = node => doc.defaultView?.getComputedStyle?.(node) || {};
+      for (let node = target; node && node !== doc; node = node.parentNode) {
+        const { overflowX = '', overflowY = '' } = style(node);
+        if (/auto|scroll/.test(overflowY) && node.scrollHeight > node.clientHeight + 1) return true;
+        if (/auto|scroll/.test(overflowX) && node.scrollWidth > node.clientWidth + 1) return true;
+        if (node === dialog) break;
+      }
+      return false;
+    }
+
+    let touchBlocked = null;
+    function onTouchmove(event) {
+      if (touchBlocked === null) {
+        const entry = entries.length ? top() : null;
+        touchBlocked = !!entry && event.touches?.length === 1
+          // Vergrößert: Der Finger verschiebt den sichtbaren Ausschnitt.
+          && !((doc.defaultView?.visualViewport?.scale ?? 1) > 1.01)
+          && event.target?.type !== 'range'
+          && !scrollsWithin(event.target, entry.dialog);
+      }
+      if (touchBlocked && event.cancelable !== false) event.preventDefault();
+    }
+    doc.addEventListener('touchstart', () => { touchBlocked = null; }, { passive: true });
+    doc.addEventListener('touchmove', onTouchmove, { passive: false });
 
     return {
       open,

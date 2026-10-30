@@ -51,7 +51,7 @@ test('beide Artikelseiten zeigen ihre Infografikanzahl und der Detailfuß bleibt
   assert.match(ui, /duplicateInfographicGallery\(pair\.facebook, 'facebook'\)/);
   assert.match(ui, /<details class="duplicate-infographic-gallery"/);
   assert.match(ui, /duplicateDetailContent\.innerHTML/);
-  assert.match(ui, /duplicateDetailDialog\.showModal\(\)/);
+  assert.match(ui, /WebArchivLayers\.open\(duplicateDetailDialog, /);
   assert.match(css, /\.duplicate-detail\s*\{[\s\S]*grid-template-rows: auto auto minmax\(0, 1fr\) auto auto/);
   assert.match(css, /\.duplicate-comparison-scroll\s*\{[^}]*overflow-y: auto/);
   assert.match(css, /\.duplicate-detail-header-grid h3\s*\{[^}]*-webkit-line-clamp: 3/);
@@ -204,10 +204,11 @@ test('Prüfansicht kehrt bei Auswahl, Ignorieren und Escape in die Trefferliste 
   assert.match(ui, /duplicateDetailDialog\.addEventListener\('close'[\s\S]*renderDuplicateList\(\{ restoreScroll: true \}\)/);
   assert.match(ui, /action === 'toggle-selection'[\s\S]*setDuplicateSelected[\s\S]*closeDuplicateDetail\(\)/);
   assert.match(ui, /action === 'ignore'[\s\S]*closeDuplicateDetail\(\);[\s\S]*mutateDuplicate/);
-  assert.match(ui, /function closeTopDuplicateDialog\(\)[\s\S]*duplicateImageViewer\.open[\s\S]*duplicateDetailDialog\.open[\s\S]*duplicateDialog\.open/);
-  assert.match(ui, /document\.addEventListener\('keydown'[\s\S]*event\.key !== 'Escape'[\s\S]*event\.preventDefault\(\)[\s\S]*closeTopDuplicateDialog\(\)/);
-  assert.match(ui, /function topDuplicateDialog\(\)[\s\S]*duplicateImageViewer\.open[\s\S]*duplicateDetailDialog\.open[\s\S]*duplicateDialog\.open/);
-  assert.match(ui, /dialog\.addEventListener\('cancel'[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*event\.currentTarget !== topDuplicateDialog\(\)[\s\S]*event\.currentTarget\.close\(\)/);
+  // Escape schließt über den Ebenen-Stapel immer nur den obersten Dialog.
+  assert.match(ui, /WebArchivLayers\.open\(duplicateImageViewer, \{ name: 'duplicate-image', onEscape: \(\) => duplicateImageViewer\.close\(\) \}\)/);
+  assert.match(ui, /WebArchivLayers\.open\(duplicateDetailDialog, \{ name: 'duplicate-detail', onEscape: closeDuplicateDetail \}\)/);
+  assert.match(ui, /WebArchivLayers\.open\(duplicateDialog, \{ name: 'duplicates', onEscape: \(\) => duplicateDialog\.close\(\) \}\)/);
+  assert.doesNotMatch(ui, /document\.addEventListener\('keydown'|addEventListener\('cancel'|stopImmediatePropagation/);
 });
 
 test('Volltext und nur Unterschiede lassen sich im Prüfdialog umschalten', () => {
@@ -240,13 +241,18 @@ test('alle drei Dublettendialoge verwenden das sichtbare Ziehen und Rückfedern 
   assert.match(gestures, /dy < PULL_CLOSE_DISTANCE\) \{ reset\(true\); return; \}/);
 });
 
+test('Nachfedern am Listenende blendet den Dublettenkopf nicht ein', () => {
+  const ui = read('public/duplicates.js');
+  assert.match(ui, /function updateDuplicateChromeOnScroll\(\)[\s\S]*?const max = Math\.max\(0, duplicateContent\.scrollHeight - duplicateContent\.clientHeight\);\s*const current = Math\.min\(max, Math\.max\(0, duplicateContent\.scrollTop\)\);[\s\S]*?const delta = current - duplicateLastScrollTop/);
+});
+
 test('offene Dublettendialoge sperren die Seite dahinter, nicht ihre inneren Scrollbereiche', () => {
   const ui = read('public/duplicates.js');
   const css = readStyles();
   assert.match(ui, /function syncDuplicatePageScroll\(\)[\s\S]*duplicateDialogs\.some\(dialog => dialog\.open\)/);
-  assert.match(ui, /duplicateImageViewer\.showModal\(\);\s*syncDuplicatePageScroll\(\)/);
-  assert.match(ui, /duplicateDetailDialog\.showModal\(\);\s*syncDuplicatePageScroll\(\)/);
-  assert.match(ui, /duplicateDialog\.showModal\(\);\s*syncDuplicatePageScroll\(\)/);
+  for (const dialog of ['duplicateImageViewer', 'duplicateDetailDialog', 'duplicateDialog']) {
+    assert.match(ui, new RegExp(String.raw`WebArchivLayers\.open\(${dialog}, [^;]*\);\s*(?:\}\s*)?syncDuplicatePageScroll\(\)`));
+  }
   assert.match(ui, /dialog\.addEventListener\('close', syncDuplicatePageScroll\)/);
   assert.match(css, /html\.duplicate-modal-open,\s*html\.duplicate-modal-open body,/);
   assert.match(css, /\.duplicate-content \{[^}]*overflow-y: auto;/);

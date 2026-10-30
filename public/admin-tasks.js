@@ -112,7 +112,8 @@ function chooseTtsProvider(article, providers) {
       const selected = selectedProvider();
       resolve(dialog.returnValue === 'start' ? selected || null : null);
     }, { once: true });
-    dialog.showModal();
+    // Ebenen-Stapel: Escape schließt den Dialog (close → resolve(null)).
+    WebArchivLayers.open(dialog, { name: 'tts-provider' });
     (radios.find(radio => radio.checked) || radios.find(radio => !radio.disabled)
       || dialog.querySelector('button')).focus();
   });

@@ -90,7 +90,10 @@ function updateDuplicateChromeHeight() {
 
 function updateDuplicateChromeOnScroll() {
   duplicateChromeFrame = 0;
-  const current = duplicateContent.scrollTop;
+  // iOS meldet beim Nachfedern Werte über das Ende (bzw. unter 0) hinaus. Das
+  // Zurückfedern ist kein Hochscrollen und darf den Kopf nicht einblenden.
+  const max = Math.max(0, duplicateContent.scrollHeight - duplicateContent.clientHeight);
+  const current = Math.min(max, Math.max(0, duplicateContent.scrollTop));
   const delta = current - duplicateLastScrollTop;
   duplicateLastScrollTop = current;
   if (!duplicateDialog.open || duplicateChromeScrollPaused) return;
@@ -231,7 +234,9 @@ function openDuplicateImageViewer(side, sideIndex) {
   if (index < 0) return;
   duplicateUi.viewerIndex = index;
   renderDuplicateImageViewer();
-  if (!duplicateImageViewer.open) duplicateImageViewer.showModal();
+  if (!duplicateImageViewer.open) {
+    WebArchivLayers.open(duplicateImageViewer, { name: 'duplicate-image', onEscape: () => duplicateImageViewer.close() });
+  }
   syncDuplicatePageScroll();
 }
 
@@ -576,7 +581,9 @@ function renderDuplicateDetail(pair) {
     </details>` : `<aside class="duplicate-migration-note">${pair.migrationUnavailable ? esc(pair.migrationUnavailable) : 'Keine migrierbare Infografik erkannt'}</aside>`}
     ${duplicateActions(pair, duplicateUi.tab, { detail: true })}
   </div>`;
-  if (!duplicateDetailDialog.open) duplicateDetailDialog.showModal();
+  if (!duplicateDetailDialog.open) {
+    WebArchivLayers.open(duplicateDetailDialog, { name: 'duplicate-detail', onEscape: closeDuplicateDetail });
+  }
   syncDuplicatePageScroll();
   updateDuplicateTools();
 }
@@ -699,7 +706,7 @@ async function openDuplicateReview() {
   duplicateUi.tab = 'pending';
   duplicateUi.detail = null;
   duplicateSearch.value = duplicateUi.search;
-  duplicateDialog.showModal();
+  WebArchivLayers.open(duplicateDialog, { name: 'duplicates', onEscape: () => duplicateDialog.close() });
   syncDuplicatePageScroll();
   showDuplicateChrome();
   updateDuplicateChromeHeight();
@@ -735,37 +742,7 @@ duplicateImageViewer.addEventListener('click', event => {
   if (event.target === duplicateImageViewer) duplicateImageViewer.close();
 });
 duplicateImageViewer.addEventListener('close', () => duplicateImageViewerImage.removeAttribute('src'));
-function closeTopDuplicateDialog() {
-  if (duplicateImageViewer.open) duplicateImageViewer.close();
-  else if (duplicateDetailDialog.open) closeDuplicateDetail();
-  else if (duplicateDialog.open) duplicateDialog.close();
-}
-
-function topDuplicateDialog() {
-  if (duplicateImageViewer.open) return duplicateImageViewer;
-  if (duplicateDetailDialog.open) return duplicateDetailDialog;
-  if (duplicateDialog.open) return duplicateDialog;
-  return null;
-}
-
-document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || ![duplicateDialog, duplicateDetailDialog, duplicateImageViewer].some(dialog => dialog.open)) return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  // Ein offenes Filtermenü schließt aria-menu.js bereits vorher (Capture-Phase).
-  closeTopDuplicateDialog();
-}, true);
-let duplicateCancelGuard = false;
-for (const dialog of [duplicateDialog, duplicateDetailDialog, duplicateImageViewer]) {
-  dialog.addEventListener('cancel', event => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (duplicateCancelGuard || event.currentTarget !== topDuplicateDialog()) return;
-    duplicateCancelGuard = true;
-    event.currentTarget.close();
-    setTimeout(() => { duplicateCancelGuard = false; }, 0);
-  });
-}
+// Escape schließt den obersten Dublettendialog über den Ebenen-Stapel.
 duplicateImageViewer.addEventListener('keydown', event => {
   if (event.key === 'ArrowLeft') stepDuplicateImageViewer(-1);
   if (event.key === 'ArrowRight') stepDuplicateImageViewer(1);

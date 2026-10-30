@@ -75,7 +75,8 @@ function openNewInfographic() {
   renderInfoNewCategories();
   $infoNewStatus.textContent = '';
   setInfoNewFile(null);
-  $infoNew.showModal();
+  // Ebenen-Stapel: Escape fragt bei Eingaben nach (leaveNewInfographic).
+  WebArchivLayers.open($infoNew, { name: 'infographic-new', onEscape: leaveNewInfographic });
   // „[Titel]“ gleich markieren, damit man lostippen kann.
   $infoNewText.focus();
   $infoNewText.setSelectionRange(2, 9);
@@ -153,14 +154,12 @@ $infoNewSave.addEventListener('click', saveNewInfographic);
 for (const id of ['infographic-new-close', 'infographic-new-cancel']) {
   document.getElementById(id).addEventListener('click', leaveNewInfographic);
 }
-$infoNew.addEventListener('cancel', event => { event.preventDefault(); leaveNewInfographic(); });
-// Tasten gehören dem Dialog (keine Artikel-Navigation, kein Schließen darunter).
-document.addEventListener('keydown', event => {
-  if (!$infoNew.open) return;
-  event.stopImmediatePropagation();
-  if (event.key === 'Escape') { event.preventDefault(); leaveNewInfographic(); }
-  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); saveNewInfographic(); }
-}, true);
+// Strg/Cmd+Enter speichert; Escape und übrige Tasten regelt der Ebenen-Stapel.
+$infoNew.addEventListener('keydown', event => {
+  if (!(event.ctrlKey || event.metaKey) || event.key !== 'Enter') return;
+  event.preventDefault();
+  saveNewInfographic();
+});
 window.addEventListener('beforeunload', event => {
   if ($infoNew.open && (infoNewDirty() || infoNewState.saving)) { event.preventDefault(); event.returnValue = ''; }
 });

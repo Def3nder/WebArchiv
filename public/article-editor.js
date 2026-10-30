@@ -125,24 +125,23 @@ document.addEventListener('click', event => {
   articleEditorState.original = '';
   markdownInput.setValue('', { readOnly: true });
   document.getElementById('article-editor-name').textContent = entry.title;
-  $articleEditor.showModal();
+  // Ebenen-Stapel: Escape fragt bei ungespeicherten Änderungen nach (leaveArticleEditor).
+  WebArchivLayers.open($articleEditor, { name: 'article-editor', onEscape: leaveArticleEditor, returnFocus: false });
   loadEditorFile();
 });
 $editorSave.addEventListener('click', saveEditorFile);
 document.getElementById('article-editor-reload').addEventListener('click', loadEditorFile);
 for (const id of ['article-editor-close', 'article-editor-cancel']) document.getElementById(id).addEventListener('click', leaveArticleEditor);
-$articleEditor.addEventListener('cancel', event => { event.preventDefault(); leaveArticleEditor(); });
 $articleEditor.addEventListener('close', () => {
   if (articleEditorState.focus?.isConnected) articleEditorState.focus.focus();
 });
-document.addEventListener('keydown', event => {
-  if (!$articleEditor.open) return;
-  const insideEditor = event.target instanceof Element && event.target.closest('#article-editor-text');
-  const saveShortcut = (event.ctrlKey || event.metaKey) && event.key === 'Enter';
-  if (insideEditor && event.key !== 'Escape' && !saveShortcut) return;
-  event.stopImmediatePropagation();
-  if (event.key === 'Escape') { event.preventDefault(); leaveArticleEditor(); }
-  if (saveShortcut) { event.preventDefault(); saveEditorFile(); }
+// Strg/Cmd+Enter speichert auch aus dem Editorfeld heraus: in der Capture-Phase am
+// Dialog, bevor CodeMirror die Tastenkombination selbst belegt.
+$articleEditor.addEventListener('keydown', event => {
+  if (!(event.ctrlKey || event.metaKey) || event.key !== 'Enter') return;
+  event.preventDefault();
+  event.stopPropagation();
+  saveEditorFile();
 }, true);
 $editorText.addEventListener('keydown', event => {
   const saveShortcut = (event.ctrlKey || event.metaKey) && event.key === 'Enter';

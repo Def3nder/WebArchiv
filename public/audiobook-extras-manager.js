@@ -494,7 +494,8 @@ async function openBookExtrasManager(book) {
   bemClosePreview({ focus: false });
   bemCloseEditor(true);
   bemRender();
-  $bem.showModal();
+  // Ebenen-Stapel: Escape schließt stufenweise (Vorschau, Umbenennen, Editor, Dialog).
+  WebArchivLayers.open($bem, { name: 'extras-manager', onEscape: bemTryClose });
   try { await bemLoad(); }
   catch (error) { bemSetStatus(error.message, 'error'); }
 }
@@ -519,22 +520,8 @@ function bemTryClose() {
 }
 
 $bem.querySelector('[data-bem-close]').addEventListener('click', bemTryClose);
-$bem.addEventListener('cancel', event => {
-  // Moderne Browser (insbesondere Safari unter iOS) senden auch beim
-  // Abbrechen eines <input type="file"> ein bubbling `cancel`-Event.
-  // Nur Escape auf dem Dialog selbst darf deshalb die Verwaltung schließen.
-  if (event.target !== $bem) return;
-  event.preventDefault();
-  bemTryClose();
-});
-// Escape wird anschließend auch vom globalen App-Handler ausgewertet. Solange
-// die Extras-Verwaltung offen ist, darf der Tastendruck das darunterliegende
-// Hörbuch deshalb nicht erreichen. Das native `cancel`-Event oben übernimmt
-// weiterhin genau einmal das stufenweise Schließen innerhalb dieses Dialogs.
-document.addEventListener('keydown', event => {
-  if (!$bem.open || event.key !== 'Escape') return;
-  event.stopImmediatePropagation();
-}, true);
+// Escape und cancel (auch das bubbelnde cancel abgebrochener Dateifelder unter iOS)
+// regelt der Ebenen-Stapel: nur der Dialog selbst schließt, die Ebene darunter nicht.
 // Wie bei den übrigen modalen Dialogen schließt ein Klick neben die sichtbare
 // Dialogfläche. Klicks auf Inhalt oder freie Fläche innerhalb des Dialogs bleiben erhalten.
 $bem.addEventListener('click', event => {

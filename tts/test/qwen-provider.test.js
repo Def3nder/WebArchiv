@@ -219,7 +219,8 @@ test('Anbieterdialog: explizite Auswahl, Kostenhinweis, gesperrte Anbieter und A
       const providers = ['qwen', 'openai'].map((provider, i) => ({ provider, available: available[i],
         label: provider, status: 'Test', confirmation: provider === 'openai' ? 'kostenpflichtig' : 'lokal' }));
       let created = 0;
-      const context = vm.createContext({ document: { getElementById: element, createElement: () => element(`created-${created++}`) }, providers });
+      const WebArchivLayers = { open(dialog) { dialog.showModal(); } };
+      const context = vm.createContext({ document: { getElementById: element, createElement: () => element(`created-${created++}`) }, providers, WebArchivLayers });
       const result = vm.runInContext(source.slice(start, end) + '\nchooseTtsProvider({ title: "Artikel" }, providers)', context);
       const options = element('tts-provider-options'), button = element('tts-provider-start');
       const radios = options.children.map(label => label.children[0]);

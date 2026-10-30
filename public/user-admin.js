@@ -57,7 +57,11 @@ function openPasswordDialog({ forced }) {
   document.getElementById('password-cancel').hidden = forced;
   document.getElementById('password-logout').hidden = !forced;
   pwState.promise = new Promise(resolve => { pwState.resolve = resolve; });
-  $pwDialog.showModal();
+  // Ebenen-Stapel: Escape schließt nur ohne Pflichtwechsel und ohne laufende Anfrage.
+  WebArchivLayers.open($pwDialog, {
+    name: 'password', returnFocus: false,
+    onEscape: () => { if (!pwState.forced && !pwState.busy) finishPasswordDialog(false); },
+  });
   $pwCurrent.focus();
   return pwState.promise;
 }
@@ -104,10 +108,6 @@ $pwForm.addEventListener('submit', async event => {
 });
 document.getElementById('password-cancel').addEventListener('click', () => finishPasswordDialog(false));
 document.getElementById('password-logout').addEventListener('click', () => finishPasswordDialog(false));
-$pwDialog.addEventListener('cancel', event => {
-  event.preventDefault();
-  if (!pwState.forced && !pwState.busy) finishPasswordDialog(false);
-});
 
 // Kurze Bestätigung unterhalb des Headers.
 function showAccountNotice(message) {
@@ -154,7 +154,8 @@ async function openUserAdmin() {
   $uaUsers.innerHTML = '';
   $uaPublic.innerHTML = '';
   uaSelectTab('users');
-  $ua.showModal();
+  // Ebenen-Stapel: Escape fragt bei ungespeicherten Änderungen nach (closeUserAdmin).
+  WebArchivLayers.open($ua, { name: 'user-admin', onEscape: closeUserAdmin, returnFocus: false });
   try {
     await uaLoad();
     uaSetStatus('');
@@ -594,12 +595,7 @@ for (const tab of ['users', 'public']) {
   });
 }
 document.getElementById('user-admin-close').addEventListener('click', closeUserAdmin);
-$ua.addEventListener('cancel', event => { event.preventDefault(); closeUserAdmin(); });
-
-// Tastatur in den Dialogen nicht an die Artikelnavigation weiterreichen.
-document.addEventListener('keydown', event => {
-  if ($ua.open || $pwDialog.open) event.stopImmediatePropagation();
-}, true);
+// Escape und Tasten regelt der Ebenen-Stapel (keine Artikelnavigation dahinter).
 window.addEventListener('beforeunload', event => {
   if ($ua.open && ua.dirty) { event.preventDefault(); event.returnValue = ''; }
 });

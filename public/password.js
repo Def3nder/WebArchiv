@@ -41,7 +41,11 @@ function openPasswordDialog({ forced }) {
   document.getElementById('password-cancel').hidden = forced;
   document.getElementById('password-logout').hidden = !forced;
   pwState.promise = new Promise(resolve => { pwState.resolve = resolve; });
-  $pwDialog.showModal();
+  // Ebenen-Stapel: Escape schließt nur ohne Pflichtwechsel und ohne laufende Anfrage.
+  WebArchivLayers.open($pwDialog, {
+    name: 'password', returnFocus: false,
+    onEscape: () => { if (!pwState.forced && !pwState.busy) finishPasswordDialog(false); },
+  });
   $pwCurrent.focus();
   return pwState.promise;
 }
@@ -94,10 +98,6 @@ $pwForm.addEventListener('submit', async event => {
 });
 document.getElementById('password-cancel').addEventListener('click', () => finishPasswordDialog(false));
 document.getElementById('password-logout').addEventListener('click', () => finishPasswordDialog(false));
-$pwDialog.addEventListener('cancel', event => {
-  event.preventDefault();
-  if (!pwState.forced && !pwState.busy) finishPasswordDialog(false);
-});
 
 function showAccountNotice(message) {
   const notice = document.createElement('div');

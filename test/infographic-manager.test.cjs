@@ -260,12 +260,23 @@ test('Prüfmodus speichert atomar und veröffentlicht alle betroffenen Jahre nur
   assert.equal((refresh.match(/publishArticleIndex\(/g) || []).length, 1);
 });
 
+test('Grafiken öffnen wie die Hörbuch-Extras im gemeinsamen Vollbild statt in einer Vorschau im Dialog', async () => {
+  const manager = await fs.readFile(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
+  const html = await fs.readFile(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const audiobooks = await fs.readFile(path.join(__dirname, '..', 'public', 'audiobooks.js'), 'utf8');
+  assert.match(manager, /function igmShowImage\(item, button\) \{[\s\S]*?igmState\.items\.map\(entry => entry\.imageUrl\)[\s\S]*?openGalleryFullscreen\(urls, igmState\.items\.indexOf\(item\), null, true, button\)/);
+  assert.match(manager, /closest\('\[data-igm-view\]'\);\s*if \(view\) \{ igmShowImage\(item, view\); return; \}/);
+  assert.match(audiobooks, /openGalleryFullscreen\(images\.map\(item => item\.url\), images\.indexOf\(extra\), null, true\)/);
+  assert.doesNotMatch(manager, /igmOpenPreview|igmClosePreview|data-igm-preview/);
+  assert.doesNotMatch(html, /data-igm-preview/);
+});
+
 test('Escape schließt nur die oberste Ebene des Infografik-Managers und erhält den Artikel', async () => {
   const manager = await fs.readFile(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
   const html = await fs.readFile(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
-  assert.match(manager, /function igmEscape\(\)[\s\S]*!\$igmPreview\.hidden[\s\S]*igmClosePreview\(\)[\s\S]*else igmClose\(\)/);
-  assert.match(manager, /document\.addEventListener\('keydown'[\s\S]*!\$igm\.open \|\| event\.key !== 'Escape'[\s\S]*event\.preventDefault\(\)[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)/);
-  assert.match(manager, /\$igm\.addEventListener\('cancel'[\s\S]*event\.preventDefault\(\)[\s\S]*event\.stopImmediatePropagation\(\)[\s\S]*igmEscape\(\)/);
+  // Escape und cancel kommen vom Ebenen-Stapel; eine geöffnete Grafik ist eine eigene Ebene (Vollbild).
+  assert.match(manager, /WebArchivLayers\.open\(\$igm, \{ name: 'infographic-manager', onEscape: igmClose/);
+  assert.doesNotMatch(manager, /document\.addEventListener\('keydown'|addEventListener\('cancel'|stopImmediatePropagation/);
   assert.match(manager, /igmState\.returnFocus = document\.activeElement[\s\S]*\$igm\.addEventListener\('close'[\s\S]*returnFocus\?\.isConnected[\s\S]*article-overlay/);
   assert.match(html, /infographic-manager\.js(?:\?v=[a-f0-9]+)?/);
 });

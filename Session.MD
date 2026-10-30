@@ -2157,3 +2157,60 @@ schließt. Artikelansicht scrollt per Rad weiterhin. Die Verkettung in die Seite
 dieser Änderung noch nicht erneut geprüft.
 
 **Deployment:** `public/css/dialogs.css`, `public/css/duplicates.css`, `public/index.html` kopieren; Browser neu laden.
+
+## 49. Aktualisierung 30.10.2026 – Ebenen-Stapel, Schritt 5: alle übrigen Dialoge am Stapel
+
+Alle restlichen nativen Dialoge öffnen über `WebArchivLayers.open(...)` statt `showModal()`. Ihre eigenen
+`cancel`-Listener und die Capture-Handler am `document` (mit `stopImmediatePropagation`) entfallen; Escape läuft über
+`onEscape`, das bisherige Schließlogik samt Rückfrage aufruft.
+
+- **Einstellungen, TTS-Einstellungen, Passwort, Benutzerverwaltung:** `onEscape` = bisherige Schließfunktion
+  (Passwort: nicht bei Pflichtwechsel oder während des Speicherns). Benutzerverwaltung → Passwort: Escape schließt
+  nur das Passwortfenster.
+- **TTS-Anbieterwahl** (`admin-tasks.js`): ohne `onEscape`, der Stapel schließt; das `close`-Ereignis bricht ab.
+- **Artikeleditor und Linkdialog** (gebündelt, `npm run build:editor`): Escape fragt bei ungespeicherten Änderungen
+  nach; Strg/Cmd+Enter speichert über einen Capture-Listener am Editor-Dialog (vor CodeMirror). Der Linkdialog meldet
+  sich am Stapel an, wenn es ihn gibt (sonst nativ, z. B. im Dubletten-Werkzeug).
+- **Neue Infografik, Infografik-Manager, Extras-Verwaltung:** Escape schließt zuerst Vorschau bzw. Markdown-Editor
+  im Dialog (`igmEscape`, `bemTryClose`), dann den Dialog. Strg+Enter in „Neue Infografik“ hängt am Dialog selbst.
+- **Dubletten (Liste, Prüfansicht, Bildbetrachter):** `closeTopDuplicateDialog`, `topDuplicateDialog`, der
+  Capture-Handler und die `cancel`-Sperre entfallen. Die Pfeiltasten im Bildbetrachter bleiben am Element.
+- **Datei-Abbruch:** Das bubbelnde `cancel` eines Dateifelds schließt keinen Dialog; der Stapel wertet nur das
+  `cancel` des Dialogs selbst aus (vorher je Dialog von Hand geprüft).
+- Verbleibende `document`-Tastenhandler: `aria-menu.js` und die Leertaste in `infographic-review.js` (Schritt 6).
+
+**Geprüft:** Node 453/453, Python 14/14 (Tests prüfen jetzt die Anmeldung am Stapel und das Fehlen eigener
+`cancel`-/`keydown`-Handler). Im Browser als Admin, mit echter Escape-Taste: Einstellungen, TTS-Einstellungen,
+Neue Infografik schließen; Benutzerverwaltung → Passwort → Benutzerverwaltung → zu; Artikel → Editor → Linkdialog:
+Escape schließt Link, dann (geändert, Rückfrage abgelehnt) bleibt der Editor offen, mit Bestätigung zu, Fokus zurück
+auf „Aktionen“, Artikel bleibt offen; Artikel → Infografik-Manager → Vorschau: je eine Ebene, zuletzt zurück zur Liste
+(`#/`); Dubletten → Prüfansicht → Bild: Pfeil blättert, je eine Ebene, Seitensperre danach aufgehoben; Extras →
+Neuer Text: erst Editor, dann Dialog. Keine Konsolenfehler. Am iPhone nicht geprüft.
+
+**Deployment:** `public/settings.js`, `password.js`, `user-admin.js`, `tts-settings.js`, `admin-tasks.js`,
+`infographic-new.js`, `infographic-manager.js`, `duplicates.js`, `vendor/article-editor.bundle.js` kopieren;
+Browser neu laden.
+
+**Nachtrag (iPhone-Rückmeldung):**
+- **Kennwortfenster schob beim Wischen die Seite dahinter.** Das Fenster passt auf den Bildschirm, scrollt also
+  nicht; `overscroll-behavior` wirkt nur an echten Scrollbereichen, und `html.modal-open` hält Safari nicht auf.
+  **Behoben zentral in `layer-stack.js`:** Kann eine Wischgeste in der obersten Ebene nichts scrollen (kein Element
+  vom Ziel bis zum Dialog mit `overflow: auto/scroll` und Überlauf), wird `touchmove` abgefangen. Einmal je Geste
+  entschieden; frei bleiben zwei Finger (Zoomen), vergrößerte Ansicht (Ausschnitt verschieben) und Schieberegler.
+  Gilt damit für alle kleinen Fenster (Einstellungen, Anbieterwahl, …), nicht nur für das Kennwortfenster.
+- **Dublettenkopf erschien nach Schwung-Scrollen von selbst.** iOS meldet beim Nachfedern am Listenende
+  `scrollTop`-Werte über das Ende hinaus; das Zurückfedern sah aus wie Hochscrollen. **Behoben:** Die Position wird
+  vor dem Vergleich auf 0 … Maximum begrenzt (`updateDuplicateChromeOnScroll`).
+- **Geprüft:** Node 455/455, Python 14/14 (neuer Verhaltenstest für die Wischsperre). Im Browser (Handy-Größe,
+  künstliche Touch-Ereignisse): Wischen im Kennwort- und Einstellungsfenster wird abgefangen, im Artikel und in der
+  Grundansicht nicht. Das Nachfedern selbst lässt sich nur am iPhone prüfen.
+- **Infografik-Manager zeigte Grafiken in einer Vorschau im Dialog** (Kasten mit „← Zurück“), Wischen nach unten
+  schloss den ganzen Manager. Die Extras der Hörbücher öffnen Bilder dagegen im gemeinsamen Vollbild. **Jetzt
+  einheitlich:** Ein Tipp auf die Grafik öffnet `openGalleryFullscreen` mit allen Grafiken des Artikels (begrenzt,
+  also ohne Sprung zum Nachbarartikel; blättern, zoomen, herunterladen). Escape oder Wischen nach unten führt zurück
+  in den Manager, der Fokus auf die angetippte Grafik. Die Vorschau-Fläche (`data-igm-preview`), `igmOpenPreview`,
+  `igmClosePreview` und `igmEscape` entfallen; Escape im Manager schließt ihn (`igmClose`).
+  **Geprüft:** Node 456/456, Python 14/14. Im Browser als Admin (Handy-Größe): Vollbild liegt über dem Manager,
+  ← blättert bis zur ersten Grafik und bleibt dort, Escape und Wischen nach unten (künstliche Touch-Ereignisse)
+  führen in den Manager zurück, danach schließt „×“ den Manager, der Artikel bleibt offen. Keine Konsolenfehler.
+  **Deployment zusätzlich:** `public/layer-stack.js`, `public/css/account.css`, `public/index.html`.
