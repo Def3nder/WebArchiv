@@ -204,24 +204,25 @@ window.addEventListener('beforeunload', event => {
   event.returnValue = '';
 });
 
-// Im Prüfmodus schaltet die Leertaste die Poster-Markierung des aktuell
-// gezeigten Bildes. Hat die Checkbox selbst den Fokus, bleibt ihre native
+// Im Prüfmodus schaltet die Leertaste die Poster-Markierung des aktuell gezeigten
+// Bildes. Aufgerufen von der Tastatur der Bildvollansicht (Ebenen-Stapel, onKey);
+// true = behandelt. Hat die Checkbox selbst den Fokus, bleibt ihre native
 // Tastaturbedienung zuständig, damit die Markierung nicht doppelt wechselt.
-document.addEventListener('keydown', e => {
-  if ((e.key === ' ' || e.code === 'Space') && $imgFullscreen.open
-      && isInfographicReviewMode() && $fullscreenPosterToggle && !$fullscreenPosterToggle.hidden) {
-    if (e.target === $fullscreenPosterCheckbox) return;
-    const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
-    const interactive = target?.closest(
-      'input, textarea, select, button, a, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
-    );
-    if (interactive) return;
-    e.preventDefault();
-    if (e.repeat) return;
-    const id = $fullscreenPosterCheckbox.dataset.reviewId;
-    if (id) setInfographicReviewMark(id, !$fullscreenPosterCheckbox.checked);
-  }
-});
+function infographicReviewFullscreenKey(e) {
+  if (!(e.key === ' ' || e.code === 'Space') || !isInfographicReviewMode()
+      || !$fullscreenPosterToggle || $fullscreenPosterToggle.hidden) return false;
+  if (e.target === $fullscreenPosterCheckbox) return false;
+  const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
+  const interactive = target?.closest(
+    'input, textarea, select, button, a, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]',
+  );
+  if (interactive) return false;
+  e.preventDefault();
+  if (e.repeat) return true;
+  const id = $fullscreenPosterCheckbox.dataset.reviewId;
+  if (id) setInfographicReviewMark(id, !$fullscreenPosterCheckbox.checked);
+  return true;
+}
 
 // ── Einhängen in app.js ─────────────────────────────────────────────────────
 Object.assign(infographicReview, {
@@ -231,6 +232,7 @@ Object.assign(infographicReview, {
   remember: rememberInfographicReviewItems,
   reset: resetInfographicReviewState,
   renderCard: renderInfographicReviewCard,
+  fullscreenKey: infographicReviewFullscreenKey,
 });
 adminHooks.actions['review-infographics'] = () => {
   if (isInfographicReviewMode()) void leaveInfographicReview();

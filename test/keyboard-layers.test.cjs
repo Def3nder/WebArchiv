@@ -49,31 +49,33 @@ test('Artikelansicht: ←/→ blättern zum Nachbarartikel, Bedienelemente behal
 
 test('Bildvollansicht: ←/→ blättern durch die Bilder', () => {
   const steps = [];
-  const context = { pageSwipeMath: pageSwipe, stepFullscreen: dir => steps.push(dir) };
+  const review = [];
+  const context = { pageSwipeMath: pageSwipe, stepFullscreen: dir => steps.push(dir),
+    infographicReview: { fullscreenKey: event => { review.push(event.key); return event.key === ' '; } } };
   vm.runInNewContext(fn('fullscreenLayerKey'), context);
   const right = key('ArrowRight');
   assert.equal(context.fullscreenLayerKey(right), true);
   assert.equal(right.prevented, true);
-  assert.equal(context.fullscreenLayerKey(key(' ')), false, 'Leertaste bleibt für den Prüfmodus');
+  assert.equal(context.fullscreenLayerKey(key(' ')), true, 'Leertaste: Prüfmodus zuerst (Poster-Markierung)');
   assert.deepEqual(steps, [1]);
+  assert.deepEqual(review, ['ArrowRight', ' ']);
 });
 
-function base({ dialog = false } = {}) {
+function base() {
   const calls = [];
   const context = {
     pageSwipeMath: pageSwipe, Node: { ELEMENT_NODE: 1 }, ARROW_KEY_CONTROLS,
-    document: { querySelector: selector => (selector === 'dialog[open]' && dialog ? {} : null) },
     state: { page: 2, pages: 3 },
     currentLayout: () => 'tall', isInfographicReviewMode: () => false,
     changeResultsPage: page => calls.push(['changeResultsPage', page]),
     WebArchivLayers: { setBase() {} },
   };
-  vm.runInNewContext(slice('function layerAboveContentOpen()', 'WebArchivLayers.setBase(baseViewKey);'), context);
+  vm.runInNewContext(slice('const ARROW_KEY_CONTROLS', 'WebArchivLayers.setBase(baseViewKey);'), context);
   return { calls, press: (...args) => context.baseViewKey(key(...args)) };
 }
 
-test('Kachelansicht: Pfeile blättern nur ohne offenen Dialog und außerhalb von Bedienelementen', () => {
-  assert.deepEqual((() => { const f = base({ dialog: true }); f.press('ArrowRight'); return f.calls; })(), []);
+// Ohne offene Ebene: Mit Ebene ruft der Stapel die Grundansicht gar nicht auf (layer-stack.test.cjs).
+test('Kachelansicht: Pfeile blättern außerhalb von Bedienelementen', () => {
   const f = base();
   f.press('ArrowRight', element('a'));
   f.press('ArrowRight', element('input'));

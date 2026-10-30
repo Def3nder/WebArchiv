@@ -40,6 +40,7 @@ const infographicReview = {
   remember() {},
   reset() {},
   renderCard: () => '',
+  fullscreenKey: () => false,
 };
 const isInfographicReviewMode = () => infographicReview.active;
 
@@ -2058,20 +2059,15 @@ window.addEventListener('resize', () => {
   applyImageZoom();
 });
 
-// Noch nicht am Ebenen-Stapel angemeldete Dialoge behalten ihre Tasten: Die
-// Kachelansicht blättert dann nicht.
-function layerAboveContentOpen() {
-  return !!document.querySelector('dialog[open]');
-}
 // Bedienelemente, die Pfeiltasten selbst nutzen (Radiobuttons, Eingaben, Regler, Audio).
 const ARROW_KEY_CONTROLS = 'input, textarea, select, audio, video, [contenteditable]:not([contenteditable="false"]), [role="slider"]';
 
-// Tastatur der Grundansicht (Kacheln). Artikel, Bildvollansicht, Login, Scrape- und
-// TTS-Fenster sind Ebenen mit eigener Tastatur; solange eine Ebene offen ist, ruft der
-// Stapel diese Funktion nicht auf.
+// Tastatur der Grundansicht (Kacheln). Alle Ebenen und Dialoge hängen am Stapel und
+// haben ihre eigene Tastatur; solange eine offen ist, ruft der Stapel diese Funktion
+// nicht auf.
 function baseViewKey(e) {
   const dir = pageSwipeMath?.keyDirection(e) || 0;
-  if (!dir || layerAboveContentOpen()) return;
+  if (!dir) return;
   const target = e.target?.nodeType === Node.ELEMENT_NODE ? e.target : e.target?.parentElement;
 
   // In der Kachelansicht blättern die Pfeiltasten wie eine Wischgeste um die
@@ -2173,14 +2169,13 @@ new MutationObserver(syncModalPageScroll).observe(document.body, {
 WebArchivLayers.onChange(syncModalPageScroll);
 syncModalPageScroll();
 
-// Ein Dialog über dem Artikel, der noch nicht am Stapel hängt.
-const dialogOpen = () => !!document.querySelector('dialog[open]:not(.app-layer)');
+// Ziehen nach unten: nur an der obersten Ebene (darunterliegende sind ohnehin inert).
 enablePullToClose({
   scroller: $overlayPanel,
   moving: $overlayPanel,
   fading: $overlayBdrop,
   // Nur wenn der Artikel oben liegt; nicht aus der wischbaren Bildleiste.
-  canStart: e => WebArchivLayers.top()?.name === 'article' && !dialogOpen()
+  canStart: e => WebArchivLayers.top()?.name === 'article'
     && !e.target.closest?.('.detail-gallery.is-scrollable, textarea, input'),
   onClose: closeOverlay,
 });
@@ -2225,7 +2220,8 @@ for (const [panelSel, closeSel, fadeSel] of PULL_DIALOGS) {
     scroller: panel,
     moving: panel,
     fading: fadeSel ? document.querySelector(fadeSel) : null,
-    canStart: e => !closeBtn.hidden && !closeBtn.disabled
+    canStart: e => WebArchivLayers.top()?.dialog === panel.closest('dialog')
+      && !closeBtn.hidden && !closeBtn.disabled
       && !e.target.closest?.('textarea, input, select, [contenteditable]')
       && !scrolledWithin(e.target, panel),
     onClose: () => closeBtn.click(),

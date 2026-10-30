@@ -10,7 +10,7 @@ const root = path.join(__dirname, '..');
 const app = readApp();
 const css = readStyles();
 const start = app.indexOf('function syncModalPageScroll()');
-const end = app.indexOf('\nconst dialogOpen', start);
+const end = app.indexOf('\n// Ziehen nach unten', start);
 
 test('Scrollbereiche aller Dialoge und Ebenen verketten nicht in die Seite dahinter', () => {
   const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');

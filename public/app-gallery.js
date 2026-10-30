@@ -126,6 +126,8 @@ function showFullscreenImage(index) {
 
 // ←/→ blättern durch die Bilder (am Rand zum Nachbarartikel, siehe stepFullscreen).
 function fullscreenLayerKey(event) {
+  // Prüfmodus: Leertaste markiert das gezeigte Bild als Poster (infographic-review.js).
+  if (infographicReview.fullscreenKey(event)) return true;
   const dir = pageSwipeMath?.keyDirection(event) || 0;
   if (!dir) return false;
   event.preventDefault();

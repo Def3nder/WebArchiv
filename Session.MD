@@ -2239,3 +2239,28 @@ zeigt er dazu den Fokusrahmen. **Behoben:** `hideArticleLayer` nimmt den Fokus w
 geschlossen → Fokus auf `body`, kein Rahmen; → blättert die Seite, Tab springt wieder in die Kacheln.
 
 **Deployment:** `public/app-detail.js` kopieren; Browser neu laden.
+
+## 52. Aktualisierung 30.10.2026 – Ebenen-Stapel, Schritt 6: Aufräumen und Regeln (Abschluss von Review-Idee 3.2)
+
+- **Leertaste im Prüfmodus „Infografiken prüfen“:** kein eigener `document`-Tastenhandler mehr. Die Funktion
+  `infographicReviewFullscreenKey` hängt über den Platzhalter `infographicReview.fullscreenKey` in der Tastatur der
+  Bildvollansicht (`fullscreenLayerKey`, onKey am Stapel) und wird dort zuerst gefragt.
+- **DOM-Abfragen durch den Stapel ersetzt:** `layerAboveContentOpen` entfällt (der Stapel ruft die Grundansicht nur
+  ohne offene Ebene auf), ebenso `dialogOpen` beim Herunterziehen des Artikels (liegt der Artikel oben, liegt nichts
+  darüber). Die übrigen Pull-Dialoge (`PULL_DIALOGS`) starten nur, wenn ihr Dialog die oberste Ebene ist.
+  Bewusst geblieben: `syncModalPageScroll` (Seitensperre, folgt `dialog[open]` samt MutationObserver),
+  `navigationChromeMustStayVisible` und der Update-Hinweis in `pwa-update.js` (beide unterscheiden
+  App-Ebenen von Fenstern per `:not(.app-layer)`).
+- **Regeltest `test/layer-rules.test.cjs`:** In `public/*.js` gibt es Tastenhandler an `document`/`window` und
+  `stopImmediatePropagation` nur in `aria-menu.js` (schließt offene Menüs zuerst), `showModal()` nur im Stapel und im
+  Rückfall des Linkdialogs (Dubletten-Werkzeug ohne Stapel), `cancel`-Listener nur im Stapel.
+- **Spike-Branch `spike/dialog-ebenen` gelöscht** (nur lokal; Spitze war `eec9436`, Spike-Commit `c025d72`). Sein
+  Dubletten-Commit ist inhaltsgleich mit `8926ee3` auf main, der Spike ist durch die Schritte 1–5 ersetzt.
+- CLAUDE.md: Abschnitt „Layers“ beschreibt den fertigen Stand samt Regeln.
+
+**Geprüft:** Node 461/461, Python 14/14 (Leertaste jetzt als Verhaltenstest, neuer Regeltest). Im Browser als Admin
+(Handy-Größe): Ziehen am Artikel unter den Einstellungen tut nichts, Ziehen an den Einstellungen schließt nur sie,
+danach schließt Ziehen den Artikel (`#/`). Prüfmodus: Kachel antippen → Vollbild, Leertaste setzt und entfernt die
+Poster-Markierung, Escape schließt das Vollbild. Keine Konsolenfehler.
+
+**Deployment:** `public/app.js`, `public/app-gallery.js`, `public/infographic-review.js` kopieren; Browser neu laden.

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const readStyles = require('./support/read-styles.cjs');
 const readApp = require('./support/read-app.cjs');
 
@@ -120,9 +121,33 @@ test('Poster-Markierung ist auch in der Vollbildansicht verfügbar', () => {
   assert.match(html, /id="img-fullscreen-poster-checkbox"/);
   assert.match(reviewUi, /fsGallery\.reviewIds\[index\]/);
   assert.match(reviewUi, /\$fullscreenPosterCheckbox\?\.addEventListener\('change'/);
-  assert.match(reviewUi, /\(e\.key === ' ' \|\| e\.code === 'Space'\)[\s\S]*isInfographicReviewMode\(\)[\s\S]*\$fullscreenPosterToggle && !\$fullscreenPosterToggle\.hidden/);
-  assert.match(reviewUi, /if \(e\.target === \$fullscreenPosterCheckbox\) return;[\s\S]*setInfographicReviewMark\(id, !\$fullscreenPosterCheckbox\.checked\)/);
-  assert.match(reviewUi, /e\.preventDefault\(\);[\s\S]*if \(e\.repeat\) return;/);
+  // Leertaste über die Tastatur der Bildvollansicht (Ebenen-Stapel), kein eigener document-Handler.
+  assert.match(reviewUi, /fullscreenKey: infographicReviewFullscreenKey/);
+  assert.doesNotMatch(reviewUi, /document\.addEventListener\('keydown'/);
+  const start = reviewUi.indexOf('function infographicReviewFullscreenKey(');
+  const source = reviewUi.slice(start, reviewUi.indexOf('\n}', start) + 2);
+  const marks = [];
+  const checkbox = { checked: false, dataset: { reviewId: 'bild-1' } };
+  const context = {
+    Node: { ELEMENT_NODE: 1 }, isInfographicReviewMode: () => true,
+    $fullscreenPosterToggle: { hidden: false }, $fullscreenPosterCheckbox: checkbox,
+    setInfographicReviewMark: (id, value) => marks.push([id, value]),
+  };
+  vm.runInNewContext(source, context);
+  const plain = { nodeType: 1, closest: () => null };
+  const press = (init = {}) => {
+    const event = { key: ' ', code: 'Space', target: plain, repeat: false, prevented: false,
+      preventDefault() { this.prevented = true; }, ...init };
+    return [context.infographicReviewFullscreenKey(event), event.prevented];
+  };
+  assert.deepEqual(press(), [true, true]);
+  assert.deepEqual(press({ repeat: true }), [true, true], 'gehaltene Taste wechselt nicht mehrfach');
+  assert.deepEqual(press({ target: checkbox }), [false, false], 'Checkbox bedient sich selbst');
+  assert.deepEqual(press({ target: { nodeType: 1, closest: () => ({}) } }), [false, false], 'Bedienelemente behalten die Taste');
+  assert.deepEqual(press({ key: 'ArrowRight', code: 'ArrowRight' }), [false, false]);
+  context.isInfographicReviewMode = () => false;
+  assert.deepEqual(press(), [false, false], 'außerhalb des Prüfmodus nichts');
+  assert.deepEqual(marks, [['bild-1', true]]);
   assert.match(reviewUi, /beforeunload[\s\S]*review\.changes\.size/);
 });
 
