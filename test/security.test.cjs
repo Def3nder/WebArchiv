@@ -216,6 +216,7 @@ test('CSP: Report-Only als Vorgabe, strikte Skripte, Nonce pro Antwort, weitere 
   assert.equal(first.headers['x-content-type-options'], 'nosniff');
   assert.equal(first.headers['referrer-policy'], 'strict-origin-when-cross-origin');
   assert.match(first.headers['permissions-policy'], /microphone=\(self\)/);
+  assert.equal(first.headers['x-robots-tag'], 'noindex, nofollow');
 });
 
 test('CSP: enforce setzt die echte Richtlinie, PDF.js erhält WebAssembly, off nur übrige Header', async t => {

@@ -789,6 +789,14 @@ ignorieren den `#`-Teil. Daher liefert `/a/<id>` serverseitig OG-Tags und leitet
 echte Besucher per Meta-Refresh/JS in die SPA (`#/article/<id>`). Der Server
 respektiert `X-Forwarded-Proto/Host` (`trust proxy`) für korrekte absolute URLs
 hinter dem Reverse Proxy, allerdings nur von den in `TRUST_PROXY` genannten Adressen.
+Geteilt wird die kurze Teilen-ID (`/a/<shareId>`, ohne Leerzeichen).
+
+**Wichtig für die Vorschau:** Im Reverse Proxy (NPMplus) muss beim Proxy-Host die Option
+„Send noindex header and block some user agents“ **aus** sein. Sie weist Vorschau-Crawler
+wie `facebookexternalhit` (WhatsApp/Facebook) oder `TelegramBot` ab, und Messenger zeigen
+dann nur den nackten Link. Den `X-Robots-Tag: noindex, nofollow` setzt die App selbst
+(`lib/security-headers.cjs`). Prüfen lässt sich das mit:
+`curl -s -o /dev/null -w "%{http_code}\n" -A "facebookexternalhit/1.1" https://<domain>/a/<shareId>` (erwartet: 200).
 
 ---
 
