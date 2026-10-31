@@ -47,18 +47,23 @@ bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categori
 `{ error: <German message>, code? }`; the frontend reacts only to `code`, never to message text), `atomic-file.cjs` (`writeFileAtomic`,
 `writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`); also the lock, security and duplicate-detection modules
 (`archive-lock.cjs`, `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below). Never `require('./server.js')` from scripts — import from `lib/`.
-Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors);
+Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors;
+`httpError(status, message, extra)` adds fields to the error response, a handler whose rollback failed attaches
+it as `error.rollbackError` and rethrows);
 every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).
 New pure helpers belong in `lib/`, not in `server.js`. Feature modules with routes live in `modules/`: a `create…`
 factory for their state plus `install…Routes(app, deps)` (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`,
-`article-editor`, `media-files`); they import from `lib/`, never from `server.js`. The index works in three phases:
+`article-editor`, `media-files`); they import from `lib/`, never from `server.js`. The index state lives in the
+`archive` object in `server.js` (`articles`, `sourceArticles`, `articleById`, `infographicGroups`, `groupAnchorOf`,
+`duplicateCanonicalOf`, `duplicateCandidates`, `meta`, `fuseIndex`); every reindex replaces its fields, so code that
+gets `archive` reads `archive.articleById` at call time and never keeps a map from install time. The index works in three phases:
 
 1. **Index build (`buildIndex` → `scanDir` → `parseArticle`).** On startup (and on reindex) it
    recursively walks `www/`. Top-level dirs are *authors*; nested 4-digit dirs (`2018/`) are
    *years*. Each `.md` becomes an article object. Sibling media files matching the `.md`
    basename (`foo.md` + `foo.jpg`/`foo.mp3`/`foo.mp4`/`foo.pdf`) are attached; a per-author
    `standard.jpg` is the image fallback. The full article list, a `meta` object (authors/years/
-   categories), and a Fuse.js fuzzy-search index are held in module-level variables — all
+   categories), and a Fuse.js fuzzy-search index are held in the `archive` object — all
    in-memory, rebuilt wholesale on reindex.
 
 2. **Markdown parsing (`parseArticle`).** Articles have NO YAML frontmatter. Metadata is parsed
@@ -164,7 +169,7 @@ The ⋯ button of the audiobook extras is an inline disclosure (actions row), no
 **Concurrent jobs:** all archive writes and index rebuilds go through the single lock in
 `lib/archive-lock.cjs` (`archiveLock` in `server.js`). Jobs with their own state (reindex, scrape, editor,
 TTS) are `register`ed once; new write routes use `archiveLock.tryAcquire(label)` + `release()` in
-`finally` (or `archiveLock.run`) and answer conflicts with `sendArchiveBusy(res)` — never add new
+`finally` (or `archiveLock.run`) and answer conflicts with `sendArchiveBusy(res, archiveLock)` (inside `jsonRoute`: `throw archiveLock.conflictError()`) — never add new
 hand-written `x.running || y.running` checks. Internal partial reindexes triggered by the lock holder
 do not acquire again.
 

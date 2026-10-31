@@ -17,7 +17,7 @@ const { createBookmarkStore, installBookmarkRoutes } = require('./modules/bookma
 const { installMediaRoutes } = require('./modules/media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./lib/login-limiter.cjs');
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./lib/security-headers.cjs');
-const { createArchiveLock } = require('./lib/archive-lock.cjs');
+const { createArchiveLock, sendArchiveBusy } = require('./lib/archive-lock.cjs');
 // Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
 const { httpError, isCrossSite, sendApiError, sendRouteError } = require('./lib/http-errors.cjs');
 const { computeAppShellVersion, createAppShellVersion, createVersionedIndex, serviceWorkerSource } = require('./lib/app-shell.cjs');
@@ -126,18 +126,23 @@ const userStore = createUserStore({
 userStore.load();
 console.log(`Public-Autoren: ${userStore.publicAuthors.length ? userStore.publicAuthors.join(', ') : '(keine)'}`);
 
-let articles = [];
-// Unverknüpfte Scan-Ergebnisse: linkInfographics verändert abgeleitete Felder.
-// Für einen Teil-Neuindex müssen die übrigen Artikel aus diesem Stand neu verknüpft werden.
-let sourceArticles = [];
-let articleById = new Map();
-// Infografik-Gruppen (siehe linkInfographics): Anker-ID → Mitglieder, Mitglied → Anker-ID.
-let infographicGroups = new Map();
-let groupAnchorOf = new Map();
-let duplicateCanonicalOf = new Map();
-let duplicateCandidates = [];
-let meta = { authors: [], years: [], categories: [] };
-let fuseIndex = null;
+// Indexzustand: publishArticleIndex und refreshDuplicateState ersetzen die Felder
+// bei jedem (Teil-)Reindex. Wer das Objekt bekommt, liest die Felder erst beim
+// Aufruf (archive.articleById.get(id)) und hält nie eine Map von früher fest.
+const archive = {
+  articles: [],
+  // Unverknüpfte Scan-Ergebnisse: linkInfographics verändert abgeleitete Felder.
+  // Für einen Teil-Neuindex müssen die übrigen Artikel aus diesem Stand neu verknüpft werden.
+  sourceArticles: [],
+  articleById: new Map(),
+  // Infografik-Gruppen (siehe linkInfographics): Anker-ID → Mitglieder, Mitglied → Anker-ID.
+  infographicGroups: new Map(),
+  groupAnchorOf: new Map(),
+  duplicateCanonicalOf: new Map(),
+  duplicateCandidates: [],
+  meta: { authors: [], years: [], categories: [] },
+  fuseIndex: null,
+};
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
 let scrapeState = { running: false, sources: null, exitCode: null, startedAt: null, done: true, error: null };
 // Zentrale Sperre für Schreib- und Indexaufträge (archive-lock.cjs); die
@@ -176,7 +181,7 @@ const ttsVoiceSettings = createTtsVoiceSettings();
 const markdownEditor = createMarkdownEditor({
   // Artikel liegen unter www/, die abstract.md der Hörbücher unter audio/.
   root: [WWW_DIR, AUDIO_DIR],
-  getArticle: id => articleById.get(id) || audiobooks.get(id),
+  getArticle: id => archive.articleById.get(id) || audiobooks.get(id),
   canAccessAuthor,
   busy: () => archiveLock.busy,
   reindex: refreshMarkdownIndex,
@@ -184,7 +189,7 @@ const markdownEditor = createMarkdownEditor({
 const ttsJobs = createTtsJobs({
   root: WWW_DIR,
   audioRoot: AUDIO_DIR,
-  getArticle: id => articleById.get(id),
+  getArticle: id => archive.articleById.get(id),
   canAccessAuthor,
   busy: () => archiveLock.busy,
   reindex: refreshMarkdownIndex,
@@ -197,10 +202,6 @@ archiveLock.register('Index-Neuaufbau', () => reindexState.running);
 archiveLock.register('Scraper-Lauf', () => scrapeState.running);
 archiveLock.register('Artikel speichern', () => markdownEditor.running);
 archiveLock.register('Audio-Erzeugung', () => ttsJobs.running);
-
-function sendArchiveBusy(res, extra = {}) {
-  return res.status(409).json({ ...extra, error: archiveLock.conflictError().message });
-}
 
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
@@ -329,22 +330,22 @@ function refreshDuplicateState() {
   const nextCanonical = new Map();
   for (const decision of duplicateStore.all()) {
     if (decision.status !== 'linked') continue;
-    const blog = articleById.get(decision.blogId);
-    const facebook = articleById.get(decision.facebookId);
+    const blog = archive.articleById.get(decision.blogId);
+    const facebook = archive.articleById.get(decision.facebookId);
     if (!blog || !facebook) continue;
     if (blog.author !== duplicateConfig.blogAuthor || !duplicateConfig.facebookAuthors.includes(facebook.author)) continue;
     nextCanonical.set(facebook.id, blog.id);
   }
-  duplicateCanonicalOf = nextCanonical;
-  duplicateCandidates = duplicateDetection.candidates(articles, duplicateConfig).candidates.filter(candidate => {
-    if (duplicateCanonicalOf.has(candidate.facebook.id)) return false;
+  archive.duplicateCanonicalOf = nextCanonical;
+  archive.duplicateCandidates = duplicateDetection.candidates(archive.articles, duplicateConfig).candidates.filter(candidate => {
+    if (archive.duplicateCanonicalOf.has(candidate.facebook.id)) return false;
     const decision = duplicateStore.find(candidate.blog.id, candidate.facebook.id);
     return !decisionStillApplies(decision, candidate.blog, candidate.facebook);
   });
 }
 
 function duplicateCanonicalFor(article, user = null) {
-  const canonical = articleById.get(duplicateCanonicalOf.get(article?.id));
+  const canonical = archive.articleById.get(archive.duplicateCanonicalOf.get(article?.id));
   if (!canonical) return null;
   if (user && !canAccessAuthor(user, canonical.author)) return null;
   return canonical;
@@ -353,7 +354,7 @@ function duplicateCanonicalFor(article, user = null) {
 // Anker der Gruppe, zu der eine Infografik gehört – nur wenn der Nutzer ihn sehen
 // darf. Sonst (z. B. Gast ohne Recht am Artikel) bleibt die Infografik einzeln.
 function visibleGroupAnchor(article, user, { hideTelegram = false } = {}) {
-  const anchor = articleById.get(groupAnchorOf.get(article?.id));
+  const anchor = archive.articleById.get(archive.groupAnchorOf.get(article?.id));
   if (!anchor || !canAccessAuthor(user, anchor.author)) return null;
   if (hideTelegram && anchor.author === TELEGRAM_AUTHOR) return null;
   return anchor;
@@ -368,7 +369,7 @@ function isBookmarkedTile(item, user, marks) {
 // Bilder einer Gruppe: eigenes Artikelfoto (kein standard.jpg), dann die
 // Infografiken in Reihenfolge. null, wenn der Nutzer keine Grafik der Gruppe sieht.
 function groupImagesFor(anchor, user) {
-  const members = (infographicGroups.get(anchor.id) || [])
+  const members = (archive.infographicGroups.get(anchor.id) || [])
     .filter(member => member.ownImage && canAccessAuthor(user, member.author));
   if (!members.length) return null;
   const images = anchor.ownImage
@@ -390,7 +391,7 @@ async function withReindexState(articleCount, task) {
   reindexState = { running: true, processed: 0, articles: articleCount, done: false };
   try {
     const result = await task();
-    reindexState = { running: false, processed: articles.length, articles: articles.length, done: true };
+    reindexState = { running: false, processed: archive.articles.length, articles: archive.articles.length, done: true };
     return result;
   } catch (error) {
     reindexState = { ...reindexState, running: false, done: true, error: error.message };
@@ -435,13 +436,13 @@ function publishArticleIndex(nextSourceArticles) {
   };
   const nextFuseIndex = buildArticleSearchIndex(nextArticles);
 
-  sourceArticles = nextSourceArticles;
-  articles = nextArticles;
-  infographicGroups = groups;
-  groupAnchorOf = anchorOf;
-  articleById = nextById;
-  meta = nextMeta;
-  fuseIndex = nextFuseIndex;
+  archive.sourceArticles = nextSourceArticles;
+  archive.articles = nextArticles;
+  archive.infographicGroups = groups;
+  archive.groupAnchorOf = anchorOf;
+  archive.articleById = nextById;
+  archive.meta = nextMeta;
+  archive.fuseIndex = nextFuseIndex;
   refreshDuplicateState();
 }
 
@@ -451,10 +452,10 @@ function publishArticleIndex(nextSourceArticles) {
 async function refreshScrapedMarkdownFiles(filenames) {
   const uniqueFiles = [...new Set((filenames || []).map(filename => path.resolve(String(filename))))];
   if (!uniqueFiles.length) return;
-  if (!sourceArticles.length) return buildIndex();
+  if (!archive.sourceArticles.length) return buildIndex();
 
   const t0 = Date.now();
-  await withReindexState(articles.length, async () => {
+  await withReindexState(archive.articles.length, async () => {
     const replacements = [];
     for (const filename of uniqueFiles) {
       if (path.extname(filename).toLowerCase() !== '.md' || !isPathInside(WWW_DIR, filename)) {
@@ -471,15 +472,15 @@ async function refreshScrapedMarkdownFiles(filenames) {
       if (!replacement) throw new Error(`Scraper-Artikel „${relative}“ konnte nicht eingelesen werden.`);
       replacements.push(replacement);
     }
-    publishArticleIndex(upsertArticleIndexEntries(sourceArticles, replacements));
+    publishArticleIndex(upsertArticleIndexEntries(archive.sourceArticles, replacements));
     console.log(`[OK] ${replacements.length} Scraper-Artikel gezielt neu eingelesen (${Date.now() - t0}ms)`);
   });
 }
 
 async function republishArticleIndex() {
-  if (!sourceArticles.length) return buildIndex();
+  if (!archive.sourceArticles.length) return buildIndex();
   const t0 = Date.now();
-  publishArticleIndex(sourceArticles);
+  publishArticleIndex(archive.sourceArticles);
   console.log(`[OK] Artikelverknuepfungen aus dem Speicher aktualisiert (${Date.now() - t0}ms)`);
 }
 
@@ -491,16 +492,16 @@ async function refreshMarkdownIndex({ id, filename } = {}) {
   if (!id || !filename) return buildIndex();
 
   const t0 = Date.now();
-  await withReindexState(articles.length, async () => {
+  await withReindexState(archive.articles.length, async () => {
     if (isPathInside(AUDIO_DIR, filename)) {
       await audiobooks.refresh(id);
       console.log(`[OK] Hoerbuch "${id}" gezielt aktualisiert (${Date.now() - t0}ms)`);
       return;
     }
     if (!isPathInside(WWW_DIR, filename)) throw new Error('Der bearbeitete Artikel liegt außerhalb des Archivs.');
-    if (!sourceArticles.length) return buildIndex();
+    if (!archive.sourceArticles.length) return buildIndex();
 
-    const current = sourceArticles.find(article => article.id === id);
+    const current = archive.sourceArticles.find(article => article.id === id);
     if (!current) return buildIndex();
     if (path.resolve(current.filePath) !== path.resolve(filename)) {
       throw new Error(`Artikel „${id}“ verweist auf einen unerwarteten Dateipfad.`);
@@ -510,7 +511,7 @@ async function refreshMarkdownIndex({ id, filename } = {}) {
     const scanned = [];
     await scanDir(path.dirname(filename), current.author, year, scanned, { strict: true, targetFile: filename });
     const replacement = scanned.find(article => article.id === id);
-    publishArticleIndex(replaceArticleIndexEntry(sourceArticles, id, replacement));
+    publishArticleIndex(replaceArticleIndexEntry(archive.sourceArticles, id, replacement));
     console.log(`[OK] Artikel "${id}" gezielt neu eingelesen (${Date.now() - t0}ms)`);
   });
 }
@@ -519,10 +520,10 @@ async function refreshInfographicsForYears(years) {
   const uniqueYears = [...new Set(years)];
   if (!uniqueYears.length) return;
   if (uniqueYears.some(year => !/^\d{4}$/.test(year))) throw new Error('Ungültiges Infografik-Jahr.');
-  if (!sourceArticles.length) return buildIndex();
+  if (!archive.sourceArticles.length) return buildIndex();
   const t0 = Date.now();
   await withReindexState(0, async () => {
-    let nextSourceArticles = sourceArticles;
+    let nextSourceArticles = archive.sourceArticles;
     let scannedCount = 0;
     for (const year of uniqueYears) {
       const yearDir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
@@ -567,7 +568,7 @@ async function rebuildIndex() {
   // Hörbücher werden nur beim vollständigen Neuindex erneut eingelesen.
   await audiobooks.rebuild();
   publishArticleIndex(uniqueArticles(collector));
-  console.log(`[OK] ${articles.length} articles, ${audiobooks.books.length} audiobooks indexed in ${Date.now() - t0}ms`);
+  console.log(`[OK] ${archive.articles.length} articles, ${audiobooks.books.length} audiobooks indexed in ${Date.now() - t0}ms`);
 }
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
@@ -584,12 +585,12 @@ function canUploadInfographic(sessionUser, article) {
     sessionUser?.role === 'admin' &&
     article &&
     canAccessAuthor(sessionUser, article.author) &&
-    (article.author !== INFOGRAPHICS_AUTHOR || !groupAnchorOf.has(article.id)) &&
+    (article.author !== INFOGRAPHICS_AUTHOR || !archive.groupAnchorOf.has(article.id)) &&
     !conflictingInfographicBase(article)
   );
 }
 
-function conflictingInfographicBase(article, byId = articleById, anchorOf = groupAnchorOf) {
+function conflictingInfographicBase(article, byId = archive.articleById, anchorOf = archive.groupAnchorOf) {
   if (article.author === INFOGRAPHICS_AUTHOR) return false;
   const year = article.year || article.date?.slice(0, 4) || '';
   const stem = path.basename(article.filePath, '.md');
@@ -597,7 +598,7 @@ function conflictingInfographicBase(article, byId = articleById, anchorOf = grou
   return !!base && anchorOf.get(base.id) !== article.id;
 }
 
-function firstAvailableInfographicOrdinal(article, byId = articleById, anchorOf = groupAnchorOf) {
+function firstAvailableInfographicOrdinal(article, byId = archive.articleById, anchorOf = archive.groupAnchorOf) {
   const year = article.year || article.date?.slice(0, 4) || '';
   const stem = path.basename(article.filePath, '.md');
   const base = byId.get([INFOGRAPHICS_AUTHOR, year, stem].join('/'));
@@ -634,7 +635,7 @@ function getInfographicTarget(article, imageExt) {
 const DUPLICATE_MEDIA_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.mp3', '.mp4', '.pdf']);
 
 function duplicateInfographicViews(article) {
-  return (infographicGroups.get(article.id) || [])
+  return (archive.infographicGroups.get(article.id) || [])
     .filter(item => item.ownImage)
     .map(item => ({
       id: item.id,
@@ -662,8 +663,8 @@ function duplicateArticleView(article) {
 }
 
 function duplicatePair(blogId, facebookId) {
-  const blog = articleById.get(blogId);
-  const facebook = articleById.get(facebookId);
+  const blog = archive.articleById.get(blogId);
+  const facebook = archive.articleById.get(facebookId);
   if (!blog || !facebook) throw httpError(404, 'Einer der Artikel wurde nicht gefunden.');
   if (blog.author !== duplicateConfig.blogAuthor || !duplicateConfig.facebookAuthors.includes(facebook.author)) {
     throw httpError(400, 'Diese Autoren können nicht als Blog-/Quellen-Dublette verknüpft werden.');
@@ -688,7 +689,7 @@ function filesForInfographic(article) {
 // gruppierten Grafiken. Eine eigenständige Basis-Infografik (mit eigenem Text
 // oder Audio) wird niemals durch Umordnen/Löschen ihrer Anhänge verändert.
 function managedInfographicContext(id, user) {
-  const requested = articleById.get(id);
+  const requested = archive.articleById.get(id);
   if (!requested) throw httpError(404, 'Artikel nicht gefunden.');
   const article = duplicateCanonicalFor(requested, user) || requested;
   if (!canUploadInfographic(user, article)) throw httpError(403, 'Keine Berechtigung für diese Infografiken.');
@@ -697,7 +698,7 @@ function managedInfographicContext(id, user) {
   const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
   const baseStem = path.basename(article.filePath, '.md');
   if (!dir || !baseStem) throw httpError(400, 'Kein gültiges Infografik-Ziel gefunden.');
-  const members = (infographicGroups.get(article.id) || []).filter(item => item.ownImage);
+  const members = (archive.infographicGroups.get(article.id) || []).filter(item => item.ownImage);
   const bundles = members.map(item => {
     if (item.author !== INFOGRAPHICS_AUTHOR || path.resolve(path.dirname(item.filePath)) !== dir
       || item.infographicBase !== baseStem) {
@@ -747,7 +748,7 @@ async function prepareInfographicPosterBatch(changes) {
       throw httpError(400, 'Eine Poster-Änderung ist ungültig oder doppelt enthalten.');
     }
     seen.add(id);
-    const article = articleById.get(id);
+    const article = archive.articleById.get(id);
     const mdPath = article?.filePath ? path.resolve(article.filePath) : '';
     if (!article || article.author !== INFOGRAPHICS_AUTHOR || !article.ownImage
         || !isPathInside(root, mdPath) || path.extname(mdPath).toLowerCase() !== '.md') {
@@ -854,7 +855,7 @@ function nextDuplicateInfographicTarget(blog, reserved) {
 
 function planDuplicateMigration(blog, facebook) {
   const bundles = [];
-  for (const info of infographicGroups.get(facebook.id) || []) {
+  for (const info of archive.infographicGroups.get(facebook.id) || []) {
     if (!info.ownImage) continue;
     if (info.hasBody) throw httpError(409, `„${info.title}“ enthält eigenen Text und wird nicht automatisch migriert.`);
     bundles.push({ kind: 'infographic', sourceArticle: info, files: filesForInfographic(info) });
@@ -1206,7 +1207,7 @@ function ogDescription(article) {
 }
 
 function publicShareItem(id) {
-  const article = articleById.get(id);
+  const article = archive.articleById.get(id);
   return (article ? (duplicateCanonicalFor(article) || article) : null) || audiobooks.getForUser(null, id);
 }
 
@@ -1307,9 +1308,9 @@ app.get('/og-image/*', async (req, res) => {
 app.get('/api/meta', attachUser, (req, res) => {
   const user = req.user;
   const authors = user.allowedAuthors === null
-    ? meta.authors
-    : meta.authors.filter(a => user.allowedAuthors.includes(a));
-  res.json({ authors, years: meta.years, categories: meta.categories });
+    ? archive.meta.authors
+    : archive.meta.authors.filter(a => user.allowedAuthors.includes(a));
+  res.json({ authors, years: archive.meta.years, categories: archive.meta.categories });
 });
 
 // Nur die Admin-Oberfläche fragt den Status ab (admin-tasks.js).
@@ -1388,7 +1389,7 @@ app.get('/api/prompts/:file', attachUser, (req, res) => {
 
 app.post('/api/reindex', requireAdminAccess, (req, res) => {
   // Ein laufender Reindex ist bei der Sperre registriert; die 409-Antwort nennt ihn.
-  if (archiveLock.busy) return sendArchiveBusy(res, { started: false });
+  if (archiveLock.busy) return sendArchiveBusy(res, archiveLock, { started: false });
   // withReindexState setzt reindexState.running synchron und belegt damit die Sperre.
   buildIndex().catch(console.error);
   res.json({ started: true });
@@ -1419,7 +1420,7 @@ app.get('/api/infographic-manager/*', requireAdminAccess, (req, res) => {
 
 app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
   const release = archiveLock.tryAcquire('Infografiken ändern');
-  if (!release) return sendArchiveBusy(res);
+  if (!release) return sendArchiveBusy(res, archiveLock);
   let undoOrder = null;
   let undoTrash = null;
   let undoInstagramPoster = null;
@@ -1471,7 +1472,7 @@ app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
 // die tatsächlich betroffenen Infografik-Jahrgänge neu eingelesen.
 app.post('/api/infographic-review', requireAdminAccess, async (req, res) => {
   const release = archiveLock.tryAcquire('Infografik-Prüfung speichern');
-  if (!release) return sendArchiveBusy(res);
+  if (!release) return sendArchiveBusy(res, archiveLock);
   let undo = null;
   let years = [];
   try {
@@ -1499,9 +1500,9 @@ app.post(
   requireAdminAccess,
   express.raw({ type: ['image/png', 'image/jpeg'], limit: INFOGRAPHIC_MAX_BYTES }),
   async (req, res) => {
-    if (archiveLock.busy) return sendArchiveBusy(res);
+    if (archiveLock.busy) return sendArchiveBusy(res, archiveLock);
     const id = req.params[0];
-    const requested = articleById.get(id);
+    const requested = archive.articleById.get(id);
     if (!requested) return res.status(404).json({ error: 'Artikel nicht gefunden.' });
     const article = duplicateCanonicalFor(requested, req.session.user) || requested;
 
@@ -1519,7 +1520,7 @@ app.post(
 
     // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
     const release = archiveLock.tryAcquire('Infografik hochladen');
-    if (!release) return sendArchiveBusy(res);
+    if (!release) return sendArchiveBusy(res, archiveLock);
     try {
     let originalContent;
     try {
@@ -1575,7 +1576,7 @@ app.post(
 // bedeutet „Variante“). Unveränderte Platzhalter der Vorlage werden entfernt.
 
 app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
-  if (archiveLock.busy) return sendArchiveBusy(res);
+  if (archiveLock.busy) return sendArchiveBusy(res, archiveLock);
   const categories = Array.isArray(req.body?.categories) ? req.body.categories.map(String) : [];
   const markdown = normalizeNewInfographicMarkdown(req.body?.markdown, categories);
   const header = validateInfographicHeader(markdown);
@@ -1602,7 +1603,7 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
 
   // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
   const release = archiveLock.tryAcquire('Neue Infografik speichern');
-  if (!release) return sendArchiveBusy(res);
+  if (!release) return sendArchiveBusy(res, archiveLock);
   try {
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(mdPath, markdown, { flag: 'wx' });
@@ -1631,7 +1632,7 @@ app.get('/api/scrape/status', requireAdminAccess, (_req, res) => res.json(scrape
 
 app.post('/api/scrape', requireAdminAccess, (req, res) => {
   // Scrape und Reindex sind bei der Sperre registriert; die 409-Antwort nennt den Auftrag.
-  if (archiveLock.busy) return sendArchiveBusy(res, { started: false });
+  if (archiveLock.busy) return sendArchiveBusy(res, archiveLock, { started: false });
   // scrapeState.running wird unten synchron gesetzt und belegt damit die Sperre.
 
   // Optionale Quellenauswahl: { sources: ["blog","facebook","telegram"] }.
@@ -1712,8 +1713,8 @@ app.get('/api/scrape/log', requireAdminAccess, (_req, res) => {
 });
 
 function duplicateDecisionView(decision) {
-  const blog = articleById.get(decision.blogId);
-  const facebook = articleById.get(decision.facebookId);
+  const blog = archive.articleById.get(decision.blogId);
+  const facebook = archive.articleById.get(decision.facebookId);
   return {
     ...decision,
     blog: duplicateArticleView(blog),
@@ -1762,7 +1763,7 @@ function finishLinkedDuplicates(linked) {
 app.get('/api/duplicates', requireAdminAccess, (_req, res) => {
   res.set('Cache-Control', 'no-store');
   const decisions = duplicateStore.all();
-  const pending = duplicateCandidates.map(candidate => ({
+  const pending = archive.duplicateCandidates.map(candidate => ({
     blog: duplicateArticleView(candidate.blog),
     facebook: duplicateArticleView(candidate.facebook),
     score: candidate.score,
@@ -1795,7 +1796,7 @@ app.get('/api/duplicates/compare', requireAdminAccess, async (req, res) => {
 
 app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  if (archiveLock.busy) return sendArchiveBusy(res);
+  if (archiveLock.busy) return sendArchiveBusy(res, archiveLock);
   const rawItems = req.body?.items;
   if (!Array.isArray(rawItems) || !rawItems.length || rawItems.length > 500) {
     return res.status(400).json({ error: 'Bitte 1 bis 500 Dublettenpaare auswählen.' });
@@ -1819,7 +1820,7 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
 
   // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
   const release = archiveLock.tryAcquire('Dubletten-Sammelaktion');
-  if (!release) return sendArchiveBusy(res);
+  if (!release) return sendArchiveBusy(res, archiveLock);
   const prepared = [];
   const failed = [];
   try {
@@ -1855,7 +1856,7 @@ app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
 app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   const release = archiveLock.tryAcquire('Dublettenaktion');
-  if (!release) return sendArchiveBusy(res);
+  if (!release) return sendArchiveBusy(res, archiveLock);
   const action = String(req.body?.action || '');
   const blogId = String(req.body?.blogId || '');
   const facebookId = String(req.body?.facebookId || '');
@@ -1915,7 +1916,7 @@ app.get('/api/articles', attachUser, (req, res) => {
   }
   const marks = bookmarks.idsFor(user.email);
   const onlyBookmarks = req.query.bookmarks === '1';
-  let filtered = articles;
+  let filtered = archive.articles;
 
   // ACL pre-filter: restrict to allowed authors
   if (user.allowedAuthors !== null) {
@@ -1962,7 +1963,7 @@ app.get('/api/articles', attachUser, (req, res) => {
   if (q) {
     // Query in Tokens zerlegen: Datums-Tokens → Datumsfilter, Rest → Fuse-Text.
     // So sind Text-Suche und Datumseingrenzung kombinierbar ("Achtsamkeit 2025").
-    const { dateConstraints, text } = parseArticleSearchQuery(q, meta.years);
+    const { dateConstraints, text } = parseArticleSearchQuery(q, archive.meta.years);
     // Datums-Tokens als Filter anwenden (AND)
     for (const dq of dateConstraints) {
       filtered = dq.kind === 'exact'
@@ -1972,9 +1973,9 @@ app.get('/api/articles', attachUser, (req, res) => {
     // Restlicher Text über Fuse, auf die gefilterte Teilmenge eingeschränkt. Ohne
     // Trefferlimit: Ein Limit vor dem Filtern ließ bei allgemeinen Begriffen
     // Treffer des gewählten Autors wegfallen; schneller war es nicht.
-    if (text && fuseIndex) {
+    if (text && archive.fuseIndex) {
       const filteredIds = new Set(filtered.map(a => a.id));
-      const results = fuseIndex.search(text);
+      const results = archive.fuseIndex.search(text);
       filtered = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
     }
   }
@@ -2011,7 +2012,7 @@ app.get('/api/articles', attachUser, (req, res) => {
 
 app.get('/api/articles/*', attachUser, async (req, res) => {
   const id = req.params[0];
-  const requested = articleById.get(id);
+  const requested = archive.articleById.get(id);
   if (!requested) return sendApiError(res, 'not_found');
 
   const canonical = duplicateCanonicalFor(requested, req.user);
@@ -2044,13 +2045,13 @@ app.get('/api/articles/*', attachUser, async (req, res) => {
 installTtsRoutes(app, requireAdminAccess, ttsJobs, undefined, ttsVoiceSettings);
 installMarkdownRoutes(app, requireAdminAccess, markdownEditor);
 installUserRoutes(app, {
-  store: userStore, requireAuth, requireAdmin: requireAdminAccess, getAuthors: () => meta.authors,
+  store: userStore, requireAuth, requireAdmin: requireAdminAccess, getAuthors: () => archive.meta.authors,
   passwordLimiter: loginLimiter,
   onUserDeleted: email => Promise.all([audiobookProgress.removeUser(email), bookmarks.removeUser(email)]),
   onAuthorPriorityChanged: republishArticleIndex,
 });
 installBookmarkRoutes(app, {
-  store: bookmarks, requireAuth, getArticle: id => articleById.get(id), canAccessAuthor,
+  store: bookmarks, requireAuth, getArticle: id => archive.articleById.get(id), canAccessAuthor,
 });
 installAudiobookRoutes(app, {
   library: audiobooks, progress: audiobookProgress, config: audiobookConfig,
@@ -2122,7 +2123,7 @@ if (require.main === module) {
 module.exports = {
   app, resolveSessionSecret, parseTrustProxy, extractSourceUrl,
   // Für Tests und Messskripte: vollständiger Scan und der unverknüpfte Rohindex.
-  buildIndex, indexedSourceArticles: () => sourceArticles,
+  buildIndex, indexedSourceArticles: () => archive.sourceArticles,
   createDirectoryCache, findSibling, paginationParams,
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
   articleDisplayAuthor,

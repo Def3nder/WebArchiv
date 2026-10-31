@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { writeFileAtomic, writeJsonAtomic, writeFileAtomicSync, readJsonFile, createJsonState } = require('../lib/atomic-file.cjs');
-const { jsonRoute } = require('../lib/http-errors.cjs');
+const { httpError, jsonRoute } = require('../lib/http-errors.cjs');
 const { escapeHtml } = require('../lib/html-sanitizer.cjs');
 
 async function tempDir(t) {
@@ -128,6 +128,34 @@ test('jsonRoute: no-store, Cross-Site nur für schreibende Aufrufe, Fehler ohne 
     await missing(request('GET'), res);
     assert.deepEqual([res.statusCode, res.body], [404, { error: 'Nicht gefunden.' }]);
     assert.equal(errors.length, 1);
+  } finally { console.error = original; }
+});
+
+test('jsonRoute: Zusatzfelder nur bei eigenen Fehlern, gescheitertes Zurückrollen nur im Log', async () => {
+  const errors = [];
+  const original = console.error;
+  console.error = (...args) => errors.push(args);
+  try {
+    const busy = jsonRoute(() => { throw httpError(409, 'Es läuft bereits: Scraper-Lauf.', { started: false }); });
+    let res = fakeResponse();
+    await busy(request('POST'), res);
+    assert.deepEqual([res.statusCode, res.body], [409, { started: false, error: 'Es läuft bereits: Scraper-Lauf.' }]);
+
+    const unexpected = jsonRoute(() => { throw Object.assign(new Error('intern'), { extra: { path: '/opt/x' } }); },
+      { label: 'Test', fallback: 'Allgemein.' });
+    res = fakeResponse();
+    await unexpected(request('POST'), res);
+    assert.deepEqual([res.statusCode, res.body], [500, { error: 'Allgemein.' }]);
+
+    const rollback = jsonRoute(() => {
+      throw Object.assign(httpError(409, 'Zieldatei existiert bereits.'), { rollbackError: new Error('EPERM: /opt/x') });
+    }, { label: 'Test' });
+    res = fakeResponse();
+    await rollback(request('POST'), res);
+    assert.deepEqual([res.statusCode, res.body],
+      [409, { error: 'Zieldatei existiert bereits. Wiederherstellung fehlgeschlagen; Details stehen im Server-Log.' }]);
+    assert.equal(errors.length, 2);
+    assert.match(String(errors[1][0]), /Wiederherstellung fehlgeschlagen/);
   } finally { console.error = original; }
 });
 

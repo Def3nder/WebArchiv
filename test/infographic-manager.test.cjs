@@ -186,7 +186,7 @@ test('Manager bleibt auf Artikelgruppen beschränkt und der Papierkorb bleibt un
   // Auslieferungssperre des Papierkorbs: Verhalten in test/media-files.test.cjs geprüft.
   const mediaRoutes = await fs.readFile(path.join(__dirname, '..', 'modules', 'media-files.cjs'), 'utf8');
   assert.match(mediaRoutes, /sameName\(author, infographicsAuthor\) && String\(second \|\| ''\)\.toLowerCase\(\) === 'trash'/);
-  assert.match(server, /infographicGroups\.get\(article\.id\)/);
+  assert.match(server, /archive\.infographicGroups\.get\(article\.id\)/);
   assert.match(server, /item\.author !== INFOGRAPHICS_AUTHOR[\s\S]*item\.infographicBase !== baseStem/);
 });
 

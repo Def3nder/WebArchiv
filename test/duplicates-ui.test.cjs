@@ -40,7 +40,7 @@ test('Migration richtet sich nur nach Infografiken und bleibt ohne Fund deaktivi
   assert.match(ui, /item\.facebook\?\.infographicCount/);
   assert.match(ui, /duplicateBatchMigrate\.disabled = duplicateUi\.busy \|\| withInfographics === 0/);
   assert.doesNotMatch(ui, /hasOwnImage \|\| item\.facebook\?\.infographicCount/);
-  assert.match(plan, /infographicGroups\.get\(facebook\.id\)/);
+  assert.match(plan, /archive\.infographicGroups\.get\(facebook\.id\)/);
   assert.doesNotMatch(plan, /facebook\.ownImage|facebook-image|findSibling/);
 });
 
@@ -66,7 +66,7 @@ test('Blog- und Facebook-Infografiken lassen sich vergleichen und bildschirmfül
   const ui = read('public/duplicates.js');
   const css = readStyles();
   const server = read('server.js');
-  assert.match(server, /function duplicateInfographicViews[\s\S]*infographicGroups\.get\(article\.id\)[\s\S]*imageUrl: item\.imageUrl/);
+  assert.match(server, /function duplicateInfographicViews[\s\S]*archive\.infographicGroups\.get\(article\.id\)[\s\S]*imageUrl: item\.imageUrl/);
   assert.doesNotMatch(server.slice(server.indexOf('function duplicateInfographicViews'), server.indexOf('function duplicateArticleView')), /article\.ownImage|article\.imageUrl/);
   assert.match(ui, /duplicateInfographicGallery\(pair\.blog, 'blog'\)/);
   assert.match(ui, /duplicateInfographicGallery\(pair\.facebook, 'facebook'\)/);

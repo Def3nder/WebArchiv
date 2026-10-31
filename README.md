@@ -893,7 +893,7 @@ lib/archive-files.cjs         Verzeichnis-Cache, Medien neben Artikeln finden, D
 lib/article-index.cjs         Fuse-Suchindex, Listen-Helfer für Teil-Reindexe, Scraper-Manifest
 lib/app-shell.cjs             Versionssignatur der App, Update-Service-Worker, Datei-Caches (index.html, Version)
 lib/article-body-cache.cjs    Gerenderte Artikeltexte (Detail, Dubletten-Vergleich), neu nur nach Dateiänderung
-lib/http-errors.cjs           httpError(status, message), jsonRoute (gemeinsamer JSON-Routen-Rahmen), isCrossSite
+lib/http-errors.cjs           httpError(status, message, extra), jsonRoute (gemeinsamer JSON-Routen-Rahmen), isCrossSite
 lib/atomic-file.cjs           Atomares Schreiben (async/sync, JSON) und createJsonFile für die JSON-Speicher
 lib/login-limiter.cjs         Begrenzung fehlgeschlagener Anmeldungen/Kennwortprüfungen
 lib/html-sanitizer.cjs        Markdown → bereinigtes HTML (sanitize-html)

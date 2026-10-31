@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const express = require('express');
-const { createArchiveLock } = require('../lib/archive-lock.cjs');
+const { createArchiveLock, sendArchiveBusy } = require('../lib/archive-lock.cjs');
 const { installAudiobookRoutes } = require('../modules/audiobooks.cjs');
 
 test('Sperre: exklusiv, Freigabe idempotent, alte Freigabe löst keinen neuen Halter', () => {
@@ -62,6 +62,19 @@ test('Sperre: run gibt nach Erfolg und Fehler frei, Konflikt nennt den Auftrag',
   assert.equal(await lock.run('Hörbuch-Verwaltung', async () => 'ok'), 'ok');
 });
 
+test('sendArchiveBusy: 409 mit laufendem Auftrag und Zusatzfeldern', () => {
+  const lock = createArchiveLock();
+  lock.register('Scraper-Lauf', () => true);
+  const res = {
+    set() { return this; },
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+  sendArchiveBusy(res, lock, { started: false });
+  assert.deepEqual([res.statusCode, res.body],
+    [409, { started: false, error: 'Es läuft bereits: Scraper-Lauf. Bitte später erneut versuchen.' }]);
+});
+
 test('Hörbuch-Verwaltung: Admin-Schreibzugriffe laufen über die zentrale Sperre', async t => {
   const lock = createArchiveLock();
   const book = { id: 'Hörbücher/Buch' };
@@ -112,7 +125,7 @@ test('server.js: keine verstreuten Busy-Prüfungen mehr, alle Aufträge an der z
   assert.doesNotMatch(server, /if \((reindex|scrape)State\.running\) return res/);
   for (const route of ["app.post('/api/reindex'", "app.post('/api/scrape'"]) {
     const start = server.indexOf(route);
-    assert.match(server.slice(start, start + 400), /if \(archiveLock\.busy\) return sendArchiveBusy\(res, \{ started: false \}\);/, route);
+    assert.match(server.slice(start, start + 400), /if \(archiveLock\.busy\) return sendArchiveBusy\(res, archiveLock, \{ started: false \}\);/, route);
   }
   for (const label of ['Index-Neuaufbau', 'Scraper-Lauf', 'Artikel speichern', 'Audio-Erzeugung']) {
     assert.match(server, new RegExp(`archiveLock\\.register\\('${label}'`));
