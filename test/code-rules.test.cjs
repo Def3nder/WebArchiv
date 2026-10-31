@@ -47,11 +47,11 @@ test('Pfadprüfungen laufen über isPathInside/resolveUnder, nie über startsWit
   assert.deepEqual(offenders, []);
 });
 
-test('server.js überschreibt Archivdateien nur atomar; writeFile legt ausschließlich neue Dateien an', () => {
-  const lines = fs.readFileSync(path.join(root, 'server.js'), 'utf8').split(/\r?\n/);
-  const offenders = lines
+test('server.js und modules/ überschreiben Archivdateien nur atomar; writeFile legt ausschließlich neue Dateien an', () => {
+  const files = [path.join(root, 'server.js'), ...walk(path.join(root, 'modules'), [])];
+  const offenders = files.flatMap(file => fs.readFileSync(file, 'utf8').split(/\r?\n/)
     .map((line, index) => ({ line: line.trim(), number: index + 1 }))
     .filter(({ line }) => /fs\.promises\.writeFile\(/.test(line) && !/flag: 'wx'/.test(line))
-    .map(({ line, number }) => `server.js:${number}: ${line}`);
+    .map(({ line, number }) => `${path.relative(root, file)}:${number}: ${line}`));
   assert.deepEqual(offenders, []);
 });

@@ -133,8 +133,12 @@ test('server.js: keine verstreuten Busy-Prüfungen mehr, alle Aufträge an der z
     assert.match(server, new RegExp(`archiveLock\\.register\\('${label}'`));
   }
   for (const label of ['Infografiken ändern', 'Infografik-Prüfung speichern', 'Infografik hochladen',
-    'Neue Infografik speichern', 'Dubletten-Sammelaktion', 'Dublettenaktion']) {
+    'Neue Infografik speichern']) {
     assert.match(server, new RegExp(`archiveLock\\.tryAcquire\\('${label}'\\)`));
+  }
+  const duplicates = fs.readFileSync(path.join(__dirname, '..', 'modules', 'duplicate-admin.cjs'), 'utf8');
+  for (const label of ['Dubletten-Sammelaktion', 'Dublettenaktion']) {
+    assert.match(duplicates, new RegExp(`lock\\.run\\('${label}'`));
   }
   assert.match(server, /exclusive: \(label, task\) => archiveLock\.run\(label, task\)/);
   assert.match(server, /process\.on\('SIGHUP'[\s\S]*?archiveLock\.whenIdle\(\(\) => buildIndex\(\)/);

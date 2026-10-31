@@ -14,6 +14,7 @@ const {
 } = require('./modules/audiobooks.cjs');
 const { createBookmarkStore, installBookmarkRoutes } = require('./modules/bookmarks.cjs');
 const { createScrapeJob, installScrapeRoutes } = require('./modules/scrape.cjs');
+const { installDuplicateRoutes } = require('./modules/duplicate-admin.cjs');
 const { installMediaRoutes } = require('./modules/media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./lib/login-limiter.cjs');
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./lib/security-headers.cjs');
@@ -23,7 +24,6 @@ const { httpError, isCrossSite, sendApiError, sendRouteError } = require('./lib/
 const { computeAppShellVersion, createAppShellVersion, createVersionedIndex, serviceWorkerSource } = require('./lib/app-shell.cjs');
 const { createArticleBodyCache } = require('./lib/article-body-cache.cjs');
 const { FileSessionStore } = require('./lib/session-file-store.cjs');
-const { writeFileAtomic } = require('./lib/atomic-file.cjs');
 const {
   parseArticleSearchQuery, bodyExcerpt, mergeCategories, autoCategorize,
   extractSourceUrl, parseArticle,
@@ -73,7 +73,7 @@ function resolveSessionSecret({ env = process.env, strict = false, log = console
 }
 const {
   loadDuplicateConfig, buildDuplicateProfile, createDuplicateDetection,
-  createDuplicateStore, decisionStillApplies, finishDuplicateLinks,
+  createDuplicateStore, decisionStillApplies,
 } = require('./lib/duplicates.cjs');
 
 const app = express();
@@ -640,44 +640,6 @@ function getInfographicTarget(article, imageExt) {
 
 const DUPLICATE_MEDIA_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.mp3', '.mp4', '.pdf']);
 
-function duplicateInfographicViews(article) {
-  return (archive.infographicGroups.get(article.id) || [])
-    .filter(item => item.ownImage)
-    .map(item => ({
-      id: item.id,
-      title: item.title,
-      imageUrl: item.imageUrl,
-    }));
-}
-
-function duplicateArticleView(article) {
-  if (!article) return null;
-  const infographics = duplicateInfographicViews(article);
-  return {
-    id: article.id,
-    author: article.author,
-    title: article.title,
-    date: article.date,
-    excerpt: article.excerpt,
-    sourceUrl: article.sourceUrl,
-    imageUrl: article.ownImage ? article.imageUrl : null,
-    hasOwnImage: !!article.ownImage,
-    hash: article.duplicateProfile?.hash || '',
-    infographicCount: infographics.length,
-    infographics,
-  };
-}
-
-function duplicatePair(blogId, facebookId) {
-  const blog = archive.articleById.get(blogId);
-  const facebook = archive.articleById.get(facebookId);
-  if (!blog || !facebook) throw httpError(404, 'Einer der Artikel wurde nicht gefunden.');
-  if (blog.author !== duplicateConfig.blogAuthor || !duplicateConfig.facebookAuthors.includes(facebook.author)) {
-    throw httpError(400, 'Diese Autoren können nicht als Blog-/Quellen-Dublette verknüpft werden.');
-  }
-  return { blog, facebook };
-}
-
 function filesForInfographic(article) {
   const dir = path.dirname(article.filePath);
   const stem = path.basename(article.filePath, '.md').toLowerCase();
@@ -838,125 +800,6 @@ async function infographicTrashFolder(year) {
     catch (error) { if (error.code !== 'EEXIST') throw error; }
   }
   throw httpError(409, 'Kein freier Platz im Infografik-Papierkorb gefunden.');
-}
-
-function nextDuplicateInfographicTarget(blog, reserved) {
-  if (conflictingInfographicBase(blog)) {
-    throw httpError(409, 'Unter diesem Dateistamm existiert eine eigenständige oder anders zugeordnete Infografik.');
-  }
-  const year = blog.year || blog.date?.slice(0, 4) || '';
-  if (!/^\d{4}$/.test(year)) throw httpError(400, 'Der Blogartikel hat kein gültiges Jahr.');
-  const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
-  if (!dir) throw httpError(400, 'Kein gültiges Infografik-Ziel gefunden.');
-  const baseStem = path.basename(blog.filePath, '.md');
-  for (let ordinal = firstAvailableInfographicOrdinal(blog); ordinal < 1000; ordinal++) {
-    const stem = infographicAttachmentStem(baseStem, ordinal);
-    if (!reserved.has(stem.toLowerCase()) && !infographicStemExists(dir, stem)) {
-      reserved.add(stem.toLowerCase());
-      return { dir, stem, ordinal };
-    }
-  }
-  throw httpError(409, 'Es konnte kein freier Infografik-Dateiname gefunden werden.');
-}
-
-function planDuplicateMigration(blog, facebook) {
-  const bundles = [];
-  for (const info of archive.infographicGroups.get(facebook.id) || []) {
-    if (!info.ownImage) continue;
-    if (info.hasBody) throw httpError(409, `„${info.title}“ enthält eigenen Text und wird nicht automatisch migriert.`);
-    bundles.push({ kind: 'infographic', sourceArticle: info, files: filesForInfographic(info) });
-  }
-  const reserved = new Set();
-  return bundles.map(bundle => {
-    const target = nextDuplicateInfographicTarget(blog, reserved);
-    const mappings = bundle.files.map(source => ({
-      source,
-      target: path.join(target.dir, target.stem + path.extname(source).toLowerCase()),
-    }));
-    return { ...bundle, ...target, mappings };
-  });
-}
-
-function publicMigrationPlan(plan) {
-  return plan.map(bundle => ({
-    kind: bundle.kind,
-    target: path.relative(WWW_DIR, path.join(bundle.dir, bundle.stem)).replace(/\\/g, '/'),
-    files: bundle.mappings.map(item => path.basename(item.target)),
-  }));
-}
-
-async function migrateDuplicateInfographics(blog, facebook) {
-  const plan = planDuplicateMigration(blog, facebook);
-  if (!plan.length) return { migrations: [], rollback: async () => {} };
-  const blogContent = await fs.promises.readFile(blog.filePath, 'utf8');
-  const header = validateInfographicHeader(blogContent);
-  if (!header.hasTitle || !header.date) throw httpError(400, 'Der Blogartikel hat keinen gültigen Titel- und Datumskopf.');
-
-  const moved = [];
-  const created = [];
-  const overwrittenMarkdown = [];
-  const archiveRoot = await fs.promises.realpath(WWW_DIR);
-  const isInsideArchive = file => isPathInside(archiveRoot, file);
-  // Jeder Schritt läuft auch, wenn ein früherer scheitert; Fehler stehen im Log.
-  const logFailure = label => error => console.error(`Dubletten-Migration zurückrollen (${label}):`, error);
-  const rollback = async () => {
-    for (const file of [...created].reverse()) await fs.promises.unlink(file).catch(logFailure(file));
-    for (const item of [...overwrittenMarkdown].reverse()) {
-      await writeFileAtomic(item.path, item.content).catch(logFailure(item.path));
-    }
-    for (const mapping of [...moved].reverse()) {
-      await fs.promises.rename(mapping.target, mapping.source).catch(logFailure(mapping.target));
-    }
-  };
-  try {
-    for (const bundle of plan) {
-      await fs.promises.mkdir(bundle.dir, { recursive: true });
-      const realTargetDir = await fs.promises.realpath(bundle.dir);
-      if (!isInsideArchive(realTargetDir)) throw httpError(403, 'Das Infografik-Ziel liegt außerhalb des Archivs.');
-      for (const mapping of bundle.mappings) {
-        const source = path.resolve(mapping.source);
-        const target = path.resolve(mapping.target);
-        if (!isPathInside(WWW_DIR, source) || !isPathInside(WWW_DIR, target)) {
-          throw httpError(403, 'Ein Medienpfad liegt außerhalb des Archivs.');
-        }
-        const stat = await fs.promises.lstat(source);
-        if (stat.isSymbolicLink() || !stat.isFile()) throw httpError(409, 'Symbolische Links können nicht migriert werden.');
-        const realSource = await fs.promises.realpath(source);
-        if (!isInsideArchive(realSource)) throw httpError(403, 'Eine Quelldatei liegt außerhalb des Archivs.');
-        try { await fs.promises.access(target); throw httpError(409, `Zieldatei existiert bereits: ${path.basename(target)}`); }
-        catch (error) { if (error.status) throw error; if (error.code !== 'ENOENT') throw error; }
-      }
-
-      const mdMapping = bundle.mappings.find(item => path.extname(item.source).toLowerCase() === '.md');
-      for (const mapping of bundle.mappings) {
-        await fs.promises.rename(mapping.source, mapping.target);
-        moved.push(mapping);
-      }
-      const mdTarget = path.join(bundle.dir, bundle.stem + '.md');
-      if (mdMapping) {
-        overwrittenMarkdown.push({ path: mdTarget, content: await fs.promises.readFile(mdTarget) });
-        await writeFileAtomic(mdTarget, buildInfographicMarkdown(blogContent, bundle.ordinal));
-      } else {
-        await fs.promises.writeFile(mdTarget, buildInfographicMarkdown(blogContent, bundle.ordinal), { flag: 'wx' });
-        created.push(mdTarget);
-      }
-    }
-  } catch (error) {
-    await rollback();
-    throw error;
-  }
-
-  const migrations = plan.flatMap(bundle => [
-    ...bundle.mappings.map(item => ({
-      from: path.relative(WWW_DIR, item.source).replace(/\\/g, '/'),
-      to: path.relative(WWW_DIR, item.target).replace(/\\/g, '/'),
-    })),
-    ...(!bundle.mappings.some(item => path.extname(item.source).toLowerCase() === '.md') ? [{
-      from: null,
-      to: path.relative(WWW_DIR, path.join(bundle.dir, bundle.stem + '.md')).replace(/\\/g, '/'),
-    }] : []),
-  ]);
-  return { migrations, rollback };
 }
 
 function requireAuth(req, res, next) {
@@ -1627,190 +1470,6 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
   } finally { release(); }
 });
 
-function duplicateDecisionView(decision) {
-  const blog = archive.articleById.get(decision.blogId);
-  const facebook = archive.articleById.get(decision.facebookId);
-  return {
-    ...decision,
-    blog: duplicateArticleView(blog),
-    facebook: duplicateArticleView(facebook),
-    missing: !blog || !facebook,
-    changed: !!(blog && facebook && (
-      decision.blogHash !== blog.duplicateProfile?.hash
-      || decision.facebookHash !== facebook.duplicateProfile?.hash
-    )),
-  };
-}
-
-async function linkDuplicatePair({ blogId, facebookId, userEmail, migrateImages = false, deferDecision = false }) {
-  const { blog, facebook } = duplicatePair(blogId, facebookId);
-  const existing = duplicateStore.find(blogId, facebookId);
-  const migrationResult = migrateImages
-    ? await migrateDuplicateInfographics(blog, facebook)
-    : { migrations: [], rollback: async () => {} };
-  const decision = {
-    blogId, facebookId, status: 'linked',
-    blogHash: blog.duplicateProfile.hash,
-    facebookHash: facebook.duplicateProfile.hash,
-    user: userEmail,
-    migrations: [...(existing?.migrations || []), ...migrationResult.migrations],
-  };
-  if (!deferDecision) {
-    try { await duplicateStore.set(decision); }
-    catch (error) { await migrationResult.rollback(); throw error; }
-  }
-  return { blogId, facebookId, migrations: migrationResult.migrations, decision, rollback: migrationResult.rollback };
-}
-
-// Nach gespeicherten Verknüpfungen: Lesezeichen umziehen, dann nur die betroffenen
-// Infografik-Jahrgänge (oder bloß den Dublettenstatus) neu ableiten. Liefert einen
-// Hinweis, falls die Lesezeichen nicht umgezogen werden konnten.
-function finishLinkedDuplicates(linked) {
-  return finishDuplicateLinks({
-    replacements: linked.map(item => ({ oldId: item.facebookId, newId: item.blogId })),
-    migrations: linked.flatMap(item => item.migrations),
-    bookmarks,
-    refreshMigrations: migrations => refreshInfographicsForYears(infographicYearsFromMigrations(migrations)),
-    refreshState: refreshDuplicateState,
-  });
-}
-
-app.get('/api/duplicates', requireAdminAccess, (_req, res) => {
-  res.set('Cache-Control', 'no-store');
-  const decisions = duplicateStore.all();
-  const pending = archive.duplicateCandidates.map(candidate => ({
-    blog: duplicateArticleView(candidate.blog),
-    facebook: duplicateArticleView(candidate.facebook),
-    score: candidate.score,
-    exact: candidate.exact,
-    containment: candidate.containment,
-    titleSimilarity: candidate.titleSimilarity,
-    days: candidate.days,
-    reasons: candidate.reasons,
-  }));
-  const linked = decisions.filter(item => item.status === 'linked').map(duplicateDecisionView);
-  const ignored = decisions.filter(item => item.status === 'ignored').map(duplicateDecisionView);
-  res.json({ pending, linked, ignored, config: duplicateConfig });
-});
-
-app.get('/api/duplicates/compare', requireAdminAccess, async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    const { blog, facebook } = duplicatePair(String(req.query.blogId || ''), String(req.query.facebookId || ''));
-    const read = async article => ({ ...duplicateArticleView(article), ...await articleBodies.get(article.filePath) });
-    let migration = [];
-    let migrationUnavailable = '';
-    try { migration = publicMigrationPlan(planDuplicateMigration(blog, facebook)); }
-    catch (error) { migrationUnavailable = error.message; }
-    const [blogView, facebookView] = await Promise.all([read(blog), read(facebook)]);
-    res.json({ blog: blogView, facebook: facebookView, migration, migrationUnavailable });
-  } catch (error) {
-    sendRouteError(res, error, { label: 'Dublettenvergleich', fallback: 'Der Vergleich konnte nicht geladen werden.' });
-  }
-});
-
-app.post('/api/duplicates/batch', requireAdminAccess, async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  if (archiveLock.busy) return sendArchiveBusy(res, archiveLock);
-  const rawItems = req.body?.items;
-  if (!Array.isArray(rawItems) || !rawItems.length || rawItems.length > 500) {
-    return res.status(400).json({ error: 'Bitte 1 bis 500 Dublettenpaare auswählen.' });
-  }
-  const items = rawItems.map(item => ({
-    blogId: String(item?.blogId || ''),
-    facebookId: String(item?.facebookId || ''),
-  }));
-  const facebookIds = new Set();
-  try {
-    for (const item of items) {
-      duplicatePair(item.blogId, item.facebookId);
-      if (facebookIds.has(item.facebookId)) {
-        throw httpError(400, 'Ein Quellartikel darf nur einmal in einer Sammelaktion vorkommen.');
-      }
-      facebookIds.add(item.facebookId);
-    }
-  } catch (error) {
-    return sendRouteError(res, error, { label: 'Dubletten-Sammelaktion', fallback: 'Die Auswahl konnte nicht geprüft werden.' });
-  }
-
-  // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
-  const release = archiveLock.tryAcquire('Dubletten-Sammelaktion');
-  if (!release) return sendArchiveBusy(res, archiveLock);
-  const prepared = [];
-  const failed = [];
-  try {
-    for (const item of items) {
-      try {
-        prepared.push(await linkDuplicatePair({
-          ...item,
-          userEmail: req.session.user.email,
-          migrateImages: !!req.body?.migrateImages,
-          deferDecision: true,
-        }));
-      } catch (error) {
-        failed.push({ ...item, error: error.status ? error.message : 'Verknüpfung fehlgeschlagen.' });
-        if (!error.status) console.error('Dubletten-Sammelaktion:', error);
-      }
-    }
-    try {
-      if (prepared.length) await duplicateStore.setMany(prepared.map(item => item.decision));
-    } catch (error) {
-      for (const item of [...prepared].reverse()) await item.rollback();
-      throw error;
-    }
-    const warning = await finishLinkedDuplicates(prepared);
-    const migrations = prepared.flatMap(item => item.migrations);
-    return res.json({ ok: failed.length === 0, linked: prepared.length, failed, migrations, ...(warning ? { warning } : {}) });
-  } catch (error) {
-    return sendRouteError(res, error, { label: 'Dubletten-Sammelaktion', fallback: 'Die Sammelaktion ist fehlgeschlagen.' });
-  } finally {
-    release();
-  }
-});
-
-app.post('/api/duplicates', requireAdminAccess, async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  const release = archiveLock.tryAcquire('Dublettenaktion');
-  if (!release) return sendArchiveBusy(res, archiveLock);
-  const action = String(req.body?.action || '');
-  const blogId = String(req.body?.blogId || '');
-  const facebookId = String(req.body?.facebookId || '');
-  try {
-    if (action === 'reset') {
-      await duplicateStore.remove(blogId, facebookId);
-      refreshDuplicateState();
-      return res.json({ ok: true });
-    }
-    const { blog, facebook } = duplicatePair(blogId, facebookId);
-    if (action === 'ignore') {
-      await duplicateStore.set({
-        blogId, facebookId, status: 'ignored',
-        blogHash: blog.duplicateProfile.hash,
-        facebookHash: facebook.duplicateProfile.hash,
-        user: req.session.user.email,
-      });
-      refreshDuplicateState();
-      return res.json({ ok: true });
-    }
-    if (!['link', 'migrate'].includes(action)) throw httpError(400, 'Unbekannte Dublettenaktion.');
-    const existing = duplicateStore.find(blogId, facebookId);
-    if (action === 'migrate' && existing?.status !== 'linked') {
-      throw httpError(409, 'Grafiken können erst nach dem Verknüpfen migriert werden.');
-    }
-    const result = await linkDuplicatePair({
-      blogId, facebookId,
-      userEmail: req.session.user.email,
-      migrateImages: !!req.body?.migrateImages || action === 'migrate',
-    });
-    const warning = await finishLinkedDuplicates([result]);
-    return res.json({ ok: true, migrations: result.migrations, ...(warning ? { warning } : {}) });
-  } catch (error) {
-    return sendRouteError(res, error, { label: 'Dublettenverwaltung', fallback: 'Die Dublettenaktion ist fehlgeschlagen.' });
-  } finally {
-    release();
-  }
-});
-
 // Ungültige Werte (z. B. page=abc) ergaben früher NaN und damit eine leere Seite.
 function paginationParams(page, limit) {
   return {
@@ -1960,6 +1619,16 @@ app.get('/api/articles/*', attachUser, async (req, res) => {
 installTtsRoutes(app, requireAdminAccess, ttsJobs, undefined, ttsVoiceSettings);
 installMarkdownRoutes(app, requireAdminAccess, markdownEditor);
 installScrapeRoutes(app, { requireAdmin: requireAdminAccess, job: scrapeJob, lock: archiveLock });
+installDuplicateRoutes(app, {
+  requireAdmin: requireAdminAccess, lock: archiveLock, archive, wwwDir: WWW_DIR,
+  store: duplicateStore, config: duplicateConfig, bookmarks, articleBodies,
+  infographics: {
+    conflictingBase: article => conflictingInfographicBase(article),
+    firstAvailableOrdinal: article => firstAvailableInfographicOrdinal(article),
+    filesFor: filesForInfographic,
+  },
+  refreshInfographicsForYears, refreshState: refreshDuplicateState,
+});
 installUserRoutes(app, {
   store: userStore, requireAuth, requireAdmin: requireAdminAccess, getAuthors: () => archive.meta.authors,
   passwordLimiter: loginLimiter,

@@ -907,6 +907,7 @@ modules/article-editor.cjs    Sicheres Lesen/Speichern von Artikel- und Abstract
 modules/bookmarks.cjs         Lesezeichen pro Nutzer (bookmarks.json) und Routen
 modules/media-files.cjs       Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)
 modules/scrape.cjs            Scraper als Kindprozess starten, Status/Log, danach gezielter Reindex
+modules/duplicate-admin.cjs   Dubletten-Routen: Liste, Vergleich, Ignorieren/Verknüpfen, Infografik-Umzug
 config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten; ignored,
                               Vorlage example-config.json)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp, diff

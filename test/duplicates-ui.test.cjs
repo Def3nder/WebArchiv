@@ -35,8 +35,8 @@ test('Infografikmigration verlangt eine ausdrückliche Bestätigung und zeigt Zi
 
 test('Migration richtet sich nur nach Infografiken und bleibt ohne Fund deaktiviert', () => {
   const ui = read('public/duplicates.js');
-  const server = read('server.js');
-  const plan = server.slice(server.indexOf('function planDuplicateMigration'), server.indexOf('function publicMigrationPlan'));
+  const admin = read('modules/duplicate-admin.cjs');
+  const plan = admin.slice(admin.indexOf('function planMigration'), admin.indexOf('function publicMigrationPlan'));
   assert.match(ui, /item\.facebook\?\.infographicCount/);
   assert.match(ui, /duplicateBatchMigrate\.disabled = duplicateUi\.busy \|\| withInfographics === 0/);
   assert.doesNotMatch(ui, /hasOwnImage \|\| item\.facebook\?\.infographicCount/);
@@ -65,9 +65,9 @@ test('Blog- und Facebook-Infografiken lassen sich vergleichen und bildschirmfül
   const html = read('public/index.html');
   const ui = read('public/duplicates.js');
   const css = readStyles();
-  const server = read('server.js');
-  assert.match(server, /function duplicateInfographicViews[\s\S]*archive\.infographicGroups\.get\(article\.id\)[\s\S]*imageUrl: item\.imageUrl/);
-  assert.doesNotMatch(server.slice(server.indexOf('function duplicateInfographicViews'), server.indexOf('function duplicateArticleView')), /article\.ownImage|article\.imageUrl/);
+  const admin = read('modules/duplicate-admin.cjs');
+  assert.match(admin, /function infographicViews[\s\S]*archive\.infographicGroups\.get\(article\.id\)[\s\S]*imageUrl: item\.imageUrl/);
+  assert.doesNotMatch(admin.slice(admin.indexOf('function infographicViews'), admin.indexOf('function articleView')), /article\.ownImage|article\.imageUrl/);
   assert.match(ui, /duplicateInfographicGallery\(pair\.blog, 'blog'\)/);
   assert.match(ui, /duplicateInfographicGallery\(pair\.facebook, 'facebook'\)/);
   assert.match(ui, /data-duplicate-action="open-infographic"/);
@@ -78,12 +78,12 @@ test('Blog- und Facebook-Infografiken lassen sich vergleichen und bildschirmfül
 
 test('Filter sind kombinierbar, Auswahl bleibt gespeichert und doppelte Quellen-Ziele werden vermieden', () => {
   const ui = read('public/duplicates.js');
-  const server = read('server.js');
+  const admin = read('modules/duplicate-admin.cjs');
   assert.match(ui, /filters: \{ score: 'all', infographics: 'all', authors: null \}/);
   assert.match(ui, /localStorage\.setItem\(DUPLICATE_SELECTION_KEY/);
   assert.match(ui, /scoreMatch[\s\S]*infographicMatch[\s\S]*return duplicateAuthorMatches\(item\) && scoreMatch && infographicMatch/);
   assert.match(ui, /facebookId[\s\S]*duplicateUi\.selection\.delete/);
-  assert.match(server, /Ein Quellartikel darf nur einmal in einer Sammelaktion vorkommen/);
+  assert.match(admin, /Ein Quellartikel darf nur einmal in einer Sammelaktion vorkommen/);
 });
 
 test('Autorfilter bietet alle konfigurierten Quellen zur Mehrfachauswahl auf jedem Tab', () => {
@@ -176,14 +176,16 @@ test('Dublettenfilter folgen den Beschriftungseinstellungen und der Kopf reagier
 
 test('Sammelverknüpfung liest nur betroffene Infografik-Jahre und reine Links gar nicht neu ein', () => {
   const server = read('server.js');
-  const batch = server.slice(server.indexOf("app.post('/api/duplicates/batch'"), server.indexOf("app.post('/api/duplicates',"));
+  const admin = read('modules/duplicate-admin.cjs');
+  const batch = admin.slice(admin.indexOf("app.post('/api/duplicates/batch'"), admin.indexOf("app.post('/api/duplicates',"));
   assert.match(batch, /for \(const item of items\)/);
-  assert.match(batch, /duplicateStore\.setMany/);
-  assert.match(batch, /await finishLinkedDuplicates\(prepared\)/);
+  assert.match(batch, /store\.setMany/);
+  assert.match(batch, /await admin\.finishLinked\(prepared\)/);
   assert.doesNotMatch(batch, /await buildIndex\(\)/);
-  const finish = server.slice(server.indexOf('function finishLinkedDuplicates('), server.indexOf("app.get('/api/duplicates'"));
+  const finish = admin.slice(admin.indexOf('function finishLinked('), admin.indexOf('return { articleView'));
   assert.match(finish, /refreshMigrations: migrations => refreshInfographicsForYears\(infographicYearsFromMigrations\(migrations\)\)/);
-  assert.match(finish, /refreshState: refreshDuplicateState/);
+  assert.match(finish, /refreshState,/);
+  assert.match(server, /refreshInfographicsForYears, refreshState: refreshDuplicateState/);
   assert.doesNotMatch(finish, /buildIndex/);
 });
 
