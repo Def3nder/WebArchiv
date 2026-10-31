@@ -53,9 +53,7 @@ test('Link-Vorschau: Open-Graph-Tags, kanonische Dublette, Hörbuch und Unbekann
 
   let html = await page('Joe/2026/a');
   assert.match(html, /<meta property="og:title" content="Titel &lt;b&gt;&amp; mehr&lt;\/b&gt;" \/>/);
-  // Nur Bild und Titel: keine Beschreibung, auch nicht als Rückfallwert für Messenger.
-  assert.doesNotMatch(html, /description/);
-  assert.doesNotMatch(html, /Kurz/);
+  assert.match(html, /<meta property="og:description" content="(Kurz){49}K…" \/>/);
   assert.match(html, new RegExp(`og:image" content="http://127[.]0[.]0[.]1:[0-9]+/og-image/${shareIdFor('Joe/2026/a')}"`));
   assert.match(html, /<script nonce="nonce123">location\.replace\("\/#\/article\/Joe%2F2026%2Fa"\);<\/script>/);
 
