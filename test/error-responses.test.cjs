@@ -102,12 +102,17 @@ test('sendRouteError: eigene Meldungen gehen an die Oberfläche, interne nur ins
   } finally { console.error = original; }
 });
 
-test('server.js reicht keine rohen Fehlermeldungen an die Oberfläche weiter', () => {
+test('server.js und modules/ reichen keine rohen Fehlermeldungen an die Oberfläche weiter', () => {
   const fs = require('node:fs');
-  const server = fs.readFileSync(require.resolve('../server.js'), 'utf8');
-  assert.doesNotMatch(server, /error: (?:err|error)\.message \|\|/);
-  assert.doesNotMatch(server, /\.status\((?:err|error)\.status \|\| \d+\)\.json/);
-  assert.doesNotMatch(server, /' Wiederherstellung fehlgeschlagen: ' \+ rollbackError\.message/);
+  const path = require('node:path');
+  const modulesDir = path.join(__dirname, '..', 'modules');
+  const files = [require.resolve('../server.js'), ...fs.readdirSync(modulesDir).map(name => path.join(modulesDir, name))];
+  for (const file of files) {
+    const source = fs.readFileSync(file, 'utf8');
+    assert.doesNotMatch(source, /error: (?:err|error)\.message \|\|/, file);
+    assert.doesNotMatch(source, /\.status\((?:err|error)\.status \|\| \d+\)\.json/, file);
+    assert.doesNotMatch(source, /' Wiederherstellung fehlgeschlagen: ' \+ rollbackError\.message/, file);
+  }
 });
 
 test('Unbehandelte Fehler: API-Pfade erhalten JSON ohne Stacktrace, andere Pfade bleiben bei Express', async t => {

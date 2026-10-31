@@ -46,6 +46,7 @@ test('Hörbücher lassen sich mit öffentlicher Cover-Vorschau teilen', () => {
   assert.match(audiobooks, /data-book-share>Teilen<\/button>/);
   assert.match(audiobooks, /location\.origin}\/a\/\$\{sanitizeForId\(book\.id\)}/);
   assert.match(server, /getArticle: id => archive\.articleById\.get\(id\) \|\| audiobooks\.get\(id\)/);
-  assert.match(server, /pathname\.startsWith\('\/audio-files\/'\) \? AUDIO_DIR/);
-  assert.match(server, /resolvePreviewImagePath\(article\)/);
+  const preview = fs.readFileSync(path.join(ROOT, 'modules', 'link-preview.cjs'), 'utf8');
+  assert.match(preview, /pathname\.startsWith\('\/audio-files\/'\) \? audioDir/);
+  assert.match(preview, /resolvePreviewImagePath\(article, \{ wwwDir, audioDir \}\)/);
 });

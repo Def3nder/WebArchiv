@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createDirectoryCache, findSibling, paginationParams } = require('../server.js');
+const { createDirectoryCache, findSibling } = require('../server.js');
+const { paginationParams } = require('../modules/articles.cjs');
 
 function tempDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'webarchiv-scan-'));

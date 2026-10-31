@@ -885,7 +885,7 @@ bereits vorhandenen Artikeln pro Quelle stoppt der Scraper diese Quelle.
 ## Projektstruktur
 
 ```
-server.js                     Express-App: Zustand (Index, Stores, Sperre) und Routen
+server.js                     Express-App: Zustand (Index, Stores, Sperre), Anmeldung, Reindex, Verdrahtung
 lib/article-parser.cjs        Markdown-Artikel parsen, Datums-/Textsuche zerlegen
 lib/taxonomy.cjs              Filter-Kategorien: gewichtete Suchwörter, autoCategorize, mergeCategories
 lib/infographics.cjs          Infografik-Zuordnung und -Gruppen, Benennung, Kopfbearbeitung, Dateien verschieben
@@ -907,6 +907,8 @@ modules/article-editor.cjs    Sicheres Lesen/Speichern von Artikel- und Abstract
 modules/bookmarks.cjs         Lesezeichen pro Nutzer (bookmarks.json) und Routen
 modules/media-files.cjs       Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)
 modules/scrape.cjs            Scraper als Kindprozess starten, Status/Log, danach gezielter Reindex
+modules/articles.cjs          Artikel-Liste (Filter, Suche, Kacheln), Einzelartikel, Facetten (/api/meta)
+modules/link-preview.cjs      Öffentliche Link-Vorschau (/a/*, /og-image/*) und Prompt-Dateien (/api/prompts)
 modules/infographic-admin.cjs Infografik-Routen: Upload, Verwaltung (Reihenfolge, Papierkorb, Poster), Prüfmodus, neue Grafik
 modules/duplicate-admin.cjs   Dubletten-Routen: Liste, Vergleich, Ignorieren/Verknüpfen, Infografik-Umzug
 config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten; ignored,

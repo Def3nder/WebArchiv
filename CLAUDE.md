@@ -60,7 +60,8 @@ it as `error.rollbackError` and rethrows);
 every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).
 New pure helpers belong in `lib/`, not in `server.js`. Feature modules with routes live in `modules/`: a `create…`
 factory for their state plus `install…Routes(app, deps)` (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`,
-`article-editor`, `media-files`, `scrape`, `duplicate-admin`, `infographic-admin`); they import from `lib/`, never
+`article-editor`, `media-files`, `scrape`, `duplicate-admin`, `infographic-admin`, `articles`, `link-preview`); they
+import from `lib/`, never
 from `server.js`. Exclusive writes in these modules use `lock.run(label, task)` inside `jsonRoute`. The index state lives in the
 `archive` object in `server.js` (`articles`, `sourceArticles`, `articleById`, `infographicGroups`, `groupAnchorOf`,
 `duplicateCanonicalOf`, `duplicateCandidates`, `meta`, `fuseIndex`); every reindex replaces its fields, so code that
@@ -128,7 +129,7 @@ object in `app.js`.
   with a whitelist always get the public authors in addition.
 - **Enforcement is per-author** via `canAccessAuthor`. It gates three layers that must stay
   consistent: the `/files/*` media handler, the `/api/articles` list (ACL pre-filter), and the
-  single-article route. `/files/*` and `/audio-files/*` live in `modules/media-files.cjs`:
+  single-article route (both in `modules/articles.cjs`). `/files/*` and `/audio-files/*` live in `modules/media-files.cjs`:
   `resolveMediaRequest` rejects `.`/`..` segments (also when sent encoded) and the author ACL is
   checked on that validated path — never check a raw first segment and resolve afterwards. Reuse
   it for any new file-serving route. `prompts/*` uses the same
@@ -147,7 +148,7 @@ object in `app.js`.
   in `localStorage` (`public/settings.js`); guests always get the defaults.
 - The `Telegram` author is special-cased: hidden from listings unless `?telegram=1` or explicitly
   filtered by `author=Telegram`.
-- **Link-preview exception:** `GET /a/<id>` (Open-Graph HTML for social crawlers, redirects humans
+- **Link-preview exception** (`modules/link-preview.cjs`): `GET /a/<id>` (Open-Graph HTML for social crawlers, redirects humans
   to `#/article/<id>`) and `GET /og-image/<id>` (sharp-downscaled preview image) are **intentionally
   unauthenticated** — they expose title/description/image of *any* article to anyone with the link,
   by design. `/og-image/*` still enforces the same path-traversal guard as `/files/*`; `?sq=256|512` returns a square top crop of the same image, used as lock-screen artwork (Media Session) for article audio. `sharp` output

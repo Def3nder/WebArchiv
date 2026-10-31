@@ -11,6 +11,7 @@ const app = readApp();
 const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
 const css = readStyles();
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+const articles = fs.readFileSync(path.join(root, 'modules', 'articles.cjs'), 'utf8');
 const review = fs.readFileSync(path.join(root, 'public', 'infographic-review.js'), 'utf8');
 // Prüfmodus: Logik in infographic-review.js, Einhängepunkte in app.js.
 const reviewUi = app + review;
@@ -35,16 +36,16 @@ test('Infografiken-Autor schaltet zyklisch zwischen allen, Postern und klassisch
   assert.match(css, /\.telegram-btn\.is-instagram\.active \.instagram-icon-bg \{ fill: url\(#instagram-filter-gradient\); \}/);
   assert.match(html, /radialGradient id="instagram-filter-gradient"/);
   assert.match(html, /linearGradient id="infographic-filter-gradient"[\s\S]*#123e4a[\s\S]*#26756f[\s\S]*#63aaa0/);
-  assert.match(server, /if \(instagramPosterMode\) filtered = filtered\.filter\(a => a\.instagramPoster && a\.ownImage\)/);
-  assert.match(server, /if \(classicInfographicMode\) filtered = filtered\.filter\(a => !a\.instagramPoster && a\.ownImage\)/);
-  assert.match(server, /if \(article\.author !== INFOGRAPHICS_AUTHOR\) return exposed;/);
+  assert.match(articles, /if \(instagramPosterMode\) filtered = filtered\.filter\(a => a\.instagramPoster && a\.ownImage\)/);
+  assert.match(articles, /if \(classicInfographicMode\) filtered = filtered\.filter\(a => !a\.instagramPoster && a\.ownImage\)/);
+  assert.match(articles, /if \(article\.author !== INFOGRAPHICS_AUTHOR\) return exposed;/);
 });
 
 test('Jede Infografik zeigt den Autor ihres Hauptartikels, sonst Infografiken', () => {
-  assert.match(server, /function exposeArticleForUser\(article, user\)[\s\S]*if \(article\.author !== INFOGRAPHICS_AUTHOR\) return exposed;[\s\S]*displayAuthor: articleDisplayAuthor\(article, visibleGroupAnchor\(article, user\)\)/);
+  assert.match(articles, /function exposeArticleForUser\(article, user\)[\s\S]*if \(article\.author !== INFOGRAPHICS_AUTHOR\) return exposed;[\s\S]*displayAuthor: articleDisplayAuthor\(article, visibleGroupAnchor\(article, user\)\)/);
   const articleIndex = fs.readFileSync(path.join(root, 'lib', 'article-index.cjs'), 'utf8');
   assert.match(articleIndex, /function articleDisplayAuthor\(article, linkedArticle = null\)[\s\S]*linkedArticle\?\.author \|\| INFOGRAPHICS_AUTHOR/);
-  assert.match(server, /map\(tile => \(\{ \.\.\.exposeGroupForUser\(tile, user\), bookmarked:/);
+  assert.match(articles, /map\(tile => \(\{ \.\.\.exposeGroupForUser\(tile, user\), bookmarked:/);
   assert.match(app, /function renderCard\(article, idx\) \{[\s\S]*const author = article\.displayAuthor \|\| article\.author;[\s\S]*authorHue\(author\)/);
   assert.match(app, /function renderInstagramPosterCard\(poster, idx\) \{[\s\S]*const author = poster\.displayAuthor \|\| INFOGRAPHICS_AUTHOR/);
   assert.match(review, /function renderInfographicReviewCard\(poster, idx\) \{[\s\S]*const author = poster\.displayAuthor \|\| INFOGRAPHICS_AUTHOR/);
@@ -99,8 +100,8 @@ test('Admin-Prüfmodus sammelt Poster-Markierungen seitenübergreifend und speic
   assert.match(reviewUi, /count \? `Speichern \(\$\{count\}\)` : 'Abbrechen'/);
   assert.match(reviewUi, /if \(review\.changes\.size\) void saveInfographicReview\(\);[\s\S]*else void leaveInfographicReview\(\);/);
   assert.match(reviewUi, /infographicReview: isInfographicReviewMode\(\)/);
-  assert.match(server, /infographicReview === '1'[\s\S]*user\.role !== 'admin'/);
-  assert.match(server, /infographicReviewMode[\s\S]*a\.author === INFOGRAPHICS_AUTHOR && a\.ownImage/);
+  assert.match(articles, /infographicReview === '1'[\s\S]*user\.role !== 'admin'/);
+  assert.match(articles, /infographicReviewMode[\s\S]*a\.author === INFOGRAPHICS_AUTHOR && a\.ownImage/);
 });
 
 test('Prüfkacheln trennen große Checkbox-Touchfläche und Vollbildöffnung', () => {

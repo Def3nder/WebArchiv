@@ -7,8 +7,9 @@ const {
   replaceArticleIndexEntry, upsertArticleIndexEntries, infographicYearsFromMigrations,
   parseScraperChangedFiles,
   buildInfographicMarkdown, infographicAttachmentStem, canUploadInfographic,
-  slugify, normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
+  slugify, normalizeNewInfographicMarkdown, mergeCategories,
 } = require('../server.js');
+const { parsePromptDefinition } = require('../modules/link-preview.cjs');
 const { firstAvailableInfographicOrdinal, conflictingInfographicBase } = require('../modules/infographic-admin.cjs');
 
 test('Infografik-Badges übernehmen immer den Autor des Hauptartikels', () => {

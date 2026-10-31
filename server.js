@@ -2,9 +2,8 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { renderSafeMarkdown, safeHttpUrl, escapeHtml } = require('./lib/html-sanitizer.cjs');
+const { renderSafeMarkdown } = require('./lib/html-sanitizer.cjs');
 const session = require('express-session');
-const sharp   = require('sharp');
 const { createTtsJobs, installTtsRoutes } = require('./tts/jobs.cjs');
 const { createTtsVoiceSettings, MAX_AUDIO_BYTES: TTS_VOICE_MAX_BYTES } = require('./tts/voice-settings.cjs');
 const { createMarkdownEditor, installMarkdownRoutes } = require('./modules/article-editor.cjs');
@@ -18,6 +17,8 @@ const { installDuplicateRoutes } = require('./modules/duplicate-admin.cjs');
 const {
   INFOGRAPHIC_MAX_BYTES, createInfographicAdmin, installInfographicRoutes,
 } = require('./modules/infographic-admin.cjs');
+const { installArticleRoutes } = require('./modules/articles.cjs');
+const { installLinkPreviewRoutes, installPromptRoutes } = require('./modules/link-preview.cjs');
 const { installMediaRoutes } = require('./modules/media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./lib/login-limiter.cjs');
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./lib/security-headers.cjs');
@@ -34,7 +35,6 @@ const {
 const {
   createDirectoryCache, findSibling, fileUrl, audioFileUrl, isPathInside, resolveUnder, yearFromRelativeDir,
 } = require('./lib/archive-files.cjs');
-const { resolveMediaRequest } = require('./modules/media-files.cjs');
 const {
   INFOGRAPHICS_AUTHOR, linkInfographics, infographicYearsFromMigrations, infographicAttachmentStem,
   removeCategoryLines, buildInfographicMarkdown, retitleInfographicMarkdown, setInstagramPosterMetadata,
@@ -92,8 +92,6 @@ const articleBodies = createArticleBodyCache();
 const WWW_DIR = path.join(__dirname, 'www');
 const AUDIO_DIR = path.join(__dirname, 'audio');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
-// Telegram ist in Listen ausgeblendet, außer mit ?telegram=1 oder author=Telegram.
-const TELEGRAM_AUTHOR = 'Telegram';
 const INFOGRAPHIC_TRASH_DIR = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR, 'trash');
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const ADMIN_ASSET_PATHS = new Set([
@@ -322,22 +320,6 @@ async function scanDir(dirPath, author, year, collector, {
   }
 }
 
-// Nur interne Felder entfernen und geerbtes Audio ohne Recht am Ursprung verbergen.
-function exposeArticleForUser(article, user) {
-  const {
-    filePath, inheritedAudioAuthor, inheritedAudioArticleId,
-    ownImage, hasBody, infographicBase, infographicOrdinal, duplicateProfile, ...rest
-  } = article;
-  const exposed = inheritedAudioAuthor && !canAccessAuthor(user, inheritedAudioAuthor)
-    ? { ...rest, audioUrl: null, hasExternalAudio: false, episodeNum: null }
-    : rest;
-  // Die echte Autorenzuordnung bleibt für ACL und Routing unverändert. Für die
-  // Anzeige übernimmt jede verknüpfte Infografik jedoch den Autor ihres
-  // sichtbaren Hauptartikels – auch wenn Telegram in der Liste ausgeblendet ist.
-  if (article.author !== INFOGRAPHICS_AUTHOR) return exposed;
-  return { ...exposed, displayAuthor: articleDisplayAuthor(article, visibleGroupAnchor(article, user)) };
-}
-
 function refreshDuplicateState() {
   const nextCanonical = new Map();
   for (const decision of duplicateStore.all()) {
@@ -361,40 +343,6 @@ function duplicateCanonicalFor(article, user = null) {
   if (!canonical) return null;
   if (user && !canAccessAuthor(user, canonical.author)) return null;
   return canonical;
-}
-
-// Anker der Gruppe, zu der eine Infografik gehört – nur wenn der Nutzer ihn sehen
-// darf. Sonst (z. B. Gast ohne Recht am Artikel) bleibt die Infografik einzeln.
-function visibleGroupAnchor(article, user, { hideTelegram = false } = {}) {
-  const anchor = archive.articleById.get(archive.groupAnchorOf.get(article?.id));
-  if (!anchor || !canAccessAuthor(user, anchor.author)) return null;
-  if (hideTelegram && anchor.author === TELEGRAM_AUTHOR) return null;
-  return anchor;
-}
-
-// Eine Infografik-Kachel öffnet ihren Anker (auch einen ausgeblendeten Telegram-Artikel);
-// dessen Lesezeichen gilt deshalb auch für die Kachel.
-function isBookmarkedTile(item, user, marks) {
-  return marks.has(item.id) || marks.has(visibleGroupAnchor(item, user)?.id);
-}
-
-// Bilder einer Gruppe: eigenes Artikelfoto (kein standard.jpg), dann die
-// Infografiken in Reihenfolge. null, wenn der Nutzer keine Grafik der Gruppe sieht.
-function groupImagesFor(anchor, user) {
-  const members = (archive.infographicGroups.get(anchor.id) || [])
-    .filter(member => member.ownImage && canAccessAuthor(user, member.author));
-  if (!members.length) return null;
-  const images = anchor.ownImage
-    ? [{ id: anchor.id, url: anchor.imageUrl, kind: anchor.author === INFOGRAPHICS_AUTHOR ? 'infographic' : 'photo' }]
-    : [];
-  for (const member of members) images.push({ id: member.id, url: member.imageUrl, kind: 'infographic' });
-  return images;
-}
-
-function exposeGroupForUser(anchor, user) {
-  const exposed = exposeArticleForUser(anchor, user);
-  const images = groupImagesFor(anchor, user);
-  return images ? { ...exposed, imageUrl: images[0].url, images } : exposed;
 }
 
 // Reindex-Status für Voll- und Teil-Reindex: läuft (sofort, damit die Sperre
@@ -818,213 +766,19 @@ installMediaRoutes(app, {
   audiobooks, canAccessAuthor, attachUser,
 });
 
-// ─── Link-Vorschau (Open Graph) ────────────────────────────────────────────
-// Crawler (WhatsApp, Signal, Telegram …) führen kein JS aus und ignorieren
-// den #-Teil der URL. Deshalb liefert /a/<id> serverseitig og:*-Meta-Tags und
-// leitet echte Besucher per JS/meta-refresh in den SPA (#/article/<id>) weiter.
-// Die ID kann zu einem Artikel oder Hörbuch gehören.
+// ─── Link-Vorschau (öffentlich), Artikel und Prompts ───────────────────────
 
-// Artikelbilder liegen unter /files, Hörbuch-Cover unter /audio-files. Für die
-// öffentliche Vorschau wird der URL-Pfad sicher auf die jeweilige Wurzel begrenzt.
-function resolvePreviewImagePath(item) {
-  if (!item?.imageUrl) return null;
-  const pathname = item.imageUrl.split('?')[0];
-  const root = pathname.startsWith('/files/') ? WWW_DIR
-    : pathname.startsWith('/audio-files/') ? AUDIO_DIR
-    : null;
-  if (!root) return null;
-  let rel;
-  try { rel = decodeURIComponent(pathname.replace(/^\/(?:files|audio-files)\//, '')); }
-  catch { return null; }
-  // Dieselbe Prüfung wie /files/* und /audio-files/* (keine Punktsegmente).
-  return resolveMediaRequest(root, rel)?.absPath || null;
-}
-
-function ogDescription(article) {
-  const raw = (article.summary || article.excerpt || '').replace(/\s+/g, ' ').trim();
-  return raw.length > 200 ? raw.slice(0, 197).trimEnd() + '…' : raw;
-}
-
-function publicShareItem(id) {
-  const article = archive.articleById.get(id);
-  return (article ? (duplicateCanonicalFor(article) || article) : null) || audiobooks.getForUser(null, id);
-}
-
-app.get('/a/*', (req, res) => {
-  const id = req.params[0];
-  const article = publicShareItem(id);
-  const canonicalId = article?.id || id;
-  const base = `${req.protocol}://${req.get('host')}`;
-  const canonical = base + '/a/' + encodeURIComponent(canonicalId);
-
-  let tags;
-  if (article) {
-    const title = escapeHtml(article.title || 'WebArchiv');
-    const desc  = escapeHtml(ogDescription(article));
-    const img   = article.imageUrl ? base + '/og-image/' + encodeURIComponent(canonicalId) : '';
-    tags = `
-    <title>${title}</title>
-    <meta name="description" content="${desc}" />
-    <meta property="og:site_name" content="WebArchiv" />
-    <meta property="og:type" content="article" />
-    <meta property="og:title" content="${title}" />
-    <meta property="og:description" content="${desc}" />
-    <meta property="og:url" content="${escapeHtml(canonical)}" />
-    ${img ? `<meta property="og:image" content="${escapeHtml(img)}" />` : ''}
-    <meta name="twitter:card" content="${img ? 'summary_large_image' : 'summary'}" />
-    <meta name="twitter:title" content="${title}" />
-    <meta name="twitter:description" content="${desc}" />
-    ${img ? `<meta name="twitter:image" content="${escapeHtml(img)}" />` : ''}`;
-  } else {
-    tags = `
-    <title>WebArchiv</title>
-    <meta property="og:site_name" content="WebArchiv" />
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="WebArchiv" />
-    <meta property="og:url" content="${escapeHtml(base + '/')}" />`;
-  }
-
-  // JS-Weiterleitung für Menschen; Crawler lesen nur die Meta-Tags oben.
-  const target = '/#/article/' + encodeURIComponent(canonicalId);
-  res.type('html').send(`<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="refresh" content="0; url=${escapeHtml(target)}" />
-    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />${tags}
-</head>
-<body>
-    <p>Weiterleitung … <a href="${escapeHtml(target)}">Zum Artikel</a></p>
-    <script nonce="${escapeHtml(res.locals.cspNonce)}">location.replace(${JSON.stringify(target)});</script>
-</body>
-</html>`);
+installLinkPreviewRoutes(app, { archive, duplicateCanonicalFor, audiobooks, wwwDir: WWW_DIR, audioDir: AUDIO_DIR });
+installArticleRoutes(app, {
+  attachUser, archive, bookmarks, articleBodies, canAccessAuthor, duplicateCanonicalFor,
+  canUploadInfographic: infographicAdmin.canUploadInfographic,
 });
-
-// Auth-freie, heruntergerechnete Bild-Auslieferung nur für die Link-Vorschau.
-// Bewusst ohne canAccessAuthor: die Vorschau-Metadaten aller Artikel und
-// Hörbücher sind öffentlich (Nutzer-Entscheidung). Das Bild wird auf max. 1200px/JPEG skaliert,
-// damit nie die Originalauflösung geteilt wird. Ergebnis pro mtime gecacht.
-const ogImageCache = new Map(); // key: absPath+':'+mtime+':'+Kantenlänge → Buffer
-// ?sq=<Kantenlänge>: quadratischer Ausschnitt vom oberen Bildteil (Sperrbildschirm/Media Session).
-const OG_SQUARE_SIZES = new Set([256, 512]);
-
-app.get('/og-image/*', async (req, res) => {
-  const id = req.params[0];
-  const article = publicShareItem(id);
-  const absPath = resolvePreviewImagePath(article);
-  if (!absPath) return res.status(404).end();
-
-  let mtime = 0;
-  try { mtime = Math.floor(fs.statSync(absPath).mtimeMs); } catch { return res.status(404).end(); }
-
-  const square = OG_SQUARE_SIZES.has(Number(req.query.sq)) ? Number(req.query.sq) : 0;
-  const key = absPath + ':' + mtime + ':' + square;
-  res.set('Cache-Control', 'public, max-age=86400');
-
-  const cached = ogImageCache.get(key);
-  if (cached) return res.type('image/jpeg').send(cached);
-
-  try {
-    const image = square
-      ? sharp(absPath).resize({ width: square, height: square, fit: 'cover', position: 'top' })
-      : sharp(absPath).resize({ width: 1200, withoutEnlargement: true });
-    const buf = await image.jpeg({ quality: 80 }).toBuffer();
-    // Cache begrenzen (einfaches FIFO), um Speicher im kleinen LXC zu schonen.
-    if (ogImageCache.size >= 200) ogImageCache.delete(ogImageCache.keys().next().value);
-    ogImageCache.set(key, buf);
-    res.type('image/jpeg').send(buf);
-  } catch (err) {
-    // Fallback: Original ausliefern, damit die Vorschau funktionsfähig bleibt.
-    res.sendFile(absPath, e => { if (e && !res.headersSent) res.status(404).end(); });
-  }
-});
+installPromptRoutes(app, { attachUser, promptsDir: path.join(__dirname, 'prompts') });
 
 // ─── Protected API routes ──────────────────────────────────────────────────
 
-app.get('/api/meta', attachUser, (req, res) => {
-  const user = req.user;
-  const authors = user.allowedAuthors === null
-    ? archive.meta.authors
-    : archive.meta.authors.filter(a => user.allowedAuthors.includes(a));
-  res.json({ authors, years: archive.meta.years, categories: archive.meta.categories });
-});
-
 // Nur die Admin-Oberfläche fragt den Status ab (admin-tasks.js).
 app.get('/api/reindex/status', requireAdminAccess, (_req, res) => res.json(reindexState));
-
-const PROMPTS_DIR = path.join(__dirname, 'prompts');
-
-function parsePromptDefinition(content) {
-  const lines = String(content).replace(/^\uFEFF/, '').split(/\r?\n/);
-  const urlMarker = lines.findIndex(line => line.trim().toUpperCase() === 'URL:');
-  const promptMarker = lines.findIndex((line, index) => index > urlMarker && line.trim().toUpperCase() === 'PROMPT:');
-  if (urlMarker < 0 || promptMarker < 0) throw new Error('URL:- oder PROMPT:-Abschnitt fehlt.');
-
-  const urlText = lines.slice(urlMarker + 1, promptMarker).map(line => line.trim()).find(Boolean);
-  if (!urlText) throw new Error('Die Prompt-URL fehlt.');
-  let url;
-  try {
-    url = new URL(urlText);
-  } catch {
-    throw new Error('Die Prompt-URL ist ungültig.');
-  }
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Die Prompt-URL muss HTTP oder HTTPS verwenden.');
-
-  const prompt = lines.slice(promptMarker + 1).join('\n').trim();
-  if (!prompt) throw new Error('Der Prompt ist leer.');
-  return { url: url.href, prompt };
-}
-
-// Liste der verfügbaren Prompt-Dateien; Zahlen-Präfix steuert Reihenfolge
-// und wird aus dem Label entfernt (z. B. "1_Infografik-Prompt-ChatGPT.txt").
-app.get('/api/prompts', attachUser, (_req, res) => {
-  try {
-    const prompts = fs.readdirSync(PROMPTS_DIR)
-      .filter(f => f.toLowerCase().endsWith('.txt'))
-      .map(file => {
-        const stem = file.slice(0, -4);
-        const m = stem.match(/^(\d+)_(.*)$/);
-        try {
-          const definition = parsePromptDefinition(fs.readFileSync(path.join(PROMPTS_DIR, file), 'utf8'));
-          return {
-            file,
-            label: m ? m[2] : stem,
-            order: m ? parseInt(m[1], 10) : Infinity,
-            ...definition,
-          };
-        } catch (err) {
-          console.warn(`Prompt-Datei „${file}“ wird ignoriert: ${err.message}`);
-          return null;
-        }
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
-      .map(({ file, label, url, prompt }) => ({ file, label, url, prompt }));
-    res.json(prompts);
-  } catch {
-    res.json([]);
-  }
-});
-
-// Inhalt einer einzelnen Prompt-Datei (Path-Traversal-Schutz wie /files/*)
-app.get('/api/prompts/:file', attachUser, (req, res) => {
-  const file = path.basename(req.params.file);
-  if (!file.toLowerCase().endsWith('.txt')) return res.status(400).end();
-  const absPath = path.resolve(PROMPTS_DIR, file);
-  if (!isPathInside(PROMPTS_DIR, absPath)) return res.status(400).end();
-  try {
-    const txt = fs.readFileSync(absPath, 'utf8');
-    const { prompt } = parsePromptDefinition(txt);
-    res.type('text/plain').send(prompt);
-  } catch (err) {
-    if (err?.code === 'ENOENT') return res.status(404).end();
-    if (err instanceof Error) return res.status(422).type('text/plain').send(err.message);
-    res.status(404).end();
-  }
-});
 
 app.post('/api/reindex', requireAdminAccess, (req, res) => {
   // Ein laufender Reindex ist bei der Sperre registriert; die 409-Antwort nennt ihn.
@@ -1032,150 +786,6 @@ app.post('/api/reindex', requireAdminAccess, (req, res) => {
   // withReindexState setzt reindexState.running synchron und belegt damit die Sperre.
   buildIndex().catch(console.error);
   res.json({ started: true });
-});
-
-// Ungültige Werte (z. B. page=abc) ergaben früher NaN und damit eine leere Seite.
-function paginationParams(page, limit) {
-  return {
-    page: Math.max(1, parseInt(page, 10) || 1),
-    limit: Math.min(100, Math.max(1, parseInt(limit, 10) || 24)),
-  };
-}
-
-app.get('/api/articles', attachUser, (req, res) => {
-  const {
-    q, author, year, category, page = '1', limit = '24', telegram, externalAudio,
-    instagram, infographic, infographicReview,
-  } = req.query;
-  const user = req.user;
-  const infographicReviewMode = infographicReview === '1';
-  if (infographicReviewMode && user.role !== 'admin') {
-    return res.status(403).json({ error: 'Der Infografik-Prüfmodus ist nur für Administratoren verfügbar.' });
-  }
-  const marks = bookmarks.idsFor(user.email);
-  const onlyBookmarks = req.query.bookmarks === '1';
-  let filtered = archive.articles;
-
-  // ACL pre-filter: restrict to allowed authors
-  if (user.allowedAuthors !== null) {
-    filtered = filtered.filter(a => user.allowedAuthors.includes(a.author));
-  }
-
-  // Bestätigte Facebook-Dubletten verschwinden aus allen normalen Ansichten,
-  // sofern der Nutzer ihren kanonischen Blogartikel sehen darf.
-  filtered = filtered.filter(article => !duplicateCanonicalFor(article, user));
-
-  // Nur Artikel mit Lesezeichen (Gäste: keine). Die übrigen Filter gelten weiter.
-  if (onlyBookmarks) filtered = filtered.filter(a => marks.has(a.id));
-
-  // "Telegram"-Artikel standardmäßig ausblenden; einbeziehen bei telegram=1,
-  // wenn explizit nach Autor "Telegram" gefiltert wird oder bei Lesezeichen.
-  const hideTelegram = telegram !== '1' && author !== TELEGRAM_AUTHOR && !onlyBookmarks;
-  if (hideTelegram) {
-    filtered = filtered.filter(a => a.author !== TELEGRAM_AUTHOR);
-  }
-
-  if (author) {
-    if (!canAccessAuthor(user, author)) {
-      return res.json({ total: 0, page: 1, limit: 24, pages: 0, items: [] });
-    }
-    filtered = filtered.filter(a => a.author === author);
-  }
-  const infographicFilter = author === INFOGRAPHICS_AUTHOR
-    ? (infographic === 'classic' ? 'classic' : ((infographic === 'poster' || instagram === '1') ? 'poster' : 'all'))
-    : 'all';
-  const instagramPosterMode = infographicFilter === 'poster';
-  const classicInfographicMode = infographicFilter === 'classic';
-  if (instagramPosterMode) filtered = filtered.filter(a => a.instagramPoster && a.ownImage);
-  if (classicInfographicMode) filtered = filtered.filter(a => !a.instagramPoster && a.ownImage);
-  if (infographicReviewMode) filtered = filtered.filter(a => a.author === INFOGRAPHICS_AUTHOR && a.ownImage);
-  if (year)     filtered = filtered.filter(a => a.year === year);
-  if (category) filtered = filtered.filter(a => a.categories.includes(category));
-  if (externalAudio === '1') {
-    filtered = filtered.filter(a =>
-      a.hasExternalAudio &&
-      (!a.inheritedAudioAuthor || canAccessAuthor(user, a.inheritedAudioAuthor))
-    );
-  }
-
-  if (q) {
-    // Query in Tokens zerlegen: Datums-Tokens → Datumsfilter, Rest → Fuse-Text.
-    // So sind Text-Suche und Datumseingrenzung kombinierbar ("Achtsamkeit 2025").
-    const { dateConstraints, text } = parseArticleSearchQuery(q, archive.meta.years);
-    // Datums-Tokens als Filter anwenden (AND)
-    for (const dq of dateConstraints) {
-      filtered = dq.kind === 'exact'
-        ? filtered.filter(a => a.date === dq.value)
-        : filtered.filter(a => a.date && a.date.startsWith(dq.value));
-    }
-    // Restlicher Text über Fuse, auf die gefilterte Teilmenge eingeschränkt. Ohne
-    // Trefferlimit: Ein Limit vor dem Filtern ließ bei allgemeinen Begriffen
-    // Treffer des gewählten Autors wegfallen; schneller war es nicht.
-    if (text && archive.fuseIndex) {
-      const filteredIds = new Set(filtered.map(a => a.id));
-      const results = archive.fuseIndex.search(text);
-      filtered = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
-    }
-  }
-
-  const { page: p, limit: lim } = paginationParams(page, limit);
-
-  // Kachelansichten: Artikel und ihre Infografiken als eine Kachel. Eine Gruppe
-  // erscheint an der ersten Stelle, an der der Anker oder eine Grafik passt.
-  // Nicht für die Liste und nicht beim Autorenfilter „Infografiken“.
-  if (req.query.group === '1' && author !== INFOGRAPHICS_AUTHOR) {
-    const tiles = [];
-    const seen = new Set();
-    let total = 0;
-    for (const article of filtered) {
-      const tile = visibleGroupAnchor(article, user, { hideTelegram }) || article;
-      if (seen.has(tile.id)) continue;
-      seen.add(tile.id);
-      const images = groupImagesFor(tile, user);
-      // Bei Lesezeichen zählt jede Kachel einmal (ein Lesezeichen = ein Treffer).
-      total += onlyBookmarks ? 1 : 1 + (images ? images.length - (tile.ownImage ? 1 : 0) : 0);
-      tiles.push(tile);
-    }
-    const items = tiles.slice((p - 1) * lim, p * lim)
-      .map(tile => ({ ...exposeGroupForUser(tile, user), bookmarked: isBookmarkedTile(tile, user, marks) }));
-    return res.json({ total, page: p, limit: lim, pages: Math.ceil(tiles.length / lim), items });
-  }
-
-  const total = filtered.length;
-  const items = filtered.slice((p - 1) * lim, p * lim)
-    .map(article => ({ ...exposeArticleForUser(article, user), bookmarked: isBookmarkedTile(article, user, marks) }));
-
-  res.json({ total, page: p, limit: lim, pages: Math.ceil(total / lim), items });
-});
-
-app.get('/api/articles/*', attachUser, async (req, res) => {
-  const id = req.params[0];
-  const requested = archive.articleById.get(id);
-  if (!requested) return sendApiError(res, 'not_found');
-
-  const canonical = duplicateCanonicalFor(requested, req.user);
-  const visibleRequested = canonical || requested;
-  if (!canAccessAuthor(req.user, visibleRequested.author)) {
-    return sendApiError(res, 'forbidden');
-  }
-  // Eine gruppierte Infografik öffnet ihre Gruppe; requestedId sagt, welches Bild gemeint war.
-  const anchor = visibleGroupAnchor(visibleRequested, req.user);
-  const article = anchor || visibleRequested;
-
-  try {
-    const { bodyHtml } = await articleBodies.get(article.filePath);
-    const rest = exposeGroupForUser(article, req.user);
-    res.json({
-      ...rest, bodyHtml, canUploadInfographic: infographicAdmin.canUploadInfographic(req.user, article),
-      bookmarked: bookmarks.has(req.user.email, article.id),
-      ...((anchor || canonical) ? { requestedId: id } : {}),
-    });
-  } catch (err) {
-    // Datei inzwischen entfernt: bis zum nächsten Reindex wie „nicht gefunden“ behandeln.
-    if (err.code === 'ENOENT') return sendApiError(res, 'not_found');
-    console.error(`Artikel ${id}:`, err);
-    res.status(500).json({ error: 'Der Artikel konnte nicht geladen werden.' });
-  }
 });
 
 // ─── Start ─────────────────────────────────────────────────────────────────
@@ -1273,13 +883,13 @@ module.exports = {
   app, resolveSessionSecret, parseTrustProxy, extractSourceUrl,
   // Für Tests und Messskripte: vollständiger Scan und der unverknüpfte Rohindex.
   buildIndex, indexedSourceArticles: () => archive.sourceArticles,
-  createDirectoryCache, findSibling, paginationParams,
+  createDirectoryCache, findSibling,
   parseArticle, linkInfographics, buildArticleSearchIndex, parseArticleSearchQuery,
   articleDisplayAuthor,
   replaceInfographicYearArticles, replaceArticleIndexEntry, upsertArticleIndexEntries,
   infographicYearsFromMigrations, parseScraperChangedFiles, prepareLinkedArticles,
   buildInfographicMarkdown, removeCategoryLines, slugify,
-  normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
+  normalizeNewInfographicMarkdown, mergeCategories,
   computeAppShellVersion, serviceWorkerSource,
   renderIndexForSession, requireAdminAccess, handleRequestError,
   infographicAttachmentStem, retitleInfographicMarkdown, moveInfographicFiles, setInstagramPosterMetadata,
