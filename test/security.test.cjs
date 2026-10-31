@@ -4,9 +4,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const express = require('express');
-const { createLoginLimiter, tooManyAttemptsError } = require('../login-limiter.cjs');
-const { renderSafeMarkdown, sanitizeRenderedHtml, safeHttpUrl } = require('../html-sanitizer.cjs');
-const { createSecurityHeaders, installCspReportRoute, cspMode } = require('../security-headers.cjs');
+const { createLoginLimiter, tooManyAttemptsError } = require('../lib/login-limiter.cjs');
+const { renderSafeMarkdown, sanitizeRenderedHtml, safeHttpUrl } = require('../lib/html-sanitizer.cjs');
+const { createSecurityHeaders, installCspReportRoute, cspMode } = require('../lib/security-headers.cjs');
 const { installUserRoutes } = require('../user-store.cjs');
 const { app: serverApp, resolveSessionSecret, parseTrustProxy, extractSourceUrl } = require('../server.js');
 

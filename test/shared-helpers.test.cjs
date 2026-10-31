@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { writeFileAtomic, writeJsonAtomic, writeFileAtomicSync, readJsonFile, createJsonState } = require('../lib/atomic-file.cjs');
 const { jsonRoute } = require('../lib/http-errors.cjs');
-const { escapeHtml } = require('../html-sanitizer.cjs');
+const { escapeHtml } = require('../lib/html-sanitizer.cjs');
 
 async function tempDir(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'webarchiv-helpers-'));

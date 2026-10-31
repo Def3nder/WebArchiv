@@ -6,7 +6,7 @@ const fsSync = require('fs');
 const fs = require('fs/promises');
 const path = require('path');
 const express = require('express');
-const { renderSafeMarkdown } = require('../html-sanitizer.cjs');
+const { renderSafeMarkdown } = require('../lib/html-sanitizer.cjs');
 const {
   DEFAULT_THRESHOLDS,
   normalizeThresholds,

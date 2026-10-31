@@ -683,19 +683,19 @@ Editor- oder Menülogik einbezogen.
   neu vergeben. Die Server-Sessions liegen im RAM: Ein Dienstneustart macht
   bestehende Logins ungültig, auch wenn die lokal gespeicherte Ansicht nach
   erneuter Anmeldung wiederhergestellt werden kann.
-- **Login-Begrenzung** (`login-limiter.cjs`): Nach 5 falschen Kennwörtern für ein Konto von
+- **Login-Begrenzung** (`lib/login-limiter.cjs`): Nach 5 falschen Kennwörtern für ein Konto von
   derselben IP, 50 für ein Konto insgesamt (verteilte Angriffe) bzw. 30 Fehlversuchen von
   einer IP innerhalb von 15 Minuten antworten `/api/login` und `/api/me/password` 15 Minuten
   lang mit `429` und `Retry-After`. Wer nur die E-Mail kennt, sperrt so nicht mehr den
   Inhaber an dessen eigener Adresse aus. Gesperrt wird vor der
   bcrypt-Prüfung; die Zähler liegen im Arbeitsspeicher. Die IP stammt aus `req.ip`, das
   `X-Forwarded-For` nur von den in `TRUST_PROXY` genannten Proxys übernimmt.
-- **HTML-Bereinigung** (`html-sanitizer.cjs`, `sanitize-html`): Artikel, Dublettenvergleich,
+- **HTML-Bereinigung** (`lib/html-sanitizer.cjs`, `sanitize-html`): Artikel, Dublettenvergleich,
   Hörbuch-Abstract, eBook-Text und Extras werden nach `marked` bereinigt. Skript- und
   Einbettungselemente entfallen samt Inhalt, Event-Attribute und `javascript:`/`data:`-Links
   werden entfernt; Sprungziele (`<a id>`), `sup`/`sub`, Tabellen, Code und Bilder bleiben.
   Unbekannte Tags werden als Text angezeigt. `Quelle:`-Links werden nur als http(s) übernommen.
-- **Content-Security-Policy** (`security-headers.cjs`): Skripte nur aus eigenen Dateien
+- **Content-Security-Policy** (`lib/security-headers.cjs`): Skripte nur aus eigenen Dateien
   (plus Nonce für die Link-Vorschau), Styles inklusive Inline-Styles und Google Fonts,
   Bilder/Medien zusätzlich `data:`/`blob:`; der PDF.js-Viewer erhält eine eigene Richtlinie
   mit `'wasm-unsafe-eval'`. `CSP_MODE=report` (Standard) meldet Verstöße nur an
@@ -825,7 +825,7 @@ einliest. Fehlt dieses Änderungsmanifest (etwa bei einer älteren
 Scraper-Version) oder scheitert die Teilaktualisierung, folgt zur Sicherheit ein
 vollständiger Reindex.
 
-**Gleichzeitige Aufträge** (`archive-lock.cjs`): Index-Neuaufbau, Scraper-Lauf, Artikel speichern,
+**Gleichzeitige Aufträge** (`lib/archive-lock.cjs`): Index-Neuaufbau, Scraper-Lauf, Artikel speichern,
 Audio-Erzeugung, Infografik- und Dublettenänderungen sowie die Hörbuch-Verwaltung schließen sich
 gegenseitig aus. Ein zweiter Auftrag wird mit `409` und dem Namen des laufenden Auftrags abgewiesen
 („Es läuft bereits: Audio-Erzeugung. Bitte später erneut versuchen.“). Ein `SIGHUP` während eines
@@ -894,17 +894,17 @@ lib/app-shell.cjs             Versionssignatur der App, Update-Service-Worker, D
 lib/article-body-cache.cjs    Gerenderte Artikeltexte (Detail, Dubletten-Vergleich), neu nur nach Dateiänderung
 lib/http-errors.cjs           httpError(status, message), jsonRoute (gemeinsamer JSON-Routen-Rahmen), isCrossSite
 lib/atomic-file.cjs           Atomares Schreiben (async/sync, JSON) und createJsonFile für die JSON-Speicher
+lib/login-limiter.cjs         Begrenzung fehlgeschlagener Anmeldungen/Kennwortprüfungen
+lib/html-sanitizer.cjs        Markdown → bereinigtes HTML (sanitize-html)
+lib/security-headers.cjs      CSP (Report-Only/Enforce), weitere Sicherheits-Header, /api/csp-report
+lib/archive-lock.cjs          Zentrale Sperre für Schreib- und Indexaufträge (409 mit laufendem Auftrag)
+lib/duplicates.cjs            Dublettenerkennung und persistente Entscheidungen
 user-store.cjs                Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen
 audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
 audiobook-extras.cjs          Hörbuch-Extras: Ordner extras/ auflisten, bearbeiten, hochladen, sortieren, löschen
 article-editor.cjs            Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown
 bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
 media-files.cjs               Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)
-login-limiter.cjs             Begrenzung fehlgeschlagener Anmeldungen/Kennwortprüfungen
-html-sanitizer.cjs            Markdown → bereinigtes HTML (sanitize-html)
-security-headers.cjs          CSP (Report-Only/Enforce), weitere Sicherheits-Header, /api/csp-report
-archive-lock.cjs              Zentrale Sperre für Schreib- und Indexaufträge (409 mit laufendem Auftrag)
-duplicates.cjs                Dublettenerkennung und persistente Entscheidungen
 config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten; ignored,
                               Vorlage example-config.json)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp, diff

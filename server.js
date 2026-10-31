@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { renderSafeMarkdown, safeHttpUrl, escapeHtml } = require('./html-sanitizer.cjs');
+const { renderSafeMarkdown, safeHttpUrl, escapeHtml } = require('./lib/html-sanitizer.cjs');
 const session = require('express-session');
 const sharp   = require('sharp');
 const { spawn } = require('child_process');
@@ -15,9 +15,9 @@ const {
 } = require('./audiobooks.cjs');
 const { createBookmarkStore, installBookmarkRoutes } = require('./bookmarks.cjs');
 const { installMediaRoutes } = require('./media-files.cjs');
-const { createLoginLimiter, tooManyAttemptsError } = require('./login-limiter.cjs');
-const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./security-headers.cjs');
-const { createArchiveLock } = require('./archive-lock.cjs');
+const { createLoginLimiter, tooManyAttemptsError } = require('./lib/login-limiter.cjs');
+const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./lib/security-headers.cjs');
+const { createArchiveLock } = require('./lib/archive-lock.cjs');
 // Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
 const { httpError, isCrossSite, sendApiError, sendRouteError } = require('./lib/http-errors.cjs');
 const { computeAppShellVersion, createAppShellVersion, createVersionedIndex, serviceWorkerSource } = require('./lib/app-shell.cjs');
@@ -74,7 +74,7 @@ function resolveSessionSecret({ env = process.env, strict = false, log = console
 const {
   loadDuplicateConfig, buildDuplicateProfile, createDuplicateDetection,
   createDuplicateStore, decisionStillApplies, finishDuplicateLinks,
-} = require('./duplicates.cjs');
+} = require('./lib/duplicates.cjs');
 
 const app = express();
 // Hinter dem Reverse-Proxy (NPMplus/HTTPS) X-Forwarded-Proto/Host/For nur von

@@ -279,6 +279,6 @@ test('Vergleichsansicht bereinigt HTML wie das WebArchiv', () => {
   const source = require('node:fs').readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(source, /bodyHtml: renderSafeMarkdown\(article\.body\)/);
   assert.doesNotMatch(source, /require\('marked'\)/);
-  const { renderSafeMarkdown } = require('../../html-sanitizer.cjs');
+  const { renderSafeMarkdown } = require('../../lib/html-sanitizer.cjs');
   assert.doesNotMatch(renderSafeMarkdown('Text <script>alert(1)</script><img src=x onerror=alert(1)>'), /<script|onerror/i);
 });

@@ -1,5 +1,5 @@
 // Dubletten zwischen Ordner A (Original) und Ordner B (Kandidat).
-// Die wortgleiche Erkennung kommt aus WebArchiv/duplicates.cjs (Wort-Shingles, Enthaltensein,
+// Die wortgleiche Erkennung kommt aus WebArchiv/lib/duplicates.cjs (Wort-Shingles, Enthaltensein,
 // Jaccard, Titelähnlichkeit, Datumsabstand); hier dazu die inhaltliche Ähnlichkeit (TF-IDF)
 // und die Entscheidungen des Werkzeugs. Kein Treffer wird automatisch verschoben.
 'use strict';
@@ -7,7 +7,7 @@
 const fsSync = require('fs');
 const fs = require('fs/promises');
 const { writeJsonAtomic } = require('./json-file.cjs');
-const archiveDuplicates = require('../../duplicates.cjs');
+const archiveDuplicates = require('../../lib/duplicates.cjs');
 
 const { normalizeDuplicateText, overlap, dateDistanceDays } = archiveDuplicates;
 

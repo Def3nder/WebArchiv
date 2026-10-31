@@ -29,8 +29,8 @@ npm test --prefix epub-tool
 
 Run the complete Node and Python test suite with `npm test`. Tests live under
 `test/`, `scraper/test/`, `epub-tool/test/`, `tts/test/` and `duplicates-tool/test/`. There is no linter or build.
-`duplicates-tool/` is a dev-only app (not deployed) that reuses `lib/article-parser.cjs`, `duplicates.cjs`,
-`html-sanitizer.cjs`, `lib/atomic-file.cjs` and the diff bundle — keep it working when changing those.
+`duplicates-tool/` is a dev-only app (not deployed) that reuses `lib/article-parser.cjs`, `lib/duplicates.cjs`,
+`lib/html-sanitizer.cjs`, `lib/atomic-file.cjs` and the diff bundle — keep it working when changing those.
 `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button
 → `POST /api/reindex`, or restart). Frontend changes (`public/`) only need a browser reload;
@@ -52,7 +52,8 @@ bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categori
 (sessions survive restarts in `sessions.json`, gitignored; only when `server.js` runs as main module),
 `http-errors.cjs` (`httpError`, `jsonRoute`, `isCrossSite`, `sendApiError` — API errors are
 `{ error: <German message>, code? }`; the frontend reacts only to `code`, never to message text), `atomic-file.cjs` (`writeFileAtomic`,
-`writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`). Never `require('./server.js')` from scripts — import from `lib/`.
+`writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`); also the lock, security and duplicate-detection modules
+(`archive-lock.cjs`, `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below). Never `require('./server.js')` from scripts — import from `lib/`.
 Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors);
 every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).
 New pure helpers belong in `lib/`, not in `server.js`. The index works in three phases:
@@ -209,13 +210,13 @@ arrows) or in the layer's `onKey` (e.g. the infographic review's Space via `info
 the stack (`WebArchivLayers.top()`), not `document.querySelector('dialog[open]')`, which layer is on top.
 
 **Concurrent jobs:** all archive writes and index rebuilds go through the single lock in
-`archive-lock.cjs` (`archiveLock` in `server.js`). Jobs with their own state (reindex, scrape, editor,
+`lib/archive-lock.cjs` (`archiveLock` in `server.js`). Jobs with their own state (reindex, scrape, editor,
 TTS) are `register`ed once; new write routes use `archiveLock.tryAcquire(label)` + `release()` in
 `finally` (or `archiveLock.run`) and answer conflicts with `sendArchiveBusy(res)` — never add new
 hand-written `x.running || y.running` checks. Internal partial reindexes triggered by the lock holder
 do not acquire again.
 
-**Security modules:** `login-limiter.cjs` (429 after repeated failed password checks on `/api/login`
-and `/api/me/password`), `html-sanitizer.cjs` (all markdown → HTML that reaches `innerHTML` must go
-through `renderSafeMarkdown`), `security-headers.cjs` (CSP; frontend must not use inline handlers like
+**Security modules:** `lib/login-limiter.cjs` (429 after repeated failed password checks on `/api/login`
+and `/api/me/password`), `lib/html-sanitizer.cjs` (all markdown → HTML that reaches `innerHTML` must go
+through `renderSafeMarkdown`), `lib/security-headers.cjs` (CSP; frontend must not use inline handlers like
 `onerror=` — use `img[data-fallback]` / event listeners; new inline scripts need the per-response nonce).

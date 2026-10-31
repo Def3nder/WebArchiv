@@ -7,7 +7,7 @@ const {
   normalizeDuplicateText, buildDuplicateProfile, compareDuplicateProfiles,
   detectDuplicateCandidates, createDuplicateStore, decisionStillApplies, loadDuplicateConfig,
   finishDuplicateLinks, BOOKMARK_MOVE_WARNING, createDuplicateDetection, DEFAULT_CONFIG,
-} = require('../duplicates.cjs');
+} = require('../lib/duplicates.cjs');
 
 const article = (author, id, title, body, date = '2026-01-01') => ({
   author, id, title, date, duplicateProfile: buildDuplicateProfile(title, body),

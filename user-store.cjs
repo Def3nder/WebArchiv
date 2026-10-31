@@ -2,7 +2,7 @@ const fsSync = require('node:fs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const bcrypt = require('bcryptjs');
-const { tooManyAttemptsError } = require('./login-limiter.cjs');
+const { tooManyAttemptsError } = require('./lib/login-limiter.cjs');
 const { httpError: fail, jsonRoute } = require('./lib/http-errors.cjs');
 const { writeJsonAtomic } = require('./lib/atomic-file.cjs');
 

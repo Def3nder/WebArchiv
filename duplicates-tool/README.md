@@ -6,9 +6,9 @@ Produktivbetrieb. Das Werkzeug läuft getrennt vom WebArchiv-Server, nutzt aber 
 Abhängigkeiten (kein eigenes `npm install`):
 
 - Parser: `lib/article-parser.cjs` (Titel, Datum, Body wie im Archiv)
-- Wortgleiche Erkennung: `duplicates.cjs` (Profil, Shingles, Bewertung); hier ergänzt um die
+- Wortgleiche Erkennung: `lib/duplicates.cjs` (Profil, Shingles, Bewertung); hier ergänzt um die
   inhaltliche Ähnlichkeit (TF-IDF) und eigene Entscheidungen
-- HTML der Vergleichsansicht: `html-sanitizer.cjs` (`renderSafeMarkdown`)
+- HTML der Vergleichsansicht: `lib/html-sanitizer.cjs` (`renderSafeMarkdown`)
 - Textvergleich im Browser: `public/vendor/duplicate-diff.bundle.js` (`npm run build:duplicate-diff`)
 - JSON-Dateien: `lib/atomic-file.cjs`
 
