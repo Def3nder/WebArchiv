@@ -3,9 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {
-  retitleInfographicMarkdown, moveInfographicFiles, reorderManagedInfographics,
+  retitleInfographicMarkdown, moveInfographicFiles,
   replaceInfographicYearArticles, prepareLinkedArticles, setInstagramPosterMetadata, parseArticle,
 } = require('../server.js');
+const { reorderManagedInfographics } = require('../modules/infographic-admin.cjs');
+const INFOGRAPHIC_ADMIN = path.join(__dirname, '..', 'modules', 'infographic-admin.cjs');
 
 test('Instagram-Poster-Metadatum steht als eigener Absatz nach Datum und nur im Ja-Fall', () => {
   const original = '# Grafik\r\n\r\nDatum: 2026-10-25\r\n\r\nZusammenfassung: Text\r\n';
@@ -186,8 +188,9 @@ test('Manager bleibt auf Artikelgruppen beschränkt und der Papierkorb bleibt un
   // Auslieferungssperre des Papierkorbs: Verhalten in test/media-files.test.cjs geprüft.
   const mediaRoutes = await fs.readFile(path.join(__dirname, '..', 'modules', 'media-files.cjs'), 'utf8');
   assert.match(mediaRoutes, /sameName\(author, infographicsAuthor\) && String\(second \|\| ''\)\.toLowerCase\(\) === 'trash'/);
-  assert.match(server, /archive\.infographicGroups\.get\(article\.id\)/);
-  assert.match(server, /item\.author !== INFOGRAPHICS_AUTHOR[\s\S]*item\.infographicBase !== baseStem/);
+  const admin = await fs.readFile(INFOGRAPHIC_ADMIN, 'utf8');
+  assert.match(admin, /archive\.infographicGroups\.get\(article\.id\)/);
+  assert.match(admin, /item\.author !== INFOGRAPHICS_AUTHOR[\s\S]*item\.infographicBase !== baseStem/);
 });
 
 test('Teil-Neuindex ersetzt nur Infografiken des Jahres und verknüpft aus unveränderten Rohdaten', () => {
@@ -231,9 +234,9 @@ test('Teil-Neuindex ersetzt nur Infografiken des Jahres und verknüpft aus unver
 });
 
 test('Manager-Aktionen und Upload lesen nur das betroffene Infografik-Jahr neu ein', async () => {
-  const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
-  const manager = server.slice(server.indexOf("app.post('/api/infographic-manager/*'"), server.indexOf("'/api/infographics/*'"));
-  const upload = server.slice(server.indexOf("'/api/infographics/*'"), server.indexOf('// ─── Neue eigenständige Infografik'));
+  const admin = await fs.readFile(INFOGRAPHIC_ADMIN, 'utf8');
+  const manager = admin.slice(admin.indexOf("app.post('/api/infographic-manager/*'"), admin.indexOf("'/api/infographics/*'"));
+  const upload = admin.slice(admin.indexOf("'/api/infographics/*'"), admin.indexOf('// ─── Neue eigenständige Infografik'));
   assert.match(manager, /await refreshInfographicsForYear\(context\.year\)/);
   assert.doesNotMatch(manager, /await buildIndex\(\)/);
   assert.match(upload, /await refreshInfographicsForYear\(header\.date\.slice\(0, 4\)\)/);
@@ -242,11 +245,12 @@ test('Manager-Aktionen und Upload lesen nur das betroffene Infografik-Jahr neu e
 
 test('Prüfmodus speichert atomar und veröffentlicht alle betroffenen Jahre nur einmal', async () => {
   const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
-  const batch = server.slice(
-    server.indexOf("app.post('/api/infographic-review'"),
-    server.indexOf("'/api/infographics/*'"),
+  const admin = await fs.readFile(INFOGRAPHIC_ADMIN, 'utf8');
+  const batch = admin.slice(
+    admin.indexOf("app.post('/api/infographic-review'"),
+    admin.indexOf("'/api/infographics/*'"),
   );
-  assert.match(batch, /prepareInfographicPosterBatch\(req\.body\?\.changes\)/);
+  assert.match(batch, /admin\.prepareInfographicPosterBatch\(req\.body\?\.changes\)/);
   assert.match(batch, /moveInfographicFiles\(batch\.mappings\)/);
   assert.match(batch, /refreshInfographicsForYears\(years\)/);
   assert.doesNotMatch(batch, /buildIndex\(/);
@@ -283,7 +287,6 @@ test('Escape schließt nur die oberste Ebene des Infografik-Managers und erhält
 
 test('Manager bietet pro Grafik eine sofort gespeicherte Instagram-Markierung an', async () => {
   const manager = await fs.readFile(path.join(__dirname, '..', 'public', 'infographic-manager.js'), 'utf8');
-  const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(manager, /data-igm-instagram/);
   assert.match(manager, /action: 'instagram-poster', id, enabled/);
   // Während eines Uploads oder Speicherns bleibt der Haken bedienbar und wird vorgemerkt.
@@ -291,11 +294,12 @@ test('Manager bietet pro Grafik eine sofort gespeicherte Instagram-Markierung an
   assert.match(manager, /if \(instagram\) \{ igmTogglePoster\(item, instagram\.checked\); return; \}\s*if \(igmState\.busy\) return;/);
   assert.match(manager, /function igmPosterValue\(item\) \{[\s\S]*?pendingPoster\.has\(item\.id\)/);
   assert.match(manager, /finally \{\s*igmBusy\(false\);[\s\S]*?queueMicrotask\(igmFlushPoster\);/);
-  // Die Markdown-Bearbeitung liegt in lib/infographics.cjs, die Route in server.js.
+  // Die Markdown-Bearbeitung liegt in lib/infographics.cjs, die Route in modules/infographic-admin.cjs.
   const infographics = await fs.readFile(path.join(__dirname, '..', 'lib', 'infographics.cjs'), 'utf8');
+  const admin = await fs.readFile(INFOGRAPHIC_ADMIN, 'utf8');
   assert.match(infographics, /Instagram-Poster: Ja/);
-  assert.match(server, /setManagedInfographicInstagramPoster/);
-  assert.match(server, /ownGraphic[\s\S]*article\.author === INFOGRAPHICS_AUTHOR[\s\S]*fixed: true/);
+  assert.match(admin, /setManagedInfographicInstagramPoster/);
+  assert.match(admin, /ownGraphic[\s\S]*article\.author === INFOGRAPHICS_AUTHOR[\s\S]*fixed: true/);
   assert.match(manager, /item\.fixed \? 'Artikelgrafik'/);
   assert.match(manager, /filter\(item => !item\.fixed\)/);
 });

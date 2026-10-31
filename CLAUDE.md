@@ -60,7 +60,8 @@ it as `error.rollbackError` and rethrows);
 every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).
 New pure helpers belong in `lib/`, not in `server.js`. Feature modules with routes live in `modules/`: a `create…`
 factory for their state plus `install…Routes(app, deps)` (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`,
-`article-editor`, `media-files`, `scrape`, `duplicate-admin`); they import from `lib/`, never from `server.js`. The index state lives in the
+`article-editor`, `media-files`, `scrape`, `duplicate-admin`, `infographic-admin`); they import from `lib/`, never
+from `server.js`. Exclusive writes in these modules use `lock.run(label, task)` inside `jsonRoute`. The index state lives in the
 `archive` object in `server.js` (`articles`, `sourceArticles`, `articleById`, `infographicGroups`, `groupAnchorOf`,
 `duplicateCanonicalOf`, `duplicateCandidates`, `meta`, `fuseIndex`); every reindex replaces its fields, so code that
 gets `archive` reads `archive.articleById` at call time and never keeps a map from install time. The index works in three phases:

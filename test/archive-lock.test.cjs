@@ -132,14 +132,17 @@ test('server.js: keine verstreuten Busy-Prüfungen mehr, alle Aufträge an der z
   for (const label of ['Index-Neuaufbau', 'Scraper-Lauf', 'Artikel speichern', 'Audio-Erzeugung']) {
     assert.match(server, new RegExp(`archiveLock\\.register\\('${label}'`));
   }
-  for (const label of ['Infografiken ändern', 'Infografik-Prüfung speichern', 'Infografik hochladen',
-    'Neue Infografik speichern']) {
-    assert.match(server, new RegExp(`archiveLock\\.tryAcquire\\('${label}'\\)`));
+  // Exklusive Schreibaufträge der Routenmodule laufen über lock.run.
+  const modules = {
+    'infographic-admin.cjs': ['Infografiken ändern', 'Infografik-Prüfung speichern', 'Infografik hochladen',
+      'Neue Infografik speichern'],
+    'duplicate-admin.cjs': ['Dubletten-Sammelaktion', 'Dublettenaktion'],
+  };
+  for (const [file, labels] of Object.entries(modules)) {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'modules', file), 'utf8');
+    for (const label of labels) assert.match(source, new RegExp(`lock\\.run\\('${label}'`), `${file}: ${label}`);
   }
-  const duplicates = fs.readFileSync(path.join(__dirname, '..', 'modules', 'duplicate-admin.cjs'), 'utf8');
-  for (const label of ['Dubletten-Sammelaktion', 'Dublettenaktion']) {
-    assert.match(duplicates, new RegExp(`lock\\.run\\('${label}'`));
-  }
+  assert.doesNotMatch(server, /archiveLock\.tryAcquire\(/);
   assert.match(server, /exclusive: \(label, task\) => archiveLock\.run\(label, task\)/);
   assert.match(server, /process\.on\('SIGHUP'[\s\S]*?archiveLock\.whenIdle\(\(\) => buildIndex\(\)/);
   assert.match(server, /SIGHUP-Reindex wartet auf: \$\{current\}/);

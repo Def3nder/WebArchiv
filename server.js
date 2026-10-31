@@ -15,12 +15,15 @@ const {
 const { createBookmarkStore, installBookmarkRoutes } = require('./modules/bookmarks.cjs');
 const { createScrapeJob, installScrapeRoutes } = require('./modules/scrape.cjs');
 const { installDuplicateRoutes } = require('./modules/duplicate-admin.cjs');
+const {
+  INFOGRAPHIC_MAX_BYTES, createInfographicAdmin, installInfographicRoutes,
+} = require('./modules/infographic-admin.cjs');
 const { installMediaRoutes } = require('./modules/media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./lib/login-limiter.cjs');
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./lib/security-headers.cjs');
 const { createArchiveLock, sendArchiveBusy } = require('./lib/archive-lock.cjs');
 // Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
-const { httpError, isCrossSite, sendApiError, sendRouteError } = require('./lib/http-errors.cjs');
+const { isCrossSite, sendApiError } = require('./lib/http-errors.cjs');
 const { computeAppShellVersion, createAppShellVersion, createVersionedIndex, serviceWorkerSource } = require('./lib/app-shell.cjs');
 const { createArticleBodyCache } = require('./lib/article-body-cache.cjs');
 const { FileSessionStore } = require('./lib/session-file-store.cjs');
@@ -33,10 +36,9 @@ const {
 } = require('./lib/archive-files.cjs');
 const { resolveMediaRequest } = require('./modules/media-files.cjs');
 const {
-  INFOGRAPHICS_AUTHOR, linkInfographics, infographicYearsFromMigrations, imageExtensionFromContentType,
-  infographicStemExists, infographicAttachmentStem, validateInfographicHeader, removeCategoryLines,
-  buildInfographicMarkdown, retitleInfographicMarkdown, setInstagramPosterMetadata, moveInfographicFiles,
-  slugify, normalizeNewInfographicMarkdown, detectImageType,
+  INFOGRAPHICS_AUTHOR, linkInfographics, infographicYearsFromMigrations, infographicAttachmentStem,
+  removeCategoryLines, buildInfographicMarkdown, retitleInfographicMarkdown, setInstagramPosterMetadata,
+  moveInfographicFiles, slugify, normalizeNewInfographicMarkdown,
 } = require('./lib/infographics.cjs');
 const {
   buildArticleSearchIndex, articleDisplayAuthor, uniqueArticles, replaceInfographicYearArticles,
@@ -93,7 +95,6 @@ const CONFIG_FILE = path.join(__dirname, 'config.json');
 // Telegram ist in Listen ausgeblendet, außer mit ?telegram=1 oder author=Telegram.
 const TELEGRAM_AUTHOR = 'Telegram';
 const INFOGRAPHIC_TRASH_DIR = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR, 'trash');
-const INFOGRAPHIC_MAX_BYTES = 10 * 1024 * 1024;
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const ADMIN_ASSET_PATHS = new Set([
   '/admin-tasks.js',
@@ -201,6 +202,11 @@ const scrapeJob = createScrapeJob({
   reindex: () => buildIndex(),
   refreshFiles: files => refreshScrapedMarkdownFiles(files),
   reindexRunning: () => reindexState.running,
+});
+// Infografik-Verwaltung; canUploadInfographic nutzt auch die Detailansicht, die
+// Dateistamm-Helfer der Dubletten-Umzug.
+const infographicAdmin = createInfographicAdmin({
+  archive, wwwDir: WWW_DIR, trashDir: INFOGRAPHIC_TRASH_DIR, canAccessAuthor, duplicateCanonicalFor,
 });
 // Editor und TTS prüfen archiveLock.busy und setzen danach synchron ihren eigenen
 // Zustand; ihr eigener Eintrag ist zum Prüfzeitpunkt daher noch nicht aktiv.
@@ -584,222 +590,6 @@ function canAccessAuthor(sessionUser, author) {
   if (author === AUDIOBOOK_AUTHOR && sessionUser.role === 'guest') return false;
   if (sessionUser.allowedAuthors === null) return true;
   return sessionUser.allowedAuthors.includes(author);
-}
-
-function canUploadInfographic(sessionUser, article) {
-  return !!(
-    sessionUser?.role === 'admin' &&
-    article &&
-    canAccessAuthor(sessionUser, article.author) &&
-    (article.author !== INFOGRAPHICS_AUTHOR || !archive.groupAnchorOf.has(article.id)) &&
-    !conflictingInfographicBase(article)
-  );
-}
-
-function conflictingInfographicBase(article, byId = archive.articleById, anchorOf = archive.groupAnchorOf) {
-  if (article.author === INFOGRAPHICS_AUTHOR) return false;
-  const year = article.year || article.date?.slice(0, 4) || '';
-  const stem = path.basename(article.filePath, '.md');
-  const base = byId.get([INFOGRAPHICS_AUTHOR, year, stem].join('/'));
-  return !!base && anchorOf.get(base.id) !== article.id;
-}
-
-function firstAvailableInfographicOrdinal(article, byId = archive.articleById, anchorOf = archive.groupAnchorOf) {
-  const year = article.year || article.date?.slice(0, 4) || '';
-  const stem = path.basename(article.filePath, '.md');
-  const base = byId.get([INFOGRAPHICS_AUTHOR, year, stem].join('/'));
-  // Solange eine alte suffixlose Grafik noch diesem Artikel gehört, darf _1
-  // nicht neu entstehen: sonst würde die alte Basis als Original erscheinen.
-  return base && anchorOf.get(base.id) === article.id ? 2 : 1;
-}
-
-function getInfographicTarget(article, imageExt) {
-  const year = article.year || (article.date ? article.date.slice(0, 4) : '');
-  if (!/^\d{4}$/.test(year)) return null;
-
-  const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
-  if (!dir) return null;
-
-  const baseStem = path.basename(article.filePath, '.md');
-  for (let ordinal = firstAvailableInfographicOrdinal(article); ordinal < 1000; ordinal++) {
-    const stem = infographicAttachmentStem(baseStem, ordinal);
-    if (!infographicStemExists(dir, stem)) {
-      return {
-        dir,
-        year,
-        ordinal,
-        stem,
-        mdPath: path.join(dir, stem + '.md'),
-        imagePath: path.join(dir, stem + imageExt),
-        id: [INFOGRAPHICS_AUTHOR, year, stem].join('/'),
-      };
-    }
-  }
-  return null;
-}
-
-const DUPLICATE_MEDIA_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.mp3', '.mp4', '.pdf']);
-
-function filesForInfographic(article) {
-  const dir = path.dirname(article.filePath);
-  const stem = path.basename(article.filePath, '.md').toLowerCase();
-  return fs.readdirSync(dir, { withFileTypes: true })
-    .filter(entry => entry.isFile())
-    .filter(entry => {
-      const ext = path.extname(entry.name).toLowerCase();
-      return path.basename(entry.name, ext).toLowerCase() === stem
-        && (ext === '.md' || DUPLICATE_MEDIA_EXTENSIONS.has(ext));
-    })
-    .map(entry => path.join(dir, entry.name));
-}
-
-// Die Artikelverwaltung bearbeitet ausschließlich die zu diesem Artikel
-// gruppierten Grafiken. Eine eigenständige Basis-Infografik (mit eigenem Text
-// oder Audio) wird niemals durch Umordnen/Löschen ihrer Anhänge verändert.
-function managedInfographicContext(id, user) {
-  const requested = archive.articleById.get(id);
-  if (!requested) throw httpError(404, 'Artikel nicht gefunden.');
-  const article = duplicateCanonicalFor(requested, user) || requested;
-  if (!canUploadInfographic(user, article)) throw httpError(403, 'Keine Berechtigung für diese Infografiken.');
-  const year = article.year || article.date?.slice(0, 4) || '';
-  if (!/^\d{4}$/.test(year)) throw httpError(400, 'Der Artikel hat kein gültiges Jahr.');
-  const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
-  const baseStem = path.basename(article.filePath, '.md');
-  if (!dir || !baseStem) throw httpError(400, 'Kein gültiges Infografik-Ziel gefunden.');
-  const members = (archive.infographicGroups.get(article.id) || []).filter(item => item.ownImage);
-  const bundles = members.map(item => {
-    if (item.author !== INFOGRAPHICS_AUTHOR || path.resolve(path.dirname(item.filePath)) !== dir
-      || item.infographicBase !== baseStem) {
-      throw httpError(409, 'Eine Grafik gehört nicht zu den verwaltbaren Artikel-Infografiken.');
-    }
-    const files = filesForInfographic(item);
-    const imageFiles = files.filter(file => ['.png', '.jpg', '.jpeg'].includes(path.extname(file).toLowerCase()));
-    if (files.length !== 2 || imageFiles.length !== 1 || !files.includes(item.filePath)) {
-      throw httpError(409, 'Eine Infografik hat zusätzliche oder unvollständige Dateien und kann nicht automatisch verwaltet werden.');
-    }
-    return { id: item.id, ordinal: item.infographicOrdinal, title: item.title,
-      imageUrl: item.imageUrl, instagramPoster: item.instagramPoster === true,
-      files, mdPath: item.filePath };
-  });
-  const ownGraphic = article.author === INFOGRAPHICS_AUTHOR && article.ownImage
-    ? {
-        id: article.id, ordinal: 0, title: article.title, imageUrl: article.imageUrl,
-        instagramPoster: article.instagramPoster === true, files: filesForInfographic(article),
-        mdPath: article.filePath, fixed: true,
-      }
-    : null;
-  return { article, dir, year, baseStem, bundles, items: ownGraphic ? [ownGraphic, ...bundles] : bundles };
-}
-
-async function setManagedInfographicInstagramPoster(item, enabled) {
-  if (typeof enabled !== 'boolean') throw httpError(400, 'Der Instagram-Poster-Wert ist ungültig.');
-  const original = await fs.promises.readFile(item.mdPath, 'utf8');
-  const updated = setInstagramPosterMetadata(original, enabled);
-  if (updated === original) return async () => {};
-  return moveInfographicFiles([{ source: item.mdPath, target: item.mdPath, content: updated }]);
-}
-
-async function prepareInfographicPosterBatch(changes) {
-  if (!Array.isArray(changes) || !changes.length || changes.length > 2000) {
-    throw httpError(400, 'Bitte mindestens eine und höchstens 2000 Änderungen senden.');
-  }
-  const seen = new Set();
-  const mappings = [];
-  const years = new Set();
-  const updated = [];
-  const root = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR);
-
-  for (const change of changes) {
-    const id = typeof change?.id === 'string' ? change.id : '';
-    if (!id || seen.has(id) || typeof change.enabled !== 'boolean'
-        || (change.expected !== undefined && typeof change.expected !== 'boolean')) {
-      throw httpError(400, 'Eine Poster-Änderung ist ungültig oder doppelt enthalten.');
-    }
-    seen.add(id);
-    const article = archive.articleById.get(id);
-    const mdPath = article?.filePath ? path.resolve(article.filePath) : '';
-    if (!article || article.author !== INFOGRAPHICS_AUTHOR || !article.ownImage
-        || !isPathInside(root, mdPath) || path.extname(mdPath).toLowerCase() !== '.md') {
-      throw httpError(404, 'Infografik nicht gefunden: ' + id);
-    }
-    const current = article.instagramPoster === true;
-    if (change.expected !== undefined && change.expected !== current) {
-      throw httpError(409, 'Die Poster-Markierung wurde zwischenzeitlich geändert. Bitte die Ansicht neu laden.');
-    }
-    if (current === change.enabled) continue;
-    const original = await fs.promises.readFile(mdPath, 'utf8');
-    const content = setInstagramPosterMetadata(original, change.enabled);
-    mappings.push({ source: mdPath, target: mdPath, content });
-    years.add(article.year);
-    updated.push({ id, instagramPoster: change.enabled });
-  }
-
-  return { mappings, years: [...years], updated };
-}
-
-async function reorderManagedInfographics(context, orderedIds) {
-  const { bundles, baseStem, dir } = context;
-  if (!Array.isArray(orderedIds) || orderedIds.length !== bundles.length
-    || new Set(orderedIds).size !== bundles.length
-    || orderedIds.some(id => !bundles.some(item => item.id === id))) {
-    throw httpError(400, 'Die Reihenfolge enthält nicht genau die vorhandenen Infografiken.');
-  }
-  if (!bundles.length) return async () => {};
-  const byId = new Map(bundles.map(item => [item.id, item]));
-  const key = file => process.platform === 'win32' ? file.toLowerCase() : file;
-  const ownedFiles = new Set(bundles.flatMap(item => item.files).map(key));
-  const blockedStems = new Set(fs.readdirSync(dir, { withFileTypes: true })
-    .filter(entry => entry.isFile())
-    .filter(entry => ['.md', '.png', '.jpg', '.jpeg'].includes(path.extname(entry.name).toLowerCase()))
-    .filter(entry => !ownedFiles.has(key(path.join(dir, entry.name))))
-    .map(entry => path.basename(entry.name, path.extname(entry.name)).toLowerCase()));
-  const mappings = [];
-  let nextOrdinal = 1;
-  for (const id of orderedIds) {
-    const bundle = byId.get(id);
-    while (nextOrdinal < 1000) {
-      const candidate = infographicAttachmentStem(baseStem, nextOrdinal);
-      if (!blockedStems.has(candidate.toLowerCase())) break;
-      nextOrdinal++;
-    }
-    if (nextOrdinal >= 1000) throw httpError(409, 'Keine freien Infografik-Dateinamen gefunden.');
-    const ordinal = nextOrdinal++;
-    const stem = infographicAttachmentStem(baseStem, ordinal);
-    for (const source of bundle.files) {
-      const extension = path.extname(source).toLowerCase();
-      const item = { source, target: path.join(dir, stem + extension) };
-      if (extension === '.md' && ordinal !== bundle.ordinal) {
-        item.content = retitleInfographicMarkdown(await fs.promises.readFile(source, 'utf8'), bundle.ordinal, ordinal);
-      }
-      if (source !== item.target) mappings.push(item);
-    }
-  }
-  return moveInfographicFiles(mappings);
-}
-
-async function infographicTrashFolder(year) {
-  const root = await fs.promises.realpath(path.join(WWW_DIR, INFOGRAPHICS_AUTHOR));
-  const ensureDirectory = async dir => {
-    try {
-      const stat = await fs.promises.lstat(dir);
-      if (!stat.isDirectory() || stat.isSymbolicLink()) throw httpError(409, 'Der Infografik-Papierkorb ist kein sicherer Ordner.');
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-      await fs.promises.mkdir(dir);
-    }
-    const real = await fs.promises.realpath(dir);
-    if (!isPathInside(root, real)) throw httpError(403, 'Der Papierkorb liegt außerhalb des Infografik-Ordners.');
-  };
-  await ensureDirectory(INFOGRAPHIC_TRASH_DIR);
-  const yearDir = path.join(INFOGRAPHIC_TRASH_DIR, year);
-  await ensureDirectory(yearDir);
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const name = new Date().toISOString().replace(/[:.]/g, '-') + '-' + crypto.randomBytes(4).toString('hex');
-    const folder = path.join(yearDir, name);
-    try { await fs.promises.mkdir(folder); return folder; }
-    catch (error) { if (error.code !== 'EEXIST') throw error; }
-  }
-  throw httpError(409, 'Kein freier Platz im Infografik-Papierkorb gefunden.');
 }
 
 function requireAuth(req, res, next) {
@@ -1244,232 +1034,6 @@ app.post('/api/reindex', requireAdminAccess, (req, res) => {
   res.json({ started: true });
 });
 
-app.get('/api/infographic-manager/*', requireAdminAccess, (req, res) => {
-  // Nur während exklusiver Dateiänderungen (z. B. Umbenennen) nicht lesen;
-  // ein laufender Scrape oder eine Audio-Erzeugung stört das Öffnen nicht.
-  if (archiveLock.holder) {
-    return res.status(409).json({ error: `Es läuft gerade: ${archiveLock.holder}. Bitte gleich erneut öffnen.` });
-  }
-  try {
-    const context = managedInfographicContext(req.params[0], req.session.user);
-    res.set('Cache-Control', 'no-store').json({
-      articleId: context.article.id,
-      title: context.article.title,
-      items: context.items.map(item => ({
-        id: item.id, title: item.title, ordinal: item.ordinal,
-        filename: path.basename(item.files.find(file => ['.png', '.jpg', '.jpeg']
-          .includes(path.extname(file).toLowerCase())) || item.mdPath),
-        imageUrl: item.imageUrl, instagramPoster: item.instagramPoster, fixed: item.fixed === true,
-      })),
-    });
-  } catch (error) {
-    sendRouteError(res, error, { label: 'Infografik-Verwaltung', fallback: 'Infografiken konnten nicht geladen werden.' });
-  }
-});
-
-app.post('/api/infographic-manager/*', requireAdminAccess, async (req, res) => {
-  const release = archiveLock.tryAcquire('Infografiken ändern');
-  if (!release) return sendArchiveBusy(res, archiveLock);
-  let undoOrder = null;
-  let undoTrash = null;
-  let undoInstagramPoster = null;
-  let trashFolder = null;
-  let context = null;
-  try {
-    context = managedInfographicContext(req.params[0], req.session.user);
-    if (req.body?.action === 'order') {
-      undoOrder = await reorderManagedInfographics(context, req.body.ids);
-    } else if (req.body?.action === 'instagram-poster') {
-      const item = context.items.find(candidate => candidate.id === req.body.id);
-      if (!item) throw httpError(404, 'Infografik nicht gefunden.');
-      undoInstagramPoster = await setManagedInfographicInstagramPoster(item, req.body.enabled);
-    } else if (req.body?.action === 'trash') {
-      const item = context.bundles.find(bundle => bundle.id === req.body.id);
-      if (!item) throw httpError(404, 'Infografik nicht gefunden.');
-      trashFolder = await infographicTrashFolder(context.year);
-      undoTrash = await moveInfographicFiles(item.files.map(source => ({
-        source, target: path.join(trashFolder, path.basename(source)),
-      })));
-      const remaining = context.bundles.filter(bundle => bundle.id !== item.id);
-      undoOrder = await reorderManagedInfographics(
-        { ...context, bundles: remaining }, remaining.map(bundle => bundle.id));
-    } else {
-      throw httpError(400, 'Unbekannte Infografik-Aktion.');
-    }
-    await refreshInfographicsForYear(context.year);
-    res.json({ ok: true, trash: trashFolder
-      ? path.relative(WWW_DIR, trashFolder).replace(/\\/g, '/') : undefined });
-  } catch (error) {
-    let rollbackError = null;
-    try {
-      if (undoOrder) await undoOrder();
-      if (undoTrash) await undoTrash();
-      if (undoInstagramPoster) await undoInstagramPoster();
-      if ((undoOrder || undoTrash || undoInstagramPoster) && context) await refreshInfographicsForYear(context.year);
-      if (trashFolder) await fs.promises.rmdir(trashFolder).catch(() => {});
-    } catch (failed) { rollbackError = failed; }
-    sendRouteError(res, error, {
-      label: 'Infografik-Verwaltung', fallback: 'Infografiken konnten nicht geändert werden.', rollbackError,
-    });
-  } finally {
-    release();
-  }
-});
-
-// Admin-Prüfmodus: Änderungen über beliebig viele Ergebnisseiten sammeln und
-// in einem atomaren Dateivorgang speichern. Anschließend werden ausschließlich
-// die tatsächlich betroffenen Infografik-Jahrgänge neu eingelesen.
-app.post('/api/infographic-review', requireAdminAccess, async (req, res) => {
-  const release = archiveLock.tryAcquire('Infografik-Prüfung speichern');
-  if (!release) return sendArchiveBusy(res, archiveLock);
-  let undo = null;
-  let years = [];
-  try {
-    const batch = await prepareInfographicPosterBatch(req.body?.changes);
-    years = batch.years;
-    undo = await moveInfographicFiles(batch.mappings);
-    await refreshInfographicsForYears(years);
-    return res.json({ ok: true, updated: batch.updated });
-  } catch (error) {
-    let rollbackError = null;
-    try {
-      if (undo) await undo();
-      if (undo && years.length) await refreshInfographicsForYears(years);
-    } catch (failed) { rollbackError = failed; }
-    return sendRouteError(res, error, {
-      label: 'Infografik-Prüfung', fallback: 'Poster-Markierungen konnten nicht gespeichert werden.', rollbackError,
-    });
-  } finally {
-    release();
-  }
-});
-
-app.post(
-  '/api/infographics/*',
-  requireAdminAccess,
-  express.raw({ type: ['image/png', 'image/jpeg'], limit: INFOGRAPHIC_MAX_BYTES }),
-  async (req, res) => {
-    if (archiveLock.busy) return sendArchiveBusy(res, archiveLock);
-    const id = req.params[0];
-    const requested = archive.articleById.get(id);
-    if (!requested) return res.status(404).json({ error: 'Artikel nicht gefunden.' });
-    const article = duplicateCanonicalFor(requested, req.session.user) || requested;
-
-    if (!canUploadInfographic(req.session.user, article)) {
-      return res.status(403).json({ error: 'Für diesen Artikel ist kein Infografik-Upload erlaubt.' });
-    }
-
-    const imageExt = imageExtensionFromContentType(req.get('content-type'));
-    if (!imageExt) {
-      return res.status(415).json({ error: 'Nur PNG- und JPG-Bilder sind erlaubt.' });
-    }
-    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-      return res.status(400).json({ error: 'Keine Bilddatei empfangen.' });
-    }
-
-    // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
-    const release = archiveLock.tryAcquire('Infografik hochladen');
-    if (!release) return sendArchiveBusy(res, archiveLock);
-    try {
-    let originalContent;
-    try {
-      originalContent = await fs.promises.readFile(article.filePath, 'utf8');
-    } catch {
-      return res.status(500).json({ error: 'Artikeldatei konnte nicht gelesen werden.' });
-    }
-
-    const header = validateInfographicHeader(originalContent);
-    if (!header.hasTitle) {
-      return res.status(400).json({ error: 'Der Artikel enthält keinen Titel.' });
-    }
-    if (!header.date) {
-      return res.status(400).json({ error: 'Der Artikel enthält keine gültige Datum-Zeile.' });
-    }
-
-    const target = getInfographicTarget({ ...article, date: header.date, year: header.date.slice(0, 4) }, imageExt);
-    if (!target) {
-      return res.status(400).json({ error: 'Kein gültiger Zielpfad für die Infografik gefunden.' });
-    }
-
-    try {
-      await fs.promises.mkdir(target.dir, { recursive: true });
-      await fs.promises.writeFile(target.mdPath, buildInfographicMarkdown(originalContent, target.ordinal), { flag: 'wx' });
-      try {
-        await fs.promises.writeFile(target.imagePath, req.body, { flag: 'wx' });
-      } catch (err) {
-        await fs.promises.unlink(target.mdPath).catch(() => {});
-        throw err;
-      }
-
-      await refreshInfographicsForYear(header.date.slice(0, 4));
-      res.json({
-        ok: true,
-        id: target.id,
-        filename: path.basename(target.imagePath),
-        ordinal: target.ordinal,
-      });
-    } catch (err) {
-      if (err.code === 'EEXIST') {
-        return res.status(409).json({ error: 'Eine Infografik mit diesem Namen existiert bereits. Bitte erneut versuchen.' });
-      }
-      sendRouteError(res, err, { label: 'Infografik hochladen', fallback: 'Infografik konnte nicht gespeichert werden.' });
-    }
-    } finally { release(); }
-  }
-);
-
-// ─── Neue eigenständige Infografik (Admin, Aktionen-Menü) ───────────────────
-//
-// Markdown + Bild in einer Anfrage (Bild base64 in JSON, keine Zusatz-Abhängigkeit).
-// Dateiname: <Datum>_<Slug aus dem Titel>; Konflikt → -2, -3 … (nicht _2, das
-// bedeutet „Variante“). Unveränderte Platzhalter der Vorlage werden entfernt.
-
-app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
-  if (archiveLock.busy) return sendArchiveBusy(res, archiveLock);
-  const categories = Array.isArray(req.body?.categories) ? req.body.categories.map(String) : [];
-  const markdown = normalizeNewInfographicMarkdown(req.body?.markdown, categories);
-  const header = validateInfographicHeader(markdown);
-  const title = parseArticle(markdown, 'neu.md').title;
-  if (!header.hasTitle || /\[titel\]/i.test(title)) return res.status(400).json({ error: 'Bitte in der ersten Zeile einen Titel eintragen.' });
-  if (!header.date) return res.status(400).json({ error: 'Die Datum-Zeile fehlt oder ist ungültig (JJJJ-MM-TT).' });
-  const slug = slugify(title);
-  if (!slug) return res.status(400).json({ error: 'Aus dem Titel lässt sich kein Dateiname ableiten.' });
-
-  const image = Buffer.from(String(req.body?.image || ''), 'base64');
-  if (!image.length) return res.status(400).json({ error: 'Bitte eine Grafik auswählen.' });
-  if (image.length > INFOGRAPHIC_MAX_BYTES) return res.status(413).json({ error: 'Die Bilddatei ist größer als 10 MB.' });
-  const imageExt = detectImageType(image);
-  if (!imageExt) return res.status(415).json({ error: 'Nur PNG- und JPG-Bilder sind erlaubt.' });
-
-  const year = header.date.slice(0, 4);
-  const dir = resolveUnder(WWW_DIR, INFOGRAPHICS_AUTHOR, year);
-  if (!dir) return res.status(400).json({ error: 'Kein gültiger Zielordner.' });
-  const baseStem = `${header.date}_${slug}`;
-  let stem = baseStem;
-  for (let n = 2; infographicStemExists(dir, stem); n++) stem = `${baseStem}-${n}`;
-  const mdPath = path.join(dir, stem + '.md');
-  const imagePath = path.join(dir, stem + imageExt);
-
-  // Zwischen Prüfung oben und hier liegt nur synchroner Code; die Sperre ist frei.
-  const release = archiveLock.tryAcquire('Neue Infografik speichern');
-  if (!release) return sendArchiveBusy(res, archiveLock);
-  try {
-    await fs.promises.mkdir(dir, { recursive: true });
-    await fs.promises.writeFile(mdPath, markdown, { flag: 'wx' });
-    try {
-      await fs.promises.writeFile(imagePath, image, { flag: 'wx' });
-    } catch (err) {
-      await fs.promises.unlink(mdPath).catch(() => {});
-      throw err;
-    }
-    await refreshInfographicsForYear(year);
-    res.json({ ok: true, id: [INFOGRAPHICS_AUTHOR, year, stem].join('/') });
-  } catch (err) {
-    if (err.code === 'EEXIST') return res.status(409).json({ error: 'Eine Datei mit diesem Namen existiert bereits. Bitte erneut speichern.' });
-    sendRouteError(res, err, { label: 'Neue Infografik', fallback: 'Infografik konnte nicht gespeichert werden.' });
-  } finally { release(); }
-});
-
 // Ungültige Werte (z. B. page=abc) ergaben früher NaN und damit eine leere Seite.
 function paginationParams(page, limit) {
   return {
@@ -1602,7 +1166,7 @@ app.get('/api/articles/*', attachUser, async (req, res) => {
     const { bodyHtml } = await articleBodies.get(article.filePath);
     const rest = exposeGroupForUser(article, req.user);
     res.json({
-      ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article),
+      ...rest, bodyHtml, canUploadInfographic: infographicAdmin.canUploadInfographic(req.user, article),
       bookmarked: bookmarks.has(req.user.email, article.id),
       ...((anchor || canonical) ? { requestedId: id } : {}),
     });
@@ -1622,12 +1186,12 @@ installScrapeRoutes(app, { requireAdmin: requireAdminAccess, job: scrapeJob, loc
 installDuplicateRoutes(app, {
   requireAdmin: requireAdminAccess, lock: archiveLock, archive, wwwDir: WWW_DIR,
   store: duplicateStore, config: duplicateConfig, bookmarks, articleBodies,
-  infographics: {
-    conflictingBase: article => conflictingInfographicBase(article),
-    firstAvailableOrdinal: article => firstAvailableInfographicOrdinal(article),
-    filesFor: filesForInfographic,
-  },
+  infographics: infographicAdmin,
   refreshInfographicsForYears, refreshState: refreshDuplicateState,
+});
+installInfographicRoutes(app, {
+  requireAdmin: requireAdminAccess, lock: archiveLock, admin: infographicAdmin, archive, wwwDir: WWW_DIR,
+  duplicateCanonicalFor, refreshInfographicsForYear, refreshInfographicsForYears,
 });
 installUserRoutes(app, {
   store: userStore, requireAuth, requireAdmin: requireAdminAccess, getAuthors: () => archive.meta.authors,
@@ -1718,8 +1282,6 @@ module.exports = {
   normalizeNewInfographicMarkdown, mergeCategories, parsePromptDefinition,
   computeAppShellVersion, serviceWorkerSource,
   renderIndexForSession, requireAdminAccess, handleRequestError,
-  infographicAttachmentStem, firstAvailableInfographicOrdinal,
-  canUploadInfographic, conflictingInfographicBase, retitleInfographicMarkdown,
-  moveInfographicFiles, reorderManagedInfographics,
-  setInstagramPosterMetadata, setManagedInfographicInstagramPoster,
+  infographicAttachmentStem, retitleInfographicMarkdown, moveInfographicFiles, setInstagramPosterMetadata,
+  canUploadInfographic: infographicAdmin.canUploadInfographic,
 };
