@@ -339,7 +339,7 @@ function renderDetail(article) {
   const $shareBtn = document.getElementById('detail-share-btn');
   if ($shareBtn) {
     $shareBtn.addEventListener('click', async () => {
-      const url = `${location.origin}/a/${sanitizeForId(article.id)}`;
+      const url = shareUrl(article);
       if (navigator.share) {
         try { await navigator.share({ title: article.title, url }); } catch { /* abgebrochen */ }
         return;

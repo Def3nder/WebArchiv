@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const express = require('express');
 const { installArticleRoutes } = require('../modules/articles.cjs');
 const { buildArticleSearchIndex } = require('../lib/article-index.cjs');
+const { shareIdFor } = require('../lib/share-ids.cjs');
 
 const article = (id, fields = {}) => {
   const [author, year] = id.split('/');
@@ -126,6 +127,8 @@ test('Einzelartikel: Gruppe, Dublette, feste Fehlercodes', async t => {
   assert.equal(res.status, 200);
   assert.deepEqual([res.data.id, res.data.requestedId, res.data.bodyHtml], [data.blog.id, data.info.id, '<p>Text</p>']);
   assert.deepEqual([res.data.canUploadInfographic, res.data.bookmarked, res.data.images.length], [true, true, 2]);
+  assert.equal(res.data.shareId, shareIdFor(data.blog.id), 'Teilen-ID des geöffneten Ankers');
+  assert.match(res.data.shareId, /^[A-Za-z0-9_-]{12}$/);
 
   res = await call(url(data.facebook.id));
   assert.deepEqual([res.data.id, res.data.requestedId, res.data.canUploadInfographic], [data.blog.id, data.facebook.id, false]);

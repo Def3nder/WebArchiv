@@ -240,7 +240,7 @@ function renderBookDetail(book) {
   });
   $detail.querySelector('[data-book-share]')?.addEventListener('click', async event => {
     const button = event.currentTarget;
-    const url = `${location.origin}/a/${sanitizeForId(book.id)}`;
+    const url = shareUrl(book);
     if (navigator.share) {
       try { await navigator.share({ title: book.title, url }); } catch { /* abgebrochen */ }
       return;

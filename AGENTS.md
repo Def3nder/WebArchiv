@@ -113,6 +113,9 @@ object in `app.js`.
   `path.basename` + prefix-check guard.
 - The `Telegram` author is special-cased: hidden from listings unless `?telegram=1` or explicitly
   filtered by `author=Telegram`.
+- **Share links** use a short `shareId` (`lib/share-ids.cjs`, 12 chars `[A-Za-z0-9_-]` from the id's SHA-256,
+  sent with article and audiobook details): `/a/<shareId>`. Share paths such as WhatsApp decode `%20` back to a
+  space and cut the link there. `/a/<full id>` keeps working for older links.
 - **Link-preview exception** (`modules/link-preview.cjs`): `GET /a/<id>` (Open-Graph HTML for social crawlers, redirects humans
   to `#/article/<id>`) and `GET /og-image/<id>` (sharp-downscaled preview image) are **intentionally
   unauthenticated** — they expose title/description/image of *any* article to anyone with the link,

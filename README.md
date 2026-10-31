@@ -900,6 +900,7 @@ lib/html-sanitizer.cjs        Markdown → bereinigtes HTML (sanitize-html)
 lib/security-headers.cjs      CSP (Report-Only/Enforce), weitere Sicherheits-Header, /api/csp-report
 lib/archive-lock.cjs          Zentrale Sperre für Schreib- und Indexaufträge (409 mit laufendem Auftrag)
 lib/duplicates.cjs            Dublettenerkennung und persistente Entscheidungen
+lib/share-ids.cjs             Kurze Teilen-IDs für /a/<shareId> (ohne Leerzeichen, für WhatsApp & Co.)
 modules/user-store.cjs        Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen
 modules/audiobooks.cjs        Hörbücher: Index, abstract.md, Hörfortschritt, Routen
 modules/audiobook-extras.cjs  Hörbuch-Extras: Ordner extras/ auflisten, bearbeiten, hochladen, sortieren, löschen

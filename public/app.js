@@ -534,6 +534,13 @@ function sanitizeForId(id) {
   return encodeURIComponent(id);
 }
 
+// Vorschau-fähiger Teilen-Link (/a/…) für Artikel und Hörbücher. Die kurze shareId
+// vom Server enthält keine Leerzeichen: Manche Teilen-Wege (z. B. nach WhatsApp)
+// dekodieren %20 wieder, und der Link bricht am ersten Leerzeichen ab.
+function shareUrl(item) {
+  return `${location.origin}/a/${item.shareId || sanitizeForId(item.id)}`;
+}
+
 // HTML-Escape für Text und Attributwerte in Templates; auch von den Admin-Skripten
 // (z. B. duplicates.js) genutzt. Zahlen bleiben erhalten, null/undefined werden leer.
 function esc(value) {

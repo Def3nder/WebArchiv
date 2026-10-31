@@ -7,6 +7,7 @@ const { createJsonState } = require('../lib/atomic-file.cjs');
 const { httpError: fail, jsonRoute } = require('../lib/http-errors.cjs');
 const { versionedUrl: withVersion } = require('../lib/archive-files.cjs');
 const { escapeHtml } = require('../lib/html-sanitizer.cjs');
+const { shareIdFor } = require('../lib/share-ids.cjs');
 const { createAudiobookExtras, extraTitle, EXTRA_IMAGE_MAX_BYTES } = require('./audiobook-extras.cjs');
 
 // Hörbücher liegen als je ein Ordner unter audio/<Verzeichnis>/ (nicht unter www/),
@@ -605,7 +606,10 @@ function installAudiobookRoutes(app, {
   app.get('/api/audiobooks/*', requireAuth, route(async (req, user) => {
     const book = await library.detail(user, req.params[0]);
     if (!book) throw fail(404, 'Hörbuch nicht gefunden.');
-    return { ...book, config: { skipLongSeconds: config.skipLongSeconds, skipShortSeconds: config.skipShortSeconds } };
+    return {
+      ...book, shareId: shareIdFor(book.id),
+      config: { skipLongSeconds: config.skipLongSeconds, skipShortSeconds: config.skipShortSeconds },
+    };
   }));
   app.get('/api/audiobook-text/*', requireAuth, route(async (req, user) => {
     const book = accessibleBook(user, req.params[0]);

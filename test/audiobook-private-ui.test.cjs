@@ -41,6 +41,6 @@ test('Server sperrt Detail-, Zusatz- und Medienzugriffe auf private Hörbücher'
   assert.match(mainServer, /installMediaRoutes\(app, \{[\s\S]*?audiobooks, canAccessAuthor, attachUser/);
   // Die öffentliche Link-Vorschau sieht Hörbücher nur aus Gastsicht (keine privaten).
   const linkPreview = fs.readFileSync(path.join(ROOT, 'modules', 'link-preview.cjs'), 'utf8');
-  assert.match(linkPreview, /function publicShareItem\(id\)[\s\S]*?audiobooks\.getForUser\(null, id\)/);
+  assert.match(linkPreview, /function publicShareItem\(param\)[\s\S]*?audiobooks\.getForUser\(null, id\)/);
   assert.match(mainServer, /installLinkPreviewRoutes\(app, \{[^}]*audiobooks/);
 });

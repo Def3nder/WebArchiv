@@ -13,6 +13,7 @@ const path = require('path');
 const sharp = require('sharp');
 const { escapeHtml } = require('../lib/html-sanitizer.cjs');
 const { isPathInside } = require('../lib/archive-files.cjs');
+const { shareIdFor, createShareIdLookup } = require('../lib/share-ids.cjs');
 const { resolveMediaRequest } = require('./media-files.cjs');
 
 // Artikelbilder liegen unter /files, Hörbuch-Cover unter /audio-files. Für die
@@ -39,7 +40,11 @@ function ogDescription(article) {
 // archive: Indexzustand aus server.js; duplicateCanonicalFor: Blogartikel einer
 // verknüpften Dublette; audiobooks: Hörbuch-Bibliothek (Gastansicht, ohne private Bücher).
 function installLinkPreviewRoutes(app, { archive, duplicateCanonicalFor, audiobooks, wwwDir, audioDir }) {
-  function publicShareItem(id) {
+  const resolveShareId = createShareIdLookup(() => [archive.articles, audiobooks.books || []]);
+
+  // Volle ID (ältere Links) oder kurze Teilen-ID (lib/share-ids.cjs).
+  function publicShareItem(param) {
+    const id = archive.articleById.has(param) ? param : (resolveShareId(param) || param);
     const article = archive.articleById.get(id);
     return (article ? (duplicateCanonicalFor(article) || article) : null) || audiobooks.getForUser(null, id);
   }
@@ -49,13 +54,13 @@ function installLinkPreviewRoutes(app, { archive, duplicateCanonicalFor, audiobo
     const article = publicShareItem(id);
     const canonicalId = article?.id || id;
     const base = `${req.protocol}://${req.get('host')}`;
-    const canonical = base + '/a/' + encodeURIComponent(canonicalId);
+    const canonical = base + '/a/' + (article ? shareIdFor(canonicalId) : encodeURIComponent(canonicalId));
 
     let tags;
     if (article) {
       const title = escapeHtml(article.title || 'WebArchiv');
       const desc  = escapeHtml(ogDescription(article));
-      const img   = article.imageUrl ? base + '/og-image/' + encodeURIComponent(canonicalId) : '';
+      const img   = article.imageUrl ? base + '/og-image/' + shareIdFor(canonicalId) : '';
       tags = `
     <title>${title}</title>
     <meta name="description" content="${desc}" />

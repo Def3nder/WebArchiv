@@ -8,6 +8,7 @@ const { httpError, apiError, jsonRoute } = require('../lib/http-errors.cjs');
 const { parseArticleSearchQuery } = require('../lib/article-parser.cjs');
 const { articleDisplayAuthor } = require('../lib/article-index.cjs');
 const { INFOGRAPHICS_AUTHOR } = require('../lib/infographics.cjs');
+const { shareIdFor } = require('../lib/share-ids.cjs');
 
 // Telegram ist in Listen ausgeblendet, außer mit ?telegram=1 oder author=Telegram.
 const TELEGRAM_AUTHOR = 'Telegram';
@@ -215,6 +216,8 @@ function installArticleRoutes(app, {
     const rest = exposeGroupForUser(article, req.user);
     return {
       ...rest, bodyHtml, canUploadInfographic: canUploadInfographic(req.user, article),
+      // Kurze ID für den Teilen-Link /a/<shareId> (lib/share-ids.cjs).
+      shareId: shareIdFor(article.id),
       bookmarked: bookmarks.has(req.user.email, article.id),
       ...((anchor || canonical) ? { requestedId: id } : {}),
     };

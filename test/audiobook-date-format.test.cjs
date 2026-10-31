@@ -44,7 +44,7 @@ test('Während der Wiedergabe wird genau das nächste Kapitel vorgeladen', () =>
 
 test('Hörbücher lassen sich mit öffentlicher Cover-Vorschau teilen', () => {
   assert.match(audiobooks, /data-book-share>Teilen<\/button>/);
-  assert.match(audiobooks, /location\.origin}\/a\/\$\{sanitizeForId\(book\.id\)}/);
+  assert.match(audiobooks, /const url = shareUrl\(book\);/);
   assert.match(server, /getArticle: id => archive\.articleById\.get\(id\) \|\| audiobooks\.get\(id\)/);
   const preview = fs.readFileSync(path.join(ROOT, 'modules', 'link-preview.cjs'), 'utf8');
   assert.match(preview, /pathname\.startsWith\('\/audio-files\/'\) \? audioDir/);
