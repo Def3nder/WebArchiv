@@ -1,9 +1,9 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { writeFileAtomic } = require('./lib/atomic-file.cjs');
-const { isPathInside } = require('./lib/archive-files.cjs');
-const { httpError: fail, jsonRoute } = require('./lib/http-errors.cjs');
+const { writeFileAtomic } = require('../lib/atomic-file.cjs');
+const { isPathInside } = require('../lib/archive-files.cjs');
+const { httpError: fail, jsonRoute } = require('../lib/http-errors.cjs');
 
 const MAX_BYTES = 1024 * 1024;
 const versionOf = content => createHash('sha256').update(content).digest('hex');

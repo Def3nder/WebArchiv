@@ -8,7 +8,7 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..');
 // Quellordner des Projekts (ohne Tests, Abhängigkeiten, Bundles und Archivdaten).
-const SOURCE_DIRS = ['lib', 'scripts', 'tts', 'scraper', 'duplicates-tool', 'epub-tool', 'public'];
+const SOURCE_DIRS = ['lib', 'modules', 'scripts', 'tts', 'scraper', 'duplicates-tool', 'epub-tool', 'public'];
 const SKIP_DIRS = new Set(['node_modules', 'vendor', 'test']);
 // Die einzige erlaubte Umsetzung der Pfadprüfung.
 const PATH_HELPER = path.join(root, 'lib', 'archive-files.cjs');

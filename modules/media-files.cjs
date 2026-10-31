@@ -7,8 +7,8 @@
 // wurde als öffentlicher Autor „Videos“ geprüft, aber aus „Joe Turan“ geliefert).
 
 const path = require('path');
-const { isPathInside } = require('./lib/archive-files.cjs');
-const { sendApiError } = require('./lib/http-errors.cjs');
+const { isPathInside } = require('../lib/archive-files.cjs');
+const { sendApiError } = require('../lib/http-errors.cjs');
 
 const IS_WINDOWS = process.platform === 'win32';
 

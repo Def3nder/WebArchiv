@@ -7,8 +7,8 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const express = require('express');
-const { resolveMediaRequest, installMediaRoutes } = require('../media-files.cjs');
-const { AUDIOBOOK_AUTHOR, createAudiobookLibrary, createProgressStore } = require('../audiobooks.cjs');
+const { resolveMediaRequest, installMediaRoutes } = require('../modules/media-files.cjs');
+const { AUDIOBOOK_AUTHOR, createAudiobookLibrary, createProgressStore } = require('../modules/audiobooks.cjs');
 
 const SECRET = 'GEHEIMER-INHALT';
 const USERS = {

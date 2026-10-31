@@ -33,7 +33,8 @@ Datenablage: www/<Autor>/<Jahr>/<Artikel>.md (+ Bild/Video/PDF)
 ```
 
 - **Backend**: `server.js` ist die zentrale Express-4-Anwendung; ergänzende
-  CommonJS-Module übernehmen u. a. Editor, Hörbücher, Dubletten und TTS-Aufträge.
+  CommonJS-Module übernehmen u. a. Editor, Hörbücher, Dubletten und TTS-Aufträge: reine Hilfen
+  liegen unter `lib/`, Fachmodule mit eigenen Routen unter `modules/`.
   Für den normalen Serverstart gibt es keinen Build-Schritt. Geänderte Quellen des
   Markdown-Editors bzw. der Dubletten-Diff-Anzeige müssen jedoch mit
   `npm run build:editor` bzw. `npm run build:duplicate-diff` gebündelt werden.
@@ -669,7 +670,7 @@ Editor- oder Menülogik einbezogen.
   ```
   Sind keine öffentlichen Autoren konfiguriert, ist die App vollständig
   login-pflichtig (401).
-- **Schreiben der Dateien** (`user-store.cjs`): temporäre Datei im selben Ordner,
+- **Schreiben der Dateien** (`modules/user-store.cjs`): temporäre Datei im selben Ordner,
   dann atomar ersetzen; Rechte/Eigentümer bleiben erhalten. Jede Änderung liest die
   Datei vorher frisch ein, Handänderungen gehen also nicht verloren. Wird
   `users.json` bei laufendem Server von Hand bearbeitet (z. B. `hash-passwords.js`),
@@ -713,7 +714,7 @@ Editor- oder Menülogik einbezogen.
   geprüfte `X-CSRF-Token` der Sitzung. `apiFetch()` setzt dieses Token für schreibende
   Same-Origin-Aufrufe automatisch. Admin-GETs liefern keine Schreibberechtigung und das
   Token wird Nicht-Admins nie in die Seite eingebettet.
-- Datei-Auslieferung `/files/*` und `/audio-files/*` (`media-files.cjs`) prüft die Autor-ACL
+- Datei-Auslieferung `/files/*` und `/audio-files/*` (`modules/media-files.cjs`) prüft die Autor-ACL
   am tatsächlich ausgelieferten Pfad: Pfade mit `.`/`..`-Segmenten – auch kodiert als `%2e%2e`,
   `%2f` oder Backslash – werden mit `400` abgewiesen, bevor Autor und Papierkorb geprüft werden.
   Der Schutz hängt nicht von der URI-Bereinigung des Reverse Proxys ab.
@@ -899,12 +900,12 @@ lib/html-sanitizer.cjs        Markdown → bereinigtes HTML (sanitize-html)
 lib/security-headers.cjs      CSP (Report-Only/Enforce), weitere Sicherheits-Header, /api/csp-report
 lib/archive-lock.cjs          Zentrale Sperre für Schreib- und Indexaufträge (409 mit laufendem Auftrag)
 lib/duplicates.cjs            Dublettenerkennung und persistente Entscheidungen
-user-store.cjs                Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen
-audiobooks.cjs                Hörbücher: Index, abstract.md, Hörfortschritt, Routen
-audiobook-extras.cjs          Hörbuch-Extras: Ordner extras/ auflisten, bearbeiten, hochladen, sortieren, löschen
-article-editor.cjs            Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown
-bookmarks.cjs                 Lesezeichen pro Nutzer (bookmarks.json) und Routen
-media-files.cjs               Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)
+modules/user-store.cjs        Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen
+modules/audiobooks.cjs        Hörbücher: Index, abstract.md, Hörfortschritt, Routen
+modules/audiobook-extras.cjs  Hörbuch-Extras: Ordner extras/ auflisten, bearbeiten, hochladen, sortieren, löschen
+modules/article-editor.cjs    Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown
+modules/bookmarks.cjs         Lesezeichen pro Nutzer (bookmarks.json) und Routen
+modules/media-files.cjs       Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)
 config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten; ignored,
                               Vorlage example-config.json)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp, diff

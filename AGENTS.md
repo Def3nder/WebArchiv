@@ -33,8 +33,8 @@ server-side files are isolated under `tts-server/` and never run as part of `ser
 
 ## Architecture
 
-**Backend: `server.js` + stateless modules in `lib/`.** `server.js` holds all module state (index,
-stores, sessions, lock) and the routes; pure logic lives in `lib/` and can be required by scripts
+**Backend: `server.js`, `lib/` and `modules/`.** `server.js` holds all module state (index,
+stores, sessions, lock), the wiring and the remaining routes; pure logic lives in `lib/` and can be required by scripts
 and tests without starting the server: `article-parser.cjs` (`parseArticle`, date/search parsing,
 taxonomy), `infographics.cjs` (`linkInfographics`, naming, header editing, `moveInfographicFiles`),
 `archive-files.cjs` (directory cache, `findSibling`, file URLs, `isPathInside`, `resolveUnder`,
@@ -49,7 +49,9 @@ bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categori
 (`archive-lock.cjs`, `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below). Never `require('./server.js')` from scripts — import from `lib/`.
 Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors);
 every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).
-New pure helpers belong in `lib/`, not in `server.js`. The index works in three phases:
+New pure helpers belong in `lib/`, not in `server.js`. Feature modules with routes live in `modules/`: a `create…`
+factory for their state plus `install…Routes(app, deps)` (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`,
+`article-editor`, `media-files`); they import from `lib/`, never from `server.js`. The index works in three phases:
 
 1. **Index build (`buildIndex` → `scanDir` → `parseArticle`).** On startup (and on reindex) it
    recursively walks `www/`. Top-level dirs are *authors*; nested 4-digit dirs (`2018/`) are
@@ -97,7 +99,7 @@ object in `app.js`.
   `public-directories`). If that list is empty, unauthenticated requests get 401.
 - **Enforcement is per-author** via `canAccessAuthor`. It gates three layers that must stay
   consistent: the `/files/*` media handler, the `/api/articles` list (ACL pre-filter), and the
-  single-article route. `/files/*` and `/audio-files/*` live in `media-files.cjs`:
+  single-article route. `/files/*` and `/audio-files/*` live in `modules/media-files.cjs`:
   `resolveMediaRequest` rejects `.`/`..` segments (also when sent encoded) and the author ACL is
   checked on that validated path — never check a raw first segment and resolve afterwards. Reuse
   it for any new file-serving route. `prompts/*` uses the same

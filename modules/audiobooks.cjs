@@ -3,10 +3,10 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const express = require('express');
 const Fuse = require('fuse.js');
-const { createJsonState } = require('./lib/atomic-file.cjs');
-const { httpError: fail, jsonRoute } = require('./lib/http-errors.cjs');
-const { versionedUrl: withVersion } = require('./lib/archive-files.cjs');
-const { escapeHtml } = require('./lib/html-sanitizer.cjs');
+const { createJsonState } = require('../lib/atomic-file.cjs');
+const { httpError: fail, jsonRoute } = require('../lib/http-errors.cjs');
+const { versionedUrl: withVersion } = require('../lib/archive-files.cjs');
+const { escapeHtml } = require('../lib/html-sanitizer.cjs');
 const { createAudiobookExtras, extraTitle, EXTRA_IMAGE_MAX_BYTES } = require('./audiobook-extras.cjs');
 
 // Hörbücher liegen als je ein Ordner unter audio/<Verzeichnis>/ (nicht unter www/),

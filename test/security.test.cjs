@@ -7,7 +7,7 @@ const express = require('express');
 const { createLoginLimiter, tooManyAttemptsError } = require('../lib/login-limiter.cjs');
 const { renderSafeMarkdown, sanitizeRenderedHtml, safeHttpUrl } = require('../lib/html-sanitizer.cjs');
 const { createSecurityHeaders, installCspReportRoute, cspMode } = require('../lib/security-headers.cjs');
-const { installUserRoutes } = require('../user-store.cjs');
+const { installUserRoutes } = require('../modules/user-store.cjs');
 const { app: serverApp, resolveSessionSecret, parseTrustProxy, extractSourceUrl } = require('../server.js');
 
 const quiet = { warn: () => {} };

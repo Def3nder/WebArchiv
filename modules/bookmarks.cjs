@@ -2,8 +2,8 @@
 // Nur für angemeldete Nutzer; Gäste haben keine Lesezeichen.
 
 const fs = require('fs/promises');
-const { createJsonState } = require('./lib/atomic-file.cjs');
-const { httpError: fail, jsonRoute } = require('./lib/http-errors.cjs');
+const { createJsonState } = require('../lib/atomic-file.cjs');
+const { httpError: fail, jsonRoute } = require('../lib/http-errors.cjs');
 
 const emailKey = email => String(email || '').toLowerCase();
 const EMPTY = new Set();

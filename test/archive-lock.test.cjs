@@ -7,7 +7,7 @@ const http = require('node:http');
 const path = require('node:path');
 const express = require('express');
 const { createArchiveLock } = require('../lib/archive-lock.cjs');
-const { installAudiobookRoutes } = require('../audiobooks.cjs');
+const { installAudiobookRoutes } = require('../modules/audiobooks.cjs');
 
 test('Sperre: exklusiv, Freigabe idempotent, alte Freigabe löst keinen neuen Halter', () => {
   const lock = createArchiveLock();

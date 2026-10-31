@@ -8,8 +8,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
-const { writeFileAtomic } = require('./lib/atomic-file.cjs');
-const { httpError: fail } = require('./lib/http-errors.cjs');
+const { writeFileAtomic } = require('../lib/atomic-file.cjs');
+const { httpError: fail } = require('../lib/http-errors.cjs');
 
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png'];
 const EXTRA_IMAGE_EXTS = new Set([...IMAGE_EXTS, '.gif']);

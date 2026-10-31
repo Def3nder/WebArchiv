@@ -8,13 +8,13 @@ const sharp   = require('sharp');
 const { spawn } = require('child_process');
 const { createTtsJobs, installTtsRoutes } = require('./tts/jobs.cjs');
 const { createTtsVoiceSettings, MAX_AUDIO_BYTES: TTS_VOICE_MAX_BYTES } = require('./tts/voice-settings.cjs');
-const { createMarkdownEditor, installMarkdownRoutes } = require('./article-editor.cjs');
-const { createUserStore, installUserRoutes } = require('./user-store.cjs');
+const { createMarkdownEditor, installMarkdownRoutes } = require('./modules/article-editor.cjs');
+const { createUserStore, installUserRoutes } = require('./modules/user-store.cjs');
 const {
   AUDIOBOOK_AUTHOR, createAudiobookLibrary, createProgressStore, loadAudiobookConfig, installAudiobookRoutes,
-} = require('./audiobooks.cjs');
-const { createBookmarkStore, installBookmarkRoutes } = require('./bookmarks.cjs');
-const { installMediaRoutes } = require('./media-files.cjs');
+} = require('./modules/audiobooks.cjs');
+const { createBookmarkStore, installBookmarkRoutes } = require('./modules/bookmarks.cjs');
+const { installMediaRoutes } = require('./modules/media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./lib/login-limiter.cjs');
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./lib/security-headers.cjs');
 const { createArchiveLock } = require('./lib/archive-lock.cjs');
@@ -31,7 +31,7 @@ const {
 const {
   createDirectoryCache, findSibling, fileUrl, audioFileUrl, isPathInside, resolveUnder, yearFromRelativeDir,
 } = require('./lib/archive-files.cjs');
-const { resolveMediaRequest } = require('./media-files.cjs');
+const { resolveMediaRequest } = require('./modules/media-files.cjs');
 const {
   INFOGRAPHICS_AUTHOR, linkInfographics, infographicYearsFromMigrations, imageExtensionFromContentType,
   infographicStemExists, infographicAttachmentStem, validateInfographicHeader, removeCategoryLines,

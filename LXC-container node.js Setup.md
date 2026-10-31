@@ -368,7 +368,7 @@ apt install unattended-upgrades
 Umgesetzt: NPMplus auf 192.168.1.14 übernimmt HTTPS, Zertifikate und Domain-Anbindung
 und leitet an den LXC (Port 3000) weiter. NPMplus muss `X-Forwarded-For` und
 `X-Forwarded-Proto` setzen (Standard). Die Option „Disable URI Sanitisation“ ist aktiv;
-der Server schützt seine Medienrouten unabhängig davon (siehe README, `media-files.cjs`).
+der Server schützt seine Medienrouten unabhängig davon (siehe README, `modules/media-files.cjs`).
 
 ### Sicherheits-Umgebung (Stand 30.10.2026)
 

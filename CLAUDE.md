@@ -40,8 +40,8 @@ must not pin versions.
 
 ## Architecture
 
-**Backend: `server.js` + stateless modules in `lib/`.** `server.js` holds all module state (index,
-stores, sessions, lock) and the routes; pure logic lives in `lib/` and can be required by scripts
+**Backend: `server.js`, `lib/` and `modules/`.** `server.js` holds all module state (index,
+stores, sessions, lock), the wiring and the remaining routes; pure logic lives in `lib/` and can be required by scripts
 and tests without starting the server: `article-parser.cjs` (`parseArticle`, date/search parsing,
 taxonomy), `infographics.cjs` (`linkInfographics`, naming, header editing, `moveInfographicFiles`),
 `archive-files.cjs` (directory cache, `findSibling`, file URLs, `isPathInside`, `resolveUnder`,
@@ -56,7 +56,9 @@ bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categori
 (`archive-lock.cjs`, `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below). Never `require('./server.js')` from scripts — import from `lib/`.
 Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors);
 every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).
-New pure helpers belong in `lib/`, not in `server.js`. The index works in three phases:
+New pure helpers belong in `lib/`, not in `server.js`. Feature modules with routes live in `modules/`: a `create…`
+factory for their state plus `install…Routes(app, deps)` (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`,
+`article-editor`, `media-files`); they import from `lib/`, never from `server.js`. The index works in three phases:
 
 1. **Index build (`buildIndex` → `scanDir` → `parseArticle`).** On startup (and on reindex) it
    recursively walks `www/`. Top-level dirs are *authors*; nested 4-digit dirs (`2018/`) are
@@ -106,7 +108,7 @@ object in `app.js`.
   plaintext `password` fields, run `node scripts/hash-passwords.js` to replace them with bcrypt
   `passwordHash`. Each user has `role` (`admin`/`user`), `allowedAuthors` (`null` = all authors,
   or an array = whitelist), optional `mustChangePassword` and `sessionVersion`.
-- **User management** (`user-store.cjs` + `public/user-admin.js`): admins manage users and the
+- **User management** (`modules/user-store.cjs` + `public/user-admin.js`): admins manage users and the
   public-author list in the UI (header "Aktionen" menu); every user can change their own password.
   `users.json` and `public-directories.txt` are written at runtime (atomic temp+rename, re-read
   before each change). `req.session.user` holds the resolved user (`email`, `role`,
@@ -120,12 +122,12 @@ object in `app.js`.
   with a whitelist always get the public authors in addition.
 - **Enforcement is per-author** via `canAccessAuthor`. It gates three layers that must stay
   consistent: the `/files/*` media handler, the `/api/articles` list (ACL pre-filter), and the
-  single-article route. `/files/*` and `/audio-files/*` live in `media-files.cjs`:
+  single-article route. `/files/*` and `/audio-files/*` live in `modules/media-files.cjs`:
   `resolveMediaRequest` rejects `.`/`..` segments (also when sent encoded) and the author ACL is
   checked on that validated path — never check a raw first segment and resolve afterwards. Reuse
   it for any new file-serving route. `prompts/*` uses the same
   `path.basename` + prefix-check guard.
-- **Audiobooks** (`audiobooks.cjs` = library, index, progress, routes; `audiobook-extras.cjs` = extras folder
+- **Audiobooks** (`modules/audiobooks.cjs` = library, index, progress, routes; `modules/audiobook-extras.cjs` = extras folder
   management; `public/audiobooks.js`): author `Hörbücher` lives under
   `audio/Hoerbuecher/<book>/` (ASCII dir name, mapped to author `Hörbücher`; tracks + cover + optional `abstract.md`), has its own index and
   `/api/audiobooks*` routes (a book without tracks but with an ebook text file is an "ebook only" book: `trackCount: 0`, `ebookOnly: true`, no player), is never public (guests blocked in `canAccessAuthor`, filtered from
@@ -133,7 +135,7 @@ object in `app.js`.
   Admins can mark a book *private* (global, not per user) — stored separately in `audiobook-private.json`;
   private books exist only for admins (list sort `private`, detail, media, preview). Sorts: `recent` (default),
   `added` (book folder creation time), `title`, `date`.
-- **Bookmarks** (`bookmarks.cjs`): per-user, logged-in only, stored in `bookmarks.json` (gitignored).
+- **Bookmarks** (`modules/bookmarks.cjs`): per-user, logged-in only, stored in `bookmarks.json` (gitignored).
   `PUT/DELETE /api/bookmarks/*`; `/api/articles?bookmarks=1` filters after the ACL pre-filter and
   also includes Telegram. Display settings (font, light/dark/auto, article text size) are per device
   in `localStorage` (`public/settings.js`); guests always get the defaults.
