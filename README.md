@@ -834,7 +834,7 @@ laufenden Auftrags wird mit einer Protokollzeile übersprungen. Teil-Reindexe, d
 auslöst, gehören zu diesem Auftrag und blockieren ihn nicht.
 
 Wichtig: `scraper/scrape_all.js` triggert selbst **keinen** Reindex. Es schreibt
-nur neue Dateien. Den Reindex stößt entweder `server.js` nach einem Web-UI-Scrape
+nur neue Dateien. Den Reindex stößt entweder der Server (`modules/scrape.cjs`) nach einem Web-UI-Scrape
 an, oder ein CLI/Cron-Aufruf muss danach den laufenden Server per `SIGHUP`
 signalisieren.
 
@@ -857,8 +857,8 @@ Details/CLI: siehe `scraper/README.md`. Zwei Auslöse-Wege:
 2. **Web-UI (Admin)**: Aktions-Menü hinter dem **↺-Button** im Header mit drei
    Einträgen — *Archiv neu einlesen* (`POST /api/reindex`), *Neue Beiträge scrapen*
    (`POST /api/scrape`) und *Scrape-Log anzeigen* (`GET /api/scrape/log`). Beim
-   Scrapen startet der Server `scrape_all.js` als Kindprozess, sammelt dessen
-   Ausgabe in `scrapeState.output` und zeigt sie **live in einem Modal** an (endet
+   Scrapen startet der Server (`modules/scrape.cjs`) `scrape_all.js` als Kindprozess, sammelt dessen
+   Ausgabe im Status (`output`) und zeigt sie **live in einem Modal** an (endet
    mit der Zusammenfassung `gespeichert=… bereits vorhanden=…`); danach werden
    nur die vom Scraper gemeldeten neuen oder durch ein nachgeladenes Bild
    geänderten Artikel neu eingelesen. *Scrape-Log anzeigen* öffnet
@@ -906,6 +906,7 @@ modules/audiobook-extras.cjs  Hörbuch-Extras: Ordner extras/ auflisten, bearbei
 modules/article-editor.cjs    Sicheres Lesen/Speichern von Artikel- und Abstract-Markdown
 modules/bookmarks.cjs         Lesezeichen pro Nutzer (bookmarks.json) und Routen
 modules/media-files.cjs       Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)
+modules/scrape.cjs            Scraper als Kindprozess starten, Status/Log, danach gezielter Reindex
 config.json                   Einstellungen (Autoren-Priorität, Dubletten, Hörbuch-Sprungweiten; ignored,
                               Vorlage example-config.json)
 package.json                  Deps: express, express-session, bcryptjs, fuse.js, marked, sharp, diff

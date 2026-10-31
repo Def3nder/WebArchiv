@@ -5,7 +5,6 @@ const crypto = require('crypto');
 const { renderSafeMarkdown, safeHttpUrl, escapeHtml } = require('./lib/html-sanitizer.cjs');
 const session = require('express-session');
 const sharp   = require('sharp');
-const { spawn } = require('child_process');
 const { createTtsJobs, installTtsRoutes } = require('./tts/jobs.cjs');
 const { createTtsVoiceSettings, MAX_AUDIO_BYTES: TTS_VOICE_MAX_BYTES } = require('./tts/voice-settings.cjs');
 const { createMarkdownEditor, installMarkdownRoutes } = require('./modules/article-editor.cjs');
@@ -14,6 +13,7 @@ const {
   AUDIOBOOK_AUTHOR, createAudiobookLibrary, createProgressStore, loadAudiobookConfig, installAudiobookRoutes,
 } = require('./modules/audiobooks.cjs');
 const { createBookmarkStore, installBookmarkRoutes } = require('./modules/bookmarks.cjs');
+const { createScrapeJob, installScrapeRoutes } = require('./modules/scrape.cjs');
 const { installMediaRoutes } = require('./modules/media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./lib/login-limiter.cjs');
 const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./lib/security-headers.cjs');
@@ -40,7 +40,7 @@ const {
 } = require('./lib/infographics.cjs');
 const {
   buildArticleSearchIndex, articleDisplayAuthor, uniqueArticles, replaceInfographicYearArticles,
-  replaceArticleIndexEntry, upsertArticleIndexEntries, parseScraperChangedFiles, SCRAPER_CHANGED_FILES_MARKER,
+  replaceArticleIndexEntry, upsertArticleIndexEntries, parseScraperChangedFiles,
 } = require('./lib/article-index.cjs');
 
 // Kommagetrennte Adressen/Subnetze bzw. Express-Schlüsselwörter (loopback,
@@ -144,7 +144,6 @@ const archive = {
   fuseIndex: null,
 };
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
-let scrapeState = { running: false, sources: null, exitCode: null, startedAt: null, done: true, error: null };
 // Zentrale Sperre für Schreib- und Indexaufträge (archive-lock.cjs); die
 // Aufträge mit eigenem Zustand werden unten nach ihrer Erzeugung registriert.
 const archiveLock = createArchiveLock();
@@ -196,10 +195,17 @@ const ttsJobs = createTtsJobs({
   selectedVoice: ttsVoiceSettings.selectedVoice,
   mediaUrl: filename => audioFileUrl(path.relative(AUDIO_DIR, filename).split(path.sep).map(encodeURIComponent).join('/'), filename),
 });
+// Scraper als eigener Prozess; danach die gemeldeten Artikel gezielt neu einlesen.
+const scrapeJob = createScrapeJob({
+  scraperDir: path.join(__dirname, 'scraper'),
+  reindex: () => buildIndex(),
+  refreshFiles: files => refreshScrapedMarkdownFiles(files),
+  reindexRunning: () => reindexState.running,
+});
 // Editor und TTS prüfen archiveLock.busy und setzen danach synchron ihren eigenen
 // Zustand; ihr eigener Eintrag ist zum Prüfzeitpunkt daher noch nicht aktiv.
 archiveLock.register('Index-Neuaufbau', () => reindexState.running);
-archiveLock.register('Scraper-Lauf', () => scrapeState.running);
+archiveLock.register('Scraper-Lauf', () => scrapeJob.running);
 archiveLock.register('Artikel speichern', () => markdownEditor.running);
 archiveLock.register('Audio-Erzeugung', () => ttsJobs.running);
 
@@ -1621,97 +1627,6 @@ app.post('/api/new-infographic', requireAdminAccess, async (req, res) => {
   } finally { release(); }
 });
 
-// ─── Scrape (Admin): externen Scraper starten, danach automatisch reindexen ──
-//
-// Startet scraper/scrape_all.js als eigenen Node-Prozess (self-contained mit
-// eigenen node_modules; playwright bleibt aus den App-Abhängigkeiten heraus).
-// Läuft im Hintergrund; der Fortschritt wird über /api/scrape/status gepollt.
-
-// Die Ausgabe enthält Quellen, Pfade und Fehlermeldungen des Scrapers: nur für Admins.
-app.get('/api/scrape/status', requireAdminAccess, (_req, res) => res.json(scrapeState));
-
-app.post('/api/scrape', requireAdminAccess, (req, res) => {
-  // Scrape und Reindex sind bei der Sperre registriert; die 409-Antwort nennt den Auftrag.
-  if (archiveLock.busy) return sendArchiveBusy(res, archiveLock, { started: false });
-  // scrapeState.running wird unten synchron gesetzt und belegt damit die Sperre.
-
-  // Optionale Quellenauswahl: { sources: ["blog","facebook","telegram"] }.
-  // Ohne Angabe laufen alle drei (Reihenfolge bestimmt der Scraper selbst).
-  const allowed = ['blog', 'facebook', 'telegram'];
-  const sources = Array.isArray(req.body?.sources)
-    ? req.body.sources.filter(s => allowed.includes(s))
-    : [];
-
-  const scriptPath = path.join(__dirname, 'scraper', 'scrape_all.js');
-  const args = [scriptPath, ...sources.map(s => `--${s}`)];
-
-  scrapeState = {
-    running: true,
-    sources: sources.length ? sources : allowed,
-    exitCode: null,
-    startedAt: Date.now(),
-    done: false,
-    error: null,
-    output: '',
-  };
-  console.log(`Scrape gestartet: ${scrapeState.sources.join(', ')}`);
-
-  // Ausgabe des Kindprozesses für die Live-Anzeige im Web-UI sammeln (gekappt
-  // auf die letzten ~20 000 Zeichen, damit ein großer Erstlauf den Speicher
-  // nicht sprengt). Die Zusammenfassung des Scrapers steht am Ende.
-  const captureOutput = (chunk) => {
-    scrapeState.output += chunk.toString();
-    if (scrapeState.output.length > 20000) {
-      scrapeState.output = scrapeState.output.slice(-20000);
-    }
-  };
-
-  const child = spawn(process.execPath, args, { cwd: path.join(__dirname, 'scraper') });
-  child.stdout.on('data', d => { process.stdout.write(`[scrape] ${d}`); captureOutput(d); });
-  child.stderr.on('data', d => { process.stderr.write(`[scrape] ${d}`); captureOutput(d); });
-  child.on('error', err => {
-    console.error('Scrape konnte nicht gestartet werden:', err.message);
-    scrapeState = { ...scrapeState, running: false, done: true, exitCode: -1, error: err.message };
-  });
-  child.on('close', code => {
-    const changedFiles = parseScraperChangedFiles(scrapeState.output);
-    if (scrapeState.output.includes(SCRAPER_CHANGED_FILES_MARKER)) {
-      scrapeState.output = scrapeState.output.split(/\r?\n/)
-        .filter(line => !line.startsWith(SCRAPER_CHANGED_FILES_MARKER)).join('\n');
-    }
-    console.log(`Scrape beendet (exit ${code}) — ${changedFiles === null ? 'vollständiger Sicherheits-Reindex' : `${changedFiles.length} geänderte Artikel`} …`);
-    scrapeState = { ...scrapeState, running: false, done: true, exitCode: code };
-    // Auch bei Teil-Fehler (exit 1) bereits gespeicherte Artikel aufnehmen. Bei
-    // älteren Scraper-Versionen ohne Manifest bleibt der Voll-Reindex erhalten.
-    if (!reindexState.running) {
-      const refresh = changedFiles === null ? buildIndex() : refreshScrapedMarkdownFiles(changedFiles);
-      refresh.catch(error => {
-        console.error('Gezielter Scraper-Reindex fehlgeschlagen:', error);
-        if (changedFiles !== null && !reindexState.running) buildIndex().catch(console.error);
-      });
-    }
-  });
-
-  res.json({ started: true, sources: scrapeState.sources });
-});
-
-// Letzte 100 Zeilen des Scraper-Logs (für die "Scrape-Log anzeigen"-Ansicht).
-app.get('/api/scrape/log', requireAdminAccess, (_req, res) => {
-  const logPath = path.join(__dirname, 'scraper', 'scrape_all.log');
-  try {
-    const stat = fs.statSync(logPath);
-    const start = Math.max(0, stat.size - 256 * 1024);  // nur den Tail lesen (Log rotiert nicht)
-    const buf = Buffer.alloc(stat.size - start);
-    const fd = fs.openSync(logPath, 'r');
-    fs.readSync(fd, buf, 0, buf.length, start);
-    fs.closeSync(fd);
-    const text = buf.toString('utf8').split(/\r?\n/).slice(-100).join('\n');
-    res.json({ text });
-  } catch {
-    res.json({ text: '(keine Logdatei gefunden)' });
-  }
-});
-
 function duplicateDecisionView(decision) {
   const blog = archive.articleById.get(decision.blogId);
   const facebook = archive.articleById.get(decision.facebookId);
@@ -2044,6 +1959,7 @@ app.get('/api/articles/*', attachUser, async (req, res) => {
 
 installTtsRoutes(app, requireAdminAccess, ttsJobs, undefined, ttsVoiceSettings);
 installMarkdownRoutes(app, requireAdminAccess, markdownEditor);
+installScrapeRoutes(app, { requireAdmin: requireAdminAccess, job: scrapeJob, lock: archiveLock });
 installUserRoutes(app, {
   store: userStore, requireAuth, requireAdmin: requireAdminAccess, getAuthors: () => archive.meta.authors,
   passwordLimiter: loginLimiter,

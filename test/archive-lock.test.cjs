@@ -123,10 +123,12 @@ test('server.js: keine verstreuten Busy-Prüfungen mehr, alle Aufträge an der z
   assert.doesNotMatch(server, /\.running \|\| \w+(State)?\.running/);
   // Start von Reindex und Scrape prüft nur die Sperre (409 mit Auftragsname).
   assert.doesNotMatch(server, /if \((reindex|scrape)State\.running\) return res/);
-  for (const route of ["app.post('/api/reindex'", "app.post('/api/scrape'"]) {
-    const start = server.indexOf(route);
-    assert.match(server.slice(start, start + 400), /if \(archiveLock\.busy\) return sendArchiveBusy\(res, archiveLock, \{ started: false \}\);/, route);
-  }
+  const reindexRoute = server.slice(server.indexOf("app.post('/api/reindex'"));
+  assert.match(reindexRoute.slice(0, 400), /if \(archiveLock\.busy\) return sendArchiveBusy\(res, archiveLock, \{ started: false \}\);/);
+  const scrape = fs.readFileSync(path.join(__dirname, '..', 'modules', 'scrape.cjs'), 'utf8');
+  const scrapeRoute = scrape.slice(scrape.indexOf("app.post('/api/scrape'"));
+  assert.match(scrapeRoute.slice(0, 400), /if \(lock\.busy\) throw lock\.conflictError\(\{ started: false \}\);/);
+  assert.match(server, /archiveLock\.register\('Scraper-Lauf', \(\) => scrapeJob\.running\)/);
   for (const label of ['Index-Neuaufbau', 'Scraper-Lauf', 'Artikel speichern', 'Audio-Erzeugung']) {
     assert.match(server, new RegExp(`archiveLock\\.register\\('${label}'`));
   }
