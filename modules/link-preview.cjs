@@ -32,11 +32,6 @@ function resolvePreviewImagePath(item, { wwwDir, audioDir }) {
   return resolveMediaRequest(root, rel)?.absPath || null;
 }
 
-function ogDescription(article) {
-  const raw = (article.summary || article.excerpt || '').replace(/\s+/g, ' ').trim();
-  return raw.length > 200 ? raw.slice(0, 197).trimEnd() + '…' : raw;
-}
-
 // archive: Indexzustand aus server.js; duplicateCanonicalFor: Blogartikel einer
 // verknüpften Dublette; audiobooks: Hörbuch-Bibliothek (Gastansicht, ohne private Bücher).
 function installLinkPreviewRoutes(app, { archive, duplicateCanonicalFor, audiobooks, wwwDir, audioDir }) {
@@ -59,20 +54,19 @@ function installLinkPreviewRoutes(app, { archive, duplicateCanonicalFor, audiobo
     let tags;
     if (article) {
       const title = escapeHtml(article.title || 'WebArchiv');
-      const desc  = escapeHtml(ogDescription(article));
       const img   = article.imageUrl ? base + '/og-image/' + shareIdFor(canonicalId) : '';
+      // Bewusst ohne (og:/twitter:)description: Die Vorschau zeigt neben dem Bild nur
+      // den Titel, der dadurch den ganzen Platz bekommt. Ohne og:description würden
+      // Messenger auf <meta name="description"> zurückfallen, deshalb fehlt auch diese.
       tags = `
     <title>${title}</title>
-    <meta name="description" content="${desc}" />
     <meta property="og:site_name" content="WebArchiv" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="${title}" />
-    <meta property="og:description" content="${desc}" />
     <meta property="og:url" content="${escapeHtml(canonical)}" />
     ${img ? `<meta property="og:image" content="${escapeHtml(img)}" />` : ''}
     <meta name="twitter:card" content="${img ? 'summary_large_image' : 'summary'}" />
     <meta name="twitter:title" content="${title}" />
-    <meta name="twitter:description" content="${desc}" />
     ${img ? `<meta name="twitter:image" content="${escapeHtml(img)}" />` : ''}`;
     } else {
       tags = `
@@ -214,5 +208,5 @@ function installPromptRoutes(app, { attachUser, promptsDir }) {
 }
 
 module.exports = {
-  resolvePreviewImagePath, ogDescription, parsePromptDefinition, installLinkPreviewRoutes, installPromptRoutes,
+  resolvePreviewImagePath, parsePromptDefinition, installLinkPreviewRoutes, installPromptRoutes,
 };
