@@ -2282,3 +2282,70 @@ die Richtlinie liegt in `security-headers.cjs`. Rückweg: `CSP_MODE=report`, `su
 **Doku nachgezogen:** `LXC-container node.js Setup.md` (Env-Datei mit `enforce`, Prüf- und Rückweg), `README.md`,
 `CLAUDE.md`/`AGENTS.md` (Produktion läuft mit `enforce`), `code-review_2026-01-28.md` (2.8 und 3.2 als erledigt).
 Damit sind alle Punkte aus Teil 2 des Reviews umgesetzt.
+
+## 54. Aktualisierung 31.10.2026 – Modulstruktur: `lib/` und `modules/` (Review-Idee 3.1)
+
+Die Frage aus der To-Do-Liste („Warum liegen einige CJS-Module unter `lib/`, andere im Root?“) hatte keinen
+sachlichen Grund. Umgesetzt in acht Schritten, je ein Commit, Tests nach jedem Schritt grün:
+
+| Schritt | Commit | Inhalt |
+|---|---|---|
+| 1 | `37f8da8` | `html-sanitizer`, `login-limiter`, `archive-lock`, `security-headers`, `duplicates` nach `lib/` |
+| 2 | `a8d5bf6` | `user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files` nach `modules/` |
+| 3 | `aafb769` | Indexzustand als Objekt `archive`; `sendArchiveBusy` nach `lib/archive-lock.cjs`; `jsonRoute` mit Zusatzfeldern (`httpError(status, message, extra)`) und `error.rollbackError` |
+| 4 | `4e0b66c` | Scrape nach `modules/scrape.cjs` (Kindprozess per `spawn` austauschbar für Tests) |
+| 5 | `e198255` | Dubletten nach `modules/duplicate-admin.cjs` |
+| 6 | `102acbb` | Infografiken nach `modules/infographic-admin.cjs` |
+| 7 | `a23eca2` | Artikel-Liste/-Detail und `/api/meta` nach `modules/articles.cjs`, Link-Vorschau und Prompts nach `modules/link-preview.cjs`; neu `apiError(code)` |
+| 8 | (dieser) | Regeltests, Doku |
+
+**Ergebnis:**
+- `server.js` hat noch rund 900 statt 2.139 Zeilen: Zustand (`archive`, Stores, Sitzungen, Sperre), Index-Aufbau
+  und Teil-Reindexe, `canAccessAuthor`, `duplicateCanonicalFor`, Anmeldung, Reindex-Routen, Verdrahtung.
+- Alle Routen der Module laufen über `jsonRoute`. Exklusive Schreibaufträge nutzen `lock.run(label, task)`;
+  `tryAcquire` und eigene `try/catch` + `sendRouteError`-Hüllen gibt es in Routen nicht mehr.
+- **Kleine Verhaltensänderungen:** JSON-Antworten von Scrape, Dubletten, Infografiken und Artikeln tragen jetzt
+  `Cache-Control: no-store`. Scheitert im Dublettenvergleich der Migrationsplan an einem Systemfehler, sieht die
+  Oberfläche eine allgemeine Meldung statt der rohen Fehlermeldung.
+- **Neue Verhaltenstests:** `test/scrape.test.cjs`, `test/duplicate-admin.test.cjs`, `test/infographic-admin.test.cjs`,
+  `test/articles.test.cjs`, `test/link-preview.test.cjs` (Routen mit Temp-Archiv, Sperre, Zurückrollen).
+- **Regeltests** (`test/code-rules.test.cjs`, `test/error-responses.test.cjs`, `test/archive-lock.test.cjs`): kein
+  `.cjs` im Root; `lib/` lädt weder `modules/` noch `server.js`; kein Skript oder Modul lädt `server.js`; kein
+  `sendRouteError`/`tryAcquire` in `server.js` und `modules/`; atomares Schreiben und keine rohen Fehlertexte auch in
+  `modules/`; Pfadregel (`startsWith`) gilt auch für `modules/`.
+- Doku: CLAUDE.md/AGENTS.md (Abschnitt „Backend“ neu gefasst, „Concurrent jobs“ auf `lock.run`), README
+  (Architektur, Projektstruktur), `code-review_2026-01-28.md` (3.1 erledigt), To-Do-Liste (Frage beantwortet).
+
+**Deployment (WinSCP):** `server.js`, die Ordner `lib/` und `modules/` sowie `scraper/scrape_all.js` und die
+Frontend-Dateien aus Abschnitt 56 kopieren. **Auf dem LXC löschen** (werden nicht mehr geladen):
+`html-sanitizer.cjs`, `login-limiter.cjs`, `archive-lock.cjs`, `security-headers.cjs`, `duplicates.cjs`,
+`user-store.cjs`, `bookmarks.cjs`, `audiobooks.cjs`, `audiobook-extras.cjs`, `article-editor.cjs`, `media-files.cjs`
+im App-Verzeichnis. Danach `sudo systemctl restart nodeapp`.
+
+## 55. Aktualisierung 31.10.2026 – Scraper: Blog meldet nur noch `[OK]`/`[SKIP]`
+
+Beim Blog stand vor jeder Ergebniszeile zusätzlich `[Artikel] <URL>`; Facebook und Telegram melden nur die
+Ergebniszeile. Die Zeile entfällt (`b724fbc`, `scraper/scrape_all.js`). Fehler nennen die URL weiter
+(`[FEHLER] <URL>: …`).
+
+## 56. Aktualisierung 31.10.2026 – Teilen-Links und Link-Vorschau in WhatsApp
+
+**Links mit Leerzeichen brachen ab** (`1d849c2`): Beim Teilen nach WhatsApp wurde `%20` wieder zu einem
+Leerzeichen (decodeURI-Muster: `%2F` blieb), und der Link endete dort. Artikel- und Hörbuch-Details liefern jetzt
+eine kurze `shareId` (`lib/share-ids.cjs`: 12 Zeichen `[A-Za-z0-9_-]` aus dem SHA-256 der ID). Die Teilen-Buttons
+teilen `/a/<shareId>` (`shareUrl` in `public/app.js`, genutzt in `app-detail.js` und `audiobooks.js`). `/a/*` und
+`/og-image/*` nehmen die `shareId` oder wie bisher die volle ID an und nennen die `shareId` als kanonische
+`og:url`/`og:image`. Die Zuordnung wird nach jedem Reindex neu berechnet.
+
+**Keine Vorschau (Bild, Titel) in WhatsApp** (`d5b0864`): NPMplus hatte beim Proxy-Host die Option „Send noindex
+header and block some user agents“ aktiv. Sie bricht Anfragen von Crawlern (`facebookexternalhit`, `TelegramBot`,
+`Twitterbot`, `Googlebot` …) ohne Antwort ab; Cloudflare meldet dann 520. Die Option ist jetzt aus; den
+`X-Robots-Tag: noindex, nofollow` setzt stattdessen die App (`lib/security-headers.cjs`). Prüfen:
+`curl -s -o /dev/null -w "%{http_code}\n" -A "facebookexternalhit/1.1" https://webarchiv.bruechmann.xyz/a/<shareId>`
+(erwartet 200). WhatsApp merkt sich Vorschauen pro Link; zum Testen einen noch nicht geteilten Artikel nehmen.
+
+**Nur Titel statt Titel + Text** wurde versucht (`e654094`) und zurückgenommen (`6d28465`): WhatsApp zeigt `og:title`
+immer in höchstens zwei Zeilen, ohne Beschreibung bleibt der Platz darunter nur leer.
+
+**Deployment:** `lib/share-ids.cjs`, `lib/security-headers.cjs`, `modules/articles.cjs`, `modules/audiobooks.cjs`,
+`modules/link-preview.cjs`, `public/app.js`, `public/app-detail.js`, `public/audiobooks.js`; Dienst neu starten.

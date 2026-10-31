@@ -40,32 +40,38 @@ must not pin versions.
 
 ## Architecture
 
-**Backend: `server.js`, `lib/` and `modules/`.** `server.js` holds all module state (index,
-stores, sessions, lock), the wiring and the remaining routes; pure logic lives in `lib/` and can be required by scripts
-and tests without starting the server: `article-parser.cjs` (`parseArticle`, date/search parsing,
-taxonomy), `infographics.cjs` (`linkInfographics`, naming, header editing, `moveInfographicFiles`),
-`archive-files.cjs` (directory cache, `findSibling`, file URLs, `isPathInside`, `resolveUnder`,
-`yearFromRelativeDir` — the only path-containment checks; never write `startsWith(root + path.sep)`), `article-index.cjs`
-(Fuse index, list helpers for partial reindex, scraper manifest), `app-shell.cjs` (PWA version, stat-based
-file caches for `index.html` and the service-worker version), `article-body-cache.cjs` (rendered article
-bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs` (filter categories), `session-file-store.cjs`
-(sessions survive restarts in `sessions.json`, gitignored; only when `server.js` runs as main module),
-`http-errors.cjs` (`httpError`, `jsonRoute`, `isCrossSite`, `sendApiError` — API errors are
-`{ error: <German message>, code? }`; the frontend reacts only to `code`, never to message text), `atomic-file.cjs` (`writeFileAtomic`,
-`writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`); also the lock, security and duplicate-detection modules
-(`archive-lock.cjs`, `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below). Never `require('./server.js')` from scripts — import from `lib/`.
-Module routes use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors;
-`httpError(status, message, extra)` adds fields to the error response, a handler whose rollback failed attaches
-it as `error.rollbackError` and rethrows);
-every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).
-New pure helpers belong in `lib/`, not in `server.js`. Feature modules with routes live in `modules/`: a `create…`
-factory for their state plus `install…Routes(app, deps)` (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`,
-`article-editor`, `media-files`, `scrape`, `duplicate-admin`, `infographic-admin`, `articles`, `link-preview`); they
-import from `lib/`, never
-from `server.js`. Exclusive writes in these modules use `lock.run(label, task)` inside `jsonRoute`. The index state lives in the
-`archive` object in `server.js` (`articles`, `sourceArticles`, `articleById`, `infographicGroups`, `groupAnchorOf`,
-`duplicateCanonicalOf`, `duplicateCandidates`, `meta`, `fuseIndex`); every reindex replaces its fields, so code that
-gets `archive` reads `archive.articleById` at call time and never keeps a map from install time. The index works in three phases:
+**Backend: `server.js` + `lib/` + `modules/`** (layout enforced by `test/code-rules.test.cjs`; no `.cjs` in the root).
+
+- **`server.js`** holds the state and the wiring: the index state in the `archive` object (`articles`,
+  `sourceArticles`, `articleById`, `infographicGroups`, `groupAnchorOf`, `duplicateCanonicalOf`, `duplicateCandidates`,
+  `meta`, `fuseIndex`), stores, sessions, the lock, index build/partial reindex, `canAccessAuthor`,
+  `duplicateCanonicalFor`, login/session middleware and the reindex routes. Every reindex replaces the fields of
+  `archive`, so code that gets `archive` reads `archive.articleById` at call time and never keeps a map from install time.
+- **`lib/`** — pure helpers without routes, usable from scripts and tests without starting the server; `lib/` never
+  imports `modules/` or `server.js`: `article-parser.cjs` (`parseArticle`, date/search parsing, taxonomy),
+  `infographics.cjs` (`linkInfographics`, naming, header editing, `moveInfographicFiles`), `archive-files.cjs` (directory
+  cache, `findSibling`, file URLs, `isPathInside`, `resolveUnder`, `yearFromRelativeDir` — the only path-containment
+  checks; never write `startsWith(root + path.sep)`), `article-index.cjs` (Fuse index, list helpers for partial reindex,
+  scraper manifest), `app-shell.cjs` (PWA version, stat-based file caches for `index.html` and the service-worker
+  version), `article-body-cache.cjs` (rendered article bodies by path, invalidated by size/mtime, LRU), `taxonomy.cjs`
+  (filter categories), `session-file-store.cjs` (sessions survive restarts in `sessions.json`, gitignored; only when
+  `server.js` runs as main module), `http-errors.cjs` (`httpError`, `apiError`, `jsonRoute`, `isCrossSite`,
+  `sendApiError` — API errors are `{ error: <German message>, code? }`; the frontend reacts only to `code`, never to
+  message text), `atomic-file.cjs` (`writeFileAtomic`, `writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`),
+  `share-ids.cjs` (short share ids), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
+  `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
+- **`modules/`** — feature modules with routes: a `create…` factory for their state plus `install…Routes(app, deps)`
+  (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files`, `scrape`,
+  `duplicate-admin`, `infographic-admin`, `articles`, `link-preview`). They import from `lib/` (and sibling modules),
+  get everything from `server.js` as `deps`, and nobody — scripts included — ever `require`s `server.js`.
+- **Routes** use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors); no own
+  `try/catch` + `sendRouteError` wrappers. `httpError(status, message, extra)` adds fields to the error response,
+  `apiError(code)` throws a fixed `{ error, code }`, `mapError` translates e.g. `ENOENT`/`EEXIST`, and a handler whose
+  rollback failed attaches it as `error.rollbackError` and rethrows. Exclusive writes use `lock.run(label, task)`.
+- Every file write uses `lib/atomic-file.cjs` — no hand-written temp+rename code (only `tts/` keeps its own helpers).
+  New pure helpers belong in `lib/`, new route groups in `modules/`, not in `server.js`.
+
+The index works in three phases:
 
 1. **Index build (`buildIndex` → `scanDir` → `parseArticle`).** On startup (and on reindex) it
    recursively walks `www/`. Top-level dirs are *authors*; nested 4-digit dirs (`2018/`) are
@@ -223,9 +229,10 @@ the stack (`WebArchivLayers.top()`), not `document.querySelector('dialog[open]')
 
 **Concurrent jobs:** all archive writes and index rebuilds go through the single lock in
 `lib/archive-lock.cjs` (`archiveLock` in `server.js`). Jobs with their own state (reindex, scrape, editor,
-TTS) are `register`ed once; new write routes use `archiveLock.tryAcquire(label)` + `release()` in
-`finally` (or `archiveLock.run`) and answer conflicts with `sendArchiveBusy(res, archiveLock)` (inside `jsonRoute`: `throw archiveLock.conflictError()`) — never add new
-hand-written `x.running || y.running` checks. Internal partial reindexes triggered by the lock holder
+TTS) are `register`ed once; new write routes run inside `jsonRoute` as `lock.run(label, task)` (a conflict becomes
+409 with the running job's name) or check `lock.busy` and `throw lock.conflictError()`; only routes outside `jsonRoute`
+(reindex) answer with `sendArchiveBusy(res, archiveLock)`. No `tryAcquire` in routes and never new hand-written
+`x.running || y.running` checks. Internal partial reindexes triggered by the lock holder
 do not acquire again.
 
 **Security modules:** `lib/login-limiter.cjs` (429 after repeated failed password checks on `/api/login`

@@ -27,5 +27,7 @@ Oct 27 18:11:14 nodejs node[28566]: <E2><9C><93> 6038 articles, 42 H<C3><B6>rb<C
   → Die drei Startmeldungen sind auf ASCII umgestellt. Umlaute in anderen Meldungen (Buchtitel, Dateinamen,
   Auftragsnamen) lassen sich nicht vermeiden; die eigentliche Ursache ist die Locale der lesenden Shell
   (`LANG=C.UTF-8`, siehe „Stolperfalle: Umlaute im Journal“ in `LXC-container node.js Setup.md`).
-* [ ] Gibt es einen Grund, warum einige CJS-Module unter "lib/" liegen und andere im root des Projektes ?
+* [x] Gibt es einen Grund, warum einige CJS-Module unter "lib/" liegen und andere im root des Projektes ?
+  Nein, das war historisch gewachsen. Seit 31.10.2026 aufgeräumt: `lib/` = reine Hilfen, `modules/` = Fachmodule
+  mit Routen, im Root nur noch `server.js` (siehe `code-review_2026-01-28.md`, 3.1, und Session.MD, Abschnitt 54).
 

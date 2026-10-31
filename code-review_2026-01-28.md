@@ -212,7 +212,18 @@ Der eigentliche XSS-Schutz der CSP greift erst mit `enforce`. Der Bestand sprich
 
 ## 3. Verbesserungsideen
 
-### 3.1 Modulstruktur: Root oder `lib/` (offene Frage aus der To-Do-Liste)
+### 3.1 Modulstruktur: Root oder `lib/` (offene Frage aus der To-Do-Liste) – ✅ umgesetzt
+
+> **Nachtrag 31.10.2026:** In acht Schritten umgesetzt (Commits `37f8da8` bis `a23eca2`, Abschluss in Session.MD,
+> Abschnitt 54). Im Root liegt kein `.cjs` mehr. Unter `lib/` liegen die reinen Hilfen, dazu `html-sanitizer`,
+> `login-limiter`, `archive-lock`, `security-headers` und `duplicates`. Unter `modules/` liegen die sechs bisherigen
+> Routenmodule und neu `scrape`, `duplicate-admin`, `infographic-admin`, `articles` und `link-preview`.
+> `server.js` schrumpfte von 2.139 auf **rund 900 Zeilen**: Zustand (Objekt `archive`), Index-Aufbau, Anmeldung,
+> Reindex und Verdrahtung. Die Schätzung „unter 700“ war zu knapp: Middleware, Anmeldung und Index-Aufbau
+> bleiben bewusst dort. Alle Routen der Module laufen über `jsonRoute`; Schreibaufträge nutzen `lock.run`.
+> Regeltests in `test/code-rules.test.cjs` sichern das ab: kein Root-Modul, `lib/` lädt weder `modules/` noch
+> `server.js`, niemand lädt `server.js`, kein `sendRouteError`/`tryAcquire` in Routen, atomares Schreiben und keine
+> rohen Fehlertexte auch in `modules/`.
 
 Einen sachlichen Grund für die heutige Aufteilung gibt es nicht. Sie ist historisch gewachsen: `lib/` entstand beim Auslagern aus `server.js`, die Root-Module gab es schon vorher. Vorschlag:
 
