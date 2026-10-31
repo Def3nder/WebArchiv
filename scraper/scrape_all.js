@@ -826,7 +826,6 @@ async function processBlogListingPage(page, context, source, processedUrls, skip
     if (skipState.stop) break;
     if (processedUrls.has(articleUrl)) continue;
 
-    logger.info(`[Artikel] ${articleUrl}`);
     const articlePage = await context.newPage();
     try {
       await articlePage.goto(articleUrl, { waitUntil: "networkidle", timeout: REQUEST_TIMEOUT * 1000 });
