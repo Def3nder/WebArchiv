@@ -500,7 +500,10 @@ Repository.
 - **Gewichtete Suche** über `Fuse.js` (Titel×3, Episodennummer×2,
   Autor×1,5, Kategorien×1, Auszug×0,8). Der vollständige Body ist kein
   eigener Suchschlüssel.
-- **Volltextsuche** (`fulltext=1`, `lib/fulltext.cjs`): hängt an die Fuse-Treffer alle weiteren Artikel an, deren
+- **Volltextsuche** (`fulltext=1`, `lib/fulltext.cjs`): eingeschaltet über die **Lupe vor dem Suchfeld** (gold mit
+  dezentem Kreis = an, entfärbt = aus; Platzhalter „Volltext: Wörter und Wortteile im Artikeltext…“; pro Gerät in
+  `localStorage` unter `wa-search-fulltext` gemerkt, eine laufende Suche startet beim Umschalten neu). Sie
+  hängt an die Fuse-Treffer alle weiteren Artikel an, deren
   Titel, Zusammenfassung oder Text alle Suchwörter enthält – auch innerhalb von Wörtern („angst“ findet
   „Verlustangst“), ohne Groß-/Kleinschreibung, Umlautpunkte und Akzente (ä = a, ß = ss). Phrasen in
   Anführungszeichen (`"inneres Kind"`) müssen zusammenhängend vorkommen; Datums-Tokens und alle Filter gelten weiter.

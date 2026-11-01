@@ -8,6 +8,8 @@ const state = {
   year: '',
   category: '',
   telegram: false,
+  // Volltextsuche (Lupe im Suchfeld); pro Gerät gemerkt, nicht Teil des Sitzungsstands.
+  fulltext: false,
   infographicFilter: 'all',
   bookmarks: false,
   page: 1,
@@ -73,6 +75,7 @@ const $app            = document.getElementById('app');
 const $count          = document.getElementById('article-count');
 const $searchInput    = document.getElementById('search-input');
 const $searchClear    = document.getElementById('search-clear');
+const $searchFulltext = document.getElementById('search-fulltext');
 const $filterAuthor   = document.getElementById('filter-author');
 const $filterYear     = document.getElementById('filter-year');
 const $filterCategory = document.getElementById('filter-category');
@@ -774,6 +777,7 @@ async function fetchArticles(params = {}) {
   if (params.year)     qs.set('year', params.year);
   if (params.category) qs.set('category', params.category);
   if (params.telegram) qs.set('telegram', '1');
+  if (params.q && params.fulltext) qs.set('fulltext', '1');
   if (params.infographicFilter === 'posters') qs.set('infographic', 'poster');
   else if (params.infographicFilter === 'classic') qs.set('infographic', 'classic');
   if (params.infographicReview) qs.set('infographicReview', '1');
@@ -1118,6 +1122,7 @@ async function loadArticles() {
       year:     state.year,
       category: state.category,
       telegram: state.telegram,
+      fulltext: state.fulltext,
       infographicFilter: state.author === INFOGRAPHICS_AUTHOR ? state.infographicFilter : 'all',
       infographicReview: isInfographicReviewMode(),
       bookmarks: state.bookmarks,
@@ -1354,6 +1359,35 @@ $searchInput.addEventListener('input', () => {
   searchTimer = setTimeout(() => {
     loadArticles();
   }, 300);
+});
+
+// Lupe als Schalter: farbig = Volltext (auch im Artikeltext, auch in Wortteilen), entfärbt = Suche wie bisher.
+const SEARCH_FULLTEXT_KEY = 'wa-search-fulltext';
+const SEARCH_PLACEHOLDERS = {
+  off: 'Suche nach Artikel, Autor, Kategorie, Datum…',
+  on: 'Volltext: Wörter und Wortteile im Artikeltext…',
+};
+
+function applySearchFulltext() {
+  const label = state.fulltext ? 'Volltextsuche ausschalten' : 'Volltextsuche einschalten';
+  $searchFulltext.setAttribute('aria-pressed', String(state.fulltext));
+  $searchFulltext.title = label;
+  $searchFulltext.setAttribute('aria-label', label);
+  $searchInput.placeholder = state.fulltext ? SEARCH_PLACEHOLDERS.on : SEARCH_PLACEHOLDERS.off;
+}
+
+try { state.fulltext = deviceStorage()?.getItem(SEARCH_FULLTEXT_KEY) === '1'; } catch { /* Speicher gesperrt */ }
+applySearchFulltext();
+
+$searchFulltext.addEventListener('click', () => {
+  state.fulltext = !state.fulltext;
+  try { deviceStorage()?.setItem(SEARCH_FULLTEXT_KEY, state.fulltext ? '1' : '0'); } catch { /* Speicher gesperrt */ }
+  applySearchFulltext();
+  // Eine laufende Suche gleich mit dem neuen Modus wiederholen.
+  if (state.q) {
+    state.page = 1;
+    loadArticles();
+  }
 });
 
 $searchClear.addEventListener('click', () => {

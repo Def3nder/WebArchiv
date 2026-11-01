@@ -147,14 +147,37 @@ select { font: inherit; color: inherit; }
   position: relative;
   max-width: 520px;
 }
-.search-icon {
+/* Lupe = Schalter für die Volltextsuche: entfärbt aus, gold mit dezentem Kreis an. */
+.search-fulltext {
   position: absolute;
-  left: 12px;
+  left: 6px;
   top: 50%;
   transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-muted);
+  transition: color var(--transition), background-color var(--transition);
+}
+.search-fulltext[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+@media (hover: hover) {
+  .search-fulltext:hover { color: var(--text); }
+  .search-fulltext[aria-pressed="true"]:hover { color: var(--accent); }
+}
+.search-fulltext:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+.search-icon {
   width: 16px;
   height: 16px;
-  color: var(--text-muted);
   pointer-events: none;
 }
 #search-input {

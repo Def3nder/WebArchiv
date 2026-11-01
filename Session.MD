@@ -2479,6 +2479,24 @@ Leerlauf ohne Watcher-Meldung, also keine Reindex-Schleife.
 `test/fulltext.test.cjs` (Normalisieren, Zerlegen, Treffer, Suchtext im Scan), `test/articles.test.cjs` (Reihenfolge
 Fuse vor Text, Wortteile, Umlaute, Rechte, Telegram, Phrase plus Jahr, alle Wörter nötig).
 
-**Noch offen:** Schalter in der Oberfläche (goldene Lupe vor dem Suchfeld, Platzhaltertext) im nächsten Commit.
 **Deployment:** `lib/fulltext.cjs` (neu), `lib/article-scan.cjs`, `lib/index-cache.cjs`, `modules/articles.cjs`;
 Dienst neu starten. Der erste Start baut den Cache einmal neu auf.
+
+## 63. Aktualisierung 01.11.2026 – Volltextsuche, Oberfläche: Lupe als Schalter
+
+- Die Lupe vor dem Suchfeld ist jetzt ein Knopf (`#search-fulltext`, 28 × 28 px, `aria-pressed`, Tooltip und
+  `aria-label` „Volltextsuche ein-/ausschalten“). Aus: entfärbt wie bisher (`--text-muted`). An: Akzentfarbe Gold mit
+  dezentem Kreis (`--accent` auf `--accent-glow`), so wie in der vorab gezeigten Vorschau gewählt.
+- Platzhalter wechselt mit: aus „Suche nach Artikel, Autor, Kategorie, Datum…“, an „Volltext: Wörter und Wortteile im
+  Artikeltext…“.
+- Der Modus liegt pro Gerät in `localStorage` (`wa-search-fulltext`), nicht im Sitzungsstand; Lesen und Schreiben sind
+  gegen gesperrten Speicher abgesichert. Beim Umschalten mit Suchtext startet die Suche sofort neu.
+  `fetchArticles` hängt `fulltext=1` nur mit Suchtext an.
+
+**Geprüft im Browser** (lokaler Server, als Gast): „angst“ 49 Artikel, nach Klick auf die Lupe 75 (Anfrage mit
+`fulltext=1`); Zustand übersteht Neuladen; Ausschalten wieder 49; Gold im hellen (`#9a6f1a`) und dunklen Design
+(`#c9a84c`) mit Kreis; in Handy-Breite sitzt die Lupe im Suchfeld; keine Konsolenfehler. Test
+`test/search-fulltext-ui.test.cjs` (Markup, CSS, Speichern, Platzhalter, Anfrage).
+
+**Deployment:** `public/index.html`, `public/app.js`, `public/css/base.css`; Browser neu laden (die `?v=`-Kennungen
+setzt der Server). Für die Treffer im Text muss der Server-Teil aus Abschnitt 62 deployt sein.
