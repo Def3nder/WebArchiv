@@ -2369,3 +2369,30 @@ Vorbereitung für den persistenten Index-Cache (Plan: Cache → Datei-Watcher �
   Dublettenprofil nur für Blog-/Quellautoren, gezieltes Einlesen, strikter Modus). Node 494/494, Python 14/14.
 
 **Deployment:** `lib/article-scan.cjs` (neu), `server.js`, `modules/articles.cjs`; Dienst neu starten.
+
+## 58. Aktualisierung 01.11.2026 – Index-Cache, Schritt 1b: `index-cache.json` (Review-Idee 3.7)
+
+- Neu `lib/index-cache.cjs`: speichert den Parse-Teil des Scans (`parseArticleContent`) pro `.md` mit Größe und
+  Änderungszeit in `index-cache.json` (App-Verzeichnis, Rechte 0600, gitignored, `INDEX_CACHE_FILE`). Der Scanner
+  liest eine unveränderte Datei nicht mehr, Medien neben der `.md` bestimmt er weiter jedes Mal frisch.
+- **Versionskennung:** SHA-256 über den Quelltext von `article-parser`, `taxonomy`, `duplicates`, `article-scan`,
+  `html-sanitizer`, `index-cache` sowie die Dubletten-Autoren aus `config.json`. Weicht sie ab (z. B. neue
+  Suchwörter in der Taxonomie), wird der Cache verworfen und neu aufgebaut. Kaputte Dateien ebenso.
+- **Dublettenprofile:** Gespeichert wird der normalisierte Text; die Wortfolgen (Shingles) entstehen beim Laden neu
+  (mit ihnen wäre die Datei 64 statt 10,6 MB groß). Für eine unveränderte Datei gibt der Cache immer dasselbe Objekt
+  zurück. Weil die Dublettenerkennung „unverändert“ an der Identität der Profile erkennt, rechnet sie nach einem
+  Voll-Reindex jetzt nicht mehr neu.
+- `rebuildIndex` lädt den Cache einmal, markiert den vollständigen Scan und speichert nach dem Veröffentlichen nur
+  bei Änderungen; gelöschte Dateien fliegen dabei heraus. Ein Schreibfehler kostet nur Zeit beim nächsten Start.
+  Teil-Reindexe (Editor, TTS, Infografiken, Scraper) nutzen den Cache ebenfalls; gespeichert wird beim nächsten
+  Vollindex.
+- Logzeile: `[OK] … indexed in …ms (Index-Cache: N unverändert, M neu eingelesen)`.
+
+**Geprüft:** Rohindex mit leerem und mit warmem Cache gegen die Basis aus Abschnitt 57 verglichen: je 7.153
+Einträge, keine Abweichung. Lokal: 9,0 s ohne Cache, 2,1 s beim Start mit Cache, 0,8 s für jeden weiteren Reindex
+im selben Prozess; Cache-Datei 22,6 MB. Neuer Test `test/index-cache.test.cjs` (Speichern/Laden, Sets, Objekt-
+Identität, Signaturvergleich, Version, kaputte Datei, Aufräumen, Scan mit Cache inkl. neuem Bild und Neustart).
+
+**Deployment:** `lib/index-cache.cjs` (neu), `lib/article-scan.cjs`, `server.js`, `.gitignore`; Dienst neu starten.
+Der erste Start baut den Cache auf (so lange wie bisher), ab dem zweiten greift er. Das App-Verzeichnis muss für den
+Dienstnutzer schreibbar sein (ist es bereits, `sessions.json` liegt dort).

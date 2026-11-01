@@ -45,6 +45,7 @@ const {
   replaceArticleIndexEntry, upsertArticleIndexEntries, parseScraperChangedFiles,
 } = require('./lib/article-index.cjs');
 const { createArticleScanner } = require('./lib/article-scan.cjs');
+const { createIndexCache, indexCacheVersion } = require('./lib/index-cache.cjs');
 
 // Kommagetrennte Adressen/Subnetze bzw. Express-Schlüsselwörter (loopback,
 // linklocal, uniquelocal). „true“ wird bewusst nicht unterstützt.
@@ -161,6 +162,12 @@ const bookmarks = createBookmarkStore({
 });
 bookmarks.load();
 const duplicateConfig = loadDuplicateConfig(CONFIG_FILE);
+// Parse-Teil des Scans pro Datei-Signatur (lib/index-cache.cjs, gitignored). Die Dubletten-
+// Autoren gehören zur Versionskennung, weil sie bestimmen, welche Artikel ein Profil bekommen.
+const indexCache = createIndexCache({
+  file: process.env.INDEX_CACHE_FILE || path.join(__dirname, 'index-cache.json'),
+  version: indexCacheVersion({ blogAuthor: duplicateConfig.blogAuthor, facebookAuthors: duplicateConfig.facebookAuthors }),
+});
 // Artikel-Scan (lib/article-scan.cjs); Dublettenprofile nur für Blog- und Quellautoren.
 const { scanDir } = createArticleScanner({
   wwwDir: WWW_DIR,
@@ -168,6 +175,7 @@ const { scanDir } = createArticleScanner({
   trashDir: INFOGRAPHIC_TRASH_DIR,
   wantsDuplicateProfile: author => author === duplicateConfig.blogAuthor || duplicateConfig.facebookAuthors.includes(author),
   onArticle: () => { reindexState.processed++; },
+  cache: indexCache,
 });
 const duplicateStore = createDuplicateStore({
   file: process.env.DUPLICATES_FILE || path.join(__dirname, 'duplicate-decisions.json'),
@@ -424,6 +432,8 @@ async function rebuildIndex() {
     throw err;
   }
 
+  await indexCache.load();
+  indexCache.beginFullScan();
   // Ein gemeinsamer Verzeichnis-Cache für den ganzen Scan (frisch je Reindex).
   const directories = createDirectoryCache();
   for (const dir of authorDirs) {
@@ -434,7 +444,11 @@ async function rebuildIndex() {
   // Hörbücher werden nur beim vollständigen Neuindex erneut eingelesen.
   await audiobooks.rebuild();
   publishArticleIndex(uniqueArticles(collector));
-  console.log(`[OK] ${archive.articles.length} articles, ${audiobooks.books.length} audiobooks indexed in ${Date.now() - t0}ms`);
+  const { hits, misses } = indexCache.stats;
+  console.log(`[OK] ${archive.articles.length} articles, ${audiobooks.books.length} audiobooks indexed in ${Date.now() - t0}ms`
+    + ` (Index-Cache: ${hits} unverändert, ${misses} neu eingelesen)`);
+  // Erst nach dem Veröffentlichen; ein Schreibfehler kostet nur Zeit beim nächsten Start.
+  await indexCache.save().catch(error => console.error('Index-Cache nicht gespeichert:', error));
 }
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────

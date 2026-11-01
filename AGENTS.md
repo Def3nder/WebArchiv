@@ -52,7 +52,9 @@ server-side files are isolated under `tts-server/` and never run as part of `ser
   `sendApiError` — API errors are `{ error: <German message>, code? }`; the frontend reacts only to `code`, never to
   message text), `atomic-file.cjs` (`writeFileAtomic`, `writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`),
   `share-ids.cjs` (short share ids), `article-scan.cjs` (the scan: `parseArticleContent` depends only on the `.md`
-  content, `articleMedia` only on directory listings; entries carry an internal `fileSignature`), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
+  content, `articleMedia` only on directory listings; entries carry an internal `fileSignature`), `index-cache.cjs`
+  (persistent cache of the parse part per file signature in `index-cache.json`, gitignored; its version hashes the parser
+  sources and the duplicate authors, so changing e.g. taxonomy keywords invalidates it — no manual bump needed), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
 - **`modules/`** — feature modules with routes: a `create…` factory for their state plus `install…Routes(app, deps)`
   (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files`, `scrape`,
@@ -104,7 +106,8 @@ object in `app.js`.
   after the file write succeeded, updates run one after another. Never mutate `state.value` directly.
 - **Runtime files are gitignored:** `config.json` (author priority, duplicates, audiobook skips) and
   `public-directories.txt` are written by the app; templates are `example-config.json` and
-  `example-public-directories.txt` — never re-add the real files to git.
+  `example-public-directories.txt` — never re-add the real files to git. `index-cache.json` is a pure cache: deleting
+  it only makes the next start slower.
 - **Users** live in `users.json` (gitignored). Copy `example-users.json` → `users.json`, set
   plaintext `password` fields, run `node scripts/hash-passwords.js` to replace them with bcrypt
   `passwordHash`. Each user has `role` (`admin`/`user`) and `allowedAuthors`: `null` = all authors,

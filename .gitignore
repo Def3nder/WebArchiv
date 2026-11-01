@@ -43,6 +43,7 @@ audiobook-progress.json
 audiobook-private.json
 bookmarks.json
 sessions.json
+index-cache.json
 duplicate-decisions.json
 tts-settings.json
 /tts-voice-previews/

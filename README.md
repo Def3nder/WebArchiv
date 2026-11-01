@@ -809,6 +809,14 @@ Videos, PDFs und MP3s nach der oben beschriebenen Suchreihenfolge in `www/` und
 Neustart — offene Sessions bleiben erhalten). Da der Index im Speicher liegt,
 werden **neu hinzugefügte Dateien erst nach einem Reindex sichtbar**.
 
+**Index-Cache** (`index-cache.json`, `lib/index-cache.cjs`): Der teure Teil des Scans (Titel, Kategorien,
+Auszüge, Dublettenprofile) wird pro `.md` mit Größe und Änderungszeit gespeichert. Ein Reindex liest nur
+neue oder geänderte Dateien. Bilder, Audio, Video und PDFs neben der `.md` werden trotzdem jedes Mal neu
+zugeordnet. Lokal gemessen (7.153 Artikel): 9 s ohne Cache, 2 s beim Start mit Cache, 0,8 s für jeden weiteren
+Reindex im laufenden Prozess. Ändert sich die Parse-Logik (Quelltext von Parser, Taxonomie, Dublettenprofil)
+oder die Liste der Dubletten-Autoren, verwirft der Server den Cache automatisch und baut ihn neu auf. Die
+Logzeile `[OK] … (Index-Cache: N unverändert, M neu eingelesen)` zeigt die Wirkung.
+
 Für die Medienzuordnung liest ein Scan jedes Verzeichnis nur einmal (`createDirectoryCache` in
 `lib/archive-files.cjs`): den Artikelordner, den parallelen Ordner unter `audio/` und den Autorenordner mit
 `standard.*`. Gesucht wird danach im Speicher, zuerst mit exaktem Namen, dann ohne Beachtung der
@@ -900,6 +908,7 @@ lib/infographics.cjs          Infografik-Zuordnung und -Gruppen, Benennung, Kopf
 lib/archive-files.cjs         Verzeichnis-Cache, Medien neben Artikeln finden, Datei-URLs, sichere Pfade
 lib/article-index.cjs         Fuse-Suchindex, Listen-Helfer für Teil-Reindexe, Scraper-Manifest
 lib/article-scan.cjs          Artikel-Scan: Inhalt (cachebar) und Medien neben der .md getrennt, Datei-Signatur
+lib/index-cache.cjs           Persistenter Index-Cache (index-cache.json): unveränderte .md nicht neu einlesen
 lib/app-shell.cjs             Versionssignatur der App, Update-Service-Worker, Datei-Caches (index.html, Version)
 lib/article-body-cache.cjs    Gerenderte Artikeltexte (Detail, Dubletten-Vergleich), neu nur nach Dateiänderung
 lib/http-errors.cjs           httpError(status, message, extra), jsonRoute (gemeinsamer JSON-Routen-Rahmen), isCrossSite
@@ -974,7 +983,7 @@ LXC-container node.js Setup.md   Server-/Deployment-Doku
 ```
 
 Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
-`www/<Autor>/2*` (Jahresinhalte), `audio/`, `download/`, `users.json`, `config.json`, `public-directories.txt`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`, `tts-settings.json`, `tts-voice-previews/`,
+`www/<Autor>/2*` (Jahresinhalte), `audio/`, `download/`, `users.json`, `config.json`, `public-directories.txt`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`, `index-cache.json`, `tts-settings.json`, `tts-voice-previews/`,
 `scraper/cookies.txt`, `scraper/Abonenten-URL.txt`, Logs.
 
 ---
@@ -1027,6 +1036,7 @@ npm test --prefix tts
 | `PORT` | `3000` | HTTP-Port |
 | `SESSION_SECRET` | zufällig pro Prozess | Signatur der Session-Cookies; bei `NODE_ENV=production` Pflicht (≥ 32 Zeichen, z. B. `openssl rand -hex 32`). Nur mit festem Wert überstehen Anmeldungen einen Neustart |
 | `SESSIONS_FILE` | `sessions.json` im App-Verzeichnis | Gespeicherte Sitzungen (Rechte 0600, gitignored); abgelaufene werden entfernt |
+| `INDEX_CACHE_FILE` | `index-cache.json` im App-Verzeichnis | Index-Cache (Rechte 0600, gitignored); löschen macht nur den nächsten Start langsamer |
 | `TRUST_PROXY` | `loopback, 192.168.1.14` | Kommagetrennte Adressen/Subnetze des Reverse Proxys (NPMplus); `true` wird abgelehnt |
 | `CSP_MODE` | `report` | `report` (nur melden), `enforce` (blockieren) oder `off` |
 | `USERS_FILE` | `./users.json` | Abweichender Pfad der Nutzerdatei (z. B. für Tests) |
