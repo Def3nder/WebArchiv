@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createArticleScanner, parseArticleContent, articleMedia } = require('../lib/article-scan.cjs');
+const { createArticleScanner, parseArticleContent, articleMedia, scanIssuesChange } = require('../lib/article-scan.cjs');
 const { createDirectoryCache } = require('../lib/archive-files.cjs');
 
 // Archiv mit Autor Joe (eigenes Bild, standard.jpg, lokales und externes Audio, Video, PDF,
@@ -121,4 +121,43 @@ test('parseArticleContent: nur vom Inhalt abhängig; articleMedia: nur von den V
   assert.deepEqual(Object.keys(media).sort(), ['audioUrl', 'hasExternalAudio', 'imageUrl', 'ownImage', 'pdfUrl', 'videoUrl']);
   assert.match(media.imageUrl, /standard\.jpg/);
   assert.deepEqual([media.ownImage, media.audioUrl, media.videoUrl, media.pdfUrl], [false, null, null, null]);
+});
+
+test('Scan: nicht lesbare Dateien werden gesammelt statt still verworfen', async t => {
+  const data = fixture(t);
+  const blocked = path.join(data.wwwDir, 'Joe', '2026', 'b.md');
+  // Dateizugriff wie fs.promises, nur b.md ist gesperrt.
+  const io = {
+    readdir: (...args) => fs.promises.readdir(...args),
+    stat: (...args) => fs.promises.stat(...args),
+    readFile: async (file, ...rest) => {
+      if (file === blocked) throw Object.assign(new Error(`EACCES: permission denied, open '${file}'`), { code: 'EACCES' });
+      return fs.promises.readFile(file, ...rest);
+    },
+  };
+  const { scanDir } = createArticleScanner({ ...data, io });
+  const collector = [];
+  const issues = [];
+  await scanDir(path.join(data.wwwDir, 'Joe'), 'Joe', null, collector, { issues });
+  assert.deepEqual(issues, [{ path: 'Joe/2026/b.md', reason: 'EACCES' }]);
+  assert.equal(collector.some(entry => entry.id === 'Joe/2026/b'), false);
+  assert.equal(collector.length, 3, 'die übrigen Artikel bleiben');
+
+  const quiet = [];
+  await scanDir(path.join(data.wwwDir, 'Joe'), 'Joe', null, quiet);
+  assert.equal(quiet.length, 3, 'ohne issues wie bisher still');
+  await assert.rejects(scanDir(path.join(data.wwwDir, 'Joe'), 'Joe', null, [], { strict: true, targetFile: blocked }),
+    { code: 'EACCES' }, 'gezieltes Einlesen meldet den Fehler weiter');
+});
+
+test('Sammelmeldung zu nicht lesbaren Dateien nur bei Änderung', () => {
+  const one = [{ path: 'Joe/2026/b.md', reason: 'EACCES' }];
+  const many = ['a', 'b', 'c', 'd', 'e'].map(name => ({ path: `Joe/${name}.md`, reason: 'EIO' }));
+  assert.equal(scanIssuesChange([], []), null);
+  assert.deepEqual(scanIssuesChange([], one), { level: 'warning', message: '1 Artikeldatei nicht lesbar: Joe/2026/b.md (EACCES)' });
+  assert.equal(scanIssuesChange(one, [{ ...one[0] }]), null, 'gleiche Liste: keine neue Meldung');
+  assert.equal(scanIssuesChange(many, many.slice().reverse()), null, 'Reihenfolge egal');
+  assert.equal(scanIssuesChange([], many).message,
+    '5 Artikeldateien nicht lesbar: Joe/a.md (EIO), Joe/b.md (EIO), Joe/c.md (EIO) … (+2)');
+  assert.deepEqual(scanIssuesChange(one, []), { level: 'info', message: 'Alle Artikeldateien sind wieder lesbar.' });
 });

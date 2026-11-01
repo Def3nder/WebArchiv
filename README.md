@@ -826,6 +826,10 @@ Reindex im laufenden Prozess. Ändert sich die Parse-Logik (Quelltext von Parser
 oder die Liste der Dubletten-Autoren, verwirft der Server den Cache automatisch und baut ihn neu auf. Die
 Logzeile `[OK] … (Index-Cache: N unverändert, M neu eingelesen)` zeigt die Wirkung.
 
+**Nicht lesbare Artikeldateien** (z. B. fehlende Leserechte) landen nicht im Index, gehen aber nicht mehr still
+verloren: Der Vollindex sammelt sie mit Pfad und Grund (`archive.scanIssues`) und meldet einmal
+`N Artikeldateien nicht lesbar: …` als Warnung – erneut nur, wenn sich die Liste ändert.
+
 Findet ein Reindex nichts Neues (typisch für `SIGHUP` ohne neue Dateien), bleibt der veröffentlichte Index
 unverändert; die Logzeile endet dann mit `Index unverändert`. Der Button **„Archiv neu einlesen“** liest bewusst
 alle Dateien frisch, am Cache vorbei, und erneuert ihn dabei – der Sicherheitsweg, falls je etwas nicht stimmt.

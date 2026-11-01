@@ -2547,3 +2547,21 @@ gesetzt, Datei gitignored. Test `test/event-log.test.cjs` (Zusammenfassen, „se
 und Zusammenführen, kaputte Datei, Zeilen-Parser, fortlaufendes Lesen samt halber Zeile und geleerter Datei).
 
 **Deployment:** `lib/event-log.cjs` (neu), `server.js`, `.gitignore`; Dienst neu starten.
+
+## 66. Aktualisierung 01.11.2026 – Health-Check, Schritt 2: Nicht lesbare Artikeldateien sichtbar (Review 3.4)
+
+- `scanDir` (`lib/article-scan.cjs`) nimmt optional `issues` an und sammelt dort Artikeldateien, die nicht gelesen
+  werden konnten, als `{ path, reason }` (Pfad relativ zu `www/`, Grund z. B. `EACCES`). Ohne `issues` bleibt es wie
+  bisher still; gezieltes Einlesen (Editor, TTS, Scraper-Manifest) meldet den Fehler weiterhin an den Aufrufer.
+  Der Dateizugriff ist für Tests austauschbar (`io`).
+- `rebuildIndex` legt die Liste als `archive.scanIssues` ab (für den Health-Check in Schritt 3).
+  `scanIssuesChange` erzeugt eine Sammelmeldung nur bei einer Änderung der Liste: Warnung
+  `N Artikeldateien nicht lesbar: … (+k)` bzw. `Alle Artikeldateien sind wieder lesbar.` (Info). So meldet nicht jeder
+  Watcher-Neu-Scan dasselbe erneut; die Warnung erscheint im Health-Check, nicht als Hinweis.
+
+**Geprüft:** Test mit gesperrter Datei (EACCES): gesammelt, nicht im Index, übrige Artikel bleiben, gezieltes Einlesen
+wirft weiter; Sammelmeldung nur bei Änderung, Reihenfolge egal, Kürzung ab drei Dateien. Am lokalen Bestand keine
+nicht lesbare Datei (keine Meldung, 7.153 Artikel).
+
+**Deployment:** `lib/article-scan.cjs`, `server.js`; Dienst neu starten. Der erste Start baut den Index-Cache einmal
+neu auf (Quelltext des Scans gehört zur Versionskennung).

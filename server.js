@@ -44,7 +44,7 @@ const {
   buildArticleSearchIndex, articleDisplayAuthor, uniqueArticles, sameSourceArticles, replaceInfographicYearArticles,
   replaceArticleIndexEntry, upsertArticleIndexEntries, parseScraperChangedFiles,
 } = require('./lib/article-index.cjs');
-const { createArticleScanner } = require('./lib/article-scan.cjs');
+const { createArticleScanner, scanIssuesChange } = require('./lib/article-scan.cjs');
 const { createIndexCache, indexCacheVersion } = require('./lib/index-cache.cjs');
 const { createArchiveWatcher } = require('./lib/archive-watcher.cjs');
 const { createEventLog, createLogTail, parseScraperLogLine, parseCronLogLine } = require('./lib/event-log.cjs');
@@ -159,6 +159,8 @@ const archive = {
   duplicateCandidates: [],
   meta: { authors: [], years: [], categories: [] },
   fuseIndex: null,
+  // Nicht lesbare Artikeldateien des letzten Vollindex ({ path, reason }) für den Health-Check.
+  scanIssues: [],
 };
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
 // Zentrale Sperre für Schreib- und Indexaufträge (archive-lock.cjs); die
@@ -453,8 +455,9 @@ async function rebuildIndex({ fresh = false } = {}) {
   indexCache.beginFullScan({ fresh });
   // Ein gemeinsamer Verzeichnis-Cache für den ganzen Scan (frisch je Reindex).
   const directories = createDirectoryCache();
+  const scanIssues = [];
   for (const dir of authorDirs) {
-    await scanDir(path.join(WWW_DIR, dir.name), dir.name, null, collector, { directories });
+    await scanDir(path.join(WWW_DIR, dir.name), dir.name, null, collector, { directories, issues: scanIssues });
   }
 
   // Deduplicate by id (orig/ subdirs may duplicate files).
@@ -469,6 +472,11 @@ async function rebuildIndex({ fresh = false } = {}) {
   const { hits, misses } = indexCache.stats;
   console.log(`[OK] ${archive.articles.length} articles, ${audiobooks.books.length} audiobooks indexed in ${Date.now() - t0}ms`
     + ` (Index-Cache: ${hits} unverändert, ${misses} neu eingelesen${unchanged ? '; Index unverändert' : ''})`);
+  // Nicht lesbare Dateien: eine Sammelmeldung, nur wenn sich die Liste geändert hat (Warnung → Health-Check).
+  const issuesChange = scanIssuesChange(archive.scanIssues, scanIssues);
+  archive.scanIssues = scanIssues;
+  if (issuesChange?.level === 'warning') console.warn(issuesChange.message);
+  else if (issuesChange) console.log(issuesChange.message);
   // Erst nach dem Veröffentlichen; ein Schreibfehler kostet nur Zeit beim nächsten Start.
   await indexCache.save().catch(error => console.error('Index-Cache nicht gespeichert:', error));
 }

@@ -53,7 +53,8 @@ server-side files are isolated under `tts-server/` and never run as part of `ser
   `sendApiError` — API errors are `{ error: <German message>, code? }`; the frontend reacts only to `code`, never to
   message text), `atomic-file.cjs` (`writeFileAtomic`, `writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`),
   `share-ids.cjs` (short share ids), `article-scan.cjs` (the scan: `parseArticleContent` depends only on the `.md`
-  content, `articleMedia` only on directory listings; entries carry an internal `fileSignature`), `index-cache.cjs`
+  content, `articleMedia` only on directory listings; entries carry an internal `fileSignature`; unreadable files are collected as `scanIssues`
+  instead of being dropped silently), `index-cache.cjs`
   (persistent cache of the parse part per file signature in `index-cache.json`, gitignored; its version hashes the parser
   sources and the duplicate authors, so changing e.g. taxonomy keywords invalidates it — no manual bump needed; a full
   rescan that finds nothing changed publishes nothing (`sameSourceArticles`), the admin reindex button reads everything
