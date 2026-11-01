@@ -759,6 +759,10 @@ Editor- oder Menülogik einbezogen.
 | `GET /files/*` | Soft | Dateien aus `www/` (Bilder, Videos, PDFs und alte MP3s), ACL pro Autor |
 | `GET /audio-files/*` | Soft | Artikel-MP3s und Hörbuchmedien aus `audio/`, ACL pro Autor |
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
+| `GET /api/health` | – | Für externes Monitoring: nur `{ status }` – `ok` (200), `starting` oder `degraded` (503: Index fehlt bzw. Indexfehler oder Datenträger fast voll) |
+| `GET /api/health/details` | Admin | Health-Check: Index (letzter Lauf, nicht lesbare Dateien, Sperre, Watcher), freier Speicher auf `www` und `audio`, Qwen, letzter Scrape (Web-UI und Cron), Server, Meldungen; je Bereich und gesamt eine Stufe `ok`/`warning`/`error` |
+| `GET /api/health/events?after=N` | Admin | Neue Fehler seit Meldungs-id N (`newErrors`, `latest`, `lastId`) |
+| `POST /api/health/events/clear` | Admin | Meldungsliste leeren |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht); `?sq=256|512` liefert einen quadratischen Ausschnitt vom oberen Bildteil (Sperrbildschirm) |
 | `POST /api/new-infographic` | Admin | Neue Infografik `{markdown, image(base64)}` → `{id}` |
 | `GET/PUT /api/tts/server-settings` | Admin | Qwen-Serverwerte live lesen beziehungsweise in `qwen_http_service_config.json` speichern |
@@ -955,6 +959,7 @@ modules/bookmarks.cjs         Lesezeichen pro Nutzer (bookmarks.json) und Routen
 modules/media-files.cjs       Geschützte Medienrouten /files/* und /audio-files/* (Pfadprüfung, ACL)
 modules/scrape.cjs            Scraper als Kindprozess starten, Status/Log, danach gezielter Reindex
 modules/articles.cjs          Artikel-Liste (Filter, Suche, Kacheln), Einzelartikel, Facetten (/api/meta)
+modules/health.cjs            Health-Check: /api/health (öffentlich nur Status) und Details/Meldungen für Admins
 modules/link-preview.cjs      Öffentliche Link-Vorschau (/a/*, /og-image/*) und Prompt-Dateien (/api/prompts)
 modules/infographic-admin.cjs Infografik-Routen: Upload, Verwaltung (Reihenfolge, Papierkorb, Poster), Prüfmodus, neue Grafik
 modules/duplicate-admin.cjs   Dubletten-Routen: Liste, Vergleich, Ignorieren/Verknüpfen, Infografik-Umzug

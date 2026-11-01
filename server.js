@@ -19,9 +19,11 @@ const {
 } = require('./modules/infographic-admin.cjs');
 const { installArticleRoutes } = require('./modules/articles.cjs');
 const { installLinkPreviewRoutes, installPromptRoutes } = require('./modules/link-preview.cjs');
+const { createHealthService, installHealthRoutes } = require('./modules/health.cjs');
+const { providerInfo: ttsProviderInfo } = require('./tts/provider-config.cjs');
 const { installMediaRoutes } = require('./modules/media-files.cjs');
 const { createLoginLimiter, tooManyAttemptsError } = require('./lib/login-limiter.cjs');
-const { createSecurityHeaders, installCspReportRoute, REPORT_PATH: CSP_REPORT_PATH } = require('./lib/security-headers.cjs');
+const { createSecurityHeaders, installCspReportRoute, cspMode, REPORT_PATH: CSP_REPORT_PATH } = require('./lib/security-headers.cjs');
 const { createArchiveLock, sendArchiveBusy } = require('./lib/archive-lock.cjs');
 // Reine Logik ohne Serverzustand (auch für Skripte nutzbar, ohne server.js zu laden).
 const { isCrossSite, sendApiError } = require('./lib/http-errors.cjs');
@@ -163,6 +165,11 @@ const archive = {
   scanIssues: [],
 };
 let reindexState = { running: false, processed: 0, articles: 0, done: true };
+// Letzter Vollindex (Zeit, Dauer, Cache) für den Health-Check; null bis zum ersten Lauf.
+let lastIndexRun = null;
+// Datei-Watcher (nur beim echten Serverstart) und die Zahl der überwachten Wurzeln.
+let archiveWatcher = null;
+let archiveWatcherRoots = 0;
 // Zentrale Sperre für Schreib- und Indexaufträge (archive-lock.cjs); die
 // Aufträge mit eigenem Zustand werden unten nach ihrer Erzeugung registriert.
 const archiveLock = createArchiveLock();
@@ -470,6 +477,9 @@ async function rebuildIndex({ fresh = false } = {}) {
     && (audiobooks.books.length > 0) === archive.meta.authors.includes(AUDIOBOOK_AUTHOR);
   if (!unchanged) publishArticleIndex(nextSourceArticles);
   const { hits, misses } = indexCache.stats;
+  lastIndexRun = {
+    at: Date.now(), durationMs: Date.now() - t0, fresh, unchanged, cacheHits: hits, cacheMisses: misses,
+  };
   console.log(`[OK] ${archive.articles.length} articles, ${audiobooks.books.length} audiobooks indexed in ${Date.now() - t0}ms`
     + ` (Index-Cache: ${hits} unverändert, ${misses} neu eingelesen${unchanged ? '; Index unverändert' : ''})`);
   // Nicht lesbare Dateien: eine Sammelmeldung, nur wenn sich die Liste geändert hat (Warnung → Health-Check).
@@ -725,6 +735,25 @@ installArticleRoutes(app, {
 });
 installPromptRoutes(app, { attachUser, promptsDir: path.join(__dirname, 'prompts') });
 
+// ─── Health-Check (modules/health.cjs): /api/health öffentlich nur mit Status ─────────────
+
+const healthService = createHealthService({
+  archive, audiobooks, archiveLock, eventLog, scrapeJob,
+  reindexState: () => reindexState,
+  lastIndexRun: () => lastIndexRun,
+  watcher: () => ({
+    enabled: require.main === module && process.env.WATCH_ARCHIVE !== '0',
+    active: !!archiveWatcher && archiveWatcherRoots > 0,
+    roots: archiveWatcherRoots,
+    directories: archiveWatcher?.directoryCount || 0,
+  }),
+  cronLogFile: path.join(__dirname, 'scraper', 'cron-scrape.log'),
+  qwenAvailable: async () => (await ttsProviderInfo()).providers.find(item => item.provider === 'qwen')?.available,
+  volumes: [{ name: 'www', dir: WWW_DIR }, { name: 'audio', dir: AUDIO_DIR }],
+  cspMode: cspMode(process.env.CSP_MODE),
+});
+installHealthRoutes(app, { requireAdmin: requireAdminAccess, service: healthService, eventLog });
+
 // ─── Protected API routes ──────────────────────────────────────────────────
 
 // Nur die Admin-Oberfläche fragt den Status ab (admin-tasks.js).
@@ -824,7 +853,7 @@ if (require.main === module) {
   // hochgeladene Artikel und Bilder, lösen nach 5 s Ruhe einen gecachten Neu-Scan aus. Eigene
   // Schreibvorgänge (Editor, TTS, Infografiken) melden sich ebenfalls; der Neu-Scan findet dann nichts
   // Neues und veröffentlicht nichts. Abschalten mit WATCH_ARCHIVE=0 (SIGHUP und Cron bleiben).
-  const archiveWatcher = process.env.WATCH_ARCHIVE === '0' ? null : createArchiveWatcher({
+  archiveWatcher = process.env.WATCH_ARCHIVE === '0' ? null : createArchiveWatcher({
     roots: [
       { dir: WWW_DIR, ignore: ([author, folder]) => author === INFOGRAPHICS_AUTHOR && folder === 'trash' },
       { dir: AUDIO_DIR },
@@ -838,9 +867,10 @@ if (require.main === module) {
       });
     },
   });
-  archiveWatcher?.start().then(roots => console.log(
-    `Datei-Watcher aktiv: ${roots} von 2 Wurzeln, ${archiveWatcher.directoryCount} Ordner überwacht`,
-  ), error => console.error('Datei-Watcher nicht gestartet:', error));
+  archiveWatcher?.start().then(roots => {
+    archiveWatcherRoots = roots;
+    console.log(`Datei-Watcher aktiv: ${roots} von 2 Wurzeln, ${archiveWatcher.directoryCount} Ordner überwacht`);
+  }, error => console.error('Datei-Watcher nicht gestartet:', error));
 
   buildIndex().catch(console.error);
   const server = app.listen(PORT, () => {

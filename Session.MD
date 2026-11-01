@@ -2565,3 +2565,31 @@ nicht lesbare Datei (keine Meldung, 7.153 Artikel).
 
 **Deployment:** `lib/article-scan.cjs`, `server.js`; Dienst neu starten. Der erste Start baut den Index-Cache einmal
 neu auf (Quelltext des Scans gehört zur Versionskennung).
+
+## 67. Aktualisierung 01.11.2026 – Health-Check, Schritt 3: Daten und Routen (`modules/health.cjs`)
+
+- `createHealthService` liest den Zustand über Funktionen (Index, Sperre, Watcher, Meldungen, Scrape, Qwen,
+  Datenträger) und liefert:
+  - `status()` für das öffentliche **`GET /api/health`**: nur `{ status }`. `starting` (503) bis zum ersten Vollindex,
+    `degraded` (503) bei einem Indexfehler oder einem Datenträger auf Fehlerstufe, sonst `ok` (200). Ein
+    ausgeschaltetes Qwen-Gerät ist kein Ausfall. Bewusste Ausnahme ohne Anmeldung, in `CLAUDE.md` festgehalten.
+  - `details()` für **`GET /api/health/details`** (Admin): Index (Artikel, Hörbücher, letzter Vollindex mit Dauer und
+    Cache-Treffern, laufender Reindex, Indexfehler, nicht lesbare Dateien, Sperre, Watcher), Datenträger `www` und
+    `audio` (frei/gesamt per `fs.statfs`), Qwen (60 s gemerkt), letzter Scrape über die Web-UI und per Cron (aus dem
+    Ende von `cron-scrape.log`), Server (Laufzeit, Node, Speicher, CSP-Modus) und alle Meldungen. Jeder Bereich und
+    das Ganze tragen eine Stufe `ok`/`warning`/`error`; Meldungen färben die Ampel nur, wenn sie jünger als 24 h sind.
+- Speicher-Stufen, ausgelegt für die beiden 100-GB-Volumes: **Warnung unter 10 GB oder 5 %, Fehler unter 2 GB oder
+  2 %** (der Anteil greift erst bei großen Disks).
+- `GET /api/health/events?after=N` (Admin) liefert die Zahl neuer Fehler seit Meldungs-id N für den Hinweis,
+  `POST /api/health/events/clear` (Admin) leert die Liste.
+- `server.js`: `lastIndexRun` (Zeit, Dauer, Cache, fresh, unchanged) nach jedem Vollindex; Watcher-Zustand für den
+  Health-Check; Qwen über `tts/provider-config.cjs`.
+
+**Geprüft am lokalen Server:** `/api/health` beim Start `starting` (503), danach `ok` (200); Details als Gast 403,
+als Admin in 29 ms (Index ok, Watcher 184 Ordner, Qwen erreichbar, Meldung „SESSION_SECRET“ als Warnung).
+Beobachtet: rund 810 MB Arbeitsspeicher (RSS) nach dem Start. Tests `test/health.test.cjs` (Speicher-Stufen,
+Cron-Zeile, Status, Details samt Ampel und 24-h-Regel, Qwen-Merkzeit, Watcher abgeschaltet/ausgefallen,
+Scrape-Fehler, fehlender Datenträger, Routen und Rechte).
+
+**Deployment:** `modules/health.cjs` (neu), `server.js`; Dienst neu starten. Prüfen auf dem LXC:
+`curl -s http://localhost:3000/api/health`.

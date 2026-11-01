@@ -76,7 +76,7 @@ must not pin versions.
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
 - **`modules/`** — feature modules with routes: a `create…` factory for their state plus `install…Routes(app, deps)`
   (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files`, `scrape`,
-  `duplicate-admin`, `infographic-admin`, `articles`, `link-preview`). They import from `lib/` (and sibling modules),
+  `duplicate-admin`, `infographic-admin`, `articles`, `link-preview`, `health`). They import from `lib/` (and sibling modules),
   get everything from `server.js` as `deps`, and nobody — scripts included — ever `require`s `server.js`.
 - **Routes** use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors); no own
   `try/catch` + `sendRouteError` wrappers. `httpError(status, message, extra)` adds fields to the error response,
@@ -169,6 +169,9 @@ object in `app.js`.
   in `localStorage` (`public/settings.js`); guests always get the defaults.
 - The `Telegram` author is special-cased: hidden from listings unless `?telegram=1` or explicitly
   filtered by `author=Telegram`.
+- **Health exception** (`modules/health.cjs`): `GET /api/health` is **intentionally unauthenticated** for external
+  monitoring and returns only `{ status }` (`ok` 200, `starting`/`degraded` 503) — never counts, paths or messages.
+  Everything else (`/api/health/details`, `/api/health/events`, `/api/health/events/clear`) is admin-only.
 - **Share links** use a short `shareId` (`lib/share-ids.cjs`, 12 chars `[A-Za-z0-9_-]` from the id's SHA-256,
   sent with article and audiobook details): `/a/<shareId>`. Share paths such as WhatsApp decode `%20` back to a
   space and cut the link there. `/a/<full id>` keeps working for older links.
