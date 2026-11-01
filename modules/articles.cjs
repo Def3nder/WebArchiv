@@ -36,7 +36,7 @@ function createArticleViews({ archive, canAccessAuthor }) {
   // Nur interne Felder entfernen und geerbtes Audio ohne Recht am Ursprung verbergen.
   function exposeArticleForUser(article, user) {
     const {
-      filePath, inheritedAudioAuthor, inheritedAudioArticleId,
+      filePath, fileSignature, inheritedAudioAuthor, inheritedAudioArticleId,
       ownImage, hasBody, infographicBase, infographicOrdinal, duplicateProfile, ...rest
     } = article;
     const exposed = inheritedAudioAuthor && !canAccessAuthor(user, inheritedAudioAuthor)

@@ -184,7 +184,8 @@ test('Scheitert das Zurückrollen bei einer Datei, laufen die übrigen weiter un
 
 test('Manager bleibt auf Artikelgruppen beschränkt und der Papierkorb bleibt unsichtbar', async () => {
   const server = await fs.readFile(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.match(server, /if \(author === INFOGRAPHICS_AUTHOR && fullPath === INFOGRAPHIC_TRASH_DIR\) continue/);
+  // Der Scan überspringt den Papierkorb (Verhalten in test/article-scan.test.cjs geprüft).
+  assert.match(server, /createArticleScanner\(\{[\s\S]*?trashDir: INFOGRAPHIC_TRASH_DIR/);
   // Auslieferungssperre des Papierkorbs: Verhalten in test/media-files.test.cjs geprüft.
   const mediaRoutes = await fs.readFile(path.join(__dirname, '..', 'modules', 'media-files.cjs'), 'utf8');
   assert.match(mediaRoutes, /sameName\(author, infographicsAuthor\) && String\(second \|\| ''\)\.toLowerCase\(\) === 'trash'/);

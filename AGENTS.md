@@ -51,7 +51,8 @@ server-side files are isolated under `tts-server/` and never run as part of `ser
   `server.js` runs as main module), `http-errors.cjs` (`httpError`, `apiError`, `jsonRoute`, `isCrossSite`,
   `sendApiError` — API errors are `{ error: <German message>, code? }`; the frontend reacts only to `code`, never to
   message text), `atomic-file.cjs` (`writeFileAtomic`, `writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`),
-  `share-ids.cjs` (short share ids), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
+  `share-ids.cjs` (short share ids), `article-scan.cjs` (the scan: `parseArticleContent` depends only on the `.md`
+  content, `articleMedia` only on directory listings; entries carry an internal `fileSignature`), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
 - **`modules/`** — feature modules with routes: a `create…` factory for their state plus `install…Routes(app, deps)`
   (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files`, `scrape`,
@@ -66,7 +67,7 @@ server-side files are isolated under `tts-server/` and never run as part of `ser
 
 The index works in three phases:
 
-1. **Index build (`buildIndex` → `scanDir` → `parseArticle`).** On startup (and on reindex) it
+1. **Index build (`buildIndex` → `scanDir` in `lib/article-scan.cjs` → `parseArticle`).** On startup (and on reindex) it
    recursively walks `www/`. Top-level dirs are *authors*; nested 4-digit dirs (`2018/`) are
    *years*. Each `.md` becomes an article object. Sibling media files matching the `.md`
    basename (`foo.md` + `foo.jpg`/`foo.mp3`/`foo.mp4`/`foo.pdf`) are attached; a per-author

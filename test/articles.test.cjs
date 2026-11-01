@@ -11,7 +11,7 @@ const article = (id, fields = {}) => {
   const [author, year] = id.split('/');
   return {
     id, author, year, date: `${year}-01-10`, title: id, categories: [], tags: [], excerpt: '',
-    filePath: `/www/${id}.md`, ownImage: false, imageUrl: `/files/${id}.jpg`, ...fields,
+    filePath: `/www/${id}.md`, fileSignature: { size: 10, mtimeMs: 1 }, ownImage: false, imageUrl: `/files/${id}.jpg`, ...fields,
   };
 };
 
@@ -72,7 +72,7 @@ test('Liste: ACL, Dubletten und Telegram ausgeblendet, interne Felder entfernt',
   let res = await call('/api/articles');
   assert.equal(res.cache, 'no-store');
   assert.deepEqual(ids(res), [data.blog.id, data.info.id]);
-  assert.equal(res.data.items[0].filePath, undefined);
+  assert.deepEqual([res.data.items[0].filePath, res.data.items[0].fileSignature], [undefined, undefined]);
   assert.equal(res.data.items[0].bookmarked, false, 'Gäste haben keine Lesezeichen');
   // Geerbtes Audio ohne Recht am Ursprung bleibt verborgen; der Anzeigeautor ist der des Hauptartikels.
   assert.deepEqual([res.data.items[1].audioUrl, res.data.items[1].displayAuthor], [null, 'Joe']);

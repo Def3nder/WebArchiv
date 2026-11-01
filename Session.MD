@@ -2349,3 +2349,23 @@ immer in höchstens zwei Zeilen, ohne Beschreibung bleibt der Platz darunter nur
 
 **Deployment:** `lib/share-ids.cjs`, `lib/security-headers.cjs`, `modules/articles.cjs`, `modules/audiobooks.cjs`,
 `modules/link-preview.cjs`, `public/app.js`, `public/app-detail.js`, `public/audiobooks.js`; Dienst neu starten.
+
+## 57. Aktualisierung 01.11.2026 – Index-Cache, Schritt 1a: Scan nach `lib/article-scan.cjs` (Review-Idee 3.7)
+
+Vorbereitung für den persistenten Index-Cache (Plan: Cache → Datei-Watcher → Volltext). Noch ohne neues Verhalten.
+
+- `scanDir` liegt jetzt in `lib/article-scan.cjs` (`createArticleScanner({ wwwDir, audioDir, trashDir,
+  wantsDuplicateProfile, onArticle })`); `server.js` erzeugt den Scanner einmal und ruft ihn wie bisher auf.
+- Der Scan ist in zwei Teile getrennt:
+  - `parseArticleContent(content, filePath, { duplicateProfile })` hängt nur vom Inhalt der `.md` ab: Titel, Datum,
+    Tags, Kategorien, Auszug, Vorschau, Folge, Poster-Markierung, `hasBody`, Dublettenprofil. Diesen Teil soll der
+    Cache später pro Datei-Signatur wiederverwenden.
+  - `articleMedia(...)` hängt nur von den Verzeichnislisten ab: Bild (sonst `standard.jpg`), Audio lokal oder unter
+    `audio/`, Video, PDF mit `?v=`, `ownImage`. Wird bei jedem Scan neu bestimmt.
+- Jeder Rohindex-Eintrag trägt intern `fileSignature: { size, mtimeMs }` der `.md`. `exposeArticleForUser` entfernt
+  das Feld wie `filePath`; Test in `test/articles.test.cjs`.
+- **Geprüft:** Rohindex des lokalen Bestands vor und nach dem Umbau verglichen: 7.153 Einträge, keine Abweichung
+  außer der neuen Signatur. Neuer Test `test/article-scan.test.cjs` (IDs, Jahre, Medien, Papierkorb, Signatur,
+  Dublettenprofil nur für Blog-/Quellautoren, gezieltes Einlesen, strikter Modus). Node 494/494, Python 14/14.
+
+**Deployment:** `lib/article-scan.cjs` (neu), `server.js`, `modules/articles.cjs`; Dienst neu starten.

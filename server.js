@@ -29,11 +29,11 @@ const { computeAppShellVersion, createAppShellVersion, createVersionedIndex, ser
 const { createArticleBodyCache } = require('./lib/article-body-cache.cjs');
 const { FileSessionStore } = require('./lib/session-file-store.cjs');
 const {
-  parseArticleSearchQuery, bodyExcerpt, mergeCategories, autoCategorize,
+  parseArticleSearchQuery, bodyExcerpt, mergeCategories,
   extractSourceUrl, parseArticle,
 } = require('./lib/article-parser.cjs');
 const {
-  createDirectoryCache, findSibling, fileUrl, audioFileUrl, isPathInside, resolveUnder, yearFromRelativeDir,
+  createDirectoryCache, findSibling, audioFileUrl, isPathInside, resolveUnder, yearFromRelativeDir,
 } = require('./lib/archive-files.cjs');
 const {
   INFOGRAPHICS_AUTHOR, linkInfographics, infographicYearsFromMigrations, infographicAttachmentStem,
@@ -44,6 +44,7 @@ const {
   buildArticleSearchIndex, articleDisplayAuthor, uniqueArticles, replaceInfographicYearArticles,
   replaceArticleIndexEntry, upsertArticleIndexEntries, parseScraperChangedFiles,
 } = require('./lib/article-index.cjs');
+const { createArticleScanner } = require('./lib/article-scan.cjs');
 
 // Kommagetrennte Adressen/Subnetze bzw. Express-Schlüsselwörter (loopback,
 // linklocal, uniquelocal). „true“ wird bewusst nicht unterstützt.
@@ -74,7 +75,7 @@ function resolveSessionSecret({ env = process.env, strict = false, log = console
   return crypto.randomBytes(32).toString('hex');
 }
 const {
-  loadDuplicateConfig, buildDuplicateProfile, createDuplicateDetection,
+  loadDuplicateConfig, createDuplicateDetection,
   createDuplicateStore, decisionStillApplies,
 } = require('./lib/duplicates.cjs');
 
@@ -160,6 +161,14 @@ const bookmarks = createBookmarkStore({
 });
 bookmarks.load();
 const duplicateConfig = loadDuplicateConfig(CONFIG_FILE);
+// Artikel-Scan (lib/article-scan.cjs); Dublettenprofile nur für Blog- und Quellautoren.
+const { scanDir } = createArticleScanner({
+  wwwDir: WWW_DIR,
+  audioDir: AUDIO_DIR,
+  trashDir: INFOGRAPHIC_TRASH_DIR,
+  wantsDuplicateProfile: author => author === duplicateConfig.blogAuthor || duplicateConfig.facebookAuthors.includes(author),
+  onArticle: () => { reindexState.processed++; },
+});
 const duplicateStore = createDuplicateStore({
   file: process.env.DUPLICATES_FILE || path.join(__dirname, 'duplicate-decisions.json'),
 });
@@ -216,109 +225,6 @@ archiveLock.register('Audio-Erzeugung', () => ttsJobs.running);
 // ─── Parsers ───────────────────────────────────────────────────────────────
 
 // ─── File scanner ──────────────────────────────────────────────────────────
-
-async function scanDir(dirPath, author, year, collector, {
-  strict = false, targetFile = null, directories = createDirectoryCache(),
-} = {}) {
-  let entries;
-  try {
-    entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
-  } catch (error) {
-    if (strict) throw error;
-    return;
-  }
-  directories.seed(dirPath, entries);
-  const listing = directories.get(dirPath);
-  const resolvedTarget = targetFile ? path.resolve(targetFile) : null;
-
-  for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
-    if (entry.isDirectory()) {
-      if (resolvedTarget && !isPathInside(fullPath, resolvedTarget)) continue;
-      // Gelöschte Infografiken bleiben als Dateien erhalten, gehören aber nie
-      // wieder in den Artikelindex oder in eine Bildgruppe.
-      if (author === INFOGRAPHICS_AUTHOR && fullPath === INFOGRAPHIC_TRASH_DIR) continue;
-      const nextYear = /^\d{4}$/.test(entry.name) ? entry.name : year;
-      await scanDir(fullPath, author, nextYear, collector, { strict, targetFile: resolvedTarget, directories });
-      continue;
-    }
-    if (!entry.name.endsWith('.md')) continue;
-    if (resolvedTarget && path.resolve(fullPath) !== resolvedTarget) continue;
-
-    const basename = entry.name.slice(0, -3);
-    const relDir = path.relative(path.join(WWW_DIR, author), dirPath);
-    const id = [author, relDir, basename].filter(Boolean).join('/').replace(/\\/g, '/');
-
-    try {
-      const content = await fs.promises.readFile(fullPath, 'utf8');
-      const parsed = parseArticle(content, fullPath);
-
-      const ownImgPath = findSibling(dirPath, basename, ['.jpg', '.jpeg', '.png'], listing);
-      const authorDir = path.join(WWW_DIR, author);
-      const imgPath = ownImgPath
-        || findSibling(authorDir, 'standard', ['.jpg', '.jpeg', '.png'], directories.get(authorDir));
-      const localAudioPath = findSibling(dirPath, basename, ['.mp3'], listing);
-      const externalAudioDir = path.join(AUDIO_DIR, author, relDir);
-      const externalAudioPath = localAudioPath
-        ? null
-        : findSibling(externalAudioDir, basename, ['.mp3'], directories.get(externalAudioDir));
-      const audioPath = localAudioPath || externalAudioPath;
-      const videoPath = findSibling(dirPath, basename, ['.mp4'], listing);
-      const pdfPath   = findSibling(dirPath, basename, ['.pdf'], listing);
-
-      const relImg   = imgPath   ? path.relative(WWW_DIR, imgPath).replace(/\\/g, '/')   : null;
-      const relAudio = audioPath
-        ? path.relative(localAudioPath ? WWW_DIR : AUDIO_DIR, audioPath).replace(/\\/g, '/')
-        : null;
-      const relVideo = videoPath ? path.relative(WWW_DIR, videoPath).replace(/\\/g, '/') : null;
-      const relPdf   = pdfPath   ? path.relative(WWW_DIR, pdfPath).replace(/\\/g, '/')   : null;
-
-      // categories = unified taxonomy labels (for filtering); tags = raw Kategorien field (display only)
-      const tags = (parsed.tags || []).slice(0, 10);
-      // Der Titel zählt bei der Kategorisierung stärker als der übrige Text.
-      const categories = mergeCategories(tags, autoCategorize((parsed.summary || '') + ' ' + parsed.body, parsed.title));
-
-      const excerpt = parsed.summary
-        ? parsed.summary.slice(0, 320)
-        : bodyExcerpt(parsed.body);
-
-      collector.push({
-        id,
-        author,
-        year: year || (parsed.date ? parsed.date.slice(0, 4) : ''),
-        title: parsed.title,
-        date: parsed.date,
-        categories,
-        tags,
-        excerpt,
-        summary: parsed.summary || null,
-        sourceUrl: parsed.sourceUrl || null,
-        // Lang genug, um in der Listenansicht auch auf breiten Bildschirmen drei volle Zeilen zu füllen.
-        preview: bodyExcerpt(parsed.body, 1000),
-        imageUrl: relImg   ? fileUrl(relImg, imgPath)     : null,
-        audioUrl: relAudio
-          ? (localAudioPath ? fileUrl(relAudio, audioPath) : audioFileUrl(relAudio, audioPath))
-          : null,
-        hasExternalAudio: !!externalAudioPath,
-        videoUrl: relVideo ? fileUrl(relVideo, videoPath) : null,
-        pdfUrl:   relPdf   ? fileUrl(relPdf, pdfPath)     : null,
-        episodeNum: parsed.episodeNum,
-        instagramPoster: parsed.instagramPoster,
-        filePath: fullPath,
-        // Intern (nicht in der API): eigenes Bild statt standard.jpg, eigener Text.
-        ownImage: !!ownImgPath,
-        hasBody: !!parsed.body.trim(),
-        duplicateProfile: (author === duplicateConfig.blogAuthor || duplicateConfig.facebookAuthors.includes(author))
-          ? buildDuplicateProfile(parsed.title, parsed.body)
-          : null,
-      });
-      reindexState.processed++;
-    } catch (err) {
-      if (resolvedTarget) throw err;
-      // skip unparseable files silently
-    }
-  }
-}
 
 function refreshDuplicateState() {
   const nextCanonical = new Map();

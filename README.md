@@ -899,6 +899,7 @@ lib/taxonomy.cjs              Filter-Kategorien: gewichtete Suchwörter, autoCat
 lib/infographics.cjs          Infografik-Zuordnung und -Gruppen, Benennung, Kopfbearbeitung, Dateien verschieben
 lib/archive-files.cjs         Verzeichnis-Cache, Medien neben Artikeln finden, Datei-URLs, sichere Pfade
 lib/article-index.cjs         Fuse-Suchindex, Listen-Helfer für Teil-Reindexe, Scraper-Manifest
+lib/article-scan.cjs          Artikel-Scan: Inhalt (cachebar) und Medien neben der .md getrennt, Datei-Signatur
 lib/app-shell.cjs             Versionssignatur der App, Update-Service-Worker, Datei-Caches (index.html, Version)
 lib/article-body-cache.cjs    Gerenderte Artikeltexte (Detail, Dubletten-Vergleich), neu nur nach Dateiänderung
 lib/http-errors.cjs           httpError(status, message, extra), jsonRoute (gemeinsamer JSON-Routen-Rahmen), isCrossSite
