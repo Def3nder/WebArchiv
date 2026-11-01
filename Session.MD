@@ -2522,3 +2522,28 @@ Markup, CSS).
 
 **Deployment:** `public/index.html`, `public/app-detail.js`, `public/app-gallery.js`, `public/css/detail.css`;
 Browser neu laden.
+
+## 65. Aktualisierung 01.11.2026 – Health-Check, Schritt 1: Meldungssammler (Review 3.4 und To-Do „Fehler anzeigen“)
+
+Plan (Schritte je mit Commit): 1 Meldungssammler, 2 unlesbare Dateien sichtbar, 3 Health-Daten und Routen
+(`/api/health` öffentlich nur mit Status, Details für Admins), 4 geordnetes Beenden, 5 Hinweis oben rechts und
+Health-Check-Dialog (vorher Vorschau), 6 Doku. Hinweis nur bei Fehlern; Warnungen zeigt nur der Health-Check.
+
+- Neu `lib/event-log.cjs`:
+  - `createEventLog`: Fehler und Warnungen mit fortlaufender id; gleiche Meldungen (Stufe, Quelle, erste Zeile)
+    werden zusammengefasst (Anzahl, erstes/letztes Auftreten), Stack als Detail, höchstens 200 Einträge.
+    `summary(after)` liefert die Zahl neuer Fehler seit einer id (auch Wiederholungen) für den späteren Hinweis.
+  - `captureConsole`: `console.error` → Fehler, `console.warn` → Warnung; die Ausgabe ins Journal bleibt.
+  - Speichern gedrosselt und atomar in `health-events.json` (gitignored, `HEALTH_EVENTS_FILE`); Meldungen vom Start
+    vor dem Laden werden zusammengeführt. Eigene Speicherfehler gehen nur ins Journal (keine Schleife).
+  - `createLogTail`: liest neue Zeilen einer Log-Datei ab gespeichertem Lesestand; beim ersten Mal ab Dateiende (keine
+    alten Fehler), halbe Zeilen warten, geleerte/ersetzte Datei von vorn. Parser für `scraper/scrape_all.log`
+    (`[ERROR]`-Zeilen, Web-UI- und Cron-Scrapes) und `scraper/cron-scrape.log` (`Scraper exit N≠0`, `FEHLER: …`).
+- `server.js`: Konsole wird nur beim echten Serverstart erfasst (nicht in Tests); die Log-Dateien werden jede Minute
+  und bei SIGHUP (Ende des Cron-Scrapes) nachgelesen; beim Beenden wird gespeichert.
+
+**Geprüft:** Echter Server: Start-Warnung `SESSION_SECRET` erfasst, Lesestand von `scrape_all.log` am Dateiende
+gesetzt, Datei gitignored. Test `test/event-log.test.cjs` (Zusammenfassen, „seit id“, Grenzen, Konsole, Speichern
+und Zusammenführen, kaputte Datei, Zeilen-Parser, fortlaufendes Lesen samt halber Zeile und geleerter Datei).
+
+**Deployment:** `lib/event-log.cjs` (neu), `server.js`, `.gitignore`; Dienst neu starten.

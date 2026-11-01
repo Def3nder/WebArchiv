@@ -941,6 +941,7 @@ lib/html-sanitizer.cjs        Markdown → bereinigtes HTML (sanitize-html)
 lib/security-headers.cjs      CSP (Report-Only/Enforce), weitere Sicherheits-Header, /api/csp-report
 lib/archive-lock.cjs          Zentrale Sperre für Schreib- und Indexaufträge (409 mit laufendem Auftrag)
 lib/duplicates.cjs            Dublettenerkennung und persistente Entscheidungen
+lib/event-log.cjs             Meldungssammler für den Health-Check (Konsole, Scrape- und Cron-Log, health-events.json)
 lib/share-ids.cjs             Kurze Teilen-IDs für /a/<shareId> (ohne Leerzeichen, für WhatsApp & Co.)
 modules/user-store.cjs        Nutzer, öffentliche Autoren & Autoren-Priorität: Speicher/Routen
 modules/audiobooks.cjs        Hörbücher: Index, abstract.md, Hörfortschritt, Routen
@@ -1006,7 +1007,7 @@ LXC-container node.js Setup.md   Server-/Deployment-Doku
 ```
 
 Nicht eingecheckt (`.gitignore`): `node_modules/`, `scraper/node_modules/`,
-`www/<Autor>/2*` (Jahresinhalte), `audio/`, `download/`, `users.json`, `config.json`, `public-directories.txt`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`, `index-cache.json`, `tts-settings.json`, `tts-voice-previews/`,
+`www/<Autor>/2*` (Jahresinhalte), `audio/`, `download/`, `users.json`, `config.json`, `public-directories.txt`, `audiobook-progress.json`, `bookmarks.json`, `duplicate-decisions.json`, `index-cache.json`, `health-events.json`, `tts-settings.json`, `tts-voice-previews/`,
 `scraper/cookies.txt`, `scraper/Abonenten-URL.txt`, Logs.
 
 ---
@@ -1060,6 +1061,7 @@ npm test --prefix tts
 | `SESSION_SECRET` | zufällig pro Prozess | Signatur der Session-Cookies; bei `NODE_ENV=production` Pflicht (≥ 32 Zeichen, z. B. `openssl rand -hex 32`). Nur mit festem Wert überstehen Anmeldungen einen Neustart |
 | `SESSIONS_FILE` | `sessions.json` im App-Verzeichnis | Gespeicherte Sitzungen (Rechte 0600, gitignored); abgelaufene werden entfernt |
 | `INDEX_CACHE_FILE` | `index-cache.json` im App-Verzeichnis | Index-Cache (Rechte 0600, gitignored); löschen macht nur den nächsten Start langsamer |
+| `HEALTH_EVENTS_FILE` | `health-events.json` im App-Verzeichnis | Gesammelte Fehler und Warnungen für den Health-Check (Rechte 0600, gitignored) |
 | `WATCH_ARCHIVE` | an | `0` schaltet den Datei-Watcher für `www/` und `audio/` ab (dann nur SIGHUP, Button, Neustart) |
 | `TRUST_PROXY` | `loopback, 192.168.1.14` | Kommagetrennte Adressen/Subnetze des Reverse Proxys (NPMplus); `true` wird abgelehnt |
 | `CSP_MODE` | `report` | `report` (nur melden), `enforce` (blockieren) oder `off` |

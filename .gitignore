@@ -44,6 +44,7 @@ audiobook-private.json
 bookmarks.json
 sessions.json
 index-cache.json
+health-events.json
 duplicate-decisions.json
 tts-settings.json
 /tts-voice-previews/

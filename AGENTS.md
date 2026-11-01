@@ -59,7 +59,10 @@ server-side files are isolated under `tts-server/` and never run as part of `ser
   rescan that finds nothing changed publishes nothing (`sameSourceArticles`), the admin reindex button reads everything
   fresh via `buildIndex({ fresh: true })`), `fulltext.cjs` (full-text search without an index: every entry carries an
   internal, cached `searchText` — folded title, summary and body; `/api/articles?fulltext=1` appends substring matches,
-  also inside words, after the Fuse hits; ~15 ms over the whole archive), `archive-watcher.cjs` (debounced `fs.watch` on `www/` and `audio/`, one
+  also inside words, after the Fuse hits; ~15 ms over the whole archive), `event-log.cjs` (messages for the health check: captures `console.error`/`warn` when
+  `server.js` runs as main module — journal output stays — plus `[ERROR]` lines from `scraper/scrape_all.log` and
+  failures from `cron-scrape.log`, read incrementally; identical messages are grouped; persisted in
+  `health-events.json`, gitignored), `archive-watcher.cjs` (debounced `fs.watch` on `www/` and `audio/`, one
   non-recursive watcher per directory — Node's recursive watch aborts on Linux at an unreadable `lost+found`; ignores
   dot files, `*.filepart`, `lost+found` and `Infografiken/trash/`), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
@@ -114,7 +117,7 @@ object in `app.js`.
 - **Runtime files are gitignored:** `config.json` (author priority, duplicates, audiobook skips) and
   `public-directories.txt` are written by the app; templates are `example-config.json` and
   `example-public-directories.txt` — never re-add the real files to git. `index-cache.json` is a pure cache: deleting
-  it only makes the next start slower.
+  it only makes the next start slower; `health-events.json` only holds the health-check messages.
 - **Users** live in `users.json` (gitignored). Copy `example-users.json` → `users.json`, set
   plaintext `password` fields, run `node scripts/hash-passwords.js` to replace them with bcrypt
   `passwordHash`. Each user has `role` (`admin`/`user`) and `allowedAuthors`: `null` = all authors,

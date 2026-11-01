@@ -47,6 +47,7 @@ const {
 const { createArticleScanner } = require('./lib/article-scan.cjs');
 const { createIndexCache, indexCacheVersion } = require('./lib/index-cache.cjs');
 const { createArchiveWatcher } = require('./lib/archive-watcher.cjs');
+const { createEventLog, createLogTail, parseScraperLogLine, parseCronLogLine } = require('./lib/event-log.cjs');
 
 // Kommagetrennte Adressen/Subnetze bzw. Express-Schlüsselwörter (loopback,
 // linklocal, uniquelocal). „true“ wird bewusst nicht unterstützt.
@@ -82,6 +83,20 @@ const {
 } = require('./lib/duplicates.cjs');
 
 const app = express();
+// Meldungen für den Health-Check (lib/event-log.cjs, health-events.json, gitignored). Beim echten
+// Serverstart erfasst er console.error/console.warn von Anfang an; die Ausgabe ins Journal bleibt.
+const eventLog = createEventLog({ file: process.env.HEALTH_EVENTS_FILE || path.join(__dirname, 'health-events.json') });
+if (require.main === module) eventLog.captureConsole();
+// Fehler anderer Prozesse aus ihren Log-Dateien: Scraper (Web-UI und Cron) und Cron-Skript.
+const eventLogTails = [
+  createLogTail({ name: 'scrapeLog', file: path.join(__dirname, 'scraper', 'scrape_all.log'), eventLog, parse: parseScraperLogLine, source: 'scraper' }),
+  createLogTail({ name: 'cronLog', file: path.join(__dirname, 'scraper', 'cron-scrape.log'), eventLog, parse: parseCronLogLine, source: 'cron' }),
+];
+async function pollEventLogTails() {
+  for (const poll of eventLogTails) {
+    try { await poll(); } catch (error) { console.warn(`Log-Datei für Meldungen nicht lesbar: ${error.message}`); }
+  }
+}
 // Hinter dem Reverse-Proxy (NPMplus/HTTPS) X-Forwarded-Proto/Host/For nur von
 // bekannten Proxy-Adressen übernehmen. Sonst könnte jeder Client über einen
 // gefälschten X-Forwarded-For-Header die Login-Begrenzung pro IP umgehen.
@@ -783,8 +798,14 @@ if (require.main === module) {
   //   kill -HUP "$(systemctl show -p MainPID --value nodeapp)"
   // Läuft beim Signal noch ein Auftrag (z. B. Audio-Erzeugung), wird der Reindex
   // nachgeholt, sobald das Archiv frei ist; früher entfiel er dann bis zum nächsten Tag.
+  // Gespeicherte Meldungen laden, dann die Log-Dateien jede Minute nachlesen.
+  eventLog.load().then(pollEventLogTails).catch(console.error);
+  setInterval(pollEventLogTails, 60 * 1000).unref();
+
   process.on('SIGHUP', () => {
     console.log('SIGHUP empfangen -> Reindex');
+    // Der Cron-Scrape schickt SIGHUP, sobald er fertig ist: seine Fehler gleich einlesen.
+    pollEventLogTails();
     const scheduled = archiveLock.whenIdle(() => buildIndex().catch(console.error), {
       onWait: current => console.warn(`SIGHUP-Reindex wartet auf: ${current} (neuer Versuch alle 30 s)`),
     });
@@ -826,6 +847,7 @@ if (require.main === module) {
     server.close();
     await ttsJobs.shutdown();
     await sessionStore?.close().catch(() => {});
+    await eventLog.flush();
     process.exit(0);
   });
 }
