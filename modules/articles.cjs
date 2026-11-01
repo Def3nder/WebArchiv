@@ -9,6 +9,7 @@ const { parseArticleSearchQuery } = require('../lib/article-parser.cjs');
 const { articleDisplayAuthor } = require('../lib/article-index.cjs');
 const { INFOGRAPHICS_AUTHOR } = require('../lib/infographics.cjs');
 const { shareIdFor } = require('../lib/share-ids.cjs');
+const { parseFulltextQuery, matchesFulltext } = require('../lib/fulltext.cjs');
 
 // Telegram ist in Listen ausgeblendet, außer mit ?telegram=1 oder author=Telegram.
 const TELEGRAM_AUTHOR = 'Telegram';
@@ -36,7 +37,7 @@ function createArticleViews({ archive, canAccessAuthor }) {
   // Nur interne Felder entfernen und geerbtes Audio ohne Recht am Ursprung verbergen.
   function exposeArticleForUser(article, user) {
     const {
-      filePath, fileSignature, inheritedAudioAuthor, inheritedAudioArticleId,
+      filePath, fileSignature, searchText, inheritedAudioAuthor, inheritedAudioArticleId,
       ownImage, hasBody, infographicBase, infographicOrdinal, duplicateProfile, ...rest
     } = article;
     const exposed = inheritedAudioAuthor && !canAccessAuthor(user, inheritedAudioAuthor)
@@ -97,7 +98,7 @@ function installArticleRoutes(app, {
   app.get('/api/articles', attachUser, jsonRoute(req => {
     const {
       q, author, year, category, page = '1', limit = '24', telegram, externalAudio,
-      instagram, infographic, infographicReview,
+      instagram, infographic, infographicReview, fulltext,
     } = req.query;
     const user = req.user;
     const infographicReviewMode = infographicReview === '1';
@@ -166,7 +167,16 @@ function installArticleRoutes(app, {
       if (text && archive.fuseIndex) {
         const filteredIds = new Set(filtered.map(a => a.id));
         const results = archive.fuseIndex.search(text);
-        filtered = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
+        const fuseHits = results.filter(r => filteredIds.has(r.item.id)).map(r => r.item);
+        // Volltext (Lupe im Suchfeld): danach alle übrigen Artikel, deren Text alle Wörter
+        // bzw. Phrasen enthält, auch innerhalb von Wörtern – in Listenreihenfolge (neueste zuerst).
+        if (fulltext === '1') {
+          const terms = parseFulltextQuery(text);
+          const fuseIds = new Set(fuseHits.map(a => a.id));
+          filtered = [...fuseHits, ...filtered.filter(a => !fuseIds.has(a.id) && matchesFulltext(a.searchText, terms))];
+        } else {
+          filtered = fuseHits;
+        }
       }
     }
 

@@ -6,25 +6,30 @@ const express = require('express');
 const { installArticleRoutes } = require('../modules/articles.cjs');
 const { buildArticleSearchIndex } = require('../lib/article-index.cjs');
 const { shareIdFor } = require('../lib/share-ids.cjs');
+const { foldSearchText } = require('../lib/fulltext.cjs');
 
 const article = (id, fields = {}) => {
   const [author, year] = id.split('/');
   return {
     id, author, year, date: `${year}-01-10`, title: id, categories: [], tags: [], excerpt: '',
     filePath: `/www/${id}.md`, fileSignature: { size: 10, mtimeMs: 1 }, ownImage: false, imageUrl: `/files/${id}.jpg`, ...fields,
+    searchText: foldSearchText(`${fields.title || id} ${fields.body || ''}`),
   };
 };
 
 // Blogartikel mit Foto und Infografik, Telegram, eine verknüpfte Facebook-Dublette und ein gesperrter Autor.
 function fixture() {
-  const blog = article('Joe/2026/achtsamkeit', { title: 'Achtsamkeit im Alltag', date: '2026-03-02', ownImage: true, categories: ['Achtsamkeit'] });
+  const blog = article('Joe/2026/achtsamkeit', {
+    title: 'Achtsamkeit im Alltag', date: '2026-03-02', ownImage: true, categories: ['Achtsamkeit'],
+    body: 'Wie die Verlustangst im Alltag kleiner wird.',
+  });
   const info = article('Infografiken/2026/achtsamkeit_1', {
     title: 'Achtsamkeit (Grafik)', date: '2026-03-02', ownImage: true, instagramPoster: true,
     inheritedAudioAuthor: 'Geheim', audioUrl: '/audio/x.mp3', hasExternalAudio: true,
   });
-  const telegram = article('Telegram/2026/notiz', { title: 'Kurze Notiz', date: '2026-02-01' });
+  const telegram = article('Telegram/2026/notiz', { title: 'Kurze Notiz', date: '2026-02-01', body: 'Über Verlustängste im Alltag sprechen.' });
   const facebook = article('Facebook/2026/achtsamkeit', { title: 'Achtsamkeit (Facebook)', date: '2026-03-01' });
-  const secret = article('Geheim/2025/intern', { title: 'Intern', date: '2025-05-05' });
+  const secret = article('Geheim/2025/intern', { title: 'Intern', date: '2025-05-05', body: 'Auch hier: Verlustangst.' });
   const articles = [blog, info, facebook, telegram, secret];
   const archive = {
     articles,
@@ -162,4 +167,26 @@ test('Facetten: Autoren nach Rechten gefiltert', async t => {
   });
   res = await call('/api/meta', 'admin');
   assert.equal(res.data.authors.length, 5);
+});
+
+test('Volltext: Treffer im Text nach den Fuse-Treffern, auch in Wortteilen, mit Rechten und Filtern', async t => {
+  const data = fixture();
+  const call = await start(t, data);
+  let res = await call('/api/articles?q=angst');
+  assert.deepEqual(ids(res), [], 'ohne Volltext nur Titel, Kategorien, Auszug');
+
+  res = await call('/api/articles?q=angst&fulltext=1');
+  assert.deepEqual(ids(res), [data.blog.id], 'Verlustangst im Text; Telegram ausgeblendet, Geheim ohne Recht');
+  assert.equal(res.data.items[0].searchText, undefined, 'Suchtext bleibt intern');
+  res = await call('/api/articles?q=angst&fulltext=1&telegram=1');
+  assert.deepEqual(ids(res), [data.blog.id, data.telegram.id], 'Verlustängste dank Umlaut-Normalisierung');
+  res = await call('/api/articles?q=angst&fulltext=1', 'admin');
+  assert.deepEqual(ids(res), [data.blog.id, data.secret.id]);
+
+  res = await call('/api/articles?q=Alltag&fulltext=1&telegram=1');
+  assert.deepEqual(ids(res), [data.blog.id, data.telegram.id], 'Titeltreffer (Fuse) zuerst, dann Treffer im Text');
+  res = await call('/api/articles?q=%22verlustangst%20im%20alltag%22%202026&fulltext=1&telegram=1');
+  assert.deepEqual(ids(res), [data.blog.id], 'Phrase und Jahr kombiniert');
+  res = await call('/api/articles?q=angst%20wut&fulltext=1');
+  assert.deepEqual(ids(res), [], 'alle Wörter müssen vorkommen');
 });

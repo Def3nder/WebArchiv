@@ -64,7 +64,9 @@ must not pin versions.
   (persistent cache of the parse part per file signature in `index-cache.json`, gitignored; its version hashes the parser
   sources and the duplicate authors, so changing e.g. taxonomy keywords invalidates it — no manual bump needed; a full
   rescan that finds nothing changed publishes nothing (`sameSourceArticles`), the admin reindex button reads everything
-  fresh via `buildIndex({ fresh: true })`), `archive-watcher.cjs` (debounced `fs.watch` on `www/` and `audio/`, one
+  fresh via `buildIndex({ fresh: true })`), `fulltext.cjs` (full-text search without an index: every entry carries an
+  internal, cached `searchText` — folded title, summary and body; `/api/articles?fulltext=1` appends substring matches,
+  also inside words, after the Fuse hits; ~15 ms over the whole archive), `archive-watcher.cjs` (debounced `fs.watch` on `www/` and `audio/`, one
   non-recursive watcher per directory — Node's recursive watch aborts on Linux at an unreadable `lost+found`; ignores
   dot files, `*.filepart`, `lost+found` and `Infografiken/trash/`), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).

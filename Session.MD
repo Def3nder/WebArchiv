@@ -2459,3 +2459,26 @@ Leerlauf ohne Watcher-Meldung, also keine Reindex-Schleife.
 
 **Deployment:** `lib/archive-watcher.cjs`, `server.js`; Dienst neu starten. Erwartet im Journal:
 `Datei-Watcher aktiv: 2 von 2 Wurzeln, … Ordner überwacht`, kein EACCES mehr.
+
+## 62. Aktualisierung 01.11.2026 – Volltextsuche, Server-Teil (Review-Idee 3.7, Schritt 3)
+
+- Neu `lib/fulltext.cjs`: `foldSearchText` (klein, ohne Umlautpunkte und Akzente, ß → ss, Satzzeichen und
+  Zeilenumbrüche als Leerzeichen), `parseFulltextQuery` (Wörter und Phrasen in Anführungszeichen),
+  `matchesFulltext` (alle Begriffe als Teilstring, also auch innerhalb von Wörtern).
+- `parseArticleContent` erzeugt pro Artikel den internen `searchText` aus Titel, Zusammenfassung und Text. Er liegt im
+  Index-Cache (Datei jetzt rund 47 statt 23 MB; `lib/fulltext.cjs` gehört zur Versionskennung) und wird von
+  `exposeArticleForUser` entfernt.
+- `/api/articles?q=…&fulltext=1`: zuerst die Fuse-Treffer wie bisher, danach alle übrigen Artikel der gefilterten
+  Menge, deren Suchtext alle Begriffe enthält, in Listenreihenfolge (neueste zuerst). Rechte, Dubletten, Telegram,
+  Filter und Datums-Tokens gelten unverändert. Ohne `fulltext=1` ändert sich nichts.
+- Bewusst ohne invertierten Index (MiniSearch): Der Textvergleich über 7.153 Artikel kostet rund 15 ms; die Zeit
+  einer Suche bestimmt weiterhin Fuse (130–300 ms, wie bisher).
+
+**Geprüft am Bestand:** „angst“ 1.240 → 2.877 Treffer, „Selbstwert“ 459 → 565, „"inneres Kind"“ 12 → 29,
+„Verlustangst 2025“ 7 → 11; `searchText` nicht in der Antwort; Start mit Cache weiter 1,9 s. Tests:
+`test/fulltext.test.cjs` (Normalisieren, Zerlegen, Treffer, Suchtext im Scan), `test/articles.test.cjs` (Reihenfolge
+Fuse vor Text, Wortteile, Umlaute, Rechte, Telegram, Phrase plus Jahr, alle Wörter nötig).
+
+**Noch offen:** Schalter in der Oberfläche (goldene Lupe vor dem Suchfeld, Platzhaltertext) im nächsten Commit.
+**Deployment:** `lib/fulltext.cjs` (neu), `lib/article-scan.cjs`, `lib/index-cache.cjs`, `modules/articles.cjs`;
+Dienst neu starten. Der erste Start baut den Cache einmal neu auf.

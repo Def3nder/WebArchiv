@@ -500,6 +500,12 @@ Repository.
 - **Gewichtete Suche** über `Fuse.js` (Titel×3, Episodennummer×2,
   Autor×1,5, Kategorien×1, Auszug×0,8). Der vollständige Body ist kein
   eigener Suchschlüssel.
+- **Volltextsuche** (`fulltext=1`, `lib/fulltext.cjs`): hängt an die Fuse-Treffer alle weiteren Artikel an, deren
+  Titel, Zusammenfassung oder Text alle Suchwörter enthält – auch innerhalb von Wörtern („angst“ findet
+  „Verlustangst“), ohne Groß-/Kleinschreibung, Umlautpunkte und Akzente (ä = a, ß = ss). Phrasen in
+  Anführungszeichen (`"inneres Kind"`) müssen zusammenhängend vorkommen; Datums-Tokens und alle Filter gelten weiter.
+  Ohne Index: Jeder Eintrag trägt intern einen normalisierten Suchtext (im Index-Cache gespeichert), ein Vergleich
+  über das ganze Archiv kostet rund 15 ms.
 - **Datums-Tokens** in der Suche werden erkannt und als Filter angewandt
   (`2026`, `2026-03`, `03.2026`, `25.01.2026`) — kombinierbar mit Textsuche
   (z. B. „Achtsamkeit 2025").
@@ -736,7 +742,7 @@ Editor- oder Menülogik einbezogen.
 | `DELETE /api/users/:email` | Admin | Nutzer löschen |
 | `PUT /api/public-authors` | Admin | Öffentliche Autoren setzen `{authors:[…]}` |
 | `GET /api/meta` | Soft | Autoren/Jahre/Kategorien (ACL-gefiltert) |
-| `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `infographic=poster\|classic` filtert beim Autor Infografiken, `infographicReview=1` liefert den Admin-Prüfmodus; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen; `bookmarks=1` nur Artikel mit Lesezeichen; Infografiken tragen den abgeleiteten `displayAuthor` |
+| `GET /api/articles` | Soft | Liste mit `q,author,year,category,page,limit,telegram`; `fulltext=1` ergänzt Treffer im Artikeltext; `infographic=poster\|classic` filtert beim Autor Infografiken, `infographicReview=1` liefert den Admin-Prüfmodus; `group=1` fasst Artikel + Infografiken zu Kacheln mit `images` zusammen; `bookmarks=1` nur Artikel mit Lesezeichen; Infografiken tragen den abgeleiteten `displayAuthor` |
 | `GET /api/articles/*` | Soft | Einzelartikel inkl. gerendertem `bodyHtml`, `images` und `bookmarked`; eine gruppierte Infografik liefert ihre Gruppe (`requestedId`) |
 | `GET /api/infographic-manager/*` | Admin + Artikelrecht | Verwaltbare, eigene Artikel-Infografiken in Reihenfolge |
 | `POST /api/infographic-manager/*` | Admin + Artikelrecht | `{action:"order",ids:[…]}` benennt Bild/Markdown um; `{action:"trash",id}` verschiebt ein Paar in den Papierkorb und nummeriert übrige Grafiken neu |
