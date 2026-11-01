@@ -108,6 +108,23 @@ $pwForm.addEventListener('submit', async event => {
 });
 document.getElementById('password-cancel').addEventListener('click', () => finishPasswordDialog(false));
 document.getElementById('password-logout').addEventListener('click', () => finishPasswordDialog(false));
+// Klick auf den abgedunkelten Hintergrund schließt wie Escape (nicht bei der Pflicht-Änderung, nicht während des
+// Speicherns) – nur wenn auch der Druck dort begann: Eine aus dem Eingabefeld gezogene Markierung schließt nicht.
+function outsideDialog(dialog, event) {
+  if (event.target !== dialog) return false;
+  const rect = dialog.getBoundingClientRect();
+  return event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+}
+function closeOnBackdrop(dialog, close) {
+  let pressedOutside = false;
+  dialog.addEventListener('pointerdown', event => { pressedOutside = outsideDialog(dialog, event); });
+  dialog.addEventListener('click', event => {
+    const outside = pressedOutside && outsideDialog(dialog, event);
+    pressedOutside = false;
+    if (outside) close();
+  });
+}
+closeOnBackdrop($pwDialog, () => { if (!pwState.forced && !pwState.busy) finishPasswordDialog(false); });
 
 // Kurze Bestätigung unterhalb des Headers.
 function showAccountNotice(message) {
@@ -595,6 +612,8 @@ for (const tab of ['users', 'public']) {
   });
 }
 document.getElementById('user-admin-close').addEventListener('click', closeUserAdmin);
+// Wie Escape: fragt bei ungespeicherten Änderungen nach, schließt nicht während des Speicherns.
+closeOnBackdrop($ua, closeUserAdmin);
 // Escape und Tasten regelt der Ebenen-Stapel (keine Artikelnavigation dahinter).
 window.addEventListener('beforeunload', event => {
   if ($ua.open && ua.dirty) { event.preventDefault(); event.returnValue = ''; }

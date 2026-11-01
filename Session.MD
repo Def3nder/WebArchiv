@@ -2673,3 +2673,19 @@ Laufzeitdatei `health-events.json` (gitignored, Pfad per `HEALTH_EVENTS_FILE`).
   „Archiv neu einlesen“ (liest bewusst ohne Cache): „nicht genutzt · N neu gelesen“.
 
 **Deployment:** `public/health.js`; Browser neu laden.
+
+## 73. Aktualisierung 01.11.2026 – „Benutzerverwaltung“ und „Kennwort ändern“ schließen per Klick daneben
+
+- `public/user-admin.js` (Admin-Shell) und `public/password.js` (Gast-/Nutzer-Shell): Hilfsfunktion
+  `closeOnBackdrop(dialog, close)` – ein Klick auf den abgedunkelten Hintergrund außerhalb des Dialogrechtecks schließt,
+  aber nur, wenn auch der Druck dort begann. So schließt eine im Eingabefeld begonnene und daneben losgelassene
+  Markierung den Dialog nicht.
+- „Kennwort ändern“ schließt dabei wie Escape: nicht bei der Pflicht-Änderung (`mustChangePassword`) und nicht während
+  des Speicherns. „Benutzerverwaltung“ nutzt `closeUserAdmin` – Rückfrage bei ungespeicherten Änderungen, kein Schließen
+  während des Speicherns.
+
+**Geprüft:** `test/backdrop-close.test.cjs` (Hilfsfunktion in beiden Dateien mit Attrappe: Klick daneben, Ziehen aus
+dem Dialog, Innenabstand; Bedingungen für Pflicht-Änderung und Rückfrage); im Browser in der Admin-Shell: Ziehen aus
+dem Kennwortfeld und Klick in den Innenabstand lassen den Dialog offen, Klick daneben schließt beide Dialoge.
+
+**Deployment:** `public/user-admin.js`, `public/password.js`; Browser neu laden.
