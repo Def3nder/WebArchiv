@@ -57,8 +57,9 @@ server-side files are isolated under `tts-server/` and never run as part of `ser
   (persistent cache of the parse part per file signature in `index-cache.json`, gitignored; its version hashes the parser
   sources and the duplicate authors, so changing e.g. taxonomy keywords invalidates it — no manual bump needed; a full
   rescan that finds nothing changed publishes nothing (`sameSourceArticles`), the admin reindex button reads everything
-  fresh via `buildIndex({ fresh: true })`), `archive-watcher.cjs` (debounced `fs.watch` on `www/` and `audio/`; ignores
-  dot files, `*.filepart` and `Infografiken/trash/`), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
+  fresh via `buildIndex({ fresh: true })`), `archive-watcher.cjs` (debounced `fs.watch` on `www/` and `audio/`, one
+  non-recursive watcher per directory — Node's recursive watch aborts on Linux at an unreadable `lost+found`; ignores
+  dot files, `*.filepart`, `lost+found` and `Infografiken/trash/`), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
 - **`modules/`** — feature modules with routes: a `create…` factory for their state plus `install…Routes(app, deps)`
   (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files`, `scrape`,

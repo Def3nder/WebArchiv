@@ -809,7 +809,9 @@ if (require.main === module) {
       });
     },
   });
-  if (archiveWatcher) console.log(`Datei-Watcher aktiv (${archiveWatcher.start()} Ordner)`);
+  archiveWatcher?.start().then(roots => console.log(
+    `Datei-Watcher aktiv: ${roots} von 2 Wurzeln, ${archiveWatcher.directoryCount} Ordner überwacht`,
+  ), error => console.error('Datei-Watcher nicht gestartet:', error));
 
   buildIndex().catch(console.error);
   const server = app.listen(PORT, () => {

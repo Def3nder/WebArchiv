@@ -823,8 +823,11 @@ alle Dateien frisch, am Cache vorbei, und erneuert ihn dabei – der Sicherheits
 
 **Datei-Watcher** (`lib/archive-watcher.cjs`): Änderungen unter `www/` und `audio/` – etwa per WinSCP hochgeladene
 Artikel und Bilder oder gelöschte Dateien – lösen nach 5 s Ruhe (spätestens nach 60 s) einen gecachten Reindex aus;
-läuft gerade ein Schreibauftrag, wartet er darauf. Ignoriert werden Punkt-Dateien (eigene Temp-Dateien), WinSCP-
-Teildateien (`*.filepart`) und `Infografiken/trash/`. Das Log zeigt `Dateiänderungen erkannt (…) -> Reindex`.
+läuft gerade ein Schreibauftrag, wartet er darauf. Jeder Ordner wird einzeln überwacht (das rekursive `fs.watch` von
+Node bricht unter Linux am nicht lesbaren `lost+found` der Disks ab); neue Ordner kommen automatisch dazu. Ignoriert
+werden Punkt-Dateien und -Ordner (eigene Temp-Dateien), WinSCP-Teildateien (`*.filepart`), `lost+found` und
+`Infografiken/trash/`. Ein nicht lesbarer Ordner steht nur im Log. Beim Start meldet das Journal
+`Datei-Watcher aktiv: 2 von 2 Wurzeln, N Ordner überwacht`. Das Log zeigt `Dateiänderungen erkannt (…) -> Reindex`.
 Eigene Schreibvorgänge (Editor, TTS, Infografiken) melden sich ebenfalls; der Neu-Scan findet dann nichts Neues
 und veröffentlicht nichts. `SIGHUP` aus dem Cron-Skript bleibt als Absicherung. Abschalten mit `WATCH_ARCHIVE=0`.
 

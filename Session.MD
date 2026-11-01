@@ -2436,3 +2436,26 @@ erkannt“, Index 7.154 Artikel (1 neu eingelesen, 0,77 s); gelöscht → 7.153 
 
 **Deployment:** `lib/archive-watcher.cjs` (neu), `server.js`; Dienst neu starten. Im Journal steht danach
 `Datei-Watcher aktiv (2 Ordner)`. Ein inotify-Limit ist bei rund 60 Ordnern nicht zu erwarten.
+
+## 61. Aktualisierung 01.11.2026 – Datei-Watcher scheiterte auf dem LXC an `lost+found`
+
+Im Journal stand nach dem Deployment:
+`Datei-Watcher für /opt/nodeapp/www nicht gestartet: EACCES: permission denied, watch '/opt/nodeapp/www/lost+found'`
+(ebenso für `audio/`) und `Datei-Watcher aktiv (0 Ordner)`. Das rekursive `fs.watch` von Node durchläuft unter Linux
+beim Start alle Unterordner und bricht für den ganzen Baum ab, sobald einer nicht lesbar ist. Beide Archiv-Disks
+haben ein `lost+found` (root, 0700). Unter Windows fiel das nicht auf, dort überwacht das Betriebssystem selbst
+rekursiv.
+
+- `lib/archive-watcher.cjs` überwacht jetzt jeden Ordner mit einem eigenen, nicht rekursiven `fs.watch`. Übersprungen
+  werden `lost+found`, Punkt-Ordner und `Infografiken/trash/`; ein nicht überwachbarer oder nicht lesbarer Ordner
+  steht nur im Log, der Rest läuft weiter. Neu angelegte Ordner werden samt Unterordnern nachträglich überwacht,
+  gelöschte fallen heraus.
+- Startmeldung: `Datei-Watcher aktiv: 2 von 2 Wurzeln, N Ordner überwacht` (lokal 184).
+
+**Geprüft:** Tests mit echtem Ordnerbaum (`lost+found`, Punkt-Ordner und Papierkorb ausgelassen, neuer Ordner und Datei
+darin gemeldet) sowie nachgebildet (Ordner mit EACCES nur im Log, gelöschter Ordner nicht mehr überwacht,
+Watcher-Fehler, stop). Echter Server lokal: Probeartikel in neuem Unterordner aufgenommen und wieder entfernt; 25 s
+Leerlauf ohne Watcher-Meldung, also keine Reindex-Schleife.
+
+**Deployment:** `lib/archive-watcher.cjs`, `server.js`; Dienst neu starten. Erwartet im Journal:
+`Datei-Watcher aktiv: 2 von 2 Wurzeln, … Ordner überwacht`, kein EACCES mehr.
