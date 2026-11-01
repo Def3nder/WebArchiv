@@ -584,7 +584,7 @@ Repository.
   Quell-Artikelbild bleibt unverändert. Entscheidungen
   liegen in `duplicate-decisions.json`; Telegram und „Joe Turan Facebook“ werden nicht verglichen.
 - **Health-Check** (Admin, Aktionen → *Health-Check*): Gesamtampel und je Bereich eine Stufe – Index
-  (Bestand, letzter Vollindex mit Dauer und Cache-Treffern, Datei-Watcher, laufender Auftrag, nicht lesbare
+  (Bestand, Dubletten verknüpft/offen, letzter Vollindex mit Dauer und Cache-Treffern, Datei-Watcher, laufender Auftrag, nicht lesbare
   Dateien), freier Speicher auf den Volumes `www` und `audio` (Warnung unter 10 GB bzw. 5 %, Fehler unter 2 GB
   bzw. 2 %), Qwen-TTS erreichbar, letzter Scrape über die Web-UI und per Cron, Server (Laufzeit, Node,
   Arbeitsspeicher, CSP) sowie die gesammelten Meldungen (Fehler und Warnungen aus dem Server-Journal,
@@ -592,7 +592,8 @@ Repository.
   zeigt Details, „Liste leeren“ nach Rückfrage). Neue **Fehler** melden sich zusätzlich mit einem schwebenden
   Hinweis oben rechts unter der Kopfzeile und einer Zahl am Menüeintrag (Abfrage jede Minute, nur bei sichtbarer
   Seite); Warnungen zeigt nur der Dialog. × oder das Öffnen des Dialogs markiert die Meldungen auf diesem Gerät als
-  gelesen; beim ersten Mal auf einem Gerät gilt die bisherige Liste als gelesen.
+  gelesen; beim ersten Mal auf einem Gerät gilt die bisherige Liste als gelesen. Escape, × oder ein Klick neben den
+  Dialog schließen ihn.
 - **Einstellungen** (Aktionen → *Einstellungen*, angemeldet): Schriftart (Editorial/Klassisch/
   Modern/System), Darstellung (Hell/Dunkel/Automatisch = folgt dem Gerät), Textgröße des
   Artikeltexts (Klein/Normal/Groß/Sehr groß) und Filter-Beschriftungen (Automatisch/Ausblenden).
@@ -770,7 +771,7 @@ Editor- oder Menülogik einbezogen.
 | `GET /audio-files/*` | Soft | Artikel-MP3s und Hörbuchmedien aus `audio/`, ACL pro Autor |
 | `GET /a/*` | – | Link-Vorschau: liefert OG-Meta-Tags + Weiterleitung in die SPA |
 | `GET /api/health` | – | Für externes Monitoring: nur `{ status }` – `ok` (200), `starting` oder `degraded` (503: Index fehlt bzw. Indexfehler oder Datenträger fast voll) |
-| `GET /api/health/details` | Admin | Health-Check: Index (letzter Lauf, nicht lesbare Dateien, Sperre, Watcher), freier Speicher auf `www` und `audio`, Qwen, letzter Scrape (Web-UI und Cron), Server, Meldungen; je Bereich und gesamt eine Stufe `ok`/`warning`/`error` |
+| `GET /api/health/details` | Admin | Health-Check: Index (Bestand, Dubletten verknüpft/offen, letzter Lauf, nicht lesbare Dateien, Sperre, Watcher), freier Speicher auf `www` und `audio`, Qwen, letzter Scrape (Web-UI und Cron), Server, Meldungen; je Bereich und gesamt eine Stufe `ok`/`warning`/`error` |
 | `GET /api/health/events?after=N` | Admin | Neue Fehler seit Meldungs-id N (`newErrors`, `latest`, `lastId`) |
 | `POST /api/health/events/clear` | Admin | Meldungsliste leeren |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht); `?sq=256|512` liefert einen quadratischen Ausschnitt vom oberen Bildteil (Sperrbildschirm) |

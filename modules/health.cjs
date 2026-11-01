@@ -98,6 +98,11 @@ function createHealthService({
     const index = {
       articles: archive.articles.length,
       audiobooks: audiobooks.books.length,
+      // Verknüpfte Quellbeiträge (durch den Blogartikel ersetzt) und noch offene Treffer der Dublettenprüfung.
+      duplicates: {
+        linked: archive.duplicateCanonicalOf?.size || 0,
+        open: archive.duplicateCandidates?.length || 0,
+      },
       lastRun: run,
       running: !!state.running,
       error: state.error || null,

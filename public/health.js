@@ -164,6 +164,7 @@ function renderIndex(index) {
     ? `<ul class="health-issues">${index.scanIssues.map(issue => `<li>${esc(issue.path)} (${esc(issue.reason)})</li>`).join('')}</ul>` : '';
   return section('Index', index.level, [
     row('Bestand', `${number(index.articles)} Artikel · ${number(index.audiobooks)} Hörbücher`),
+    row('Dubletten', `${number(index.duplicates.linked)} verknüpft · ${number(index.duplicates.open)} offen`),
     row('Letzter Vollindex', run
       ? `${esc(clock(run.at))} · ${esc(seconds(run.durationMs))} · Cache ${number(run.cacheHits)}/${number(run.cacheMisses)}`
       : (index.running ? 'läuft gerade' : 'noch keiner'), run ? null : 'warning'),
@@ -272,6 +273,12 @@ function closeHealthDialog() {
 
 $refresh.addEventListener('click', loadDetails);
 $close.addEventListener('click', closeHealthDialog);
+// Klick auf den abgedunkelten Hintergrund (außerhalb des Dialogrechtecks) schließt, wie bei den anderen Dialogen.
+$dialog.addEventListener('click', event => {
+  if (event.target !== $dialog) return;
+  const rect = $dialog.getBoundingClientRect();
+  if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeHealthDialog();
+});
 $content.addEventListener('click', async event => {
   const toggle = event.target.closest('.health-event[aria-controls]');
   if (toggle) {

@@ -2652,3 +2652,15 @@ Bereichen, Stack-Details klappen auf, Escape schließt, × blendet aus und setzt
 Laufzeitdatei `health-events.json` (gitignored, Pfad per `HEALTH_EVENTS_FILE`).
 
 **Deployment:** nur Doku.
+
+## 71. Aktualisierung 01.11.2026 – Health-Check: Dubletten im Index, Schließen per Klick daneben
+
+- `modules/health.cjs`: `index.duplicates = { linked, open }` – verknüpfte Quellbeiträge
+  (`archive.duplicateCanonicalOf`) und offene Treffer der Dublettenprüfung (`archive.duplicateCandidates`).
+- `public/health.js`: Zeile „Dubletten“ unter „Bestand“ („443 verknüpft · 0 offen“); ein Klick auf den abgedunkelten
+  Hintergrund außerhalb des Dialogrechtecks schließt den Dialog, wie bei Einstellungen und TTS-Einstellungen.
+
+**Geprüft:** `test/health.test.cjs` (Zählung), `test/health-ui.test.cjs` (Zeile, Klick-Handler); im Browser bei 375 und
+560 px: Zeile sichtbar, Klick ins Dialog-Padding lässt ihn offen, Klick daneben schließt ihn und leert den Ebenen-Stapel.
+
+**Deployment:** `modules/health.cjs`, `public/health.js`; Dienst neu starten.

@@ -50,6 +50,9 @@ test('health.js: Dialog am Ebenen-Stapel, sicheres Markup, Einhängen über admi
     'die Hooks von admin-tasks.js bleiben erhalten');
   assert.match(HEALTH, /actions: \{ \.\.\.adminHooks\.actions, health: openHealthDialog \}/);
   assert.match(HEALTH, /rememberSeen\(data\.events\.lastId\);/, 'Dialog gesehen = gelesen');
+  assert.match(HEALTH, /row\('Dubletten', `\$\{number\(index\.duplicates\.linked\)\} verknüpft · \$\{number\(index\.duplicates\.open\)\} offen`\)/);
+  assert.match(HEALTH, /\$dialog\.addEventListener\('click', event => \{\s*if \(event\.target !== \$dialog\) return;[\s\S]*?closeHealthDialog\(\);\s*\}\);/,
+    'Klick neben den Dialog schließt ihn');
 });
 
 test('health.css: Hinweis oben rechts mit rotem Streifen, Ampelfarben aus den App-Variablen', () => {

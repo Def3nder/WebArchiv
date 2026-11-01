@@ -29,7 +29,7 @@ function setup(t, overrides = {}) {
   const cronLogFile = path.join(dir, 'cron-scrape.log');
   let clock = NOW;
   const service = createHealthService({
-    archive: { articles: new Array(7153), scanIssues: [] },
+    archive: { articles: new Array(7153), scanIssues: [], duplicateCanonicalOf: new Map([['fb1', 'b1'], ['fb2', 'b2']]), duplicateCandidates: [{}] },
     audiobooks: { books: new Array(47) },
     reindexState: () => state.reindex,
     lastIndexRun: () => state.lastRun,
@@ -100,6 +100,7 @@ test('Details: Index, Speicher, Dienste, Server, Meldungen und Gesamtstufe', asy
   let details = await service.details();
   assert.equal(details.level, 'ok');
   assert.deepEqual([details.index.articles, details.index.audiobooks, details.index.busy, details.index.level], [7153, 47, null, 'ok']);
+  assert.deepEqual(details.index.duplicates, { linked: 2, open: 1 }, 'verknüpfte und offene Dubletten');
   // www rechnet mit frsize, audio (ohne frsize) mit bsize: je 1.000 GB gesamt, 500 GB frei.
   assert.deepEqual(details.disks.map(disk => [disk.name, disk.free / GB, disk.total / GB, disk.level]),
     [['www', 500, 1000, 'ok'], ['audio', 500, 1000, 'ok']]);
