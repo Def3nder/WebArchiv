@@ -116,6 +116,8 @@ const INFOGRAPHIC_TRASH_DIR = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR, 'trash');
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const ADMIN_ASSET_PATHS = new Set([
   '/admin-tasks.js',
+  '/health.js',
+  '/css/health.css',
   '/infographic-review.js',
   '/user-admin.js',
   '/tts-settings.js',

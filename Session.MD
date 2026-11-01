@@ -2610,3 +2610,30 @@ Echtlauf prüfbar (unter Windows beendet ein Signal Node ohne Handler); auf dem 
 während eines Infografik-Umbaus die Zeile `Beenden wartet auf: …` im Journal.
 
 **Deployment:** `lib/archive-lock.cjs`, `server.js`; Dienst neu starten.
+
+## 69. Aktualisierung 01.11.2026 – Health-Check, Schritt 5: Hinweis oben rechts und Dialog (Review 3.4)
+
+- Neues Admin-Skript `public/health.js` (gekapselt, `data-admin-asset`, in `ADMIN_ASSET_PATHS`) und
+  `public/css/health.css` (nach `duplicates.css`); Markup in einem `ADMIN_ONLY`-Block von `index.html`, Menüeintrag
+  „Health-Check“ mit Zahl neuer Fehler.
+- **Hinweis oben rechts:** fragt jede Minute (und beim Zurückkehren zur Seite) `/api/health/events?after=<gelesen>`
+  ab, nur für Admins und bei sichtbarer Seite. Nur neue **Fehler** zeigen den Hinweis („2 neue Fehler“, neueste
+  Meldung mit Zeit, „Details“, ×); Warnungen erscheinen nur im Dialog. „Gelesen bis“ liegt pro Gerät in
+  `localStorage` (`wa-health-seen`); beim ersten Mal auf einem Gerät gilt die bisherige Liste als gelesen, nach
+  „Liste leeren“ beginnt der Zähler von vorn. Der Hinweis liegt unter der Kopfzeile (die je nach Breite ein- oder
+  zweizeilig ist und beim Scrollen ausblendet) – darüber verdeckte er deren Menüs; `health.js` setzt dazu
+  `--health-notice-top` im nächsten Frame nach Scroll/Resize, solange der Hinweis sichtbar ist. Über offenen
+  Ansichten bleibt er per `WebArchivLayers.float` bedienbar.
+- **Dialog „Health-Check“** (Ebenen-Stapel, Escape schließt): Gesamtampel, „geprüft“-Zeit, Aktualisieren;
+  Bereiche Index, Speicher (Balken je Volume), Dienste, Server und Meldungen (neueste zuerst, Quelle als Chip,
+  Anzahl gleicher Meldungen, Details aufklappbar, „Liste leeren“ nach Rückfrage). Alle Texte laufen über `esc()`.
+  Öffnen gilt als gelesen.
+- Einhängen über `adminHooks`: `userChanged` von `admin-tasks.js` wird verkettet, `actions.health` ergänzt.
+
+**Geprüft:** `test/health-ui.test.cjs` (nur Admin-Shell, Abfrage-/Gelesen-Logik, Lage unter der Kopfzeile, Dialog
+am Ebenen-Stapel mit `esc`, Farben); im Browser mit Test-Admin und vorbereiteter Meldungsdatei: Hinweis bei 800 px
+(Kopfzeile zweizeilig) und 375 px unter der Kopfzeile, beim Scrollen bei 12 px, Details öffnet den Dialog mit allen
+Bereichen, Stack-Details klappen auf, Escape schließt, × blendet aus und setzt die Menüzahl zurück.
+
+**Deployment:** `public/index.html`, `public/health.js`, `public/css/health.css`, `public/css/dialogs.css`,
+`server.js`; Dienst neu starten (Admin-Asset-Liste), danach Browser neu laden.

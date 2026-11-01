@@ -13,7 +13,7 @@
   .user-admin-panel, .ua-author-list, .tts-settings-voice-menu .header-menu-dropdown,
   .bem-library, .bem-editor, .bem-preview-pane, .bem-image-preview, .bem-text-preview-scroll,
   .duplicate-content, .duplicate-comparison-scroll, .duplicate-migration-note ul,
-  .duplicate-filter-menu .header-menu-dropdown) {
+  .duplicate-filter-menu .header-menu-dropdown, .health-content) {
   overscroll-behavior: contain;
 }
 

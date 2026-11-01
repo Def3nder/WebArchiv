@@ -24,6 +24,7 @@
   <link rel="stylesheet" href="css/account.css" />
   <link rel="stylesheet" href="css/audiobooks.css" />
   <link rel="stylesheet" href="css/duplicates.css" data-admin-asset />
+  <link rel="stylesheet" href="css/health.css" data-admin-asset />
   <link rel="stylesheet" href="css/audiobook-extras.css" />
 </head>
 <body>
@@ -99,6 +100,7 @@
           <button type="button" role="menuitem" class="header-menu-item" data-action="new-infographic" data-admin-only>Neue Infografik</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="review-infographics" data-admin-only>Infografiken prüfen</button>
           <button type="button" role="menuitem" class="header-menu-item duplicate-menu-item" data-action="duplicates" data-admin-only>Dubletten prüfen <span id="duplicate-menu-count" class="duplicate-menu-count" hidden></span></button>
+          <button type="button" role="menuitem" class="header-menu-item health-menu-item" data-action="health" data-admin-only>Health-Check <span id="health-menu-count" class="health-menu-count" hidden></span></button>
           <hr class="header-menu-sep" data-admin-only>
           <button type="button" role="menuitem" class="header-menu-item" data-action="settings">Einstellungen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="users" data-admin-only>Benutzerverwaltung</button>
@@ -829,6 +831,30 @@
     </div>
   </dialog>
   <!-- ADMIN_ONLY_END -->
+  <!-- ADMIN_ONLY_START -->
+  <!-- Health-Check (Admin): schwebender Hinweis bei neuen Fehlern und Dialog (health.js) -->
+  <aside id="health-notice" class="health-notice" role="status" aria-live="polite" hidden>
+    <svg class="health-notice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>
+    </svg>
+    <div class="health-notice-copy">
+      <strong id="health-notice-title"></strong>
+      <span id="health-notice-text"></span>
+      <button type="button" id="health-notice-details" class="health-notice-button">Details</button>
+    </div>
+    <button type="button" id="health-notice-dismiss" class="health-notice-dismiss" aria-label="Hinweis schließen">×</button>
+  </aside>
+  <dialog id="health-dialog" class="account-dialog account-dialog-wide health-dialog" aria-labelledby="health-title" tabindex="-1">
+    <div class="article-editor-heading health-heading">
+      <div><p class="article-editor-eyebrow">Admin</p><h2 id="health-title">Health-Check</h2></div>
+      <span id="health-level" class="health-pill" hidden></span>
+      <span id="health-checked" class="health-checked"></span>
+      <button type="button" id="health-refresh" class="detail-cat-pill">Aktualisieren</button>
+      <button type="button" id="health-close" class="detail-cat-pill" aria-label="Health-Check schließen">✕</button>
+    </div>
+    <div id="health-content" class="health-content" aria-live="polite"></div>
+  </dialog>
+  <!-- ADMIN_ONLY_END -->
   <script src="aria-menu.js"></script>
 <script src="layer-stack.js"></script>
   <script src="password.js" data-non-admin-asset></script>
@@ -845,6 +871,7 @@
   <script src="app-detail.js"></script>
   <script src="app.js"></script>
   <script src="admin-tasks.js" data-admin-asset></script>
+  <script src="health.js" data-admin-asset></script>
   <script src="infographic-review.js" data-admin-asset></script>
   <script src="vendor/duplicate-diff.bundle.js" data-admin-asset></script>
   <script src="duplicates.js" data-admin-asset></script>

@@ -183,7 +183,7 @@ scripts without nonce, no external sources).
   `duplicate-diff.js`): only where npm packages (CodeMirror, diff) are needed; rebuild with `npm run build:*`.
 
 **Stylesheets** live in `public/css/` (base, filters, cards, detail, dialogs, account, audiobooks,
-duplicates [admin only], audiobook-extras), loaded in this order — the order is the cascade. Tests read all
+duplicates and health [admin only], audiobook-extras), loaded in this order — the order is the cascade. Tests read all
 of them via `test/support/read-styles.cjs`.
 
 **Menus and admin code (frontend):** every dropdown/action menu uses `public/aria-menu.js`
@@ -191,7 +191,9 @@ of them via `test/support/read-styles.cjs`.
 `<details>` menus. Admin-only browser code goes into admin scripts (`data-admin-asset` in `index.html`
 and listed in `ADMIN_ASSET_PATHS` in `server.js`); `public/admin-tasks.js` holds TTS, reindex, scrape and
 log and plugs into `app.js` via `adminHooks` (empty for guests/users). `public/infographic-review.js` holds the
-"Infografiken prüfen" mode and fills the `infographicReview` placeholder in `app.js`. The markdown editor toolbar
+"Infografiken prüfen" mode and fills the `infographicReview` placeholder in `app.js`. `public/health.js` holds the
+health check (notice top right under the navigation chrome for new errors, dialog from `/api/health/details`) and chains
+`adminHooks.userChanged`/`actions` instead of replacing them. The markdown editor toolbar
 (`markdown-live-preview.js`, bundled — run `npm run build:editor` after changes) also uses `window.WebArchivAriaMenu`.
 The ⋯ button of the audiobook extras is an inline disclosure (actions row), not a popup menu.
 

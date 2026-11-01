@@ -583,6 +583,16 @@ Repository.
   `www/Infografiken/` können bestätigt für den Blogartikel umbenannt werden; das eigentliche
   Quell-Artikelbild bleibt unverändert. Entscheidungen
   liegen in `duplicate-decisions.json`; Telegram und „Joe Turan Facebook“ werden nicht verglichen.
+- **Health-Check** (Admin, Aktionen → *Health-Check*): Gesamtampel und je Bereich eine Stufe – Index
+  (Bestand, letzter Vollindex mit Dauer und Cache-Treffern, Datei-Watcher, laufender Auftrag, nicht lesbare
+  Dateien), freier Speicher auf den Volumes `www` und `audio` (Warnung unter 10 GB bzw. 5 %, Fehler unter 2 GB
+  bzw. 2 %), Qwen-TTS erreichbar, letzter Scrape über die Web-UI und per Cron, Server (Laufzeit, Node,
+  Arbeitsspeicher, CSP) sowie die gesammelten Meldungen (Fehler und Warnungen aus dem Server-Journal,
+  `[ERROR]`-Zeilen aus dem Scrape-Log, fehlgeschlagene Cron-Läufe; gleiche Meldungen zusammengefasst, ein Klick
+  zeigt Details, „Liste leeren“ nach Rückfrage). Neue **Fehler** melden sich zusätzlich mit einem schwebenden
+  Hinweis oben rechts unter der Kopfzeile und einer Zahl am Menüeintrag (Abfrage jede Minute, nur bei sichtbarer
+  Seite); Warnungen zeigt nur der Dialog. × oder das Öffnen des Dialogs markiert die Meldungen auf diesem Gerät als
+  gelesen; beim ersten Mal auf einem Gerät gilt die bisherige Liste als gelesen.
 - **Einstellungen** (Aktionen → *Einstellungen*, angemeldet): Schriftart (Editorial/Klassisch/
   Modern/System), Darstellung (Hell/Dunkel/Automatisch = folgt dem Gerät), Textgröße des
   Artikeltexts (Klein/Normal/Groß/Sehr groß) und Filter-Beschriftungen (Automatisch/Ausblenden).
@@ -976,6 +986,7 @@ public/
 ├── aria-menu.js              Gemeinsame ARIA-Menükomponente (Tastatur, Escape, Außenklick, Fokus, Viewport)
 ├── admin-tasks.js            Nur Admin-Shell: Audio erzeugen (TTS), Archiv neu einlesen, Scrapen, Scrape-Log
 ├── infographic-review.js     Nur Admin-Shell: Prüfmodus „Infografiken prüfen“ (Poster-Markierungen)
+├── health.js                 Nur Admin-Shell: Hinweis oben rechts bei neuen Fehlern, Dialog „Health-Check“
 ├── duplicates.js             Admin-Prüfung und Verknüpfung von Blog-/Quellen-Dubletten
 ├── article-editor.js         Dialoglogik für Artikel- und Abstract-Markdown
 ├── markdown-live-preview.js  CodeMirror-Live-Darstellung, Toolbar und Cursor-Navigation
@@ -993,7 +1004,7 @@ public/
 ├── favicon.ico               16/32/48 px (PNG-Einträge), aus favicon.svg erzeugt
 ├── apple-touch-icon.png      180 px ohne Eckenradius für den iOS-Homescreen
 ├── css/                      Styles in Ladereihenfolge: base, filters, cards, detail, dialogs, account,
-│                             audiobooks, duplicates (nur Admin), audiobook-extras
+│                             audiobooks, duplicates und health (nur Admin), audiobook-extras
 └── vendor/
     └── pdfjs/                PDF.js-Anzeige (Drittanbieterbibliothek)
 epub-tool/                    Eigenständiges Werkzeug: EPUB → Markdown; Tests unter epub-tool/test/
