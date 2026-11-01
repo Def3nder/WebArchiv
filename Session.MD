@@ -2628,6 +2628,8 @@ während eines Infografik-Umbaus die Zeile `Beenden wartet auf: …` im Journal.
   Bereiche Index, Speicher (Balken je Volume), Dienste, Server und Meldungen (neueste zuerst, Quelle als Chip,
   Anzahl gleicher Meldungen, Details aufklappbar, „Liste leeren“ nach Rückfrage). Alle Texte laufen über `esc()`.
   Öffnen gilt als gelesen.
+- Gesamtstufe im Dialogkopf als gefüllte Plakette mit Symbol (✓ / ! / ✕) und farbigem Hof, damit „Alles in
+  Ordnung“ sofort ins Auge fällt; Text in `--bg`, lesbar im hellen und dunklen Modus.
 - Einhängen über `adminHooks`: `userChanged` von `admin-tasks.js` wird verkettet, `actions.health` ergänzt.
 
 **Geprüft:** `test/health-ui.test.cjs` (nur Admin-Shell, Abfrage-/Gelesen-Logik, Lage unter der Kopfzeile, Dialog

@@ -84,17 +84,39 @@
 .health-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .health-heading > div { margin-right: auto; }
 .health-checked { font-size: 0.75rem; color: var(--text-muted); }
+/* Gesamtstufe: gefüllte Plakette mit Symbol und farbigem Hof, damit „alles in Ordnung“ auf einen Blick auffällt.
+   Text in --bg wie beim Hinweis-Button: hell auf dunklem Grün (heller Modus) bzw. dunkel auf hellem (dunkler). */
 .health-pill {
-  padding: 2px 10px;
-  border: 1px solid currentColor;
+  --pill: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 14px 5px 6px;
   border-radius: 999px;
-  font-size: 0.75rem;
+  background: var(--pill);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--pill) 20%, transparent);
+  color: var(--bg);
+  font: 700 0.86rem var(--font-body);
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
+.health-pill::before {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg) 24%, transparent);
+  font-size: 0.78rem;
+  line-height: 1;
+}
 .health-pill[hidden] { display: none; }
-.health-pill-ok { color: var(--author-1); }
-.health-pill-warning { color: var(--accent); }
-.health-pill-error { color: var(--red); }
+.health-pill-ok { --pill: var(--author-1); }
+.health-pill-ok::before { content: '✓'; }
+.health-pill-warning { --pill: var(--accent); }
+.health-pill-warning::before { content: '!'; }
+.health-pill-error { --pill: var(--red); }
+.health-pill-error::before { content: '✕'; }
 .health-content { min-height: 0; overflow-y: auto; }
 .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
 .health-section {

@@ -61,5 +61,7 @@ test('health.css: Hinweis oben rechts mit rotem Streifen, Ampelfarben aus den Ap
   assert.match(CSS, /\.health-dot-ok \{ background: var\(--author-1\); \}/);
   assert.match(CSS, /\.health-dot-warning \{ background: var\(--accent\); \}/);
   assert.match(CSS, /\.health-dot-error \{ background: var\(--red\); \}/);
+  assert.match(CSS, /\.health-pill \{[^}]*background: var\(--pill\);[^}]*color: var\(--bg\);/, 'Gesamtstufe als gefüllte Plakette');
+  assert.match(CSS, /\.health-pill-ok \{ --pill: var\(--author-1\); \}\s*\.health-pill-ok::before \{ content: '✓'; \}/);
   assert.match(CSS, /\.health-grid \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(260px, 1fr\)\);/);
 });
