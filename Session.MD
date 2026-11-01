@@ -2639,3 +2639,16 @@ Bereichen, Stack-Details klappen auf, Escape schließt, × blendet aus und setzt
 
 **Deployment:** `public/index.html`, `public/health.js`, `public/css/health.css`, `public/css/dialogs.css`,
 `server.js`; Dienst neu starten (Admin-Asset-Liste), danach Browser neu laden.
+
+## 70. Aktualisierung 01.11.2026 – Health-Check, Abschluss (Review 3.4)
+
+- `code-review_2026-01-28.md`, 3.4: als umgesetzt markiert, mit einem Nachtrag zu allen drei Punkten (Health-Route,
+  unlesbare Dateien, geordnetes Beenden) und dem, was über den Vorschlag hinausgeht (Admin-Details, beide Volumes,
+  Meldungssammler, Hinweis oben rechts).
+- `To-Do-Liste.md`: Eintrag „Fehler als schwebenden Hinweis anzeigen … Health-Check“ abgehakt, mit Verweis.
+
+**Ergebnis der Reihe (Abschnitte 65–69):** `lib/event-log.cjs`, `modules/health.cjs`, `public/health.js`,
+`public/css/health.css`, `scanIssues` in `lib/article-scan.cjs` und `archiveLock.active`/`waitUntilIdle`. Neue
+Laufzeitdatei `health-events.json` (gitignored, Pfad per `HEALTH_EVENTS_FILE`).
+
+**Deployment:** nur Doku.

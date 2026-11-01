@@ -271,7 +271,18 @@ Jeder Teil-Reindex blockiert die Ereignisschleife damit rund **0,6 s**, und das 
 
 Fuse und die Infografik-Verknüpfung sind dagegen unkritisch.
 
-### 3.4 Betrieb
+### 3.4 Betrieb – ✅ umgesetzt
+
+> **Nachtrag 01.11.2026:** In fünf Schritten umgesetzt, zusammen mit dem To-Do „Fehler als schwebenden Hinweis
+> anzeigen und Health-Check“ (Commits `79acb2b` bis `3e15b8f`, Session.MD, Abschnitte 65–70).
+> **`/api/health`** ist für externes Monitoring offen, liefert aber bewusst nur `{ status }` (`ok` 200,
+> `starting`/`degraded` 503). Alles Weitere steht in `/api/health/details` (nur Admins): Index mit letztem Lauf,
+> Watcher und laufendem Auftrag, freier Platz auf **beiden** Volumes `www` und `audio`, Qwen, letzter Scrape per
+> Web-UI und Cron, Server und gesammelte Meldungen (`lib/event-log.cjs`: Konsolenfehler und -warnungen, `[ERROR]`
+> aus dem Scrape-Log, fehlgeschlagene Cron-Läufe). In der Oberfläche gibt es den Dialog „Health-Check“ und bei
+> neuen Fehlern einen Hinweis oben rechts. **Unlesbare Dateien** sammelt der Scan als `scanIssues`; sie stehen im
+> Health-Check, und bei jeder Änderung gibt es eine Sammelmeldung. **Geordnetes Beenden:** `archiveLock.waitUntilIdle`
+> wartet bis zu 20 s auf Schreibaufträge; Scraper, Reindex und TTS sind ausgenommen.
 
 - **`/api/health`** für Monitoring und den Neustart-Check: Indexstatus und -zeitpunkt, Artikel- und Hörbuchzahl, Sperrstatus (`archiveLock.current`), Erreichbarkeit von Qwen, freier Platz auf dem `www`-Datenträger.
 - **Unlesbare Dateien sichtbar machen:** `scanDir` verwirft sie weiterhin still ([server.js:304](server.js:304)). Gezählt und mit Pfad im Reindex-Status oder Log wären sie die erste Zeile des „Qualitäts-Dashboards“ aus der To-Do-Liste.
