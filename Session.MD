@@ -2593,3 +2593,20 @@ Scrape-Fehler, fehlender Datenträger, Routen und Rechte).
 
 **Deployment:** `modules/health.cjs` (neu), `server.js`; Dienst neu starten. Prüfen auf dem LXC:
 `curl -s http://localhost:3000/api/health`.
+
+## 68. Aktualisierung 01.11.2026 – Health-Check, Schritt 4: Geordnetes Beenden (Review 3.4)
+
+- `lib/archive-lock.cjs`: `active` listet alle laufenden Aufträge (exklusiver Halter zuerst);
+  `waitUntilIdle({ timeoutMs, ignore, onWait })` wartet, bis kein Auftrag außer den ignorierten mehr läuft
+  (Ergebnis `true`), höchstens bis zum Zeitlimit (`false`).
+- `server.js` wartet bei SIGINT/SIGTERM nach `server.close()` bis zu 20 s auf Schreibaufträge (Infografiken,
+  Dubletten, Hörbuch-Verwaltung, Artikel speichern) und meldet `Beenden wartet auf: …`; nach Ablauf eine Warnung.
+  Nicht abgewartet: Scraper (eigener Prozess, läuft Minuten), Index-Neuaufbau (schreibt nichts im Archiv) und TTS
+  (bricht `ttsJobs.shutdown` danach sauber ab). systemd lässt standardmäßig 90 s Zeit.
+
+**Geprüft:** Tests in `test/archive-lock.test.cjs` (alle laufenden Aufträge, Warten bis zur Freigabe trotz ignoriertem
+Scraper, `onWait` einmal, Zeitlimit, sofort frei; Reihenfolge im Beenden-Ablauf von `server.js`). Lokal nicht als
+Echtlauf prüfbar (unter Windows beendet ein Signal Node ohne Handler); auf dem LXC zeigt `systemctl restart nodeapp`
+während eines Infografik-Umbaus die Zeile `Beenden wartet auf: …` im Journal.
+
+**Deployment:** `lib/archive-lock.cjs`, `server.js`; Dienst neu starten.

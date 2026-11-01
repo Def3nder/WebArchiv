@@ -182,3 +182,40 @@ test('run-scrape.sh signalisiert den Dienst ohne sudo und protokolliert das Erge
   assert.match(script, /SIGHUP an nodeapp \(PID \$PID\) gesendet/);
   assert.match(script, /FEHLER: SIGHUP an nodeapp nicht gesendet/);
 });
+
+test('Sperre: active listet alle laufenden Aufträge, waitUntilIdle wartet mit Zeitlimit', async () => {
+  const lock = createArchiveLock();
+  let scraping = false;
+  let saving = false;
+  lock.register('Scraper-Lauf', () => scraping);
+  lock.register('Artikel speichern', () => saving);
+  // Erst die Sperre holen (bei laufendem Auftrag gäbe es keine), dann laufen die anderen an.
+  const release = lock.tryAcquire('Infografiken ändern');
+  scraping = true;
+  saving = true;
+  assert.deepEqual(lock.active, ['Infografiken ändern', 'Scraper-Lauf', 'Artikel speichern']);
+
+  const waits = [];
+  const started = Date.now();
+  setTimeout(() => { release(); saving = false; }, 60);
+  const idle = await lock.waitUntilIdle({ timeoutMs: 2000, intervalMs: 10, ignore: ['Scraper-Lauf'], onWait: labels => waits.push(labels) });
+  assert.equal(idle, true, 'frei, obwohl der Scraper weiterläuft');
+  assert.ok(Date.now() - started >= 50 && Date.now() - started < 1000);
+  assert.deepEqual(waits, [['Infografiken ändern', 'Artikel speichern']], 'onWait einmal mit allem, worauf gewartet wird');
+
+  saving = true;
+  const timedOut = Date.now();
+  assert.equal(await lock.waitUntilIdle({ timeoutMs: 80, intervalMs: 10, ignore: ['Scraper-Lauf'] }), false, 'Zeitlimit');
+  assert.ok(Date.now() - timedOut < 500);
+  saving = false;
+  scraping = false;
+  assert.equal(await lock.waitUntilIdle({ timeoutMs: 0 }), true, 'nichts läuft: sofort frei');
+});
+
+test('server.js: Beenden wartet bis zu 20 s auf Schreibaufträge, nicht auf Scraper, Reindex und TTS', () => {
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const shutdown = server.slice(server.indexOf("for (const signal of ['SIGINT', 'SIGTERM'])"));
+  assert.match(shutdown, /server\.close\(\);[\s\S]*?await archiveLock\.waitUntilIdle\(\{\s*timeoutMs: 20 \* 1000,\s*ignore: \['Scraper-Lauf', 'Index-Neuaufbau', 'Audio-Erzeugung'\],/);
+  assert.ok(shutdown.indexOf('waitUntilIdle') < shutdown.indexOf('await ttsJobs.shutdown()'), 'erst warten, dann TTS abbrechen');
+  assert.match(shutdown, /if \(!idle\) console\.warn\(/);
+});

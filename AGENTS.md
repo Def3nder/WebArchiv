@@ -201,7 +201,8 @@ TTS) are `register`ed once; new write routes run inside `jsonRoute` as `lock.run
 409 with the running job's name) or check `lock.busy` and `throw lock.conflictError()`; only routes outside `jsonRoute`
 (reindex) answer with `sendArchiveBusy(res, archiveLock)`. No `tryAcquire` in routes and never new hand-written
 `x.running || y.running` checks. Internal partial reindexes triggered by the lock holder
-do not acquire again.
+do not acquire again. On shutdown `archiveLock.waitUntilIdle` waits up to 20 s for write jobs (not for the scraper,
+reindex or TTS, which `ttsJobs.shutdown` cancels).
 
 **Security modules:** `lib/login-limiter.cjs` (429 after repeated failed password checks on `/api/login`
 and `/api/me/password`), `lib/html-sanitizer.cjs` (all markdown → HTML that reaches `innerHTML` must go

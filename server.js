@@ -883,6 +883,16 @@ if (require.main === module) {
     shuttingDown = true;
     archiveWatcher?.stop();
     server.close();
+    // Laufende Schreibaufträge (Infografiken, Dubletten, Hörbuch-Verwaltung, Artikel speichern) zu Ende
+    // laufen lassen, damit z. B. eine Umbenennung nicht halb liegen bleibt; höchstens 20 s (systemd
+    // wartet standardmäßig 90 s). Nicht gewartet wird auf den Scraper (läuft Minuten, eigener Prozess),
+    // den Index-Neuaufbau (schreibt nichts im Archiv) und TTS (bricht ttsJobs.shutdown sauber ab).
+    const idle = await archiveLock.waitUntilIdle({
+      timeoutMs: 20 * 1000,
+      ignore: ['Scraper-Lauf', 'Index-Neuaufbau', 'Audio-Erzeugung'],
+      onWait: labels => console.log(`Beenden wartet auf: ${labels.join(', ')} (höchstens 20 s)`),
+    });
+    if (!idle) console.warn(`Beenden nach 20 s trotz laufendem Auftrag: ${archiveLock.active.join(', ')}`);
     await ttsJobs.shutdown();
     await sessionStore?.close().catch(() => {});
     await eventLog.flush();

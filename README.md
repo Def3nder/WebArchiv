@@ -1099,6 +1099,9 @@ npx playwright install --with-deps chromium
 - Dieser Abschnitt beschreibt **Gerät A, den WebArchiv-Server**. Der separate
   Qwen-TTS-Modellserver ist Gerät B und wird nach
   [`tts-server/QWEN-ANBINDUNG.md`](tts-server/QWEN-ANBINDUNG.md) eingerichtet.
+- **Geordnetes Beenden:** Bei `systemctl stop/restart` wartet der Server bis zu 20 s, bis laufende Schreibaufträge
+  (Infografiken, Dubletten, Hörbuch-Verwaltung, Artikel speichern) fertig sind (Journal: `Beenden wartet auf: …`);
+  ein Scrape oder Reindex wird nicht abgewartet, eine Audio-Erzeugung sauber abgebrochen.
 - WebArchiv-App unter `/opt/nodeapp`, Start via **systemd** (`nodeapp.service`), betrieben
   als unprivilegierter User `ralf` (`User=ralf`/`Group=ralf`), damit erzeugte
   Dateien `ralf:ralf` gehören. Steuern nur mit `sudo systemctl …`.
