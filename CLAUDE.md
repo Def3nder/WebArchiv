@@ -61,7 +61,9 @@ must not pin versions.
   `share-ids.cjs` (short share ids), `article-scan.cjs` (the scan: `parseArticleContent` depends only on the `.md`
   content, `articleMedia` only on directory listings; entries carry an internal `fileSignature`), `index-cache.cjs`
   (persistent cache of the parse part per file signature in `index-cache.json`, gitignored; its version hashes the parser
-  sources and the duplicate authors, so changing e.g. taxonomy keywords invalidates it — no manual bump needed), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
+  sources and the duplicate authors, so changing e.g. taxonomy keywords invalidates it — no manual bump needed; a full
+  rescan that finds nothing changed publishes nothing (`sameSourceArticles`), the admin reindex button reads everything
+  fresh via `buildIndex({ fresh: true })`), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
 - **`modules/`** — feature modules with routes: a `create…` factory for their state plus `install…Routes(app, deps)`
   (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files`, `scrape`,

@@ -2396,3 +2396,22 @@ Identität, Signaturvergleich, Version, kaputte Datei, Aufräumen, Scan mit Cach
 **Deployment:** `lib/index-cache.cjs` (neu), `lib/article-scan.cjs`, `server.js`, `.gitignore`; Dienst neu starten.
 Der erste Start baut den Cache auf (so lange wie bisher), ab dem zweiten greift er. Das App-Verzeichnis muss für den
 Dienstnutzer schreibbar sein (ist es bereits, `sessions.json` liegt dort).
+
+## 59. Aktualisierung 01.11.2026 – Index-Cache, Schritt 1c: Unverändert heißt nicht veröffentlichen, Button liest frisch
+
+- **Nichts geändert, nichts veröffentlichen:** `sameSourceArticles` (in `lib/article-index.cjs`) vergleicht den neuen
+  Rohindex mit dem veröffentlichten. Mit Cache sind unveränderte Einträge feldweise identisch (gleiche Objekte und
+  Arrays aus dem Cache, gleiche Medien-URLs samt `?v=`); `fileSignature` wird nach Größe und Änderungszeit verglichen.
+  Ist alles gleich (und bleibt der Wechsel „keine/einige Hörbücher“ aus), entfallen Neuverknüpfung, Fuse-Index und
+  Dublettenstatus. Logzeile endet dann mit `Index unverändert`.
+- **Button „Archiv neu einlesen“:** `POST /api/reindex` ruft `buildIndex({ fresh: true })`. Der Scan liest alle Dateien
+  neu (`indexCache.beginFullScan({ fresh: true })`), erneuert den Cache und veröffentlicht immer. Start, SIGHUP und
+  Scraper-Rückfall nutzen den Cache.
+
+**Geprüft:** Im selben Prozess: Neu-Scan ohne Änderung 0,76 s und derselbe Rohindex (kein Veröffentlichen); frischer
+Scan liest alle 7.153 Dateien und veröffentlicht; Ergebnis identisch mit der Basis. Tests: Vergleich erkennt
+geänderte, neue und gelöschte Dateien sowie neue Bilder, `fresh` liest alles neu und der Cache greift danach wieder
+(`test/index-cache.test.cjs`); der Button nutzt `fresh: true` (`test/archive-lock.test.cjs`).
+
+**Deployment:** `lib/index-cache.cjs`, `lib/article-index.cjs`, `server.js`; Dienst neu starten. Weil
+`lib/index-cache.cjs` zur Versionskennung gehört, baut der erste Start den Cache einmal neu auf.

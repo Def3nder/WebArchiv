@@ -41,7 +41,7 @@ const {
   moveInfographicFiles, slugify, normalizeNewInfographicMarkdown,
 } = require('./lib/infographics.cjs');
 const {
-  buildArticleSearchIndex, articleDisplayAuthor, uniqueArticles, replaceInfographicYearArticles,
+  buildArticleSearchIndex, articleDisplayAuthor, uniqueArticles, sameSourceArticles, replaceInfographicYearArticles,
   replaceArticleIndexEntry, upsertArticleIndexEntries, parseScraperChangedFiles,
 } = require('./lib/article-index.cjs');
 const { createArticleScanner } = require('./lib/article-scan.cjs');
@@ -273,8 +273,9 @@ async function withReindexState(articleCount, task) {
   }
 }
 
-function buildIndex() {
-  return withReindexState(0, rebuildIndex);
+// fresh: alle Dateien neu einlesen statt den Index-Cache zu nutzen (Button „Archiv neu einlesen“).
+function buildIndex({ fresh = false } = {}) {
+  return withReindexState(0, () => rebuildIndex({ fresh }));
 }
 
 function prepareLinkedArticles(nextSourceArticles, authorPriority) {
@@ -419,7 +420,7 @@ async function refreshInfographicsForYear(year) {
   return refreshInfographicsForYears([year]);
 }
 
-async function rebuildIndex() {
+async function rebuildIndex({ fresh = false } = {}) {
   console.log('Building article index...');
   const t0 = Date.now();
   const collector = [];
@@ -433,7 +434,7 @@ async function rebuildIndex() {
   }
 
   await indexCache.load();
-  indexCache.beginFullScan();
+  indexCache.beginFullScan({ fresh });
   // Ein gemeinsamer Verzeichnis-Cache für den ganzen Scan (frisch je Reindex).
   const directories = createDirectoryCache();
   for (const dir of authorDirs) {
@@ -443,10 +444,15 @@ async function rebuildIndex() {
   // Deduplicate by id (orig/ subdirs may duplicate files).
   // Hörbücher werden nur beim vollständigen Neuindex erneut eingelesen.
   await audiobooks.rebuild();
-  publishArticleIndex(uniqueArticles(collector));
+  const nextSourceArticles = uniqueArticles(collector);
+  // Nichts geändert (typisch für SIGHUP oder Watcher ohne neue Dateien): Verknüpfung, Fuse-Index und
+  // Dublettenstatus bleiben, wie sie sind. Ein Wechsel „keine/einige Hörbücher“ ändert die Facetten.
+  const unchanged = sameSourceArticles(archive.sourceArticles, nextSourceArticles)
+    && (audiobooks.books.length > 0) === archive.meta.authors.includes(AUDIOBOOK_AUTHOR);
+  if (!unchanged) publishArticleIndex(nextSourceArticles);
   const { hits, misses } = indexCache.stats;
   console.log(`[OK] ${archive.articles.length} articles, ${audiobooks.books.length} audiobooks indexed in ${Date.now() - t0}ms`
-    + ` (Index-Cache: ${hits} unverändert, ${misses} neu eingelesen)`);
+    + ` (Index-Cache: ${hits} unverändert, ${misses} neu eingelesen${unchanged ? '; Index unverändert' : ''})`);
   // Erst nach dem Veröffentlichen; ein Schreibfehler kostet nur Zeit beim nächsten Start.
   await indexCache.save().catch(error => console.error('Index-Cache nicht gespeichert:', error));
 }
@@ -704,7 +710,8 @@ app.post('/api/reindex', requireAdminAccess, (req, res) => {
   // Ein laufender Reindex ist bei der Sperre registriert; die 409-Antwort nennt ihn.
   if (archiveLock.busy) return sendArchiveBusy(res, archiveLock, { started: false });
   // withReindexState setzt reindexState.running synchron und belegt damit die Sperre.
-  buildIndex().catch(console.error);
+  // Der Button liest bewusst alles frisch (Sicherheitsweg am Index-Cache vorbei).
+  buildIndex({ fresh: true }).catch(console.error);
   res.json({ started: true });
 });
 

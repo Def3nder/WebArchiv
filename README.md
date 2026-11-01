@@ -817,6 +817,10 @@ Reindex im laufenden Prozess. Ändert sich die Parse-Logik (Quelltext von Parser
 oder die Liste der Dubletten-Autoren, verwirft der Server den Cache automatisch und baut ihn neu auf. Die
 Logzeile `[OK] … (Index-Cache: N unverändert, M neu eingelesen)` zeigt die Wirkung.
 
+Findet ein Reindex nichts Neues (typisch für `SIGHUP` ohne neue Dateien), bleibt der veröffentlichte Index
+unverändert; die Logzeile endet dann mit `Index unverändert`. Der Button **„Archiv neu einlesen“** liest bewusst
+alle Dateien frisch, am Cache vorbei, und erneuert ihn dabei – der Sicherheitsweg, falls je etwas nicht stimmt.
+
 Für die Medienzuordnung liest ein Scan jedes Verzeichnis nur einmal (`createDirectoryCache` in
 `lib/archive-files.cjs`): den Artikelordner, den parallelen Ordner unter `audio/` und den Autorenordner mit
 `standard.*`. Gesucht wird danach im Speicher, zuerst mit exaktem Namen, dann ohne Beachtung der

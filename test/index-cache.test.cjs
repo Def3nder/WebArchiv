@@ -147,3 +147,52 @@ test('Scan mit Cache: unveränderte Dateien nicht neu parsen, Medien trotzdem fr
   await scan(restarted);
   assert.equal(restarted.stats.entries, 1, 'gelöschte Datei fliegt aus dem Cache');
 });
+
+test('Neu-Scan: unverändert erkannt; geänderte, neue, gelöschte Datei und neues Bild nicht', async t => {
+  const { sameSourceArticles } = require('../lib/article-index.cjs');
+  const dir = tempDir(t);
+  const wwwDir = path.join(dir, 'www');
+  const yearDir = path.join(wwwDir, 'Joe', '2026');
+  fs.mkdirSync(yearDir, { recursive: true });
+  fs.writeFileSync(path.join(yearDir, 'a.md'), CONTENT);
+  fs.writeFileSync(path.join(yearDir, 'b.md'), CONTENT.replace('Titel', 'Zweiter'));
+  const cache = createIndexCache({ file: path.join(dir, 'index-cache.json'), version: 'v1' });
+  const { scanDir } = createArticleScanner({
+    wwwDir, audioDir: path.join(dir, 'audio'), trashDir: path.join(wwwDir, 'trash'), wantsDuplicateProfile: () => true, cache,
+  });
+  const scan = async (options = {}) => {
+    cache.beginFullScan(options);
+    const collector = [];
+    await scanDir(path.join(wwwDir, 'Joe'), 'Joe', null, collector);
+    await cache.save();
+    return collector;
+  };
+
+  const first = await scan();
+  assert.equal(sameSourceArticles(first, await scan()), true, 'nichts geändert');
+  assert.equal(sameSourceArticles(first, first.slice().reverse()), true, 'Reihenfolge egal');
+
+  const fresh = await scan({ fresh: true });
+  assert.deepEqual(cache.stats, { hits: 0, misses: 2, entries: 2 }, 'fresh liest alles neu');
+  assert.equal(sameSourceArticles(first, fresh), false, 'frisch geparst gilt als geändert (veröffentlichen)');
+  const afterFresh = await scan();
+  assert.deepEqual(cache.stats, { hits: 2, misses: 0, entries: 2 }, 'danach greift der erneuerte Cache wieder');
+  assert.equal(sameSourceArticles(fresh, afterFresh), true);
+
+  fs.writeFileSync(path.join(yearDir, 'a.jpg'), 'bild');
+  const withImage = await scan();
+  assert.equal(sameSourceArticles(afterFresh, withImage), false, 'neues Bild');
+
+  fs.writeFileSync(path.join(yearDir, 'b.md'), CONTENT.replace('Titel', 'Anders'));
+  const changed = await scan();
+  assert.equal(sameSourceArticles(withImage, changed), false, 'geänderte Datei');
+
+  fs.writeFileSync(path.join(yearDir, 'c.md'), CONTENT);
+  const added = await scan();
+  assert.equal(sameSourceArticles(changed, added), false, 'neue Datei');
+
+  fs.rmSync(path.join(yearDir, 'c.md'));
+  const removed = await scan();
+  assert.equal(sameSourceArticles(added, removed), false, 'gelöschte Datei');
+  assert.equal(sameSourceArticles(changed, removed), true, 'wieder wie vorher');
+});
