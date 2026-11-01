@@ -584,7 +584,7 @@ Repository.
   Quell-Artikelbild bleibt unverändert. Entscheidungen
   liegen in `duplicate-decisions.json`; Telegram und „Joe Turan Facebook“ werden nicht verglichen.
 - **Health-Check** (Admin, Aktionen → *Health-Check*): Gesamtampel und je Bereich eine Stufe – Index
-  (Bestand, Dubletten verknüpft/offen, letzter Vollindex mit Dauer und Cache-Treffern, Datei-Watcher, laufender Auftrag, nicht lesbare
+  (Bestand, Dubletten verknüpft/offen, letzter Vollindex mit Dauer, Index-Cache mit übernommenen und neu gelesenen Dateien, Datei-Watcher, laufender Auftrag, nicht lesbare
   Dateien), freier Speicher auf den Volumes `www` und `audio` (Warnung unter 10 GB bzw. 5 %, Fehler unter 2 GB
   bzw. 2 %), Qwen-TTS erreichbar, letzter Scrape über die Web-UI und per Cron, Server (Laufzeit, Node,
   Arbeitsspeicher, CSP) sowie die gesammelten Meldungen (Fehler und Warnungen aus dem Server-Journal,

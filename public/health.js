@@ -166,8 +166,13 @@ function renderIndex(index) {
     row('Bestand', `${number(index.articles)} Artikel · ${number(index.audiobooks)} Hörbücher`),
     row('Dubletten', `${number(index.duplicates.linked)} verknüpft · ${number(index.duplicates.open)} offen`),
     row('Letzter Vollindex', run
-      ? `${esc(clock(run.at))} · ${esc(seconds(run.durationMs))} · Cache ${number(run.cacheHits)}/${number(run.cacheMisses)}`
+      ? `${esc(clock(run.at))} · ${esc(seconds(run.durationMs))}`
       : (index.running ? 'läuft gerade' : 'noch keiner'), run ? null : 'warning'),
+    // Index-Cache (index-cache.json): wie viele Dateien der letzte Lauf unverändert übernehmen konnte und wie viele
+    // er neu lesen musste; der Button „Archiv neu einlesen“ liest bewusst alles ohne Cache.
+    run ? row('Index-Cache', run.fresh
+      ? `nicht genutzt · ${number(run.cacheMisses)} neu gelesen`
+      : `${number(run.cacheHits)} übernommen · ${number(run.cacheMisses)} neu gelesen`) : '',
     index.error ? row('Fehler', esc(index.error), 'error') : '',
     row('Datei-Watcher', esc(watcherText), watcher.enabled && !watcher.active ? 'warning' : null),
     row('Laufender Auftrag', esc(index.busy || '–')),

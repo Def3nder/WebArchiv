@@ -2664,3 +2664,12 @@ Laufzeitdatei `health-events.json` (gitignored, Pfad per `HEALTH_EVENTS_FILE`).
 560 px: Zeile sichtbar, Klick ins Dialog-Padding lässt ihn offen, Klick daneben schließt ihn und leert den Ebenen-Stapel.
 
 **Deployment:** `modules/health.cjs`, `public/health.js`; Dienst neu starten.
+
+## 72. Aktualisierung 01.11.2026 – Health-Check: Index-Cache als eigene Zeile
+
+- „Letzter Vollindex“ zeigt nur noch Zeit und Dauer. Die Cache-Zahlen („Cache 6.104/0“) waren ohne Erklärung
+  unverständlich und stehen jetzt in einer eigenen Zeile **Index-Cache**: „6.104 übernommen · 0 neu gelesen“ – so
+  viele Dateien hat der letzte Lauf unverändert aus `index-cache.json` übernommen bzw. neu lesen müssen. Nach
+  „Archiv neu einlesen“ (liest bewusst ohne Cache): „nicht genutzt · N neu gelesen“.
+
+**Deployment:** `public/health.js`; Browser neu laden.
