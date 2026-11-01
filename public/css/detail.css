@@ -58,6 +58,8 @@ html.modal-open body {
   margin: 0 auto;
   animation: slideUp .25s cubic-bezier(.4,0,.2,1);
   scrollbar-width: thin;
+  /* Fokus nur fürs Tastatur-Scrollen (focusArticlePanel); kein Rahmen um den ganzen Artikel. */
+  outline: none;
   /* Kein Federn/„Pull to refresh“ am oberen Rand – das Herunterziehen übernimmt
      enablePullToClose (app.js). */
   overscroll-behavior-y: none;

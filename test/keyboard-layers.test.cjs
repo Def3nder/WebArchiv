@@ -119,3 +119,32 @@ test('Artikel schließen: Die zurückgegebene Kachel behält keinen Fokus (kein 
   assert.equal(run(true), true, 'Kachel in der Übersicht');
   assert.equal(run(false), false, 'z. B. Suchfeld oder Menü-Knopf');
 });
+
+test('Artikelansicht: ↑/↓ und Bild-Tasten scrollen, weil der Fokus im Textbereich liegt', () => {
+  const focused = [];
+  const panel = { inside: new Set(), contains(node) { return node === this || this.inside.has(node); },
+    focus(options) { focused.push(options); } };
+  const overlay = { querySelector: selector => (selector === '.overlay-panel' ? panel : null) };
+  const context = { $overlay: overlay, document: { activeElement: { tagName: 'BODY' } }, WebArchivLayers: { top: () => ({ dialog: overlay }) } };
+  vm.runInNewContext(fn('focusArticlePanel'), context);
+
+  context.focusArticlePanel();
+  assert.deepEqual([focused.length, focused[0]?.preventScroll], [1, true], 'Fokus auf <body> → in den Textbereich');
+  const audio = { tagName: 'AUDIO' };
+  panel.inside.add(audio);
+  context.document.activeElement = audio;
+  context.focusArticlePanel();
+  assert.equal(focused.length, 1, 'Fokus schon im Textbereich (z. B. Audio): bleibt');
+  context.document.activeElement = { tagName: 'BUTTON' };
+  context.WebArchivLayers.top = () => ({ dialog: { id: 'img-fullscreen' } });
+  context.focusArticlePanel();
+  assert.equal(focused.length, 1, 'Bild-Vollansicht darüber: Fokus nicht wegnehmen');
+
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(html, /<div class="overlay-panel" tabindex="-1">/);
+  const css = require('./support/read-styles.cjs')();
+  assert.match(css, /\.overlay-panel \{[^}]*outline: none;/);
+  assert.match(slice('async function openArticle(', '// Schließen auf Wunsch des Nutzers'),
+    /else closeImageFullscreen\(\);\s*\}\s*focusArticlePanel\(\);/, 'nach dem Anzeigen, auch beim Blättern');
+  assert.match(fn('closeImageFullscreen'), /returnFocus\.focus\(\{ preventScroll: true \}\);[\s\S]*focusArticlePanel\(\);/);
+});

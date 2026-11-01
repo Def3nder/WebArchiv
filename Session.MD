@@ -2500,3 +2500,25 @@ Dienst neu starten. Der erste Start baut den Cache einmal neu auf.
 
 **Deployment:** `public/index.html`, `public/app.js`, `public/css/base.css`; Browser neu laden (die `?v=`-Kennungen
 setzt der Server). Für die Treffer im Text muss der Server-Teil aus Abschnitt 62 deployt sein.
+
+## 64. Aktualisierung 01.11.2026 – Artikelansicht: ↑/↓ und Bild-Tasten scrollen wieder
+
+**Symptom:** In der Artikelansicht scrollte nur das Mausrad; ↑/↓, Bild-hoch/-runter, Leertaste und Pos1/Ende taten
+nichts. **Ursache:** Diese Tasten scrollt der Browser nur im Bereich mit dem Fokus. Seit die Artikelansicht ein
+`<dialog>` am Ebenen-Stapel ist, lag der Fokus nach dem Öffnen auf `<body>` (bzw. nach einem Klick auf ‹/› auf dem
+Knopf), also außerhalb des scrollbaren `.overlay-panel`.
+
+- `.overlay-panel` hat `tabindex="-1"` (fokussierbar, nicht in der Tab-Reihenfolge) und keinen Fokusrahmen.
+- `focusArticlePanel()` (`public/app-detail.js`) setzt den Fokus nach jedem Anzeigen eines Artikels (Öffnen, Blättern
+  per ←/→ oder ‹/›) in den Textbereich, aber nur, wenn die Artikelansicht die oberste Ebene ist und der Fokus nicht
+  schon darin liegt (z. B. im Audio-Player). `closeImageFullscreen` ruft es ebenfalls auf, weil das Ausgangsbild nach
+  dem Blättern über Artikelgrenzen nicht mehr existiert.
+- ←/→ blättern weiter (der Ebenen-Stapel behandelt nur diese und Escape).
+
+**Geprüft im Browser:** Fokus nach dem Öffnen im Textbereich; ↓ ×3 = 120 px, Bild-runter/-hoch, Leertaste, Pos1/Ende
+scrollen; nach → und nach Klick auf › scrollt ↓; nach Escape aus der Bild-Vollansicht scrollt ↓; kein Fokusrahmen,
+keine Konsolenfehler. Test in `test/keyboard-layers.test.cjs` (Verhalten von `focusArticlePanel`, Aufrufstellen,
+Markup, CSS).
+
+**Deployment:** `public/index.html`, `public/app-detail.js`, `public/app-gallery.js`, `public/css/detail.css`;
+Browser neu laden.

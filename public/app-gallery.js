@@ -173,6 +173,9 @@ function closeImageFullscreen() {
   document.body.style.overflow = fsGallery.previousBodyOverflow;
   fsGallery.previousBodyOverflow = '';
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+  // Nach dem Blättern über Artikelgrenzen gibt es das Ausgangsbild nicht mehr: Fokus in den
+  // Textbereich, damit die Tasten den Artikel wieder scrollen (app-detail.js).
+  focusArticlePanel();
 }
 // Nach dem letzten Bild weiter zum nächsten Artikel, vor dem ersten zum vorigen.
 function stepFullscreen(dir) {

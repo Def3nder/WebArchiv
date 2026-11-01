@@ -32,6 +32,16 @@ function hideArticleLayer() {
   if ($app.contains(document.activeElement)) document.activeElement.blur();
 }
 
+// ↑/↓, Bild-Tasten, Leertaste, Pos1/Ende scrollt der Browser nur im Bereich mit dem Fokus.
+// Nach dem Öffnen läge er sonst auf <body> oder ‹/› außerhalb des Textbereichs; dann
+// scrollte nur das Mausrad. Nur wenn die Artikelansicht oben liegt (nicht unter der
+// Bild-Vollansicht) und der Fokus nicht schon im Textbereich steht.
+function focusArticlePanel() {
+  if (WebArchivLayers.top()?.dialog !== $overlay) return;
+  const panel = $overlay.querySelector('.overlay-panel');
+  if (panel && !panel.contains(document.activeElement)) panel.focus({ preventScroll: true });
+}
+
 // ←/→ blättern zum Nachbarartikel; Bedienelemente mit eigener Pfeilbedienung
 // (Eingaben, Audio, Regler) behalten die Tasten.
 function articleLayerKey(event) {
@@ -97,6 +107,7 @@ async function openArticle(id, {
       if (urls.length) openGalleryFullscreen(urls, dir < 0 ? urls.length - 1 : 0, article.id);
       else closeImageFullscreen();
     }
+    focusArticlePanel();
     if (detailPosition) await restoreDetailPosition(detailPosition);
     if (!restoring) saveCurrentViewState();
     return true;
