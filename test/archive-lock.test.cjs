@@ -147,6 +147,8 @@ test('server.js: keine verstreuten Busy-Prüfungen mehr, alle Aufträge an der z
   assert.match(server, /exclusive: \(label, task\) => archiveLock\.run\(label, task\)/);
   assert.match(server, /process\.on\('SIGHUP'[\s\S]*?archiveLock\.whenIdle\(\(\) => buildIndex\(\)/);
   assert.match(server, /SIGHUP-Reindex wartet auf: \$\{current\}/);
+  // Der Datei-Watcher stößt den Reindex ebenfalls nur über die Sperre an und ist abschaltbar.
+  assert.match(server, /process\.env\.WATCH_ARCHIVE === '0' \? null : createArchiveWatcher\(\{[\s\S]*?archiveLock\.whenIdle\(\(\) => buildIndex\(\)/);
 });
 
 test('Sperre: whenIdle holt einen Auftrag nach, sobald das Archiv frei ist', async () => {

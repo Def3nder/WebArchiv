@@ -32,8 +32,9 @@ Run the complete Node and Python test suite with `npm test`. Tests live under
 `duplicates-tool/` is a dev-only app (not deployed) that reuses `lib/article-parser.cjs`, `lib/duplicates.cjs`,
 `lib/html-sanitizer.cjs`, `lib/atomic-file.cjs` and the diff bundle — keep it working when changing those.
 `node server.js` is the only runtime; restart it to
-pick up server-code changes. Article changes are picked up by re-indexing (admin reindex button
-→ `POST /api/reindex`, or restart). Frontend changes (`public/`) only need a browser reload;
+pick up server-code changes. Article changes under `www/` and `audio/` are picked up automatically by the file watcher
+(`lib/archive-watcher.cjs`: 5 s quiet, then a cached rescan via `archiveLock.whenIdle`; off with `WATCH_ARCHIVE=0`),
+otherwise by `SIGHUP`, the admin reindex button (`POST /api/reindex`, reads fresh) or a restart. Frontend changes (`public/`) only need a browser reload;
 the server appends `?v=<content hash>` to every local `<script>`/`<link>` in `public/index.html`
 automatically (`createVersionedIndex` in `lib/app-shell.cjs`) — never add `?v=` numbers by hand, and tests
 must not pin versions.
@@ -63,7 +64,8 @@ must not pin versions.
   (persistent cache of the parse part per file signature in `index-cache.json`, gitignored; its version hashes the parser
   sources and the duplicate authors, so changing e.g. taxonomy keywords invalidates it — no manual bump needed; a full
   rescan that finds nothing changed publishes nothing (`sameSourceArticles`), the admin reindex button reads everything
-  fresh via `buildIndex({ fresh: true })`), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
+  fresh via `buildIndex({ fresh: true })`), `archive-watcher.cjs` (debounced `fs.watch` on `www/` and `audio/`; ignores
+  dot files, `*.filepart` and `Infografiken/trash/`), plus the lock, security and duplicate-detection modules (`archive-lock.cjs`,
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
 - **`modules/`** — feature modules with routes: a `create…` factory for their state plus `install…Routes(app, deps)`
   (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files`, `scrape`,

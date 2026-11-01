@@ -46,6 +46,7 @@ const {
 } = require('./lib/article-index.cjs');
 const { createArticleScanner } = require('./lib/article-scan.cjs');
 const { createIndexCache, indexCacheVersion } = require('./lib/index-cache.cjs');
+const { createArchiveWatcher } = require('./lib/archive-watcher.cjs');
 
 // Kommagetrennte Adressen/Subnetze bzw. Express-Schlüsselwörter (loopback,
 // linklocal, uniquelocal). „true“ wird bewusst nicht unterstützt.
@@ -790,6 +791,26 @@ if (require.main === module) {
     if (!scheduled) console.log('SIGHUP-Reindex ist bereits vorgemerkt.');
   });
 
+  // Datei-Watcher (lib/archive-watcher.cjs): Änderungen unter www/ und audio/, z. B. per WinSCP
+  // hochgeladene Artikel und Bilder, lösen nach 5 s Ruhe einen gecachten Neu-Scan aus. Eigene
+  // Schreibvorgänge (Editor, TTS, Infografiken) melden sich ebenfalls; der Neu-Scan findet dann nichts
+  // Neues und veröffentlicht nichts. Abschalten mit WATCH_ARCHIVE=0 (SIGHUP und Cron bleiben).
+  const archiveWatcher = process.env.WATCH_ARCHIVE === '0' ? null : createArchiveWatcher({
+    roots: [
+      { dir: WWW_DIR, ignore: ([author, folder]) => author === INFOGRAPHICS_AUTHOR && folder === 'trash' },
+      { dir: AUDIO_DIR },
+    ],
+    onChange: changes => {
+      const sample = changes.slice(0, 3).join(', ') + (changes.length > 3 ? ` … (+${changes.length - 3})` : '');
+      console.log(`Dateiänderungen erkannt (${sample}) -> Reindex`);
+      archiveLock.whenIdle(() => buildIndex().catch(console.error), {
+        intervalMs: 5000,
+        onWait: current => console.warn(`Watcher-Reindex wartet auf: ${current}`),
+      });
+    },
+  });
+  if (archiveWatcher) console.log(`Datei-Watcher aktiv (${archiveWatcher.start()} Ordner)`);
+
   buildIndex().catch(console.error);
   const server = app.listen(PORT, () => {
     console.log(`WebArchiv -> http://localhost:${PORT}`);
@@ -799,6 +820,7 @@ if (require.main === module) {
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
     if (shuttingDown) return;
     shuttingDown = true;
+    archiveWatcher?.stop();
     server.close();
     await ttsJobs.shutdown();
     await sessionStore?.close().catch(() => {});

@@ -821,6 +821,13 @@ Findet ein Reindex nichts Neues (typisch für `SIGHUP` ohne neue Dateien), bleib
 unverändert; die Logzeile endet dann mit `Index unverändert`. Der Button **„Archiv neu einlesen“** liest bewusst
 alle Dateien frisch, am Cache vorbei, und erneuert ihn dabei – der Sicherheitsweg, falls je etwas nicht stimmt.
 
+**Datei-Watcher** (`lib/archive-watcher.cjs`): Änderungen unter `www/` und `audio/` – etwa per WinSCP hochgeladene
+Artikel und Bilder oder gelöschte Dateien – lösen nach 5 s Ruhe (spätestens nach 60 s) einen gecachten Reindex aus;
+läuft gerade ein Schreibauftrag, wartet er darauf. Ignoriert werden Punkt-Dateien (eigene Temp-Dateien), WinSCP-
+Teildateien (`*.filepart`) und `Infografiken/trash/`. Das Log zeigt `Dateiänderungen erkannt (…) -> Reindex`.
+Eigene Schreibvorgänge (Editor, TTS, Infografiken) melden sich ebenfalls; der Neu-Scan findet dann nichts Neues
+und veröffentlicht nichts. `SIGHUP` aus dem Cron-Skript bleibt als Absicherung. Abschalten mit `WATCH_ARCHIVE=0`.
+
 Für die Medienzuordnung liest ein Scan jedes Verzeichnis nur einmal (`createDirectoryCache` in
 `lib/archive-files.cjs`): den Artikelordner, den parallelen Ordner unter `audio/` und den Autorenordner mit
 `standard.*`. Gesucht wird danach im Speicher, zuerst mit exaktem Namen, dann ohne Beachtung der
@@ -1041,6 +1048,7 @@ npm test --prefix tts
 | `SESSION_SECRET` | zufällig pro Prozess | Signatur der Session-Cookies; bei `NODE_ENV=production` Pflicht (≥ 32 Zeichen, z. B. `openssl rand -hex 32`). Nur mit festem Wert überstehen Anmeldungen einen Neustart |
 | `SESSIONS_FILE` | `sessions.json` im App-Verzeichnis | Gespeicherte Sitzungen (Rechte 0600, gitignored); abgelaufene werden entfernt |
 | `INDEX_CACHE_FILE` | `index-cache.json` im App-Verzeichnis | Index-Cache (Rechte 0600, gitignored); löschen macht nur den nächsten Start langsamer |
+| `WATCH_ARCHIVE` | an | `0` schaltet den Datei-Watcher für `www/` und `audio/` ab (dann nur SIGHUP, Button, Neustart) |
 | `TRUST_PROXY` | `loopback, 192.168.1.14` | Kommagetrennte Adressen/Subnetze des Reverse Proxys (NPMplus); `true` wird abgelehnt |
 | `CSP_MODE` | `report` | `report` (nur melden), `enforce` (blockieren) oder `off` |
 | `USERS_FILE` | `./users.json` | Abweichender Pfad der Nutzerdatei (z. B. für Tests) |

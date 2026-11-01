@@ -2415,3 +2415,24 @@ geänderte, neue und gelöschte Dateien sowie neue Bilder, `fresh` liest alles n
 
 **Deployment:** `lib/index-cache.cjs`, `lib/article-index.cjs`, `server.js`; Dienst neu starten. Weil
 `lib/index-cache.cjs` zur Versionskennung gehört, baut der erste Start den Cache einmal neu auf.
+
+## 60. Aktualisierung 01.11.2026 – Datei-Watcher für `www/` und `audio/` (Review-Idee 3.7, Schritt 2)
+
+- Neu `lib/archive-watcher.cjs`: `fs.watch` rekursiv auf `www/` und `audio/`. Ereignisse werden gebündelt, bis 5 s Ruhe
+  ist, spätestens nach 60 s. Ignoriert: Punkt-Dateien (eigene Temp-Dateien `.….tmp`), `*.filepart` (WinSCP),
+  `Infografiken/trash/`. Ein fehlender Ordner oder ein Watcher-Fehler (z. B. inotify-Limit) steht nur im Log.
+- `server.js` startet den Watcher nur beim echten Serverstart (nicht in Tests); er stößt `buildIndex()` über
+  `archiveLock.whenIdle` an (wartet auf laufende Aufträge, fasst sich mit einem vorgemerkten SIGHUP-Reindex zusammen)
+  und wird beim Beenden geschlossen. Abschalten mit `WATCH_ARCHIVE=0`.
+- Bewusst ohne Zuordnung „welche Datei gehört zu welchem Artikel“: Dank Index-Cache kostet ein Neu-Scan rund 0,7 s,
+  und ohne echte Änderung wird nichts veröffentlicht (Abschnitt 59). Damit sind auch Bilder, MP3s in `audio/`,
+  `standard.jpg`, Löschungen und Hörbücher (Neuaufbau ca. 40 ms) ohne Sonderfälle abgedeckt.
+- `scraper/run-scrape.sh` (SIGHUP nach dem Cron-Scrape) bleibt als Absicherung unverändert.
+
+**Geprüft:** Echter Server lokal: Probeartikel in `www/_watcher-probe/` angelegt → nach 5 s „Dateiänderungen
+erkannt“, Index 7.154 Artikel (1 neu eingelesen, 0,77 s); gelöscht → 7.153 (0,69 s). Neuer Test
+`test/archive-watcher.test.cjs` (Bündeln, Höchstwartezeit, Ignorieren, fehlender Ordner, Fehler, stop, echtes
+`fs.watch`); `test/archive-lock.test.cjs` prüft, dass der Watcher nur über die Sperre reindexiert.
+
+**Deployment:** `lib/archive-watcher.cjs` (neu), `server.js`; Dienst neu starten. Im Journal steht danach
+`Datei-Watcher aktiv (2 Ordner)`. Ein inotify-Limit ist bei rund 60 Ordnern nicht zu erwarten.
