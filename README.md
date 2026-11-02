@@ -918,10 +918,15 @@ scraper/scrape_all.js  →  ../www/Joe Turan | ../www/Telegram | ../www/Facebook
 
 Details/CLI: siehe `scraper/README.md`. Zwei Auslöse-Wege:
 
-1. **CLI**: `cd scraper && node scrape_all.js [--blog|--facebook|--telegram] [--visible]`
-2. **Web-UI (Admin)**: Aktions-Menü hinter dem **↺-Button** im Header mit drei
-   Einträgen — *Archiv neu einlesen* (`POST /api/reindex`), *Neue Beiträge scrapen*
-   (`POST /api/scrape`) und *Scrape-Log anzeigen* (`GET /api/scrape/log`). Beim
+1. **CLI**: `cd scraper && node scrape_all.js [--blog|--facebook|--telegram|--source "<Name>"] [--visible]`
+2. **Web-UI (Admin)**: Aktions-Menü hinter dem **↺-Button** → *Scraper-Zentrale*. Der Dialog zeigt je Quelle
+   Typ, Adresse, letzten Lauf (Zeit, Dauer, Web/Cron/von Hand), Ergebnis, neue Artikel des letzten Laufs
+   (aufklappbar, verlinkt), Neue in 30 Tagen und notwendige Aktionen (farbig: abgebrochen, Facebook-Anmeldung
+   abgelaufen oder bald ablaufend, keine Beiträge, Layout geändert, lange nichts Neues, pausiert), oben den
+   Cron-Stand und das Ablaufdatum der Facebook-Anmeldung. Je Quelle: *Jetzt scrapen* (`POST /api/scraper/run`),
+   *Bearbeiten*, *Pausieren*/*Fortsetzen*, *Entfernen* (Artikel bleiben); oben *Alle scrapen* (`POST /api/scrape`),
+   *Log anzeigen* (`GET /api/scrape/log`) und *Quelle hinzufügen*. Läufe und Log erscheinen im bisherigen
+   Scrape-Fenster über der Zentrale. *Archiv neu einlesen* (`POST /api/reindex`) bleibt eigener Menüeintrag. Beim
    Scrapen startet der Server (`modules/scrape.cjs`) `scrape_all.js` als Kindprozess, sammelt dessen
    Ausgabe im Status (`output`) und zeigt sie **live in einem Modal** an (endet
    mit der Zusammenfassung `gespeichert=… bereits vorhanden=…`); danach werden
@@ -996,6 +1001,7 @@ public/
 ├── admin-tasks.js            Nur Admin-Shell: Audio erzeugen (TTS), Archiv neu einlesen, Scrapen, Scrape-Log
 ├── infographic-review.js     Nur Admin-Shell: Prüfmodus „Infografiken prüfen“ (Poster-Markierungen)
 ├── health.js                 Nur Admin-Shell: Hinweis oben rechts bei neuen Fehlern, Dialog „Health-Check“
+├── scraper-center.js         Nur Admin-Shell: Dialog „Scraper-Zentrale“ (Quellen, Stand, Aktionen, Verwaltung)
 ├── duplicates.js             Admin-Prüfung und Verknüpfung von Blog-/Quellen-Dubletten
 ├── article-editor.js         Dialoglogik für Artikel- und Abstract-Markdown
 ├── markdown-live-preview.js  CodeMirror-Live-Darstellung, Toolbar und Cursor-Navigation
@@ -1013,7 +1019,7 @@ public/
 ├── favicon.ico               16/32/48 px (PNG-Einträge), aus favicon.svg erzeugt
 ├── apple-touch-icon.png      180 px ohne Eckenradius für den iOS-Homescreen
 ├── css/                      Styles in Ladereihenfolge: base, filters, cards, detail, dialogs, account,
-│                             audiobooks, duplicates und health (nur Admin), audiobook-extras
+│                             audiobooks, duplicates, health und scraper-center (nur Admin), audiobook-extras
 └── vendor/
     └── pdfjs/                PDF.js-Anzeige (Drittanbieterbibliothek)
 epub-tool/                    Eigenständiges Werkzeug: EPUB → Markdown; Tests unter epub-tool/test/

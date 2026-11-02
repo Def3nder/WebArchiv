@@ -2940,3 +2940,27 @@ Vorlage → Laufzeitdatei, Bearbeiten, Pausieren, Entfernen, Einzelquelle, 409 w
 nie von Hand geändert, ist das unkritisch (die Vorlage hat denselben Inhalt und gilt automatisch). Sonst vorher
 sichern und danach zurückkopieren: `cp scraper/scraper-config.json /tmp/` → `git pull` →
 `cp /tmp/scraper-config.json scraper/`.
+
+## 86. Aktualisierung 02.11.2026 – Scraper-Zentrale, Schritt 3: Dialog (To-Do)
+
+- Aktionen-Menü: „Scraper-Zentrale“ ersetzt „Neue Beiträge scrapen“ und „Scrape-Log anzeigen“.
+- `public/scraper-center.js` (Admin-Skript, gekapselt) + `public/css/scraper-center.css` (nach `health.css`), Markup im
+  `ADMIN_ONLY`-Block, `ADMIN_ASSET_PATHS`. Kopf mit Gesamtstufe (Plakette), Aktualisieren, ✕; Leiste „Alle scrapen“,
+  „Log anzeigen“, „Quelle hinzufügen“; Zeile mit Cron-Stand und Ablauf der Facebook-Anmeldung (Hinweis, solange die
+  Vorlage gilt). Je Quelle eine Karte mit farbigem Rand: Typ, Name, „pausiert“, Adresse (nur https als Link),
+  Letzter Lauf / Ergebnis / Neu in 30 Tagen, notwendige Aktionen farbig, neue Artikel des letzten Laufs aufklappbar
+  (Link schließt die Zentrale und öffnet den Artikel; fehlende als „nicht mehr im Index“), Knöpfe Jetzt scrapen,
+  Bearbeiten, Pausieren/Fortsetzen, Entfernen (mit Rückfrage). Formular für Hinzufügen/Bearbeiten (Typ und Name beim
+  Bearbeiten fest) mit Hinweis auf Rechte und Dubletten-Quellen; Fehlermeldungen des Servers im Formular.
+- Läufe: `admin-tasks.js` `runScrape({ source })` startet eine Einzelquelle über `/api/scraper/run` im bisherigen
+  Scrape-Fenster (über der Zentrale), das Promise endet nach Lauf und Reindex; danach lädt die Zentrale neu.
+- Ebenen-Stapel, Escape (schließt zuerst das Formular), Klick daneben, Nach-unten-Ziehen (`PULL_DIALOGS`);
+  `.scraper-content`/`.scraper-form` in der Overscroll-Liste. Auf dem Handy einspaltig.
+
+**Geprüft:** `test/scraper-center-ui.test.cjs`; `npm test` 605/605, `npm run test:browser` 15/15. Im Browser mit
+`npm run dev:fixture` und Beispieldaten (`SCRAPER_DIR`): alle Stufen und Aktionen, neue Artikel samt Link,
+Formular mit Fehlermeldung, Hinzufügen/Pausieren/Entfernen, Handyansicht (375 px, ohne Querscrollen), Escape.
+„Jetzt scrapen“/„Alle scrapen“ bewusst nicht gedrückt (würde gegen die Live-Quellen laufen).
+
+**Deployment:** `public/index.html`, `public/scraper-center.js`, `public/css/scraper-center.css`,
+`public/css/dialogs.css`, `public/admin-tasks.js`, `public/app.js`, `server.js`; Dienst neu starten.

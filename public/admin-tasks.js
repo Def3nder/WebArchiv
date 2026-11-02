@@ -349,14 +349,21 @@ function closeScrapeModal() {
 $scrapeClose?.addEventListener('click', closeScrapeModal);
 $scrapeBackdrop?.addEventListener('click', closeScrapeModal);
 
-async function runScrape() {
-  if (!confirm('Neue Beiträge scrapen (Blog, Facebook, Telegram)? Das kann einige Minuten dauern.')) return;
+// source: genau eine Quelle (Scraper-Zentrale, „Jetzt scrapen“); ohne: alle aktiven Quellen.
+// Das Promise endet, wenn Lauf und anschließender Reindex fertig sind (die Zentrale lädt dann neu).
+async function runScrape({ source = null } = {}) {
+  const question = source
+    ? `Quelle „${source}“ jetzt scrapen? Das kann einige Minuten dauern.`
+    : 'Neue Beiträge scrapen (alle aktiven Quellen)? Das kann einige Minuten dauern.';
+  if (!confirm(question)) return;
   $reindexBtn.disabled = true;
   $reindexBtn.textContent = '…';
-  openScrapeModal('Scrapen');
+  openScrapeModal(source ? `Scrapen: ${source}` : 'Scrapen');
   $scrapeStatus.textContent = 'Scrape läuft …';
   try {
-    const r = await apiFetch('/api/scrape', { method: 'POST' });
+    const r = source
+      ? await apiFetch('/api/scraper/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source }) })
+      : await apiFetch('/api/scrape', { method: 'POST' });
     const data = await r.json();
     if (!data.started) {
       // Die Sperre meldet, was gerade läuft (Scrape, Reindex, Audio …).
@@ -441,7 +448,8 @@ Object.assign(adminHooks, {
   actions: {
     ...adminHooks.actions,
     reindex: runReindex,
-    scrape: runScrape,
+    scrape: () => runScrape(),
+    'scrape-source': source => runScrape({ source }),
     log: showScrapeLog,
     tts: runTts,
     'tts-job': showTtsJob,

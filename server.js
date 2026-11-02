@@ -120,6 +120,8 @@ const ADMIN_ASSET_PATHS = new Set([
   '/admin-tasks.js',
   '/health.js',
   '/css/health.css',
+  '/scraper-center.js',
+  '/css/scraper-center.css',
   '/infographic-review.js',
   '/user-admin.js',
   '/tts-settings.js',

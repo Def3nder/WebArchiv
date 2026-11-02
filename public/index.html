@@ -25,6 +25,7 @@
   <link rel="stylesheet" href="css/audiobooks.css" />
   <link rel="stylesheet" href="css/duplicates.css" data-admin-asset />
   <link rel="stylesheet" href="css/health.css" data-admin-asset />
+  <link rel="stylesheet" href="css/scraper-center.css" data-admin-asset />
   <link rel="stylesheet" href="css/audiobook-extras.css" />
 </head>
 <body>
@@ -93,8 +94,7 @@
         <div id="admin-menu" class="header-menu-dropdown" role="menu" hidden>
           <p id="header-menu-account" class="header-menu-account"></p>
           <button type="button" role="menuitem" class="header-menu-item" data-action="reindex" data-admin-only>Archiv neu einlesen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="scrape" data-admin-only>Neue Beiträge scrapen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="log" data-admin-only>Scrape-Log anzeigen</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="scraper-center" data-admin-only>Scraper-Zentrale</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job" data-admin-only>Audio-Auftrag anzeigen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="tts-settings" data-admin-only>TTS-Einstellungen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="new-infographic" data-admin-only>Neue Infografik</button>
@@ -854,6 +854,48 @@
     </div>
     <div id="health-content" class="health-content" aria-live="polite"></div>
   </dialog>
+  <!-- Scraper-Zentrale (Admin): Quellen, letzter Lauf, neue Artikel, notwendige Aktionen (scraper-center.js) -->
+  <dialog id="scraper-center" class="account-dialog account-dialog-wide scraper-center-dialog" aria-labelledby="scraper-center-title" tabindex="-1">
+    <div class="article-editor-heading scraper-heading">
+      <div><p class="article-editor-eyebrow">Admin</p><h2 id="scraper-center-title">Scraper-Zentrale</h2></div>
+      <span id="scraper-level" class="scraper-pill" hidden></span>
+      <button type="button" id="scraper-refresh" class="detail-cat-pill">Aktualisieren</button>
+      <button type="button" id="scraper-close" class="detail-cat-pill" aria-label="Scraper-Zentrale schließen">✕</button>
+    </div>
+    <div class="scraper-toolbar">
+      <button type="button" id="scraper-run-all" class="detail-cat-pill account-primary">Alle scrapen</button>
+      <button type="button" id="scraper-log" class="detail-cat-pill">Log anzeigen</button>
+      <button type="button" id="scraper-add" class="detail-cat-pill">Quelle hinzufügen</button>
+    </div>
+    <div id="scraper-content" class="scraper-content" aria-live="polite"></div>
+    <form id="scraper-form" class="scraper-form" novalidate hidden>
+      <h3 id="scraper-form-title">Quelle hinzufügen</h3>
+      <div class="scraper-form-grid">
+        <label class="login-field"><span class="login-label">Typ</span>
+          <select id="scraper-form-type" class="login-input">
+            <option value="blog">Blog</option><option value="facebook">Facebook</option><option value="telegram">Telegram</option>
+          </select></label>
+        <label class="login-field"><span class="login-label">Name (= Ordner im Archiv)</span>
+          <input id="scraper-form-name" class="login-input" maxlength="60" required /></label>
+        <label class="login-field scraper-form-wide"><span class="login-label">Adresse</span>
+          <input id="scraper-form-url" class="login-input" type="url" maxlength="300" placeholder="https://…" required /></label>
+        <label class="login-field"><span class="login-label">Dateiautor (optional)</span>
+          <input id="scraper-form-file-author" class="login-input" maxlength="60" /></label>
+        <label class="login-field"><span class="login-label">Ausschluss-Ausdruck (optional)</span>
+          <input id="scraper-form-exclude" class="login-input" maxlength="200" placeholder="z. B. kuschel[\s-]*workshop" /></label>
+        <label class="login-field"><span class="login-label">Signatur: Name (optional)</span>
+          <input id="scraper-form-signature-name" class="login-input" maxlength="80" /></label>
+        <label class="login-field"><span class="login-label">Signatur: Website (optional)</span>
+          <input id="scraper-form-signature-website" class="login-input" maxlength="120" /></label>
+      </div>
+      <p id="scraper-form-hint" class="account-hint">Der Name wird zum Autorenordner <code>www/&lt;Name&gt;</code> und lässt sich später nicht ändern. Danach eventuell Rechte (öffentliche Autoren, Nutzer-Freigaben) und die Dubletten-Quellen (<code>config.json</code>, <code>duplicates.facebookAuthors</code>) anpassen.</p>
+      <p id="scraper-form-error" class="login-error" role="alert" hidden></p>
+      <div class="account-buttons">
+        <button type="button" id="scraper-form-cancel" class="detail-cat-pill">Abbrechen</button>
+        <button type="submit" id="scraper-form-save" class="detail-cat-pill account-primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
   <!-- ADMIN_ONLY_END -->
   <script src="aria-menu.js"></script>
 <script src="layer-stack.js"></script>
@@ -872,6 +914,7 @@
   <script src="app.js"></script>
   <script src="admin-tasks.js" data-admin-asset></script>
   <script src="health.js" data-admin-asset></script>
+  <script src="scraper-center.js" data-admin-asset></script>
   <script src="infographic-review.js" data-admin-asset></script>
   <script src="vendor/duplicate-diff.bundle.js" data-admin-asset></script>
   <script src="duplicates.js" data-admin-asset></script>
