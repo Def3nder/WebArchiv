@@ -594,8 +594,8 @@ Repository.
   zeigt Details, „Liste leeren“ nach Rückfrage). Neue **Fehler** melden sich zusätzlich mit einem schwebenden
   Hinweis oben rechts unter der Kopfzeile und einer Zahl am Menüeintrag (Abfrage jede Minute, nur bei sichtbarer
   Seite); Warnungen zeigt nur der Dialog. × oder das Öffnen des Dialogs markiert die Meldungen auf diesem Gerät als
-  gelesen; beim ersten Mal auf einem Gerät gilt die bisherige Liste als gelesen. Escape, × oder ein Klick neben den
-  Dialog schließen ihn.
+  gelesen; beim ersten Mal auf einem Gerät gilt die bisherige Liste als gelesen. Escape, ×, ein Klick neben den
+  Dialog oder Wischen nach unten schließen ihn.
 - **Einstellungen** (Aktionen → *Einstellungen*, angemeldet): Schriftart (Editorial/Klassisch/
   Modern/System), Darstellung (Hell/Dunkel/Automatisch = folgt dem Gerät), Textgröße des
   Artikeltexts (Klein/Normal/Groß/Sehr groß) und Filter-Beschriftungen (Automatisch/Ausblenden).

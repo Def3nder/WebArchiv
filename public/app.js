@@ -2257,6 +2257,7 @@ const PULL_DIALOGS = [
   ['#settings-dialog', '#settings-form button[type="submit"]'],
   ['#tts-settings-dialog', '#tts-settings-close'],
   ['#user-admin', '#user-admin-close'],
+  ['#health-dialog', '#health-close'],
 ];
 for (const [panelSel, closeSel, fadeSel] of PULL_DIALOGS) {
   const panel = document.querySelector(panelSel);

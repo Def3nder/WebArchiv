@@ -2720,3 +2720,14 @@ unveränderter Filterzeile. Das Wischverhalten selbst ist nur auf einem echten i
 
 **Deployment:** `modules/health.cjs`, `tts/jobs.cjs`, `public/layer-stack.js`, `public/touch-gestures.js`,
 `public/health.js`, `public/css/base.css`, `public/css/health.css`; Dienst neu starten, Browser neu laden.
+
+## 75. Aktualisierung 02.11.2026 – Health-Check schließt per Wischen nach unten
+
+- `public/app.js`: `['#health-dialog', '#health-close']` in `PULL_DIALOGS` – Nach-unten-Ziehen wirkt wie ×, wie bei
+  den anderen Dialogen (nicht aus gescrollten Bereichen oder Feldern). In Gast- und Nutzer-Shell fehlt das Markup,
+  der Eintrag wird dort übersprungen.
+
+**Geprüft:** `test/health-ui.test.cjs`; im Browser (375 px, simulierte Touch-Gesten): kurzes Ziehen federt zurück,
+langes schließt den Dialog und leert den Ebenen-Stapel.
+
+**Deployment:** `public/app.js`; Browser neu laden.

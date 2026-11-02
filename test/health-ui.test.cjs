@@ -49,6 +49,8 @@ test('health.js: Dialog am Ebenen-Stapel, sicheres Markup, Einhängen über admi
   assert.match(HEALTH, /const previousUserChanged = adminHooks\.userChanged;[\s\S]*?userChanged: user => \{ previousUserChanged\(user\); startPolling\(\); \}/,
     'die Hooks von admin-tasks.js bleiben erhalten');
   assert.match(HEALTH, /actions: \{ \.\.\.adminHooks\.actions, health: openHealthDialog \}/);
+  // Nach unten wischen schließt wie × (gemeinsame Liste in app.js; fehlt das Markup, wird der Eintrag übersprungen).
+  assert.match(read('public/app.js'), /const PULL_DIALOGS = \[[\s\S]*?\['#health-dialog', '#health-close'\],[\s\S]*?\];/);
   // Ohne Qwen (Desktop-Rechner aus) ist „TTS-Einstellungen“ gesperrt; Stand aus Abfrage und Dialog.
   assert.match(HEALTH, /document\.querySelector\('\[data-action="tts-settings"\]'\)/);
   assert.match(HEALTH, /\$ttsSettingsItem\.disabled = !reachable;/);
