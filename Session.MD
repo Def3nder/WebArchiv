@@ -2889,3 +2889,24 @@ verwerfen?“, bei Abbrechen bleiben Editor und Artikel offen (Artikeldatei unve
   `test/fixtures/smoke-archive.cjs`; neue Bedienabläufe einen Ablauf in `test/browser/`.
 
 **Deployment:** nur Doku.
+
+## 84. Aktualisierung 02.11.2026 – Scraper-Zentrale, Schritt 1: Statusdatei, Pausieren, Einzelquelle (To-Do)
+
+- `scraper/scrape_all.js` schreibt `scraper/scrape-status.json` (gitignored, letzte 30 Läufe): Auslöser (`web`/`cron`/
+  `manual` über `SCRAPE_TRIGGER`, gesetzt von `modules/scrape.cjs` bzw. `run-scrape.sh`), Start, Ende, Exit-Code und je
+  Quelle Status (`ok`/`failed`/`paused`), gespeichert, vorhanden, Dauer, Fehler, Warnungen nach Art und neue
+  Markdown-Dateien (relativ zu `www/` = Artikel-IDs). Geschrieben nach jeder Quelle, atomar über `lib/atomic-file.cjs`;
+  ein Schreibfehler bricht den Lauf nicht ab.
+- Warnungen ordnet der Logger der gerade laufenden Quelle zu (`warningKind`: Cookie-Datei fehlt, keine Beiträge,
+  DOM-Fallback, Bild, kein Datum, sonstige) – daraus leitet die Zentrale später notwendige Aktionen ab.
+- `"Aktiv": false` pausiert eine Quelle (sie bleibt in der Config); `--source "<Name>"` startet genau eine Quelle,
+  auch eine pausierte. Die Telegram-Ergebniszeile nennt jetzt den Quellnamen.
+- `runAll` nimmt für Tests Browser und Quellen-Funktionen entgegen; `SCRAPE_LOG_FILE` lenkt das Log um.
+
+**Geprüft:** `scraper/test/scrape-status.test.js` (Pausieren, `--source`, Warnungsarten, Statusdatei mit 30 Läufen und
+kaputter Datei, Pfade, kompletter Lauf mit nachgebildeten Quellen: Ergebnis, Warnungen je Quelle, Abbruch, Pause,
+Exit-Code), `test/scrape.test.cjs` (Web-Lauf setzt `SCRAPE_TRIGGER=web`); `npm test` 593/593. Kein echter Lauf gegen
+die Live-Quellen.
+
+**Deployment:** `scraper/scrape_all.js`, `scraper/run-scrape.sh`, `modules/scrape.cjs`, `.gitignore`; Dienst neu
+starten. Nach dem nächsten Lauf liegt `scraper/scrape-status.json` vor.

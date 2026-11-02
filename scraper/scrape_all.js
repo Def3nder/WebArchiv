@@ -36,6 +36,7 @@ import TurndownService from "turndown";
 
 // Gemeinsame Pfadprüfung des Archivs (nur Node-Bordmittel, keine weiteren Abhängigkeiten).
 import { isPathInside } from "../lib/archive-files.cjs";
+import { writeFileAtomic } from "../lib/atomic-file.cjs";
 
 // ---------------------------------------------------------------------------
 // Konfiguration
@@ -50,6 +51,9 @@ const WWW_DIR = path.join(PROJECT_ROOT, "www");
 const COOKIES_FILE = path.join(SCRIPT_DIR, "cookies.txt");
 const CONFIG_FILE = path.join(SCRIPT_DIR, "scraper-config.json");
 const LOG_FILE = path.join(SCRIPT_DIR, "scrape_all.log");
+// Strukturierter Stand der letzten Läufe je Quelle (Scraper-Zentrale im WebArchiv); gitignored.
+const STATUS_FILE = path.join(SCRIPT_DIR, "scrape-status.json");
+const STATUS_RUN_LIMIT = 30;
 
 // Gemeinsame Abbruchschwelle: nach so vielen bereits vorhandenen Artikeln wird
 // die jeweilige Quelle beendet.
@@ -124,7 +128,14 @@ function loadScraperConfig(configPath = CONFIG_FILE) {
       if (!["http:", "https:"].includes(parsedUrl.protocol)) {
         throw new Error(`Scraper-Config: nur HTTP(S)-URLs sind erlaubt: ${url}`);
       }
-      return { name, url, outputDir: sourceOutputDir(outputPath), ...sourceOptions(entry, section, index, name) };
+      // Aktiv: false pausiert die Quelle (bleibt in der Config, läuft aber nur mit --source).
+      if (entry.Aktiv !== undefined && typeof entry.Aktiv !== "boolean") {
+        throw new Error(`Scraper-Config: ${section}[${index}]: "Aktiv" muss true oder false sein.`);
+      }
+      return {
+        name, url, outputDir: sourceOutputDir(outputPath), active: entry.Aktiv !== false,
+        ...sourceOptions(entry, section, index, name),
+      };
     });
   }
   return config;
@@ -164,11 +175,16 @@ function _timestamp() {
   );
 }
 
+// Warnungen der gerade laufenden Quelle zählen (Statusdatei); null außerhalb einer Quelle.
+let warningSink = null;
+
 function _emit(level, msg) {
+  if (level === "WARN" && warningSink) warningSink(msg);
   const line = `${_timestamp()} [${level}] ${msg}`;
   console.log(line);
   try {
-    fs.appendFileSync(LOG_FILE, line + "\n", { encoding: "utf-8" });
+    // SCRAPE_LOG_FILE: abweichende Logdatei (Tests schreiben nicht ins echte Log).
+    fs.appendFileSync(process.env.SCRAPE_LOG_FILE || LOG_FILE, line + "\n", { encoding: "utf-8" });
   } catch {
     /* Logdatei nicht schreibbar -> nur Konsole */
   }
@@ -1036,7 +1052,7 @@ async function scrapeTelegram(browser, source, changedFiles) {
     await context.close();
   }
 
-  logger.info(`Telegram: ${saved} gespeichert, ${skipped} bereits vorhanden.`);
+  logger.info(`Telegram "${source.name}": ${saved} gespeichert, ${skipped} bereits vorhanden.`);
   return [saved, skipped];
 }
 
@@ -1523,14 +1539,99 @@ async function scrapeFacebook(browser, source, cookiesFile, changedFiles) {
 }
 
 // ===========================================================================
+// Status je Quelle (scrape-status.json, für die Scraper-Zentrale im WebArchiv)
+// ===========================================================================
+// Art einer Warnung, damit die Zentrale daraus notwendige Aktionen ableiten kann.
+function warningKind(msg) {
+  const text = String(msg);
+  if (/Cookie-Datei nicht gefunden/i.test(text)) return "cookies-missing";
+  if (/Keine Beiträge gefunden/i.test(text)) return "no-posts";
+  if (/DOM-Fallback/i.test(text)) return "dom-fallback";
+  if (/Bild/i.test(text)) return "image";
+  if (/kein Datum/i.test(text)) return "no-date";
+  return "other";
+}
+
+function readStatus(file = STATUS_FILE) {
+  try {
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (data && Array.isArray(data.runs)) return { version: 1, runs: data.runs };
+  } catch {
+    /* fehlt oder beschädigt: neu beginnen */
+  }
+  return { version: 1, runs: [] };
+}
+
+// Lauf einfügen bzw. ersetzen (gleiche id), neueste zuerst, höchstens limit Läufe.
+function upsertRun(status, run, limit = STATUS_RUN_LIMIT) {
+  const others = status.runs.filter((item) => item.id !== run.id);
+  return { version: 1, runs: [run, ...others].slice(0, limit) };
+}
+
+// Atomar schreiben; ein Fehler hier darf den Lauf nicht abbrechen.
+async function saveRun(run, file = STATUS_FILE) {
+  try {
+    const status = upsertRun(readStatus(file), run);
+    await writeFileAtomic(file, JSON.stringify(status, null, 2) + "\n", { defaultMode: 0o644 });
+  } catch (exc) {
+    console.error(`Scraper-Status konnte nicht gespeichert werden (${file}): ${exc.message}`);
+  }
+}
+
+// Geänderte Dateien relativ zu www/ (wie die Artikel-IDs), nur Markdown.
+function relativeNewFiles(files, wwwDir = WWW_DIR) {
+  return [...files]
+    .filter((file) => file.toLowerCase().endsWith(".md"))
+    .map((file) => path.relative(wwwDir, file).split(path.sep).join("/"))
+    .sort();
+}
+
+// Quellenauswahl: ohne Namen die gewählten Phasen mit allen Quellen (pausierte laufen dort nicht);
+// mit --source genau diese eine Quelle, auch wenn sie pausiert ist.
+function selectSources(config, phases, sourceName = null) {
+  if (!sourceName) return { phases, config };
+  const wanted = String(sourceName).trim().toLowerCase();
+  for (const phase of CANONICAL_ORDER) {
+    const source = (config[phase] || []).find((item) => item.name.toLowerCase() === wanted);
+    if (source) {
+      const only = Object.fromEntries(CANONICAL_ORDER.map((item) => [item, []]));
+      only[phase] = [{ ...source, active: true }];
+      return { phases: [phase], config: only };
+    }
+  }
+  const known = CANONICAL_ORDER.flatMap((phase) => (config[phase] || []).map((item) => item.name));
+  throw new Error(`Quelle "${sourceName}" nicht in der Config. Vorhanden: ${known.join(", ") || "(keine)"}`);
+}
+
+// ===========================================================================
 // Orchestrator
 // ===========================================================================
+const SCRAPERS = {
+  blog: (browser, source, opts, files) => scrapeBlog(browser, source, files),
+  facebook: (browser, source, opts, files) => scrapeFacebook(browser, source, opts.cookies, files),
+  telegram: (browser, source, opts, files) => scrapeTelegram(browser, source, files),
+};
+
+// opts.launch / opts.scrapers / opts.statusFile / opts.wwwDir nur für Tests austauschbar.
 async function runAll(phases, opts) {
   const results = {};
   const failures = [];
   const changedFiles = new Set();
+  const scrapers = opts.scrapers || SCRAPERS;
+  const statusFile = opts.statusFile || STATUS_FILE;
+  const startedAt = new Date();
+  const run = {
+    id: startedAt.toISOString(),
+    trigger: opts.trigger || "manual",
+    startedAt: startedAt.toISOString(),
+    finishedAt: null,
+    exitCode: null,
+    phases,
+    sources: [],
+  };
+  await saveRun(run, statusFile);
 
-  const browser = await chromium.launch({ headless: opts.headless });
+  const browser = await (opts.launch || ((options) => chromium.launch(options)))({ headless: opts.headless });
   try {
     for (const phase of phases) {
       logger.info("=".repeat(70));
@@ -1546,28 +1647,51 @@ async function runAll(phases, opts) {
       }
 
       for (const source of sources) {
+        if (source.active === false) {
+          logger.info(`${CONFIG_SECTIONS[phase]} "${source.name}": pausiert (Aktiv: false) – übersprungen.`);
+          run.sources.push({ type: phase, name: source.name, status: "paused" });
+          await saveRun(run, statusFile);
+          continue;
+        }
+        const entry = {
+          type: phase, name: source.name, status: "ok", startedAt: new Date().toISOString(), finishedAt: null,
+          durationMs: null, saved: 0, skipped: 0, error: null, warnings: {}, newFiles: [],
+        };
+        const sourceFiles = new Set();
+        warningSink = (msg) => {
+          const kind = warningKind(msg);
+          entry.warnings[kind] = (entry.warnings[kind] || 0) + 1;
+        };
         try {
-          let sourceResult;
-          if (phase === "blog") {
-            sourceResult = await scrapeBlog(browser, source, changedFiles);
-          } else if (phase === "facebook") {
-            sourceResult = await scrapeFacebook(browser, source, opts.cookies, changedFiles);
-          } else if (phase === "telegram") {
-            sourceResult = await scrapeTelegram(browser, source, changedFiles);
-          }
-          saved += sourceResult[0];
-          skipped += sourceResult[1];
+          const [sourceSaved, sourceSkipped] = await scrapers[phase](browser, source, opts, sourceFiles);
+          entry.saved = sourceSaved;
+          entry.skipped = sourceSkipped;
+          saved += sourceSaved;
+          skipped += sourceSkipped;
         } catch (exc) {
           logger.error(`[FEHLER] ${phase} "${source.name}" abgebrochen: ${exc}`);
           logger.error(exc && exc.stack ? exc.stack : String(exc));
           failures.push(`${phase}:${source.name}`);
           failed += 1;
+          entry.status = "failed";
+          entry.error = String(exc && exc.message ? exc.message : exc).slice(0, 500);
+        } finally {
+          warningSink = null;
+          for (const file of sourceFiles) changedFiles.add(file);
+          entry.newFiles = relativeNewFiles(sourceFiles, opts.wwwDir || WWW_DIR);
+          entry.finishedAt = new Date().toISOString();
+          entry.durationMs = Date.parse(entry.finishedAt) - Date.parse(entry.startedAt);
+          run.sources.push(entry);
+          await saveRun(run, statusFile);
         }
       }
       results[phase] = { saved, skipped, failed };
     }
   } finally {
     await browser.close();
+    run.finishedAt = new Date().toISOString();
+    run.exitCode = failures.length || Object.keys(results).length < phases.length ? 1 : 0;
+    await saveRun(run, statusFile);
   }
 
   logger.info("=".repeat(70));
@@ -1598,6 +1722,7 @@ function parseArgs(argv) {
     .option("--blog", "Blog-Quelle einschließen")
     .option("--facebook", "Facebook-Quelle einschließen")
     .option("--telegram", "Telegram-Quelle einschließen")
+    .option("--source <name>", "nur diese eine Quelle (Name aus der Config; auch wenn pausiert)")
     .option("--visible", "Browser sichtbar starten")
     .option("--config <path>", "Pfad zu scraper-config.json")
     .option("--cookies <path>", "Pfad zu cookies.txt")
@@ -1610,21 +1735,23 @@ async function main(argv) {
   const args = parseArgs(argv);
 
   const selected = CANONICAL_ORDER.filter((p) => args[p]);
-  const phases = selected.length ? selected : [...CANONICAL_ORDER];
-
   const configPath = args.config ? path.resolve(args.config) : CONFIG_FILE;
+  const { phases, config } = selectSources(
+    loadScraperConfig(configPath), selected.length ? selected : [...CANONICAL_ORDER], args.source
+  );
   const opts = {
     headless: !args.visible,
-    config: loadScraperConfig(configPath),
+    config,
     cookies: args.cookies ? path.resolve(args.cookies) : COOKIES_FILE,
+    // Wer den Lauf ausgelöst hat: Web-UI setzt "web", run-scrape.sh "cron", sonst Aufruf von Hand.
+    trigger: ["web", "cron"].includes(process.env.SCRAPE_TRIGGER) ? process.env.SCRAPE_TRIGGER : "manual",
   };
 
   logger.info(`Ablaufplan: ${phases.join(" -> ")}`);
   logger.info(`Config: ${configPath}`);
   for (const phase of phases) {
-    logger.info(
-      `  ${CONFIG_SECTIONS[phase]}: ${opts.config[phase].map((source) => source.name).join(", ") || "(keine)"}`
-    );
+    const names = opts.config[phase].map((source) => `${source.name}${source.active === false ? " (pausiert)" : ""}`);
+    logger.info(`  ${CONFIG_SECTIONS[phase]}: ${names.join(", ") || "(keine)"}`);
   }
   return runAll(phases, opts);
 }
@@ -1644,6 +1771,13 @@ export {
   stripSignature,
   parseFbDate,
   cleanFbPermalink,
+  warningKind,
+  readStatus,
+  upsertRun,
+  relativeNewFiles,
+  selectSources,
+  runAll,
+  logger,
 };
 
 // Nur bei Direktaufruf (node scrape_all.js …) ausführen, nicht beim Import.

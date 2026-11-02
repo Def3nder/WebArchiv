@@ -69,7 +69,8 @@ function createScrapeJob({ scraperDir, reindex, refreshFiles, reindexRunning, sp
         state.output += chunk.toString();
         if (state.output.length > OUTPUT_LIMIT) state.output = state.output.slice(-OUTPUT_LIMIT);
       };
-      const child = spawn(process.execPath, args, { cwd: scraperDir });
+      // SCRAPE_TRIGGER: In scrape-status.json steht so, dass der Lauf aus der Web-UI kam.
+      const child = spawn(process.execPath, args, { cwd: scraperDir, env: { ...process.env, SCRAPE_TRIGGER: 'web' } });
       child.stdout.on('data', d => { process.stdout.write(`[scrape] ${d}`); captureOutput(d); });
       child.stderr.on('data', d => { process.stderr.write(`[scrape] ${d}`); captureOutput(d); });
       child.on('error', err => {

@@ -11,6 +11,13 @@ const { createScrapeJob, installScrapeRoutes } = require('../modules/scrape.cjs'
 const { createArchiveLock } = require('../lib/archive-lock.cjs');
 const { SCRAPER_CHANGED_FILES_MARKER } = require('../lib/article-index.cjs');
 
+test('Web-Scrape markiert den Lauf für scrape-status.json als "web"', () => {
+  const { job, calls } = scrapeJob();
+  job.start(['facebook']);
+  assert.equal(calls[0].options.env.SCRAPE_TRIGGER, 'web');
+  assert.equal(calls[0].options.cwd, path.join('/app', 'scraper'));
+});
+
 // Nachgebildeter Kindprozess: Ausgabe und Ende steuert der Test.
 function fakeSpawn() {
   const calls = [];

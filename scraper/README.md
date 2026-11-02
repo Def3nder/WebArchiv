@@ -50,6 +50,7 @@ Optionale Felder je Quelle (nichts davon ist im Code fest eingetragen):
 | `FileAuthor` | Autorenname in Dateinamen von Facebook-/Telegram-Beiträgen (`<Datum>_<FileAuthor> - <Slug>.md`); Standard: `Name` |
 | `Signature` | `{ "Name": "…", "Website": "…" }` – Abspann, Social-Media-Hinweise und Call-to-Action dieses Autors entfernen |
 | `Exclude` | Regulärer Ausdruck (ohne Groß-/Kleinschreibung); passende Beiträge werden übersprungen |
+| `Aktiv` | `false` pausiert die Quelle: Sie bleibt in der Config, läuft aber nur noch gezielt mit `--source` |
 
 Die Endung „/ Blog | www.<Domain>“ im Blog-Titel wird aus der Domain der `URL` abgeleitet.
 
@@ -78,6 +79,9 @@ node scrape_all.js
 node scrape_all.js --telegram
 node scrape_all.js --blog --facebook
 
+# Genau eine Quelle (Name aus der Config, auch wenn pausiert)
+node scrape_all.js --source "Joe Turan Gruppe"
+
 # Browser sichtbar (Debugging)
 node scrape_all.js --visible
 
@@ -99,6 +103,16 @@ Für die Facebook-Quellen in `scraper/` ablegen:
 
 Die URLs kommen ausschließlich aus `scraper-config.json`. Alle konfigurierten
 Facebook-Quellen verwenden dieselbe Cookie-Datei.
+
+## Statusdatei für die Scraper-Zentrale
+
+Jeder Lauf schreibt `scrape-status.json` (gitignored, die letzten 30 Läufe, neueste zuerst; atomar über
+`lib/atomic-file.cjs`). Pro Lauf: Auslöser (`web` aus der Web-UI, `cron` aus `run-scrape.sh`, sonst `manual`
+– gesetzt über `SCRAPE_TRIGGER`), Start, Ende, Exit-Code und je Quelle `status` (`ok`, `failed`, `paused`),
+gespeichert, bereits vorhanden, Dauer, Fehlermeldung, Warnungen nach Art (`cookies-missing`, `no-posts`,
+`dom-fallback`, `image`, `no-date`, `other`) und die neuen Markdown-Dateien relativ zu `www/` (= Artikel-IDs).
+Geschrieben wird schon während des Laufs nach jeder Quelle; ein Lauf ohne `finishedAt` läuft noch oder ist
+abgestürzt. `SCRAPE_LOG_FILE` lenkt das Log um (Tests).
 
 ## Nach dem Lauf: Reindex
 

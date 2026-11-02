@@ -50,6 +50,8 @@ tts-settings.json
 /tts-voice-previews/
 /scraper/cookies.txt
 /scraper/Abonenten-URL.txt
+# Stand der letzten Scraper-Läufe je Quelle (schreibt scrape_all.js, liest die Scraper-Zentrale)
+/scraper/scrape-status.json
 # Zur Laufzeit beschrieben (Autoren-Priorität, öffentliche Autoren); Vorlagen:
 # example-config.json, example-public-directories.txt
 /config.json

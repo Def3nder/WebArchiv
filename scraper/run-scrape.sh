@@ -4,7 +4,8 @@ LOG=/opt/nodeapp/scraper/cron-scrape.log
 cd /opt/nodeapp/scraper || exit 1
 
 # Scrapen (alle drei Quellen; für nur Telegram: --telegram usw.)
-/usr/bin/node scrape_all.js >> "$LOG" 2>&1
+# SCRAPE_TRIGGER: In scrape-status.json steht so, dass der Lauf vom Cron kam.
+SCRAPE_TRIGGER=cron /usr/bin/node scrape_all.js >> "$LOG" 2>&1
 echo "$(date '+%F %T') Scraper exit $?" >> "$LOG"
 
 # Laufenden Server neu einlesen lassen, ohne Prozess, Sessions oder laufende
