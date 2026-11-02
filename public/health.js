@@ -217,6 +217,9 @@ function renderServices(services) {
     row('Qwen-TTS', qwen.reachable ? 'erreichbar' : 'nicht erreichbar (Desktop-Rechner aus)'),
     row('Scrape (Web-UI)', web, webFailed ? 'error' : null),
     row('Scrape (Cron)', cron, scrape.cron && scrape.cron.exitCode !== 0 ? 'error' : null),
+    // Facebook-Anmeldung des Scrapers, nur wenn eine aktive Facebook-Quelle sie braucht.
+    scrape.login?.needed ? row('Facebook-Anmeldung', esc(scrape.login.text), scrape.login.level) : '',
+    '<div class="health-actions"><button type="button" class="detail-cat-pill" data-health-scraper>Scraper-Zentrale öffnen</button></div>',
   ].join(''));
 }
 
@@ -304,6 +307,12 @@ $content.addEventListener('click', async event => {
     const open = toggle.getAttribute('aria-expanded') !== 'true';
     toggle.setAttribute('aria-expanded', String(open));
     detail.hidden = !open;
+    return;
+  }
+  if (event.target.closest('[data-health-scraper]')) {
+    // Health-Check schließen, dann die Zentrale öffnen (scraper-center.js hängt sich in adminHooks.actions ein).
+    closeHealthDialog();
+    adminHooks.actions['scraper-center']?.();
     return;
   }
   if (event.target.closest('[data-health-clear]')) {

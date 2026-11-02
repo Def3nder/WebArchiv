@@ -2964,3 +2964,24 @@ Formular mit Fehlermeldung, Hinzufügen/Pausieren/Entfernen, Handyansicht (375 p
 
 **Deployment:** `public/index.html`, `public/scraper-center.js`, `public/css/scraper-center.css`,
 `public/css/dialogs.css`, `public/admin-tasks.js`, `public/app.js`, `server.js`; Dienst neu starten.
+
+## 87. Aktualisierung 02.11.2026 – Scraper-Zentrale, Schritt 4: Anschluss an den Health-Check
+
+- `lib/scraper-sources.cjs` `facebookLoginState`: nur relevant mit aktiver Facebook-Quelle; `cookies.txt` fehlt oder
+  Anmeldung (`c_user`/`xs`) abgelaufen = Fehler, Ablauf in < 7 Tagen = Warnung, sonst „gültig bis …“. Die Texte sind je
+  Zustand und Tag gleich, damit das Meldungsprotokoll sie zusammenfasst.
+- `modules/scraper-center.cjs`: `loginState()` und `createLoginReminder` – schreibt den Zustand ins Meldungsprotokoll
+  (Quelle „scraper“): Fehler sofort und danach höchstens einmal am Tag (dann erscheint die Sprechblase erneut),
+  Warnung ebenso (nur im Dialog); ist alles wieder gut, beginnt es neu. `server.js` prüft 30 s nach dem Start und dann
+  stündlich (nur als echter Server).
+- `modules/health.cjs`: `scraperLogin` fließt in `services.scrape` (`login`, Stufe); der öffentliche Status bleibt
+  unberührt. `public/health.js`: Zeile „Facebook-Anmeldung“ im Bereich Dienste und Knopf „Scraper-Zentrale öffnen“
+  (schließt den Health-Check und öffnet die Zentrale).
+
+**Geprüft:** Tests in `test/scraper-center.test.cjs` (Login-Stufen, Erinnerung einmal am Tag, Eskalation, Neubeginn,
+`loginState` ohne Werte), `test/health.test.cjs`, `test/health-ui.test.cjs`; `npm test` 609/609. Im Browser mit
+`dev:fixture` und abgelaufenen Test-Cookies: nach 30 s Sprechblase „1 neuer Fehler – Facebook-Anmeldung des Scrapers
+abgelaufen …“, Dienste „Fehler“ mit der Zeile, Knopf öffnet die Zentrale mit derselben Aktion.
+
+**Deployment:** `lib/scraper-sources.cjs`, `modules/scraper-center.cjs`, `modules/health.cjs`, `server.js`,
+`public/health.js`; Dienst neu starten.

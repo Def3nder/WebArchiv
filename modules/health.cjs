@@ -56,7 +56,7 @@ async function lastCronRun(file, io = fs.promises) {
 // Alle Angaben kommen als Funktionen, weil sich der Zustand des Servers ständig ändert.
 function createHealthService({
   archive, audiobooks, reindexState, lastIndexRun, archiveLock, watcher, eventLog, scrapeJob,
-  cronLogFile, qwenAvailable, volumes, cspMode, startedAt = Date.now(),
+  cronLogFile, qwenAvailable, volumes, cspMode, startedAt = Date.now(), scraperLogin = async () => null,
   statfs = path => fs.promises.statfs(path), now = () => Date.now(), io = fs.promises,
 }) {
   let qwenCache = null;
@@ -123,13 +123,15 @@ function createHealthService({
       : null;
     let cron = null;
     try { cron = await lastCronRun(cronLogFile, io); } catch { cron = null; }
+    const login = await scraperLogin().catch(() => null);
     const scrapeFailed = (web && !web.running && (web.error || (web.exitCode !== null && web.exitCode !== 0)))
       || (cron && cron.exitCode !== 0);
     const services = {
       // Qwen läuft auf dem Desktop-Rechner und ist abends aus: „nicht erreichbar“ ist ein erwarteter Zustand,
       // keine Warnung.
       qwen: { reachable: qwenState.reachable, checkedAt: qwenState.checkedAt, level: 'ok' },
-      scrape: { web, cron, level: scrapeFailed ? 'error' : 'ok' },
+      // Facebook-Anmeldung des Scrapers (Scraper-Zentrale): abgelaufen = Fehler, bald ablaufend = Warnung.
+      scrape: { web, cron, login, level: scrapeFailed || login?.level === 'error' ? 'error' : login?.level === 'warning' ? 'warning' : 'ok' },
     };
 
     const memory = process.memoryUsage();

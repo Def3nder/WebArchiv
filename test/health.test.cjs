@@ -189,3 +189,16 @@ test('Routen: öffentlich nur der Status, Details und Meldungen nur für Admins'
   res = await call('/api/health/events/clear', { admin: true, method: 'POST' });
   assert.deepEqual([res.status, res.data.ok, eventLog.list().length], [200, true, 0]);
 });
+
+test('Details: Facebook-Anmeldung des Scrapers fließt in die Stufe „Scrape“ ein', async t => {
+  let login = { needed: true, level: 'warning', text: 'läuft am 05.11.2026 ab' };
+  const { service } = setup(t, { scraperLogin: async () => login });
+  let details = await service.details();
+  assert.deepEqual([details.services.scrape.login.level, details.services.scrape.level], ['warning', 'warning']);
+  login = { needed: true, level: 'error', text: 'abgelaufen' };
+  details = await service.details();
+  assert.equal(details.services.scrape.level, 'error');
+  assert.equal(await service.status(), 'ok', 'der öffentliche Status bleibt davon unberührt');
+  login = { needed: false, level: 'ok', text: 'keine aktive Facebook-Quelle' };
+  assert.equal((await service.details()).services.scrape.level, 'ok');
+});

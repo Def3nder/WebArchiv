@@ -194,3 +194,53 @@ test('Routen: einzelne Quelle starten; während eines Laufs keine Änderungen (4
   assert.equal(res.status, 409);
   assert.match(res.data.error, /Scraper-Lauf/);
 });
+
+test('Facebook-Anmeldung: nur mit aktiver Facebook-Quelle; fehlt/abgelaufen = Fehler, < 7 Tage = Warnung', () => {
+  const { facebookLoginState } = require('../lib/scraper-sources.cjs');
+  assert.deepEqual(facebookLoginState({ exists: false }, { needed: false, now: NOW }).level, 'ok');
+  assert.match(facebookLoginState({ exists: false }, { needed: true, now: NOW }).text, /cookies\.txt fehlt/);
+  assert.equal(facebookLoginState({ exists: true, sessionExpiresAt: NOW - 1 }, { needed: true, now: NOW }).level, 'error');
+  assert.equal(facebookLoginState({ exists: true, sessionExpiresAt: null }, { needed: true, now: NOW }).level, 'error');
+  const soon = facebookLoginState({ exists: true, sessionExpiresAt: Date.parse('2026-11-05T12:00:00Z') }, { needed: true, now: NOW });
+  assert.deepEqual([soon.level, soon.text], ['warning', 'Facebook-Anmeldung des Scrapers läuft am 05.11.2026 ab – cookies.txt erneuern.']);
+  assert.equal(facebookLoginState({ exists: true, sessionExpiresAt: NOW + 30 * DAY }, { needed: true, now: NOW }).level, 'ok');
+});
+
+test('Erinnerung: je Stufe höchstens einmal am Tag ins Meldungsprotokoll, Eskalation sofort, „ok“ setzt zurück', async () => {
+  const { createLoginReminder } = require('../modules/scraper-center.cjs');
+  const recorded = [];
+  let clock = NOW;
+  let state = { level: 'warning', text: 'läuft am 05.11.2026 ab' };
+  const reminder = createLoginReminder({
+    loginState: async () => state, now: () => clock,
+    eventLog: { record: (level, text, options) => recorded.push([level, text, options.source]) },
+  });
+  await reminder.check();
+  await reminder.check();
+  assert.deepEqual(recorded, [['warning', 'Scraper: läuft am 05.11.2026 ab', 'scraper']]);
+  state = { level: 'error', text: 'abgelaufen' };
+  await reminder.check();
+  clock += 23 * 3600 * 1000;
+  await reminder.check();
+  assert.equal(recorded.length, 2, 'Fehler sofort, aber nicht stündlich');
+  clock += 2 * 3600 * 1000;
+  await reminder.check();
+  assert.equal(recorded.length, 3, 'nach einem Tag erneut (die Sprechblase erinnert wieder)');
+  state = { level: 'ok', text: 'gültig' };
+  await reminder.check();
+  state = { level: 'error', text: 'abgelaufen' };
+  await reminder.check();
+  assert.equal(recorded.length, 4, 'nach „ok“ beginnt es neu');
+});
+
+test('Routen: loginState liest Config und cookies.txt, ohne Werte', async t => {
+  const { files } = await setup(t);
+  const center = createScraperCenter({ ...files, archive: { articleById: new Map() }, now: () => NOW });
+  assert.equal((await center.loginState()).level, 'error', 'aktive Facebook-Quelle, aber keine cookies.txt');
+  const expiry = Math.floor((NOW + 30 * DAY) / 1000);
+  fs.writeFileSync(files.cookiesFile, ['.facebook.com', 'TRUE', '/', 'TRUE', expiry, 'c_user', 'GEHEIM'].join('\t') + '\n'
+    + ['.facebook.com', 'TRUE', '/', 'TRUE', expiry, 'xs', 'GEHEIM'].join('\t'));
+  const state = await center.loginState();
+  assert.equal(state.level, 'ok');
+  assert.ok(!JSON.stringify(state).includes('GEHEIM'));
+});

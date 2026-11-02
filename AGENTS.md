@@ -141,7 +141,9 @@ object in `app.js`.
   `scraper/scraper-config.json` (sources, written by the scraper center) and `scraper/scrape-status.json` (last 30
   runs per source, written by `scrape_all.js`) are runtime files too; template `scraper/example-scraper-config.json`.
   The scraper center (`modules/scraper-center.cjs`, helpers `lib/scraper-sources.cjs`) only ever reports the expiry
-  of the Facebook login from `cookies.txt`, never cookie names/values.
+  of the Facebook login from `cookies.txt`, never cookie names/values. The health check shows that login and an hourly
+  reminder (`createLoginReminder`, server main only) records an expired login as an error at most once a day, so
+  the health notice reminds; expiring within 7 days is a warning.
 - **Users** live in `users.json` (gitignored). Copy `example-users.json` → `users.json`, set
   plaintext `password` fields, run `node scripts/hash-passwords.js` to replace them with bcrypt
   `passwordHash`. Each user has `role` (`admin`/`user`) and `allowedAuthors`: `null` = all authors,

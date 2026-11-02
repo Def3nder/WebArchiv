@@ -58,6 +58,9 @@ test('health.js: Dialog am Ebenen-Stapel, sicheres Markup, Einhängen über admi
   assert.match(HEALTH, /setQwenReachable\(data\.services\.qwen\.reachable\);/);
   assert.match(HEALTH, /row\('Qwen-TTS', qwen\.reachable \? 'erreichbar' : 'nicht erreichbar \(Desktop-Rechner aus\)'\)/, 'keine Warnstufe');
   assert.match(CSS, /\.header-menu-item\[data-unavailable\]::after \{/);
+  // Scraper-Zentrale: Facebook-Anmeldung im Bereich „Dienste“ und Knopf, der die Zentrale öffnet.
+  assert.match(HEALTH, /scrape\.login\?\.needed \? row\('Facebook-Anmeldung', esc\(scrape\.login\.text\), scrape\.login\.level\) : ''/);
+  assert.match(HEALTH, /if \(event\.target\.closest\('\[data-health-scraper\]'\)\) \{\s*\/\/[^\n]*\n\s*closeHealthDialog\(\);\s*adminHooks\.actions\['scraper-center'\]\?\.\(\);/);
   assert.match(HEALTH, /rememberSeen\(data\.events\.lastId\);/, 'Dialog gesehen = gelesen');
   assert.match(HEALTH, /run \? row\('Index-Cache', run\.fresh\s*\? `nicht genutzt · \$\{number\(run\.cacheMisses\)\} neu gelesen`\s*: `\$\{number\(run\.cacheHits\)\} übernommen · \$\{number\(run\.cacheMisses\)\} neu gelesen`\) : ''/,
     'Cache als eigene Zeile, nicht im Vollindex');

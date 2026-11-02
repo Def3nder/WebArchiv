@@ -13,7 +13,7 @@ const {
 } = require('./modules/audiobooks.cjs');
 const { createBookmarkStore, installBookmarkRoutes } = require('./modules/bookmarks.cjs');
 const { createScrapeJob, installScrapeRoutes } = require('./modules/scrape.cjs');
-const { createScraperCenter, installScraperCenterRoutes } = require('./modules/scraper-center.cjs');
+const { createScraperCenter, installScraperCenterRoutes, createLoginReminder } = require('./modules/scraper-center.cjs');
 const { installDuplicateRoutes } = require('./modules/duplicate-admin.cjs');
 const {
   INFOGRAPHIC_MAX_BYTES, createInfographicAdmin, installInfographicRoutes,
@@ -768,6 +768,7 @@ const healthService = createHealthService({
   qwenAvailable: async () => (await ttsProviderInfo()).providers.find(item => item.provider === 'qwen')?.available,
   volumes: [{ name: 'www', dir: WWW_DIR }, { name: 'audio', dir: AUDIO_DIR }],
   cspMode: cspMode(process.env.CSP_MODE),
+  scraperLogin: () => scraperCenter.loginState(),
 });
 installHealthRoutes(app, { requireAdmin: requireAdminAccess, service: healthService, eventLog });
 
@@ -856,6 +857,11 @@ if (require.main === module) {
   // Gespeicherte Meldungen laden, dann die Log-Dateien jede Minute nachlesen.
   eventLog.load().then(pollEventLogTails).catch(console.error);
   setInterval(pollEventLogTails, 60 * 1000).unref();
+  // Facebook-Anmeldung des Scrapers: stündlich prüfen, abgelaufen = Fehler im Health-Check (Sprechblase).
+  const loginReminder = createLoginReminder({ loginState: () => scraperCenter.loginState(), eventLog });
+  const checkScraperLogin = () => loginReminder.check().catch(error => console.error('Scraper-Anmeldung prüfen:', error));
+  setTimeout(checkScraperLogin, 30 * 1000).unref();
+  setInterval(checkScraperLogin, 60 * 60 * 1000).unref();
 
   process.on('SIGHUP', () => {
     console.log('SIGHUP empfangen -> Reindex');

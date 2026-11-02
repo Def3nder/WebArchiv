@@ -10,6 +10,7 @@ const { httpError, jsonRoute } = require('../lib/http-errors.cjs');
 const { writeJsonAtomic } = require('../lib/atomic-file.cjs');
 const {
   emptyConfig, listSources, findSource, sourceEntry, cookieExpiry, summarizeSource, sourceActions, cronState, worstLevel,
+  facebookLoginState,
 } = require('../lib/scraper-sources.cjs');
 const { lastCronRun } = require('./health.cjs');
 
@@ -81,9 +82,17 @@ function createScraperCenter({
     return result;
   }
 
+  // Facebook-Anmeldung für Health-Check und Erinnerung (nur Stufe, Text und Ablaufdatum).
+  async function loginState() {
+    const [doc, cookiesText] = await Promise.all([readConfig(), readText(cookiesFile)]);
+    const needed = listSources(doc).some(source => source.type === 'facebook' && source.active);
+    return facebookLoginState(cookieExpiry(cookiesText), { needed, now: now() });
+  }
+
   return {
     overview,
     readConfig,
+    loginState,
     addSource: input => update(doc => {
       const { section, entry } = sourceEntry(input, { doc });
       doc[section] = [...(doc[section] || []), entry];
@@ -131,4 +140,23 @@ function installScraperCenterRoutes(app, { requireAdmin, center, job, lock }) {
   }, 'Scrape'));
 }
 
-module.exports = { createScraperCenter, installScraperCenterRoutes };
+// Erinnerung an die Facebook-Anmeldung über das Meldungsprotokoll: abgelaufen = Fehler (Sprechblase im Health-Check),
+// bald ablaufend = Warnung (nur im Dialog). Höchstens einmal je Stufe und Tag; ist alles wieder gut, beginnt es neu.
+function createLoginReminder({ loginState, eventLog, now = Date.now, repeatMs = 24 * 3600 * 1000 }) {
+  let last = { level: null, at: 0 };
+  return {
+    async check() {
+      const state = await loginState();
+      if (state.level !== 'error' && state.level !== 'warning') {
+        last = { level: null, at: 0 };
+        return null;
+      }
+      if (state.level === last.level && now() - last.at < repeatMs) return null;
+      last = { level: state.level, at: now() };
+      eventLog.record(state.level, `Scraper: ${state.text}`, { source: 'scraper' });
+      return state;
+    },
+  };
+}
+
+module.exports = { createScraperCenter, installScraperCenterRoutes, createLoginReminder };
