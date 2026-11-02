@@ -1059,8 +1059,9 @@ Alle Testskripte liegen in `test/`-Unterordnern. Der gemeinsame Einstieg im
 Projektroot führt die Node-Tests aus `test/`, `scraper/test/`, `epub-tool/test/`
 und `tts/test/` sowie die Python-Tests des separaten Qwen-Dienstes unter
 `tts-server/test/` aus. Davor läuft ESLint (`npm run lint`, Konfiguration `eslint.config.js`) mit nur drei Regeln –
-nicht deklarierte Namen, unbenutzte Variablen, Doppeldeklarationen – über den Node-Code samt Unterpaketen; ein
-Tippfehler oder ein toter Import bricht `npm test` also sofort ab:
+nicht deklarierte Namen, unbenutzte Variablen, Doppeldeklarationen – über den Node-Code samt Unterpaketen und die
+Browser-Skripte in `public/` (die gemeinsamen globalen Namen ermittelt `test/support/browser-globals.cjs` aus dem
+Quelltext); ein Tippfehler oder ein toter Import bricht `npm test` also sofort ab:
 
 ```bash
 npm test

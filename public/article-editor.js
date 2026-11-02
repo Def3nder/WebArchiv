@@ -27,6 +27,11 @@ function leaveArticleEditor() {
   $articleEditor.close();
   return true;
 }
+// app.js und app-detail.js fragen beim Verlassen des Artikels (Zurück, Schließen, anderer Artikel) hier nach. Der
+// Editor liegt im esbuild-Bündel, seine Namen sind dort nicht global: Ohne window lief die Rückfrage bei
+// ungespeicherten Änderungen seit dem Umstieg aufs Bündel (15.10.2026) ins Leere (gefunden per ESLint, no-undef).
+window.leaveArticleEditor = leaveArticleEditor;
+window.articleEditorState = articleEditorState;
 async function editorRequest(options) {
   const id = articleEditorState.id.split('/').map(encodeURIComponent).join('/');
   const response = await apiFetch(`/api/article-markdown/${id}`, { cache: 'no-store', ...options });

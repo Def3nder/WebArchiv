@@ -2752,3 +2752,30 @@ langes schließt den Dialog und leert den Ebenen-Stapel.
 **Geprüft:** `npm test` mit Lint; eine Probedatei mit Tippfehler und unbenutzter Variable wird erkannt.
 
 **Deployment:** nichts Laufzeitrelevantes außer den entfernten toten Importen; Dienst neu starten genügt.
+
+## 77. Aktualisierung 02.11.2026 – Qualitätssicherung, Schritt 2: ESLint für die Browser-Skripte (Review 3.5)
+
+- `eslint.config.js` erfasst jetzt `public/` (ohne `vendor/`) und `duplicates-tool/public/`. Die klassischen Skripte
+  teilen 584 Namen über den globalen Gültigkeitsbereich; `test/support/browser-globals.cjs` ermittelt sie mit
+  `espree` (Parser von ESLint, bereits installiert) aus den obersten Deklarationen und aus `window.X =` / `root.X =`
+  (UMD). Jedes Skript kennt die Namen der übrigen; deklariert es selbst einen davon oder einen Browser-Namen,
+  meldet `no-redeclare` das. Oberste Deklarationen prüft `no-unused-vars` nicht (`vars: 'local'`). `password.js` und
+  `user-admin.js` dürfen dieselben Namen haben (nie in derselben Shell). Bündel-Quellen laufen als ES-Module bzw.
+  CommonJS (`duplicate-diff.js`); neue Skripte, die noch nicht in `index.html` stehen, bekommen eine Auffangregel.
+- **Echter Fehler gefunden:** Seit dem Umstieg des Artikel-Editors aufs esbuild-Bündel (15.10., `f68ef27`) sind
+  `leaveArticleEditor` und `articleEditorState` dort nicht mehr global. `app.js`/`app-detail.js` prüfen
+  `typeof leaveArticleEditor === 'function'` – das war immer falsch: Zurück, Schließen oder Blättern verließ den
+  Artikel trotz ungespeicherter Änderungen im Editor ohne Rückfrage. `article-editor.js` veröffentlicht beide jetzt
+  über `window`; Bündel neu gebaut (die bisherige Bündeldatei entsprach genau den alten Quellen).
+- Weitere Funde: `duplicates-tool/public/app.js` überschrieb mit `function reportError` die gleichnamige
+  Browser-Funktion (jetzt `reportFailure`); unbenutzte Parameter in `renderAudioPlayer` und `igmEntry`.
+- Neuer Test `test/browser-globals.test.cjs`: jeder gemeinsame Name wird benutzt; je Shell (Gast, Nutzer, Admin)
+  deklarieren keine zwei geladenen Skripte denselben Namen; Editor-Namen sind im Bündel global; ESLint erkennt
+  Tippfehler und überschriebene Browser-Funktionen in `public/`.
+
+**Geprüft:** `npm test` (Lint über 163 Dateien); Probe mit Tippfehler, `function close()` und unbekanntem Namen in
+neuer Datei. Im Browser: Artikel öffnen, Editor öffnen, Text eintippen, Zurück → Rückfrage „Ungespeicherte Änderungen
+verwerfen?“, bei Abbrechen bleiben Editor und Artikel offen (Artikeldatei unverändert).
+
+**Deployment:** `public/article-editor.js`, `public/vendor/article-editor.bundle.js`, `public/app-detail.js`,
+`public/app-media.js`, `public/infographic-manager.js`; Browser neu laden.

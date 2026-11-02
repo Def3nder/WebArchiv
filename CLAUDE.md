@@ -30,9 +30,13 @@ npm test --prefix epub-tool
 Run the complete Node and Python test suite with `npm test`. Tests live under
 `test/`, `scraper/test/`, `epub-tool/test/`, `tts/test/` and `duplicates-tool/test/`.
 `npm test` runs `npm run lint` first: ESLint (`eslint.config.js`) with only `no-undef`, `no-unused-vars` and
-`no-redeclare` over the Node code (server, `lib/`, `modules/`, `scripts/`, tests and the sub-packages; `public/`
-follows). The module type is set per folder there (ESLint ignores `"type"` in package.json); a leading `_` marks
-intentionally unused parameters. There is no build.
+`no-redeclare` over the Node code (server, `lib/`, `modules/`, `scripts/`, tests, sub-packages) and `public/`. The
+module type is set per folder there (ESLint ignores `"type"` in package.json); a leading `_` marks intentionally
+unused parameters. Browser scripts: each classic script knows the shared names of the others, collected from the
+source by `test/support/browser-globals.cjs` (no hand-kept list); redeclaring one of them or a browser global
+(`open`, `close`, `reportError` …) fails. Code inside the esbuild bundles is *not* global — expose what classic
+scripts call via `window.X` (e.g. `window.leaveArticleEditor`). `test/browser-globals.test.cjs` catches dead shared
+names and names declared twice in one shell. There is no build.
 `duplicates-tool/` is a dev-only app (not deployed) that reuses `lib/article-parser.cjs`, `lib/duplicates.cjs`,
 `lib/html-sanitizer.cjs`, `lib/atomic-file.cjs` and the diff bundle — keep it working when changing those.
 `node server.js` is the only runtime; restart it to

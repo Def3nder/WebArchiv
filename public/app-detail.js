@@ -247,7 +247,7 @@ function renderDetail(article) {
     `<span class="detail-cat-pill" style="opacity:.7">${esc(t)}</span>`
   ).join('');
 
-  const audioHtml = article.audioUrl ? renderAudioPlayer(article) : '';
+  const audioHtml = article.audioUrl ? renderAudioPlayer() : '';
   const videoHtml = article.videoUrl ? renderVideoPlayer(article.videoUrl) : '';
   const pdfHtml   = article.pdfUrl   ? renderPdfEmbed(article.pdfUrl)     : '';
 

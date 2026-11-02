@@ -760,7 +760,7 @@ async function undoMove(id) {
   }
 }
 
-function reportError(error) {
+function reportFailure(error) {
   duplicateStatus.textContent = `Fehler: ${error.message}`;
 }
 
@@ -883,7 +883,7 @@ duplicateSelectNone.addEventListener('click', () => {
 });
 
 duplicateBatchMove.addEventListener('click', () => {
-  moveDuplicates(selectedDuplicateItems()).catch(reportError);
+  moveDuplicates(selectedDuplicateItems()).catch(reportFailure);
 });
 
 function pairFromElement(element) {
@@ -904,13 +904,13 @@ duplicateContent.addEventListener('click', event => {
   if (!button) return;
   const action = button.dataset.duplicateAction;
   if (action === 'undo') {
-    undoMove(button.closest('[data-move-id]').dataset.moveId).catch(reportError);
+    undoMove(button.closest('[data-move-id]').dataset.moveId).catch(reportFailure);
     return;
   }
   const ids = pairFromElement(button);
   if (!ids) return;
-  if (action === 'inspect') inspectDuplicate(ids.originalId, ids.candidateId).catch(reportError);
-  else mutateDuplicate(action, ids.originalId, ids.candidateId).catch(reportError);
+  if (action === 'inspect') inspectDuplicate(ids.originalId, ids.candidateId).catch(reportFailure);
+  else mutateDuplicate(action, ids.originalId, ids.candidateId).catch(reportFailure);
 });
 
 duplicateDetailContent.addEventListener('click', event => {
@@ -936,9 +936,9 @@ duplicateDetailContent.addEventListener('click', event => {
     renderDuplicateList();
     return;
   }
-  if (action === 'move') return moveDuplicates([pair]).catch(reportError);
+  if (action === 'move') return moveDuplicates([pair]).catch(reportFailure);
   const ids = duplicatePairIds(pair);
-  mutateDuplicate(action, ids.originalId, ids.candidateId).catch(reportError);
+  mutateDuplicate(action, ids.originalId, ids.candidateId).catch(reportFailure);
 });
 
 duplicateDetailDialog.addEventListener('click', event => {

@@ -23,9 +23,13 @@ Tests are organized under `test/`, `scraper/test/`, `epub-tool/test/`, `tts/test
 and `tts-server/test/`. WebArchiv-side Node modules live under `tts/`; the separate
 Qwen model server, its launch helpers, and its Python tests live under `tts-server/`.
 `npm test` runs `npm run lint` first: ESLint (`eslint.config.js`) with only `no-undef`, `no-unused-vars` and
-`no-redeclare` over the Node code (server, `lib/`, `modules/`, `scripts/`, tests and the sub-packages; `public/`
-follows). The module type is set per folder there (ESLint ignores `"type"` in package.json); a leading `_` marks
-intentionally unused parameters. There is no build. `node server.js` is the only runtime; restart it to
+`no-redeclare` over the Node code (server, `lib/`, `modules/`, `scripts/`, tests, sub-packages) and `public/`. The
+module type is set per folder there (ESLint ignores `"type"` in package.json); a leading `_` marks intentionally
+unused parameters. Browser scripts: each classic script knows the shared names of the others, collected from the
+source by `test/support/browser-globals.cjs` (no hand-kept list); redeclaring one of them or a browser global
+(`open`, `close`, `reportError` …) fails. Code inside the esbuild bundles is *not* global — expose what classic
+scripts call via `window.X` (e.g. `window.leaveArticleEditor`). `test/browser-globals.test.cjs` catches dead shared
+names and names declared twice in one shell. There is no build. `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes under `www/` and `audio/` are picked up automatically by the file watcher
 (`lib/archive-watcher.cjs`: 5 s quiet, then a cached rescan via `archiveLock.whenIdle`; off with `WATCH_ARCHIVE=0`),
 otherwise by `SIGHUP`, the admin reindex button (`POST /api/reindex`, reads fresh) or a restart. Frontend changes (`public/`) only need a browser reload;

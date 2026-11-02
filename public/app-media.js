@@ -22,7 +22,7 @@ function stopAudio() {
   }
 }
 
-function renderAudioPlayer(article) {
+function renderAudioPlayer() {
   return `
     <div class="audio-player" id="audio-player">
       <button class="audio-play-btn" id="audio-play-btn" aria-label="Abspielen">

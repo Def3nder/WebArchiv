@@ -58,7 +58,7 @@ function igmPosterValue(item) {
   return igmState.pendingPoster.has(item.id) ? igmState.pendingPoster.get(item.id) : !!item.instagramPoster;
 }
 
-function igmEntry(item, index, total) {
+function igmEntry(item) {
   const movable = igmState.items.filter(candidate => !candidate.fixed);
   const movableIndex = movable.findIndex(candidate => candidate.id === item.id);
   const label = item.fixed ? 'Artikelgrafik' : 'Grafik ' + (movableIndex + 1);
@@ -80,7 +80,7 @@ function igmRender() {
   const count = igmState.items.length;
   $igm.querySelector('[data-igm-count]').textContent = count + (count === 1 ? ' Infografik' : ' Infografiken');
   $igmList.innerHTML = count
-    ? igmState.items.map((item, index) => igmEntry(item, index, count)).join('')
+    ? igmState.items.map(item => igmEntry(item)).join('')
     : '<p class="bem-empty">Für diesen Artikel sind noch keine Infografiken vorhanden.</p>';
   const active = $igmList.querySelectorAll('[data-igm-entry]')[igmState.actionIndex];
   active?.classList.add('is-actions-open');
