@@ -161,18 +161,32 @@ function prepareBookProgress(body, scroller, text) {
   // Sprungziel, das das obere Drittel des Bildschirms erreicht hat. Gibt es keine
   // h2, dienen h1 als Fallback. EPUB-Konvertierungen enthalten teils bildbasierte
   // Überschriften oder nur ein unsichtbares <a id="…"></a>; deren Namen kommen
-  // aus dem Bild-alt-Text bzw. dem verweisenden Inhaltsverzeichnis.
+  // aus dem Bild-alt-Text bzw. dem verweisenden Inhaltsverzeichnis. Register- und
+  // Fußnotenverweise („ref1“, „↩“, „5“) zeigen auch auf solche Ziele, benennen aber
+  // kein Kapitel – sonst würde jedes Bild mit Registereintrag zum Kapitel „ref1“.
   const cleanChapterName = value => (value || '').replace(/\s+/g, ' ').trim();
+  const isReferenceLabel = name => /^(?:ref\s*\d+|↩\uFE0E?|\d+)$/i.test(name);
+  // Fußnotenverweise in Überschriften (<sup><a href="#anm-5">5</a></sup>) gehören nicht
+  // zum Kapitelnamen; andere hochgestellte Zeichen wie „©“ bleiben erhalten.
+  const visibleName = marker => {
+    const copy = marker.cloneNode(true);
+    copy.querySelectorAll('a[href^="#"]').forEach(link => {
+      if (!isReferenceLabel(cleanChapterName(link.textContent))) return;
+      const sup = link.closest('sup');
+      (sup && isReferenceLabel(cleanChapterName(sup.textContent)) ? sup : link).remove();
+    });
+    return cleanChapterName(copy.textContent);
+  };
   const targetNames = new Map();
   text.querySelectorAll('a[href^="#"]').forEach(link => {
     let id = link.getAttribute('href').slice(1);
     try { id = decodeURIComponent(id); } catch { /* unverändert verwenden */ }
     const name = cleanChapterName(link.textContent)
       || cleanChapterName(link.querySelector('img[alt]')?.getAttribute('alt'));
-    if (id && name && !targetNames.has(id)) targetNames.set(id, name);
+    if (id && name && !isReferenceLabel(name) && !targetNames.has(id)) targetNames.set(id, name);
   });
   const markerName = marker => {
-    const visible = cleanChapterName(marker.textContent);
+    const visible = visibleName(marker);
     if (visible) return visible;
     const image = marker.querySelector?.('img[alt]')
       || (marker.tagName === 'A' && marker.nextElementSibling?.matches?.('img[alt]')
