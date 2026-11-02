@@ -321,7 +321,18 @@ Fuse und die Infografik-Verknüpfung sind dagegen unkritisch.
   So entstehen Widersprüche wie in 2.10 gar nicht erst.
 - **`AGENTS.md` und `CLAUDE.md`** enthalten weitgehend denselben Text. Eine Datei könnte auf die andere verweisen.
 
-### 3.7 Noch offene Ideen aus dem ersten Review
+### 3.7 Noch offene Ideen aus dem ersten Review – ✅ umgesetzt (bis auf zwei Hörbuch-Funktionen)
+
+> **Nachtrag 02.11.2026:** Die drei Server-Ideen sind umgesetzt (Session.MD, Abschnitte 57–63). **Persistenter
+> Index-Cache** (`lib/index-cache.cjs`, `index-cache.json`; Commits `12e5809`, `a10b220`): Der Parse-Teil wird pro
+> Datei-Signatur wiederverwendet, die Version hasht die Parser-Quellen; der Start sank von ca. 9 s auf ca. 2 s, ein
+> unveränderter Neu-Scan veröffentlicht nichts, der Button „Archiv neu einlesen“ liest bewusst frisch. **Datei-Watcher**
+> für `www/` und `audio/` (`lib/archive-watcher.cjs`; `4ade4d1`, `efa321b`): entprellt, ein Watcher pro Ordner (Node's
+> rekursives Watch scheiterte auf dem LXC an `lost+found`), abschaltbar mit `WATCH_ARCHIVE=0`. **Volltextsuche**
+> (`lib/fulltext.cjs`; `a2c936c`, `4298582`): ohne MiniSearch – ein gefalteter, zwischengespeicherter Suchtext pro
+> Artikel, Treffer auch innerhalb von Wörtern (ca. 15 ms über das ganze Archiv), eingeschaltet über die goldene Lupe vor
+> dem Suchfeld. **Offen** sind weiterhin der Einschlaf-Timer und die Gesamtdauer bzw. verbleibende Hörzeit für
+> Hörbücher; beide stehen in der To-Do-Liste.
 
 Datei-Watcher für `www/` statt SIGHUP/Cron, persistenter Index-Cache für schnellere Starts, optionale Volltextsuche über den Body (MiniSearch) sowie Einschlaf-Timer und Gesamtdauer für Hörbücher (stehen auch in der To-Do-Liste).
 
