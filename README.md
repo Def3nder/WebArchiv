@@ -1077,6 +1077,16 @@ Zweck, Dateien und erwartete Ergebnisse. `test/fixture-archive.test.cjs` baut da
 startet den echten Server darauf (eigener Prozess, freier Port, CSP erzwungen) und prüft die Fälle über die API
 (ca. 2 s, Teil von `npm test`).
 
+Dasselbe Archiv lässt sich zum Ansehen starten – derselbe Stand wie im Test, also mit verknüpften und ignorierten
+Dubletten, umgezogenen Grafiken und privatem Hörbuch:
+
+```bash
+npm run dev:fixture            # http://localhost:3100, Anmeldungen stehen in der Ausgabe
+npm run dev:fixture -- --keep  # Ordner nach Strg+C behalten
+```
+
+Die Kennwörter sind Testwerte und gelten nur für den jeweiligen Lauf; jedes Bild trägt seine Fallnummer.
+
 Gezielte UI-Vertragstests für die hier beschriebenen Bereiche liegen insbesondere in
 `test/article-editor-ui.test.cjs`, `test/audiobook-extras-ui.test.cjs`,
 `test/filter-aria-menu.test.cjs` und `test/card-preview.test.cjs`.

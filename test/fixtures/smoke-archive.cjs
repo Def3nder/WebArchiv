@@ -106,7 +106,10 @@ function md({ title, date, summary, tags, quelle, audioquickie, poster, body = '
 
 // Datei-Bausteine: { path (relativ zum Archivordner), kind, … }
 const article = (file, fields) => ({ path: `www/${file}.md`, kind: 'text', content: md(fields) });
-const placeholder = (file, title, extra = {}) => article(file, { title, date: null, ...extra });
+// Platzhalter-Infografik: Kopf ohne Text, wie ihn der Server aus dem Blogkopf schreibt (Titel, Datum aus dem
+// Dateinamen; ohne Datum-Zeile zählte eine Poster-Zeile zum Titel).
+const placeholder = (file, title, extra = {}) => article(file,
+  { title, date: path.basename(file).slice(0, 10), ...extra });
 const image = (file, label) => ({ path: `www/${file}`, kind: 'image', label });
 const sound = file => ({ path: file, kind: 'copy', from: 'silence.mp3' });
 const raw = (file, content) => ({ path: file, kind: 'text', content });
@@ -592,7 +595,8 @@ async function renderImage(label, extension) {
   const hue = [...label].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 360;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320">
     <rect width="100%" height="100%" fill="hsl(${hue}, 45%, 42%)"/>
-    <text x="50%" y="55%" font-family="sans-serif" font-size="44" fill="#fff" text-anchor="middle">${label}</text></svg>`;
+    <text x="50%" y="55%" font-family="sans-serif" font-size="${Math.min(44, Math.floor(760 / label.length))}" fill="#fff"
+      text-anchor="middle">${label}</text></svg>`;
   const image = sharp(Buffer.from(svg));
   return extension === '.png' ? image.png().toBuffer() : image.jpeg({ quality: 70 }).toBuffer();
 }

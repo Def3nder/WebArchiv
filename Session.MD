@@ -2806,3 +2806,19 @@ verwerfen?“, bei Abbrechen bleiben Editor und Artikel offen (Artikeldatei unve
 **Geprüft:** `npm test` (584 Node-Tests, Lint); D28 schlug vor der Korrektur fehl.
 
 **Deployment:** `server.js`, `modules/duplicate-admin.cjs`; Dienst neu starten.
+
+## 79. Aktualisierung 02.11.2026 – Qualitätssicherung, Schritt 3b: `npm run dev:fixture` (Review 3.5)
+
+- `scripts/dev-fixture.js` (`npm run dev:fixture`): baut das Testarchiv in einem temporären Ordner, startet die App
+  darauf (Port 3100 bzw. `PORT`, Datei-Watcher an, CSP erzwungen, Serverausgabe sichtbar) und bereitet alle Fälle
+  vor wie der Test. Die Ausgabe nennt URL und die Anmeldungen der vier Testnutzer (Kennwörter nur für diesen Lauf).
+  Strg+C beendet und löscht den Ordner, `-- --keep` behält ihn; stirbt der Server, endet auch das Skript und räumt auf.
+- `test/support/fixture-server.cjs`: `startFixtureArchive` (bauen, starten, vorbereiten) gemeinsam für Test und
+  Skript.
+- Testarchiv realistischer: Platzhalter-Infografiken haben wie echte eine Datum-Zeile (ohne sie zählte eine
+  Poster-Zeile zum Titel); Bildaufschriften passen sich der Länge an.
+
+**Geprüft:** `npm test`; im Browser als Gast (nur öffentliche Autoren, Bilder mit Fallnummer) und als Admin
+(56 Artikel, Gruppe B09 mit Foto, `_1`, `_2` und Kategorie „Beziehungen“); Server beendet → Skript endet, Ordner weg.
+
+**Deployment:** keins (nur Entwicklung).

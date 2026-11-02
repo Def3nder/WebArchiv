@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "dev:fixture": "node scripts/dev-fixture.js",
     "scrape": "node scraper/scrape_all.js",
     "build:editor": "esbuild public/markdown-editors.js --bundle --minify --format=iife --target=es2020 --outfile=public/vendor/article-editor.bundle.js --legal-comments=linked",
     "build:duplicate-diff": "esbuild public/duplicate-diff.js --bundle --minify --format=iife --target=es2020 --global-name=duplicateTextDiff --outfile=public/vendor/duplicate-diff.bundle.js --legal-comments=linked",

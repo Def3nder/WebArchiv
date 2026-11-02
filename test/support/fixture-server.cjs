@@ -8,7 +8,8 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-async function startFixtureServer(env, { timeoutMs = 60000 } = {}) {
+// echo: Serverausgabe zusätzlich durchreichen (npm run dev:fixture).
+async function startFixtureServer(env, { timeoutMs = 60000, echo = false } = {}) {
   const child = spawn(process.execPath, ['server.js'], {
     cwd: ROOT,
     env: {
@@ -18,8 +19,8 @@ async function startFixtureServer(env, { timeoutMs = 60000 } = {}) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
-  child.stdout.on('data', chunk => { log += chunk; });
-  child.stderr.on('data', chunk => { log += chunk; });
+  child.stdout.on('data', chunk => { log += chunk; if (echo) process.stdout.write(chunk); });
+  child.stderr.on('data', chunk => { log += chunk; if (echo) process.stderr.write(chunk); });
   const exited = new Promise(resolve => child.once('exit', resolve));
   const stop = async () => {
     if (child.exitCode === null) child.kill();
@@ -45,7 +46,7 @@ async function startFixtureServer(env, { timeoutMs = 60000 } = {}) {
       if (Date.now() > deadline) throw new Error(`Index wird nicht fertig:\n${log}`);
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-    return { base, stop, log: () => log };
+    return { base, stop, log: () => log, exited };
   } catch (error) {
     await stop();
     throw error;
@@ -84,4 +85,68 @@ function client(base) {
   };
 }
 
-module.exports = { startFixtureServer, client };
+// Testarchiv in dir bauen, Server darauf starten und alle Fälle vorbereiten (Verknüpfen, Ignorieren, privat setzen,
+// Dateiänderungen mit frischem Reindex). Gemeinsam für test/fixture-archive.test.cjs und npm run dev:fixture.
+// Liefert server, ctx (Zugriffe je Rolle für die Erwartungen der Fälle) und die Kennwörter dieses Laufs.
+async function startFixtureArchive(dir, serverOptions = {}) {
+  const assert = require('node:assert/strict');
+  const fs = require('node:fs');
+  const { CASES, USERS, build } = require('../fixtures/smoke-archive.cjs');
+  const { env, passwords } = await build(dir);
+  const server = await startFixtureServer({ ...env, ...serverOptions.env }, serverOptions);
+  try {
+    const clients = { guest: client(server.base) };
+    for (const [role, user] of Object.entries(USERS)) {
+      clients[role] = client(server.base);
+      await clients[role].login(user.email, passwords[role]);
+    }
+    const query = params => new URLSearchParams(params).toString();
+    // Alle Seiten einer Liste (höchstens 100 Einträge je Seite).
+    const allPages = async (role, url, params) => {
+      const items = [];
+      for (let page = 1; ; page++) {
+        const res = await clients[role].get(`${url}?${query({ limit: '100', ...params, page: String(page) })}`);
+        assert.equal(res.status, 200, `${url} ${JSON.stringify(params)}: ${JSON.stringify(res.data)}`);
+        items.push(...res.data.items);
+        if (page >= (res.data.pages || 1)) return items;
+      }
+    };
+    const ctx = {
+      migrations: {},
+      as: role => clients[role],
+      list: (role, params = {}) => allPages(role, '/api/articles', params),
+      tiles: (role, params = {}) => allPages(role, '/api/articles', { ...params, group: '1' }),
+      books: (role, params = {}) => allPages(role, '/api/audiobooks', params),
+      async detail(role, id) {
+        const res = await clients[role].get(`/api/articles/${encodeURI(id)}`);
+        assert.equal(res.status, 200, `${id}: ${JSON.stringify(res.data)}`);
+        return res.data;
+      },
+      async duplicateAction(body) {
+        const res = await clients.admin.post('/api/duplicates', body);
+        assert.equal(res.status, 200, `${JSON.stringify(body)}: ${JSON.stringify(res.data)}`);
+        return res.data;
+      },
+    };
+
+    // Vorbereitung über die echten Routen, danach Dateiänderungen und ein frischer Reindex.
+    for (const testCase of CASES) if (testCase.setup) await testCase.setup(ctx);
+    const edits = CASES.filter(testCase => testCase.edit);
+    for (const { edit } of edits) await fs.promises.appendFile(path.join(dir, edit.file), edit.append);
+    if (edits.length) {
+      assert.equal((await clients.admin.post('/api/reindex')).status, 200);
+      for (let i = 0; (await clients.admin.get('/api/reindex/status')).data.running; i++) {
+        assert.ok(i < 300, 'Reindex wird nicht fertig');
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    ctx.duplicates = (await clients.admin.get('/api/duplicates')).data;
+    ctx.pending = ctx.duplicates.pending;
+    return { server, ctx, passwords };
+  } catch (error) {
+    await server.stop();
+    throw error;
+  }
+}
+
+module.exports = { startFixtureServer, startFixtureArchive, client };

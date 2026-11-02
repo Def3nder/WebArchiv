@@ -15,6 +15,7 @@ code comments, and content are German.
 ```bash
 npm install            # install deps (express, marked, fuse.js, express-session, bcryptjs, sharp)
 npm start              # run server.js → http://localhost:3000 (PORT env overrides)
+npm run dev:fixture    # same app on the test archive (test/fixtures/smoke-archive.cjs) → :3100, logins printed
 npm test               # run all Node and Python tests from the test/ directories
 node scripts/hash-passwords.js   # hash plaintext passwords in users.json (see Auth below)
 ```
