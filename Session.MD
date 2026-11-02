@@ -2822,3 +2822,19 @@ verwerfen?“, bei Abbrechen bleiben Editor und Artikel offen (Artikeldatei unve
 (56 Artikel, Gruppe B09 mit Foto, `_1`, `_2` und Kategorie „Beziehungen“); Server beendet → Skript endet, Ordner weg.
 
 **Deployment:** keins (nur Entwicklung).
+
+## 80. Aktualisierung 02.11.2026 – Testarchiv: Badge der Infografiken (Review 3.5)
+
+- Neue Gruppe G im Testarchiv. Eine Infografik zeigt in Kachel und Poster-Kachel den Autor ihres Hauptartikels
+  (`displayAuthor`, `articleDisplayAuthor` in `lib/article-index.cjs`), aber nur, wenn der Nutzer den Hauptartikel
+  sehen darf; sonst „Infografiken“. Die Artikelansicht braucht keinen eigenen Wert: Eine gruppierte Infografik
+  öffnet ihren Anker.
+  - **G39** prüft das über alle bisherigen Fälle: Platzhalter (Joe Turan), eigenständig und eigenes Audio
+    (Infografiken), Basis-Infografik als Anker (Infografiken), Audioquickie (Stefan Hiene, auch für den
+    Whitelist-Nutzer), gleicher Stamm (Joe Turan bzw. Autor A), umgezogene Grafiken (Joe Turan), Poster-Filter;
+    Gast und Whitelist-Nutzer ohne Recht am Blog sehen „Infografiken“.
+  - **G40** (neu): Infografik eines Telegram-Artikels – ohne Telegram-Schalter eine eigene Kachel, aber mit Badge
+    „Telegram“; mit Schalter eine Gruppe; öffnet den Telegram-Artikel; der Gast sieht sie einzeln mit „Infografiken“.
+- Gegenprobe: Mit absichtlich falscher Badge-Logik schlagen G39 und G40 fehl.
+
+**Geprüft:** `npm test`. **Deployment:** keins (nur Tests).

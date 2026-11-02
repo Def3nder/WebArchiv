@@ -580,6 +580,63 @@ const CASES = [
       assert.equal(res.data.hasExtras, true);
     },
   },
+
+  // G. Badge: Eine Infografik zeigt den Autor ihres Hauptartikels (displayAuthor, Kachel und Poster-Kachel), aber nur,
+  // wenn der Nutzer den Hauptartikel sehen darf; sonst „Infografiken“. Die Artikelansicht öffnet ohnehin den Anker.
+  {
+    id: 'G39', title: 'Badge der Infografiken: Autor des Hauptartikels, sonst „Infografiken“',
+    files: [],
+    async check(ctx) {
+      const badges = async (role, params = {}) => new Map((await ctx.list(role, { author: 'Infografiken', ...params }))
+        .map(item => [item.id, item.displayAuthor]));
+      const admin = await badges('admin');
+      const expected = {
+        'Infografiken/2026/2026-04-01_gruppe_1': 'Joe Turan', // B09 Platzhalter
+        'Infografiken/2026/2026-04-01_gruppe_2': 'Joe Turan',
+        'Infografiken/2026/2026-04-02_eigenstaendig': 'Infografiken', // B10 eigenständig
+        'Infografiken/2026/2026-04-03_mit-audio-grafik_1': 'Infografiken', // B11 eigenes Audio, nicht gruppiert
+        'Infografiken/2026/2026-04-04_basis_1': 'Infografiken', // B12 Anker ist die Basis-Infografik
+        'Infografiken/2026/2026-04-05_basis-leer_1': 'Infografiken', // B13
+        'Infografiken/2026/2026-03-06_Audioquickie_2961': 'Stefan Hiene', // B14
+        'Infografiken/2026/2026-04-06_gleicher-stamm_1': 'Joe Turan', // B15 Priorität
+        'Infografiken/2026/2026-04-07_ohne-prioritaet_1': 'Autor A', // B15 einziger mit Audio
+        'Infografiken/2026/2026-04-08_audio-gruppe_1': 'Joe Turan', // B16
+        'Infografiken/2026/2026-04-10_poster-gruppe_1': 'Joe Turan', // C19
+        'Infografiken/2026/2026-04-11_poster-allein': 'Infografiken', // C20
+        'Infografiken/2026/2026-05-08_umzug_2': 'Joe Turan', // D28 nach dem Umzug zum Blogartikel
+        'Infografiken/2026/2026-05-09_beide_2': 'Joe Turan', // D29
+      };
+      assert.deepEqual(Object.fromEntries(Object.keys(expected).map(id => [id, admin.get(id)])), expected);
+      // Poster-Kachel („Instagram-Poster von …“) nutzt denselben Wert.
+      assert.equal((await badges('admin', { infographic: 'poster' })).get('Infografiken/2026/2026-04-10_poster-gruppe_2'), 'Joe Turan');
+      // Ohne Recht am Hauptartikel: „Infografiken“ (Gast und Whitelist-Nutzer sehen Joe Turan nicht).
+      for (const role of ['guest', 'reader']) {
+        assert.equal((await badges(role)).get('Infografiken/2026/2026-04-01_gruppe_1'), 'Infografiken', role);
+      }
+      assert.equal((await badges('reader')).get('Infografiken/2026/2026-03-06_Audioquickie_2961'), 'Stefan Hiene', 'Whitelist-Autor');
+      // Auch als eigene Kachel in der Gruppenansicht (Gast): Badge „Infografiken“.
+      assert.equal(tileOf(await ctx.tiles('guest'), 'Infografiken/2026/2026-04-01_gruppe_1').displayAuthor, 'Infografiken');
+    },
+  },
+  {
+    id: 'G40', title: 'Infografik eines Telegram-Artikels: einzeln, solange Telegram ausgeblendet ist, aber mit Badge „Telegram“',
+    files: [article('Telegram/2026/2026-03-10_telegram-grafik', { title: 'Telegram mit Grafik', date: '2026-03-10', body: text(52, 2) }),
+      placeholder('Infografiken/2026/2026-03-10_telegram-grafik_1', 'Telegram-Grafik'),
+      image('Infografiken/2026/2026-03-10_telegram-grafik_1.png', 'G40')],
+    async check(ctx) {
+      const member = 'Infografiken/2026/2026-03-10_telegram-grafik_1';
+      const anchor = id('Telegram/2026/2026-03-10_telegram-grafik');
+      const hidden = tileOf(await ctx.tiles('admin'), member);
+      assert.ok(hidden && !hidden.images, 'ohne Telegram-Schalter eigene Kachel');
+      assert.equal(hidden.displayAuthor, 'Telegram', 'Badge trotzdem vom Hauptartikel');
+      const shown = await ctx.tiles('admin', { telegram: '1' });
+      assert.deepEqual(ids(tileOf(shown, anchor).images), [member], 'mit Telegram-Schalter eine Gruppe');
+      assert.ok(!tileOf(shown, member));
+      assert.equal((await ctx.detail('admin', member)).id, anchor, 'öffnet den Telegram-Artikel');
+      // Telegram ist nicht öffentlich: Der Gast sieht die Grafik einzeln mit „Infografiken“.
+      assert.equal(tileOf(await ctx.tiles('guest'), member).displayAuthor, 'Infografiken');
+    },
+  },
 ];
 
 // ── Aufbau ───────────────────────────────────────────────────────────────────

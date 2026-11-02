@@ -1072,7 +1072,8 @@ npm run lint   # nur ESLint, ca. 3 s
 eigenem Bild, `standard.jpg`, Audio daneben oder unter `audio/`, Video/PDF, Datumsformate, Telegram; Infografik-Gruppen
 (Platzhalter, Basis mit/ohne Text, eigenes Audio, gleicher Stamm bei zwei Autoren, Papierkorb); Instagram-Poster;
 Dubletten (offen, überlappend, zu kurz/zu weit, verknüpft, ignoriert, geändert, mit Grafik- und Poster-Umzug);
-Gast, Whitelist, Admin, Pflicht-Kennwortänderung; Hörbücher (normal, nur eBook, privat, Extras). Jeder Fall nennt
+Gast, Whitelist, Admin, Pflicht-Kennwortänderung; Hörbücher (normal, nur eBook, privat, Extras); Badge der Infografiken
+(Autor des Hauptartikels, ohne Recht daran „Infografiken“, auch bei ausgeblendetem Telegram). Jeder Fall nennt
 Zweck, Dateien und erwartete Ergebnisse. `test/fixture-archive.test.cjs` baut das Archiv in einem temporären Ordner,
 startet den echten Server darauf (eigener Prozess, freier Port, CSP erzwungen) und prüft die Fälle über die API
 (ca. 2 s, Teil von `npm test`).
