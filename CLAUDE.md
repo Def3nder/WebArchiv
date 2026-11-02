@@ -39,7 +39,8 @@ source by `test/support/browser-globals.cjs` (no hand-kept list); redeclaring on
 scripts call via `window.X` (e.g. `window.leaveArticleEditor`). `test/browser-globals.test.cjs` catches dead shared
 names and names declared twice in one shell. `test/fixture-archive.test.cjs` builds the test archive from
 `test/fixtures/smoke-archive.cjs` (~40 cases: media, infographic groups, Instagram posters, duplicates incl. moving
-their graphics, access, audiobooks, the infographic badge (`displayAuthor`) — each with purpose and expected results) in a temp dir and runs the real
+their graphics, access, audiobooks, the infographic badge (`displayAuthor`), the scraper center with its own
+`SCRAPER_DIR` data — each with purpose and expected results) in a temp dir and runs the real
 `server.js` on it as a child process (`WWW_DIR`/`AUDIO_DIR`/`CONFIG_FILE`, port 0, CSP enforced); a new combination of
 articles, infographics or duplicates gets a case there. `npm run test:browser` (not part of `npm test`, ~10 s) runs
 `test/browser/smoke.test.cjs` with Playwright/Chromium on the same archive: login, tiles and badges, full-text toggle,

@@ -217,6 +217,42 @@ describe('Browser-Smoke-Test (Chromium, Testarchiv)', () => {
     assert.deepEqual(await closedDialogsInvisible(), []);
   });
 
+  run('Scraper-Zentrale: Stufen, neue Artikel, Quelle hinzufügen, pausieren und entfernen', async () => {
+    // „Jetzt scrapen“/„Alle scrapen“ bleiben unberührt: Sie starteten den echten Scraper.
+    await showList();
+    await adminAction('scraper-center');
+    await page.waitForFunction(() => document.querySelectorAll('#scraper-center .scraper-source').length === 5);
+    assert.equal(await page.textContent('#scraper-level'), 'Fehler');
+    const card = name => page.locator(`#scraper-center .scraper-source[data-name="${name}"]`);
+    assert.equal(await card('Facebook').locator('.scraper-action-error').count(), 1, 'abgebrochen');
+    assert.equal(await card('Facebook').locator('.scraper-action-warning').count(), 2, 'Anmeldung, keine Beiträge');
+    assert.equal(await card('Gruppe Pausiert').locator('.scraper-paused').textContent(), 'pausiert');
+
+    await card('Joe Turan').locator('[data-scraper="toggle"]').click();
+    assert.deepEqual(await card('Joe Turan').locator('.scraper-new-list li').allTextContents(),
+      ['Gartenjahr', 'Joe Turan/2026/2026-12-31_nicht-mehr-da (nicht mehr im Index)']);
+
+    await page.click('#scraper-add');
+    await page.selectOption('#scraper-form-type', 'telegram');
+    await page.fill('#scraper-form-name', 'Browser Kanal');
+    await page.fill('#scraper-form-url', 'https://t.me/browserkanal');
+    await page.click('#scraper-form-save');
+    await page.locator('#scraper-form-error').filter({ hasText: 't.me/s/' }).waitFor();
+    errors.splice(0); // 400 der absichtlich falschen Adresse
+    await page.fill('#scraper-form-url', 'https://t.me/s/browserkanal');
+    await page.click('#scraper-form-save');
+    await card('Browser Kanal').waitFor();
+    await card('Browser Kanal').locator('[data-scraper="pause"]').click();
+    await card('Browser Kanal').locator('.scraper-paused').waitFor();
+    page.once('dialog', dialog => dialog.accept());
+    await card('Browser Kanal').locator('[data-scraper="remove"]').click();
+    await card('Browser Kanal').waitFor({ state: 'detached' });
+
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.getElementById('scraper-center').open);
+    assert.deepEqual(await closedDialogsInvisible(), []);
+  });
+
   run('Hörbuch öffnen und abspielen', async () => {
     await showList({ author: 'Hörbücher' });
     await page.locator(card('Hörbücher/Testbuch Normal')).click();

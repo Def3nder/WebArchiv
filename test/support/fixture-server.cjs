@@ -74,6 +74,7 @@ function client(base) {
     get: url => request('GET', url),
     post: (url, body) => request('POST', url, body),
     put: (url, body) => request('PUT', url, body),
+    del: url => request('DELETE', url),
     async login(email, password) {
       const res = await request('POST', '/api/login', { email, password });
       if (!res.ok) throw new Error(`Anmeldung ${email}: ${res.status} ${JSON.stringify(res.data)}`);

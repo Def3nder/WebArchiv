@@ -637,6 +637,85 @@ const CASES = [
       assert.equal(tileOf(await ctx.tiles('guest'), member).displayAuthor, 'Infografiken');
     },
   },
+
+  // H. Scraper-Zentrale (Daten unter SCRAPER_DIR: writeScraperData unten)
+  {
+    id: 'H41', title: 'Übersicht: Quellen in Ablaufreihenfolge, letzter Lauf, neue Artikel verlinkt, Cron und Anmeldung',
+    files: [],
+    async check(ctx) {
+      const { data } = await ctx.as('admin').get('/api/scraper/sources');
+      assert.deepEqual(data.sources.map(source => `${source.type}:${source.name}:${source.active}`), [
+        'blog:Joe Turan:true', 'facebook:Facebook:true', 'facebook:Gruppe Pausiert:false', 'telegram:Telegram:true', 'telegram:Kanal Neu:true']);
+      const blog = data.sources[0];
+      assert.deepEqual([blog.last.trigger, blog.last.saved, blog.last.skipped, blog.newLast30Days], ['cron', 1, 3, 1]);
+      assert.deepEqual(blog.last.newArticles, [
+        { id: 'Joe Turan/2026/2026-05-11_weit-gleich', title: 'Gartenjahr', exists: true },
+        { id: 'Joe Turan/2026/2026-12-31_nicht-mehr-da', title: null, exists: false },
+      ]);
+      assert.equal(data.cron.level, 'ok');
+      assert.equal(data.cookies.exists, true);
+      assert.ok(data.cookies.sessionExpiresAt > Date.now(), 'Ablaufdatum der Test-Cookies');
+      assert.ok(!JSON.stringify(data).includes('TESTWERT'), 'nie Cookie-Werte');
+      assert.equal(data.usesExample, false);
+    },
+  },
+  {
+    id: 'H42', title: 'Notwendige Aktionen: abgebrochen, Anmeldung läuft bald ab, pausiert, lange nichts Neues, noch nie gelaufen',
+    files: [],
+    async check(ctx) {
+      const { data } = await ctx.as('admin').get('/api/scraper/sources');
+      const codes = Object.fromEntries(data.sources.map(source => [source.name, `${source.level}:${source.actions.map(action => action.code).join(',')}`]));
+      assert.deepEqual(codes, {
+        'Joe Turan': 'ok:',
+        Facebook: 'error:failed,cookies-expiring,no-posts',
+        'Gruppe Pausiert': 'info:paused',
+        Telegram: 'info:stale',
+        'Kanal Neu': 'info:never-run',
+      });
+      assert.equal(data.level, 'error');
+    },
+  },
+  {
+    id: 'H43', title: 'Quellen verwalten: Prüfung, hinzufügen, bearbeiten, pausieren, entfernen',
+    files: [],
+    async check(ctx) {
+      const admin = ctx.as('admin');
+      const bad = await admin.post('/api/scraper/sources', { type: 'facebook', name: 'Infografiken', url: 'https://facebook.com/x' });
+      assert.equal(bad.status, 400, 'reservierter Name');
+      const wrongUrl = await admin.post('/api/scraper/sources', { type: 'telegram', name: 'H43 Kanal', url: 'https://t.me/h43' });
+      assert.equal(wrongUrl.status, 400);
+      assert.equal((await admin.post('/api/scraper/sources', { type: 'telegram', name: 'H43 Kanal', url: 'https://t.me/s/h43' })).status, 200);
+      assert.equal((await admin.put(`/api/scraper/sources/${encodeURIComponent('H43 Kanal')}`, { url: 'https://t.me/s/h43neu' })).status, 200);
+      assert.equal((await admin.put(`/api/scraper/sources/${encodeURIComponent('H43 Kanal')}/active`, { active: false })).status, 200);
+      let source = (await admin.get('/api/scraper/sources')).data.sources.find(item => item.name === 'H43 Kanal');
+      assert.deepEqual([source.url, source.active, source.actions.map(action => action.code)], ['https://t.me/s/h43neu', false, ['paused']]);
+      assert.equal((await admin.del(`/api/scraper/sources/${encodeURIComponent('H43 Kanal')}`)).status, 200);
+      source = (await admin.get('/api/scraper/sources')).data.sources.find(item => item.name === 'H43 Kanal');
+      assert.equal(source, undefined);
+      assert.equal((await admin.post('/api/scraper/run', { source: 'Gibt es nicht' })).status, 404);
+    },
+  },
+  {
+    id: 'H44', title: 'Scraper-Zentrale nur für Admins',
+    files: [],
+    async check(ctx) {
+      // Gäste sind dank öffentlicher Autoren gültige Besucher: 403 „Nur für Administratoren“, nicht 401.
+      const guest = await ctx.as('guest').get('/api/scraper/sources');
+      assert.deepEqual([guest.status, guest.data.code], [403, 'admin_required']);
+      assert.equal((await ctx.as('member').get('/api/scraper/sources')).status, 403);
+      assert.equal((await ctx.as('member').post('/api/scraper/sources', { type: 'telegram', name: 'X', url: 'https://t.me/s/x' })).status, 403);
+    },
+  },
+  {
+    id: 'H45', title: 'Health-Check: Facebook-Anmeldung läuft bald ab → Warnung bei „Scrape“',
+    files: [],
+    async check(ctx) {
+      const { data } = await ctx.as('admin').get('/api/health/details');
+      assert.deepEqual([data.services.scrape.login.needed, data.services.scrape.login.level], [true, 'warning']);
+      assert.match(data.services.scrape.login.text, /läuft am \d{2}\.\d{2}\.\d{4} ab/);
+      assert.equal(data.services.scrape.level, 'warning');
+    },
+  },
 ];
 
 // ── Aufbau ───────────────────────────────────────────────────────────────────
@@ -656,6 +735,51 @@ async function renderImage(label, extension) {
       text-anchor="middle">${label}</text></svg>`;
   const image = sharp(Buffer.from(svg));
   return extension === '.png' ? image.png().toBuffer() : image.jpeg({ quality: 70 }).toBuffer();
+}
+
+// Scraper-Zentrale (Fälle H): Quellen, Läufe, Test-Cookies (Werte sind Platzhalter) und Cron-Log, Zeiten relativ zu jetzt.
+const SCRAPER_SOURCES = {
+  Blog: [{ Name: 'Joe Turan', URL: 'https://www.joeturan.com/blog', OutputPath: '../www/Joe Turan' }],
+  Facebook: [
+    { Name: 'Facebook', URL: 'https://www.facebook.com/beispielseite/', OutputPath: '../www/Facebook', FileAuthor: 'Joe Turan' },
+    { Name: 'Gruppe Pausiert', URL: 'https://www.facebook.com/groups/12345/', OutputPath: '../www/Gruppe Pausiert', Aktiv: false },
+  ],
+  Telegram: [
+    { Name: 'Telegram', URL: 'https://t.me/s/joeturan', OutputPath: '../www/Telegram' },
+    { Name: 'Kanal Neu', URL: 'https://t.me/s/kanalneu', OutputPath: '../www/Kanal Neu' },
+  ],
+};
+const COOKIE_DAYS_LEFT = 3;
+
+async function writeScraperData(write) {
+  const now = Date.now();
+  const iso = ms => new Date(ms).toISOString();
+  const entry = (type, name, at, fields) => ({
+    type, name, status: 'ok', startedAt: iso(at - 10000), finishedAt: iso(at), durationMs: 10000,
+    saved: 0, skipped: 3, error: null, warnings: {}, newFiles: [], ...fields,
+  });
+  const recent = now - 3600 * 1000;
+  const older = now - 20 * 24 * 3600 * 1000;
+  const runs = [
+    { id: iso(recent - 60000), trigger: 'cron', startedAt: iso(recent - 60000), finishedAt: iso(recent), exitCode: 1, phases: ['blog', 'facebook', 'telegram'],
+      sources: [
+        entry('blog', 'Joe Turan', recent - 40000, { saved: 1, newFiles: ['Joe Turan/2026/2026-05-11_weit-gleich.md', 'Joe Turan/2026/2026-12-31_nicht-mehr-da.md'] }),
+        entry('facebook', 'Facebook', recent - 20000, { status: 'failed', saved: 0, skipped: 0, error: 'page.goto: Timeout 30000ms exceeded', warnings: { 'no-posts': 1 } }),
+        { type: 'facebook', name: 'Gruppe Pausiert', status: 'paused' },
+        entry('telegram', 'Telegram', recent, { warnings: { 'dom-fallback': 1 } }),
+      ] },
+    { id: iso(older), trigger: 'web', startedAt: iso(older), finishedAt: iso(older + 60000), exitCode: 0, phases: ['telegram'],
+      sources: [entry('telegram', 'Telegram', older + 60000, { saved: 2 })] },
+  ];
+  const expiry = Math.floor((now + COOKIE_DAYS_LEFT * 24 * 3600 * 1000) / 1000);
+  const cookie = name => ['.facebook.com', 'TRUE', '/', 'TRUE', expiry, name, 'TESTWERT'].join('\t');
+  const pad = n => String(n).padStart(2, '0');
+  const cron = new Date(recent);
+  const cronLine = `${cron.getFullYear()}-${pad(cron.getMonth() + 1)}-${pad(cron.getDate())} ${pad(cron.getHours())}:${pad(cron.getMinutes())}:${pad(cron.getSeconds())} Scraper exit 0`;
+  await write('scraper/scraper-config.json', JSON.stringify(SCRAPER_SOURCES, null, 2));
+  await write('scraper/scrape-status.json', JSON.stringify({ version: 1, runs }, null, 2));
+  await write('scraper/cookies.txt', ['# Netscape HTTP Cookie File', cookie('c_user'), cookie('xs')].join('\n') + '\n');
+  await write('scraper/cron-scrape.log', `${cronLine}\n`);
 }
 
 // Legt das Archiv samt Nutzern, öffentlichen Autoren und Einstellungen unter dir an.
@@ -683,6 +807,7 @@ async function build(dir) {
   await write('users.json', JSON.stringify({ users }, null, 2));
   await write('public-directories.txt', JSON.stringify({ 'public-directories': PUBLIC_AUTHORS }, null, 2));
   await write('config.json', JSON.stringify(CONFIG, null, 2));
+  await writeScraperData(write);
   return {
     passwords,
     env: {
@@ -700,6 +825,7 @@ async function build(dir) {
       AUDIOBOOK_PRIVATE_FILE: path.join(dir, 'audiobook-private.json'),
       TTS_SETTINGS_FILE: path.join(dir, 'tts-settings.json'),
       TTS_VOICE_PREVIEW_DIR: path.join(dir, 'tts-voice-previews'),
+      SCRAPER_DIR: path.join(dir, 'scraper'),
     },
   };
 }

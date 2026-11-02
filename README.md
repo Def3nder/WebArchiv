@@ -1086,7 +1086,9 @@ eigenem Bild, `standard.jpg`, Audio daneben oder unter `audio/`, Video/PDF, Datu
 (Platzhalter, Basis mit/ohne Text, eigenes Audio, gleicher Stamm bei zwei Autoren, Papierkorb); Instagram-Poster;
 Dubletten (offen, überlappend, zu kurz/zu weit, verknüpft, ignoriert, geändert, mit Grafik- und Poster-Umzug);
 Gast, Whitelist, Admin, Pflicht-Kennwortänderung; Hörbücher (normal, nur eBook, privat, Extras); Badge der Infografiken
-(Autor des Hauptartikels, ohne Recht daran „Infografiken“, auch bei ausgeblendetem Telegram). Jeder Fall nennt
+(Autor des Hauptartikels, ohne Recht daran „Infografiken“, auch bei ausgeblendetem Telegram); Scraper-Zentrale
+(eigene Quellen, Läufe und Test-Cookies unter `SCRAPER_DIR`: Übersicht, Aktionen, Verwaltung, nur Admins,
+Facebook-Anmeldung im Health-Check). Jeder Fall nennt
 Zweck, Dateien und erwartete Ergebnisse. `test/fixture-archive.test.cjs` baut das Archiv in einem temporären Ordner,
 startet den echten Server darauf (eigener Prozess, freier Port, CSP erzwungen) und prüft die Fälle über die API
 (ca. 2 s, Teil von `npm test`).

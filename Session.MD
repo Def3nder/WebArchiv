@@ -2985,3 +2985,21 @@ abgelaufen …“, Dienste „Fehler“ mit der Zeile, Knopf öffnet die Zentral
 
 **Deployment:** `lib/scraper-sources.cjs`, `modules/scraper-center.cjs`, `modules/health.cjs`, `server.js`,
 `public/health.js`; Dienst neu starten.
+
+## 88. Aktualisierung 02.11.2026 – Scraper-Zentrale, Schritt 5: Tests im Testarchiv und im Browser
+
+- Testarchiv (`test/fixtures/smoke-archive.cjs`): `writeScraperData` legt unter `SCRAPER_DIR` eine eigene
+  Quellenliste (Blog, Facebook, pausierte Gruppe, Telegram, nie gelaufener Kanal), zwei Läufe (Cron mit Abbruch und
+  neuen Dateien – davon eine nicht mehr im Index –, älterer Web-Lauf), Test-Cookies (Platzhalterwerte, Ablauf in
+  3 Tagen) und ein Cron-Log an. `fixture-server` kennt jetzt auch `DELETE`.
+- Neue Fälle: **H41** Übersicht (Reihenfolge, letzter Lauf, neue Artikel mit Titel bzw. „nicht mehr im Index“, Cron,
+  Anmeldung, nie Cookie-Werte), **H42** Aktionen je Quelle und Gesamtstufe, **H43** Verwaltung (reservierter Name,
+  falsche Telegram-Adresse, hinzufügen, bearbeiten, pausieren, entfernen, unbekannte Quelle starten = 404),
+  **H44** nur Admins (Gast 403 `admin_required`, Nutzer 403), **H45** Health-Check-Warnung durch die bald ablaufende
+  Anmeldung.
+- Browser: Desktop-Ablauf (Stufen, neue Artikel, Formular mit Fehlermeldung, hinzufügen, pausieren, entfernen,
+  Escape, geschlossene Dialoge unsichtbar; „Jetzt/Alle scrapen“ bewusst nicht) und Handy-Ablauf (Karten und Formular
+  einspaltig, nichts ragt heraus, Formularfelder 16 px, Escape schließt erst das Formular, dann die Zentrale).
+- Gegenprobe: Ohne Warnung für die bald ablaufende Anmeldung scheitern H42 und H45.
+
+**Geprüft:** `npm test`, `npm run test:browser` 17/17. **Deployment:** keins (nur Tests).

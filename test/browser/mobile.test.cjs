@@ -198,6 +198,26 @@ describe('Handy-Ansicht (Chromium, Pixel 7, Touch)', () => {
     await page.fill('#search-input', '');
   });
 
+  run('Scraper-Zentrale auf dem Handy: Karten einspaltig, nichts ragt heraus, Formular einspaltig', async () => {
+    await adminAction('scraper-center');
+    await waitOpen('scraper-center');
+    await page.waitForFunction(() => document.querySelectorAll('#scraper-center .scraper-source').length > 0);
+    const layout = await page.evaluate(() => {
+      const dialog = document.getElementById('scraper-center');
+      const facts = getComputedStyle(document.querySelector('#scraper-center .scraper-facts')).gridTemplateColumns.split(' ').length;
+      return { overflow: dialog.scrollWidth - dialog.clientWidth, facts, page: document.documentElement.scrollWidth - window.innerWidth };
+    });
+    assert.deepEqual(layout, { overflow: 0, facts: 1, page: 0 });
+    await page.tap('#scraper-add');
+    const columns = await page.evaluate(() => getComputedStyle(document.querySelector('.scraper-form-grid')).gridTemplateColumns.split(' ').length);
+    assert.equal(columns, 1);
+    assert.equal(await fontSize('#scraper-form-name'), '16px', 'kein Auto-Zoom auf dem iPhone');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.getElementById('scraper-form').hidden, null);
+    await page.keyboard.press('Escape');
+    await waitOpen('scraper-center', false);
+  });
+
   run('iPhone-Kennung: Viewport mit maximum-scale=1 (kein Auto-Zoom), Android ohne', async () => {
     const meta = target => target.evaluate(() => document.querySelector('meta[name="viewport"]').content);
     assert.doesNotMatch(await meta(page), /maximum-scale/, 'Android: Pinch-Zoom bleibt frei');
