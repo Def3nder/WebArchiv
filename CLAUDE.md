@@ -28,7 +28,11 @@ npm test --prefix epub-tool
 ```
 
 Run the complete Node and Python test suite with `npm test`. Tests live under
-`test/`, `scraper/test/`, `epub-tool/test/`, `tts/test/` and `duplicates-tool/test/`. There is no linter or build.
+`test/`, `scraper/test/`, `epub-tool/test/`, `tts/test/` and `duplicates-tool/test/`.
+`npm test` runs `npm run lint` first: ESLint (`eslint.config.js`) with only `no-undef`, `no-unused-vars` and
+`no-redeclare` over the Node code (server, `lib/`, `modules/`, `scripts/`, tests and the sub-packages; `public/`
+follows). The module type is set per folder there (ESLint ignores `"type"` in package.json); a leading `_` marks
+intentionally unused parameters. There is no build.
 `duplicates-tool/` is a dev-only app (not deployed) that reuses `lib/article-parser.cjs`, `lib/duplicates.cjs`,
 `lib/html-sanitizer.cjs`, `lib/atomic-file.cjs` and the diff bundle — keep it working when changing those.
 `node server.js` is the only runtime; restart it to

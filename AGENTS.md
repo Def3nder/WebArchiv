@@ -22,7 +22,10 @@ node scripts/hash-passwords.js   # hash plaintext passwords in users.json (see A
 Tests are organized under `test/`, `scraper/test/`, `epub-tool/test/`, `tts/test/`, `duplicates-tool/test/`,
 and `tts-server/test/`. WebArchiv-side Node modules live under `tts/`; the separate
 Qwen model server, its launch helpers, and its Python tests live under `tts-server/`.
-There is no linter or build. `node server.js` is the only runtime; restart it to
+`npm test` runs `npm run lint` first: ESLint (`eslint.config.js`) with only `no-undef`, `no-unused-vars` and
+`no-redeclare` over the Node code (server, `lib/`, `modules/`, `scripts/`, tests and the sub-packages; `public/`
+follows). The module type is set per folder there (ESLint ignores `"type"` in package.json); a leading `_` marks
+intentionally unused parameters. There is no build. `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes under `www/` and `audio/` are picked up automatically by the file watcher
 (`lib/archive-watcher.cjs`: 5 s quiet, then a cached rescan via `archiveLock.whenIdle`; off with `WATCH_ARCHIVE=0`),
 otherwise by `SIGHUP`, the admin reindex button (`POST /api/reindex`, reads fresh) or a restart. Frontend changes (`public/`) only need a browser reload;

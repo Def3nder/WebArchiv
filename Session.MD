@@ -2731,3 +2731,24 @@ unveränderter Filterzeile. Das Wischverhalten selbst ist nur auf einem echten i
 langes schließt den Dialog und leert den Ebenen-Stapel.
 
 **Deployment:** `public/app.js`; Browser neu laden.
+
+## 76. Aktualisierung 02.11.2026 – Qualitätssicherung, Schritt 1: ESLint für den Node-Code (Review 3.5)
+
+- Neue Entwicklungs-Pakete `eslint@10.13.0` und `globals@17.13.0` (bewusst die über zwei Wochen alten Versionen;
+  im Lockfile kamen nur Pakete hinzu, keine bestehende Version änderte sich). Die vier „moderate“-Meldungen von
+  `npm audit` betreffen `minimatch` innerhalb von ESLint (nur Entwicklung, nicht der Server). Auf dem LXC reicht
+  `npm install --omit=dev`.
+- `eslint.config.js` (nicht `.cjs`: im Projektroot sind keine CJS-Module erlaubt, `test/code-rules.test.cjs`): nur
+  `no-undef`, `no-unused-vars` (Rest-Destrukturierung und führendes `_` erlaubt, `catch`-Parameter frei) und
+  `no-redeclare`. Erfasst: `server.js`, `lib/`, `modules/`, `scripts/`, `test/`, `tts/`, `duplicates-tool/`,
+  `scraper/`, `epub-tool/` – 132 Dateien, ca. 3 s. Die Modulart steht je Ordner in der Konfiguration, weil ESLint
+  `"type"` aus package.json nicht liest. `public/` folgt in Schritt 2.
+- `npm test` startet mit `npm run lint`.
+- Behoben (16 Funde): tote Importe in `modules/user-store.cjs` (`path`), `tts/voice-settings.cjs` (`createHash`) und
+  vier Tests; `scraper/scrape_all.js` deklariert `window`/`document` per `/* global */`, weil sie nur in
+  `page.evaluate()` im Browserkontext laufen. `_next` im Express-Fehler-Handler bleibt (Express erkennt ihn nur an
+  vier Parametern).
+
+**Geprüft:** `npm test` mit Lint; eine Probedatei mit Tippfehler und unbenutzter Variable wird erkannt.
+
+**Deployment:** nichts Laufzeitrelevantes außer den entfernten toten Importen; Dienst neu starten genügt.

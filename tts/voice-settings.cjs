@@ -1,6 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { createHash, randomUUID } = require('node:crypto');
+const { randomUUID } = require('node:crypto');
 const { providerSettings } = require('./provider-config.cjs');
 
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;

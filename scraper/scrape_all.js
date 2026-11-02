@@ -32,6 +32,8 @@ import { chromium } from "playwright";
 import sharp from "sharp";
 import TurndownService from "turndown";
 
+/* global window, document -- nur in page.evaluate(), läuft im Browserkontext */
+
 // Gemeinsame Pfadprüfung des Archivs (nur Node-Bordmittel, keine weiteren Abhängigkeiten).
 import { isPathInside } from "../lib/archive-files.cjs";
 

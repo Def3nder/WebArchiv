@@ -1,11 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const readStyles = require('./support/read-styles.cjs');
 const readApp = require('./support/read-app.cjs');
-
-const ROOT = path.join(__dirname, '..');
 
 test('Die mobile Kachel-Navigation passt mit Pfeilen in eine Zeile', () => {
   const app = readApp();
