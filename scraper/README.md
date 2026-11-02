@@ -5,8 +5,10 @@ von `BlogDownloader/node/scrape_all.js`; **einziger Unterschied**: die Ausgabe
 geht ins `www/` des WebArchiv-Projekt-Roots (eine Ebene höher), das der Server
 rendert.
 
-Alle Quellen werden in `scraper-config.json` konfiguriert. `OutputPath` ist
-relativ zu `scraper/scrape_all.js` und muss innerhalb von `../www/` liegen:
+Alle Quellen werden in `scraper-config.json` konfiguriert. Die Datei ist eine Laufzeitdatei (gitignored; die
+Scraper-Zentrale im WebArchiv schreibt sie). Fehlt sie, gilt die eingecheckte Vorlage
+`example-scraper-config.json`. `OutputPath` ist relativ zu `scraper/scrape_all.js` und muss innerhalb von
+`../www/` liegen:
 
 ```json
 {

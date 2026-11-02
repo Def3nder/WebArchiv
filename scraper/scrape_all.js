@@ -49,7 +49,10 @@ const PROJECT_ROOT = path.join(SCRIPT_DIR, "..");
 const WWW_DIR = path.join(PROJECT_ROOT, "www");
 
 const COOKIES_FILE = path.join(SCRIPT_DIR, "cookies.txt");
+// Quellen: Laufzeitdatei (gitignored, die Scraper-Zentrale im WebArchiv schreibt sie); fehlt sie, gilt die Vorlage.
 const CONFIG_FILE = path.join(SCRIPT_DIR, "scraper-config.json");
+const EXAMPLE_CONFIG_FILE = path.join(SCRIPT_DIR, "example-scraper-config.json");
+const defaultConfigFile = () => (fs.existsSync(CONFIG_FILE) ? CONFIG_FILE : EXAMPLE_CONFIG_FILE);
 const LOG_FILE = path.join(SCRIPT_DIR, "scrape_all.log");
 // Strukturierter Stand der letzten Läufe je Quelle (Scraper-Zentrale im WebArchiv); gitignored.
 const STATUS_FILE = path.join(SCRIPT_DIR, "scrape-status.json");
@@ -96,7 +99,7 @@ function sourceOutputDir(outputPath) {
   return outputDir;
 }
 
-function loadScraperConfig(configPath = CONFIG_FILE) {
+function loadScraperConfig(configPath = defaultConfigFile()) {
   let parsed;
   try {
     parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -1735,7 +1738,7 @@ async function main(argv) {
   const args = parseArgs(argv);
 
   const selected = CANONICAL_ORDER.filter((p) => args[p]);
-  const configPath = args.config ? path.resolve(args.config) : CONFIG_FILE;
+  const configPath = args.config ? path.resolve(args.config) : defaultConfigFile();
   const { phases, config } = selectSources(
     loadScraperConfig(configPath), selected.length ? selected : [...CANONICAL_ORDER], args.source
   );

@@ -13,6 +13,7 @@ const {
 } = require('./modules/audiobooks.cjs');
 const { createBookmarkStore, installBookmarkRoutes } = require('./modules/bookmarks.cjs');
 const { createScrapeJob, installScrapeRoutes } = require('./modules/scrape.cjs');
+const { createScraperCenter, installScraperCenterRoutes } = require('./modules/scraper-center.cjs');
 const { installDuplicateRoutes } = require('./modules/duplicate-admin.cjs');
 const {
   INFOGRAPHIC_MAX_BYTES, createInfographicAdmin, installInfographicRoutes,
@@ -245,6 +246,17 @@ const scrapeJob = createScrapeJob({
   reindex: () => buildIndex(),
   refreshFiles: files => refreshScrapedMarkdownFiles(files),
   reindexRunning: () => reindexState.running,
+});
+// Scraper-Zentrale: Quellen, Stand je Quelle, notwendige Aktionen. SCRAPER_DIR lenkt nur ihre Daten um (Tests);
+// gestartet wird immer scraper/scrape_all.js.
+const SCRAPER_DATA_DIR = path.resolve(process.env.SCRAPER_DIR || path.join(__dirname, 'scraper'));
+const scraperCenter = createScraperCenter({
+  configFile: path.join(SCRAPER_DATA_DIR, 'scraper-config.json'),
+  exampleFile: path.join(__dirname, 'scraper', 'example-scraper-config.json'),
+  statusFile: path.join(SCRAPER_DATA_DIR, 'scrape-status.json'),
+  cookiesFile: path.join(SCRAPER_DATA_DIR, 'cookies.txt'),
+  cronLogFile: path.join(SCRAPER_DATA_DIR, 'cron-scrape.log'),
+  archive,
 });
 // Infografik-Verwaltung; canUploadInfographic nutzt auch die Detailansicht, die
 // Dateistamm-Helfer der Dubletten-Umzug.
@@ -776,6 +788,7 @@ app.post('/api/reindex', requireAdminAccess, (req, res) => {
 installTtsRoutes(app, requireAdminAccess, ttsJobs, undefined, ttsVoiceSettings);
 installMarkdownRoutes(app, requireAdminAccess, markdownEditor);
 installScrapeRoutes(app, { requireAdmin: requireAdminAccess, job: scrapeJob, lock: archiveLock });
+installScraperCenterRoutes(app, { requireAdmin: requireAdminAccess, center: scraperCenter, job: scrapeJob, lock: archiveLock });
 installDuplicateRoutes(app, {
   requireAdmin: requireAdminAccess, lock: archiveLock, archive, wwwDir: WWW_DIR,
   store: duplicateStore, config: duplicateConfig, bookmarks, articleBodies,

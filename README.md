@@ -807,6 +807,11 @@ Editor- oder Menülogik einbezogen.
 | `GET /api/scrape/status` | Auth | Status + Live-Ausgabe des Scrape-Laufs |
 | `POST /api/scrape` | Admin | Scraper starten (`{sources?}`), danach Auto-Reindex |
 | `GET /api/scrape/log` | Admin | Letzte 100 Zeilen von `scraper/scrape_all.log` |
+| `GET /api/scraper/sources` | Admin | Scraper-Zentrale: je Quelle Config, letzter Lauf, neue Artikel (verlinkt), Neue in 30 Tagen, notwendige Aktionen; Cron-Stand, Ablauf der Facebook-Anmeldung (nie Cookie-Werte) |
+| `POST /api/scraper/sources` | Admin | Quelle hinzufügen (`{type, name, url, fileAuthor?, signatureName?, signatureWebsite?, exclude?}`); Name = Ordner `www/<Name>` |
+| `PUT`/`DELETE /api/scraper/sources/:name` | Admin | Quelle bearbeiten (URL, Dateiautor, Signatur, Ausschluss; Name und Typ fest) bzw. entfernen (Artikel bleiben) |
+| `PUT /api/scraper/sources/:name/active` | Admin | Quelle pausieren (`{active:false}`) oder fortsetzen |
+| `POST /api/scraper/run` | Admin | Genau eine Quelle scrapen (`{source}`), danach Teil-Reindex wie beim normalen Lauf |
 
 „Soft" = `attachUser`: eingeloggt oder Gast mit Public-Autoren; sonst 401.
 
@@ -934,7 +939,8 @@ unten).
 Voraussetzungen für den Scrape: installierte Playwright-Browser + System-Libs und
 gesetztes `PLAYWRIGHT_BROWSERS_PATH` (siehe `LXC-container node.js Setup.md`).
 Die aktiven Quellen stehen in den Arrays `Blog`, `Facebook` und `Telegram` von
-`scraper/scraper-config.json` (jeweils `Name`, `URL`, `OutputPath`); mehrere
+`scraper/scraper-config.json` (jeweils `Name`, `URL`, `OutputPath`; Laufzeitdatei, gitignored – Vorlage
+`scraper/example-scraper-config.json`, die gilt, solange die Datei fehlt); mehrere
 Einträge je Quellentyp werden nacheinander verarbeitet. Facebook benötigt
 zusätzlich `scraper/cookies.txt` im Netscape-Format. Die frühere
 `scraper/Abonenten-URL.txt` ist **keine** aktive URL-Quelle mehr. Nach drei
@@ -1127,6 +1133,7 @@ npm test --prefix tts
 | `WWW_DIR` | `./www` | Artikelarchiv (z. B. das Testarchiv) |
 | `AUDIO_DIR` | `./audio` | Audio und Hörbücher |
 | `CONFIG_FILE` | `./config.json` | Einstellungen (Autoren-Priorität, Dubletten, Hörbücher) |
+| `SCRAPER_DIR` | `./scraper` | Daten der Scraper-Zentrale (`scraper-config.json`, `scrape-status.json`, `cookies.txt`, `cron-scrape.log`); gestartet wird immer `scraper/scrape_all.js` (für Tests) |
 | `SESSION_SECRET` | zufällig pro Prozess | Signatur der Session-Cookies; bei `NODE_ENV=production` Pflicht (≥ 32 Zeichen, z. B. `openssl rand -hex 32`). Nur mit festem Wert überstehen Anmeldungen einen Neustart |
 | `SESSIONS_FILE` | `sessions.json` im App-Verzeichnis | Gespeicherte Sitzungen (Rechte 0600, gitignored); abgelaufene werden entfernt |
 | `INDEX_CACHE_FILE` | `index-cache.json` im App-Verzeichnis | Index-Cache (Rechte 0600, gitignored); löschen macht nur den nächsten Start langsamer |

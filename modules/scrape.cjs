@@ -49,21 +49,24 @@ function createScrapeJob({ scraperDir, reindex, refreshFiles, reindexRunning, sp
     // Optionale Quellenauswahl: ["blog","facebook","telegram"]. Ohne Angabe laufen
     // alle drei (Reihenfolge bestimmt der Scraper selbst). Der Aufrufer prüft vorher
     // die Archiv-Sperre; running wird hier synchron gesetzt und belegt sie damit.
-    start(requestedSources) {
+    // source: genau eine Quelle nach Namen (Scraper-Zentrale, „Jetzt scrapen“); der Aufrufer prüft, dass es sie gibt.
+    start(requestedSources, { source = null } = {}) {
       const sources = Array.isArray(requestedSources)
-        ? requestedSources.filter(source => SCRAPE_SOURCES.includes(source))
+        ? requestedSources.filter(type => SCRAPE_SOURCES.includes(type))
         : [];
-      const args = [path.join(scraperDir, 'scrape_all.js'), ...sources.map(source => `--${source}`)];
+      const args = [path.join(scraperDir, 'scrape_all.js'),
+        ...(source ? ['--source', source] : sources.map(type => `--${type}`))];
       state = {
         running: true,
-        sources: sources.length ? sources : SCRAPE_SOURCES,
+        sources: source ? [] : (sources.length ? sources : SCRAPE_SOURCES),
+        source,
         exitCode: null,
         startedAt: Date.now(),
         done: false,
         error: null,
         output: '',
       };
-      console.log(`Scrape gestartet: ${state.sources.join(', ')}`);
+      console.log(`Scrape gestartet: ${source ? `Quelle „${source}“` : state.sources.join(', ')}`);
 
       const captureOutput = chunk => {
         state.output += chunk.toString();
@@ -78,7 +81,7 @@ function createScrapeJob({ scraperDir, reindex, refreshFiles, reindexRunning, sp
         state = { ...state, running: false, done: true, exitCode: -1, error: err.message };
       });
       child.on('close', finish);
-      return { started: true, sources: state.sources };
+      return source ? { started: true, sources: state.sources, source } : { started: true, sources: state.sources };
     },
 
     // Letzte 100 Zeilen des Scraper-Logs (für die "Scrape-Log anzeigen"-Ansicht).

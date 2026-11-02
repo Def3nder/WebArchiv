@@ -2910,3 +2910,33 @@ die Live-Quellen.
 
 **Deployment:** `scraper/scrape_all.js`, `scraper/run-scrape.sh`, `modules/scrape.cjs`, `.gitignore`; Dienst neu
 starten. Nach dem nächsten Lauf liegt `scraper/scrape-status.json` vor.
+
+## 85. Aktualisierung 02.11.2026 – Scraper-Zentrale, Schritt 2: Server (`modules/scraper-center.cjs`)
+
+- **Config als Laufzeitdatei:** `scraper/scraper-config.json` ist jetzt gitignored; eingecheckt bleibt die Vorlage
+  `scraper/example-scraper-config.json` (bisheriger Inhalt). Fehlt die Laufzeitdatei, liest der Scraper die Vorlage;
+  die Zentrale legt die Datei beim ersten Schreiben aus der Vorlage an.
+- `lib/scraper-sources.cjs` (rein): Quellen auflisten/finden; neue Quelle prüfen (Name = Ordner `www/<Name>`:
+  keine `/ \ : * ? " < > |`, kein führender Punkt, nicht reserviert – Infografiken, PDF, Videos, Hörbücher –,
+  eindeutig ohne Groß-/Kleinschreibung; https; Facebook nur auf facebook.com, Telegram nur `https://t.me/s/<Kanal>`;
+  Dateiautor, Signatur, Ausschluss-Ausdruck (kompilierbar, ≤ 200 Zeichen)); Name und Typ sind beim Bearbeiten fest.
+  `cookieExpiry` liest aus `cookies.txt` nur Anzahl und Ablauf der Facebook-Anmeldung (`c_user`, `xs`).
+  `summarizeSource` (letzter Lauf, letzter Lauf mit Neuem, Neue in 30 Tagen), `sourceActions` (Fehler: abgebrochen,
+  Cookies fehlen/abgelaufen; Warnung: Cookies laufen in < 7 Tagen ab, keine Beiträge; Info: pausiert, noch nie
+  gelaufen, ≥ 3× DOM-Fallback, seit > 14 Tagen nichts Neues), `cronState` (> 26 h ohne Cron-Lauf = Warnung).
+- `modules/scraper-center.cjs`: `GET /api/scraper/sources` (Übersicht; neue Dateien des letzten Laufs als
+  Artikel-IDs mit Titel und `exists`), `POST /api/scraper/sources`, `PUT`/`DELETE /api/scraper/sources/:name`,
+  `PUT …/:name/active`, `POST /api/scraper/run` (genau eine Quelle über `--source`). Alles nur für Admins
+  (`requireAdminAccess`); Schreibzugriffe unter der Archiv-Sperre (während eines Laufs 409).
+  `modules/scrape.cjs`: `start(types, { source })`.
+- `SCRAPER_DIR` lenkt die Daten der Zentrale um (Tests); gestartet wird immer `scraper/scrape_all.js`.
+
+**Geprüft:** `test/scraper-center.test.cjs` (Prüfregeln, Cookie-Ablauf ohne Werte, Aktionen, Cron, Routen mit
+Vorlage → Laufzeitdatei, Bearbeiten, Pausieren, Entfernen, Einzelquelle, 409 während eines Laufs); `npm test`.
+
+**Deployment:** `server.js`, `lib/scraper-sources.cjs`, `modules/scraper-center.cjs`, `modules/scrape.cjs`,
+`scraper/scrape_all.js`, `scraper/example-scraper-config.json`, `.gitignore`; Dienst neu starten. **Achtung beim
+`git pull` auf dem LXC:** Die bisher eingecheckte `scraper/scraper-config.json` wird dabei gelöscht. Wurde sie dort
+nie von Hand geändert, ist das unkritisch (die Vorlage hat denselben Inhalt und gilt automatisch). Sonst vorher
+sichern und danach zurückkopieren: `cp scraper/scraper-config.json /tmp/` → `git pull` →
+`cp /tmp/scraper-config.json scraper/`.

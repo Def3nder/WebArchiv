@@ -96,7 +96,7 @@ must not pin versions.
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
 - **`modules/`** — feature modules with routes: a `create…` factory for their state plus `install…Routes(app, deps)`
   (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files`, `scrape`,
-  `duplicate-admin`, `infographic-admin`, `articles`, `link-preview`, `health`). They import from `lib/` (and sibling modules),
+  `duplicate-admin`, `infographic-admin`, `articles`, `link-preview`, `health`, `scraper-center`). They import from `lib/` (and sibling modules),
   get everything from `server.js` as `deps`, and nobody — scripts included — ever `require`s `server.js`.
 - **Routes** use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors); no own
   `try/catch` + `sendRouteError` wrappers. `httpError(status, message, extra)` adds fields to the error response,
@@ -152,6 +152,10 @@ object in `app.js`.
   `public-directories.txt` are written by the app; templates are `example-config.json` and
   `example-public-directories.txt` — never re-add the real files to git. `index-cache.json` is a pure cache: deleting
   it only makes the next start slower; `health-events.json` only holds the health-check messages.
+  `scraper/scraper-config.json` (sources, written by the scraper center) and `scraper/scrape-status.json` (last 30
+  runs per source, written by `scrape_all.js`) are runtime files too; template `scraper/example-scraper-config.json`.
+  The scraper center (`modules/scraper-center.cjs`, helpers `lib/scraper-sources.cjs`) only ever reports the expiry
+  of the Facebook login from `cookies.txt`, never cookie names/values.
 - **Users** live in `users.json` (gitignored). Copy `example-users.json` → `users.json`, set
   plaintext `password` fields, run `node scripts/hash-passwords.js` to replace them with bcrypt
   `passwordHash`. Each user has `role` (`admin`/`user`), `allowedAuthors` (`null` = all authors,
