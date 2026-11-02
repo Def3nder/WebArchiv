@@ -288,7 +288,25 @@ Fuse und die Infografik-Verknüpfung sind dagegen unkritisch.
 - **Unlesbare Dateien sichtbar machen:** `scanDir` verwirft sie weiterhin still ([server.js:304](server.js:304)). Gezählt und mit Pfad im Reindex-Status oder Log wären sie die erste Zeile des „Qualitäts-Dashboards“ aus der To-Do-Liste.
 - **Geordnetes Beenden:** Beim Herunterfahren ([server.js:2091](server.js:2091)) wartet der Server auf TTS und Sitzungen, aber nicht auf einen laufenden exklusiven Schreibauftrag (`archiveLock.holder`). Ein kurzes Warten mit Zeitlimit verhindert halbe Infografik-Umbenennungen bei `systemctl restart`.
 
-### 3.5 Qualitätssicherung
+### 3.5 Qualitätssicherung – ✅ umgesetzt
+
+> **Nachtrag 02.11.2026:** In sechs Schritten umgesetzt (Commits `b23ed02` bis `c2092b5`, Session.MD, Abschnitte 76–83).
+> **ESLint** (`eslint.config.js`, nur `no-undef`, `no-unused-vars`, `no-redeclare`) prüft Node-Code, Unterpakete und
+> `public/` in ca. 3 s als erster Teil von `npm test`. Die rund 580 gemeinsamen Namen der klassischen Skripte pflegt
+> niemand von Hand: `test/support/browser-globals.cjs` liest sie aus dem Quelltext; `test/browser-globals.test.cjs`
+> findet tote gemeinsame Namen und doppelte Namen je Shell. Gefunden wurden dabei 16 tote Importe, eine überschriebene
+> Browser-Funktion (`reportError` im Dubletten-Werkzeug) und ein echter Fehler: Seit dem Editor-Bündel (15.10.) ging die
+> Rückfrage bei ungespeicherten Änderungen beim Verlassen des Artikels ins Leere. Statt eines kleinen Smoke-Archivs
+> gibt es ein **Testarchiv mit 40 beschriebenen Fällen** (`test/fixtures/smoke-archive.cjs`: Medien, Infografik-Gruppen,
+> Instagram-Poster, Dubletten samt Grafik-Umzug, Zugriff, Hörbücher, Badge); `test/fixture-archive.test.cjs` startet
+> den echten Server darauf und prüft alle Fälle über die API (ca. 2 s, Teil von `npm test`). Das fand einen zweiten
+> Fehler: Beim Verknüpfen mit Grafik-Umzug ging „Instagram-Poster: Ja“ verloren. `npm run dev:fixture` startet die App
+> zum Ansehen auf demselben Archiv. Der **Browser-Smoke-Test** (`npm run test:browser`, Playwright/Chromium, CSP
+> erzwungen, ca. 20 s) spielt neun Desktop-Abläufe – genau die hier vorgeschlagenen und mehr – und sechs Handy-Abläufe
+> mit echten Wischgesten durch; jeder Konsolenfehler oder CSP-Verstoß lässt ihn scheitern. Gegenproben mit absichtlich
+> wieder eingebauten Fehlern (Health-Dialog, Hintergrund-Wischen, Badge) schlagen an. Die **Regeltests** gab es
+> bereits (`startsWith` in `test/code-rules.test.cjs`, rohe Fehlertexte in `test/error-responses.test.cjs`).
+> Grenze: Chromium ist nicht Safari – iOS-eigenes Zoomen und Federn zeigt nur ein echtes iPhone.
 
 - **ESLint mit wenigen Regeln** (`no-undef`, `no-unused-vars`, `no-redeclare`) und einer `globals`-Liste für die gemeinsamen klassischen Skripte. Bei rund 300 global geteilten Bezeichnern findet das Tippfehler und tote Exporte (wie in 2.11), bevor sie im Browser auffallen.
 - **Browser-Smoke-Test:** Playwright ist im Scraper schon vorhanden. Wenige Abläufe würden 2.1-artige Fehler abfangen: Artikel öffnen, Dialog öffnen, Escape und Pfeiltasten, Lesezeichen setzen, Hörbuch abspielen, alles im `CSP_MODE=enforce` ohne Konsolenfehler. Die heutigen Frontend-Tests prüfen überwiegend Quelltext-Muster.

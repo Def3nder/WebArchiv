@@ -2872,3 +2872,20 @@ verwerfen?“, bei Abbrechen bleiben Editor und Artikel offen (Artikeldatei unve
   WebKit (Playwright) ist auf Wunsch nachrüstbar.
 
 **Geprüft:** dreimal 6/6 (ca. 10 s), `npm run test:browser` 15/15, `npm test`. **Deployment:** keins.
+
+## 83. Aktualisierung 02.11.2026 – Qualitätssicherung, Abschluss (Review 3.5)
+
+- `code-review_2026-01-28.md`, 3.5: als umgesetzt markiert, Nachtrag mit allen drei Punkten und den Funden.
+- **Ergebnis der Reihe (Abschnitte 76–82):**
+  - `npm test` beginnt mit ESLint (Node-Code, Unterpakete, `public/`, ca. 3 s) und enthält das Testarchiv mit 40 Fällen
+    gegen den echten Server (ca. 2 s) sowie den Test der gemeinsamen Browser-Namen.
+  - `npm run test:browser` (ca. 20 s, nach Frontend-Änderungen): 9 Desktop- und 6 Handy-Abläufe in Chromium mit
+    erzwungener CSP.
+  - `npm run dev:fixture`: die App auf dem Testarchiv zum Ansehen.
+- **Gefundene Fehler:** Rückfrage des Artikel-Editors beim Verlassen ohne Wirkung (seit 15.10.); Instagram-Poster-
+  Markierung beim Dubletten-Umzug verloren; `reportError` im Dubletten-Werkzeug überschrieb die Browser-Funktion;
+  16 tote Importe.
+- **Für neue Arbeit:** neue Kombinationen von Artikeln, Infografiken oder Dubletten bekommen einen Fall in
+  `test/fixtures/smoke-archive.cjs`; neue Bedienabläufe einen Ablauf in `test/browser/`.
+
+**Deployment:** nur Doku.
