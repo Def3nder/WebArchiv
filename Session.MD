@@ -2779,3 +2779,30 @@ verwerfen?“, bei Abbrechen bleiben Editor und Artikel offen (Artikeldatei unve
 
 **Deployment:** `public/article-editor.js`, `public/vendor/article-editor.bundle.js`, `public/app-detail.js`,
 `public/app-media.js`, `public/infographic-manager.js`; Browser neu laden.
+
+## 78. Aktualisierung 02.11.2026 – Qualitätssicherung, Schritt 3a: Testarchiv mit Fallliste (Review 3.5)
+
+- `test/fixtures/smoke-archive.cjs`: 38 Fälle mit Zweck, Dateien, optionaler Vorbereitung über die echten Routen
+  und erwarteten Ergebnissen – A: Artikel und Medien (eigenes Bild, `standard.jpg`, Audio daneben/extern,
+  Video/PDF, Audioquickie, Datumsformate, Telegram); B: Infografiken (Platzhalter-Gruppe mit geerbten Kategorien,
+  eigenständig mit Text, eigenes Audio, Basis mit/ohne Text als Anker, `_2961` ohne verkürzten Stamm, gleicher Stamm
+  mit Priorität bzw. Audio, geerbtes Audio, Papierkorb, Gastsicht); C: Instagram-Poster (in Gruppe, eigenständig,
+  Filter „Poster“/„Klassisch“); D: Dubletten (offen gleich/überlappend, zu kurz, überlappend und zu weit, wortgleich
+  trotz Abstand, verknüpft, ignoriert, ignoriert und geändert, Umzug von Grafik und Poster, beide mit Grafiken,
+  ausgeschlossene Autoren); E: Gast, Whitelist, Admin, Pflicht-Kennwortänderung; F: Hörbücher (normal, nur eBook,
+  privat, Extras). Texte aus einem Satzpool: Jedes Dublettenpaar hat eigene Sätze, weil jeder Blogartikel mit jedem
+  Quellbeitrag verglichen wird. Bilder mit Fallnummer per `sharp`; eine stumme MP3 und ein Mini-Video (6,8 KB) unter
+  `test/fixtures/smoke/`. Nicht lesbare Dateien deckt weiterhin `test/article-scan.test.cjs` ab.
+- `server.js`: `WWW_DIR`, `AUDIO_DIR`, `CONFIG_FILE` per Umgebung; die Startmeldung nennt den tatsächlichen Port
+  (`PORT=0`).
+- `test/support/fixture-server.cjs` startet `server.js` als eigenen Prozess (im Testprozess ginge es nicht: alle
+  Tests teilen ein geladenes `server.js` mit dem echten Archiv) – freier Port, Watcher aus, CSP erzwungen – und
+  spricht die API wie die Oberfläche an (Cookie, CSRF-Token der Admin-Seite). `test/fixture-archive.test.cjs`
+  prüft alle Fälle in ca. 2 s, dazu: keine Fehlermeldung im Serverprotokoll.
+- **Echter Fehler gefunden (D28):** Beim Verknüpfen einer Dublette mit Grafik-Umzug wurde die `.md` jeder Grafik aus
+  dem Blogkopf neu geschrieben; „Instagram-Poster: Ja“ ging dabei verloren, ein Poster wurde zur klassischen
+  Infografik. `modules/duplicate-admin.cjs` übernimmt die Markierung jetzt (`setInstagramPosterMetadata`).
+
+**Geprüft:** `npm test` (584 Node-Tests, Lint); D28 schlug vor der Korrektur fehl.
+
+**Deployment:** `server.js`, `modules/duplicate-admin.cjs`; Dienst neu starten.

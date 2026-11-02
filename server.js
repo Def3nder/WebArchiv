@@ -109,9 +109,10 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
 // Gerenderte Artikeltexte für Detailansicht und Dubletten-Vergleich.
 const articleBodies = createArticleBodyCache();
-const WWW_DIR = path.join(__dirname, 'www');
-const AUDIO_DIR = path.join(__dirname, 'audio');
-const CONFIG_FILE = path.join(__dirname, 'config.json');
+// Archiv und Einstellungen; abweichende Pfade z. B. für das Testarchiv (test/fixtures/smoke-archive.cjs).
+const WWW_DIR = path.resolve(process.env.WWW_DIR || path.join(__dirname, 'www'));
+const AUDIO_DIR = path.resolve(process.env.AUDIO_DIR || path.join(__dirname, 'audio'));
+const CONFIG_FILE = path.resolve(process.env.CONFIG_FILE || path.join(__dirname, 'config.json'));
 const INFOGRAPHIC_TRASH_DIR = path.join(WWW_DIR, INFOGRAPHICS_AUTHOR, 'trash');
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const ADMIN_ASSET_PATHS = new Set([
@@ -876,7 +877,8 @@ if (require.main === module) {
 
   buildIndex().catch(console.error);
   const server = app.listen(PORT, () => {
-    console.log(`WebArchiv -> http://localhost:${PORT}`);
+    // Tatsächlicher Port: PORT=0 wählt einen freien (Tests).
+    console.log(`WebArchiv -> http://localhost:${server.address().port}`);
   });
 
   let shuttingDown = false;

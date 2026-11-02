@@ -29,7 +29,11 @@ unused parameters. Browser scripts: each classic script knows the shared names o
 source by `test/support/browser-globals.cjs` (no hand-kept list); redeclaring one of them or a browser global
 (`open`, `close`, `reportError` …) fails. Code inside the esbuild bundles is *not* global — expose what classic
 scripts call via `window.X` (e.g. `window.leaveArticleEditor`). `test/browser-globals.test.cjs` catches dead shared
-names and names declared twice in one shell. There is no build. `node server.js` is the only runtime; restart it to
+names and names declared twice in one shell. `test/fixture-archive.test.cjs` builds the test archive from
+`test/fixtures/smoke-archive.cjs` (~40 cases: media, infographic groups, Instagram posters, duplicates incl. moving
+their graphics, access, audiobooks — each with purpose and expected results) in a temp dir and runs the real
+`server.js` on it as a child process (`WWW_DIR`/`AUDIO_DIR`/`CONFIG_FILE`, port 0, CSP enforced); a new combination of
+articles, infographics or duplicates gets a case there. There is no build. `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes under `www/` and `audio/` are picked up automatically by the file watcher
 (`lib/archive-watcher.cjs`: 5 s quiet, then a cached rescan via `archiveLock.whenIdle`; off with `WATCH_ARCHIVE=0`),
 otherwise by `SIGHUP`, the admin reindex button (`POST /api/reindex`, reads fresh) or a restart. Frontend changes (`public/`) only need a browser reload;

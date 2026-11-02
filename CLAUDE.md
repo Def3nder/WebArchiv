@@ -36,7 +36,11 @@ unused parameters. Browser scripts: each classic script knows the shared names o
 source by `test/support/browser-globals.cjs` (no hand-kept list); redeclaring one of them or a browser global
 (`open`, `close`, `reportError` …) fails. Code inside the esbuild bundles is *not* global — expose what classic
 scripts call via `window.X` (e.g. `window.leaveArticleEditor`). `test/browser-globals.test.cjs` catches dead shared
-names and names declared twice in one shell. There is no build.
+names and names declared twice in one shell. `test/fixture-archive.test.cjs` builds the test archive from
+`test/fixtures/smoke-archive.cjs` (~40 cases: media, infographic groups, Instagram posters, duplicates incl. moving
+their graphics, access, audiobooks — each with purpose and expected results) in a temp dir and runs the real
+`server.js` on it as a child process (`WWW_DIR`/`AUDIO_DIR`/`CONFIG_FILE`, port 0, CSP enforced); a new combination of
+articles, infographics or duplicates gets a case there. There is no build.
 `duplicates-tool/` is a dev-only app (not deployed) that reuses `lib/article-parser.cjs`, `lib/duplicates.cjs`,
 `lib/html-sanitizer.cjs`, `lib/atomic-file.cjs` and the diff bundle — keep it working when changing those.
 `node server.js` is the only runtime; restart it to

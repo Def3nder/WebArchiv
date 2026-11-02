@@ -1068,6 +1068,15 @@ npm test
 npm run lint   # nur ESLint, ca. 3 s
 ```
 
+**Testarchiv:** `test/fixtures/smoke-archive.cjs` beschreibt rund 40 Fälle, die der Code unterscheidet – Artikel mit
+eigenem Bild, `standard.jpg`, Audio daneben oder unter `audio/`, Video/PDF, Datumsformate, Telegram; Infografik-Gruppen
+(Platzhalter, Basis mit/ohne Text, eigenes Audio, gleicher Stamm bei zwei Autoren, Papierkorb); Instagram-Poster;
+Dubletten (offen, überlappend, zu kurz/zu weit, verknüpft, ignoriert, geändert, mit Grafik- und Poster-Umzug);
+Gast, Whitelist, Admin, Pflicht-Kennwortänderung; Hörbücher (normal, nur eBook, privat, Extras). Jeder Fall nennt
+Zweck, Dateien und erwartete Ergebnisse. `test/fixture-archive.test.cjs` baut das Archiv in einem temporären Ordner,
+startet den echten Server darauf (eigener Prozess, freier Port, CSP erzwungen) und prüft die Fälle über die API
+(ca. 2 s, Teil von `npm test`).
+
 Gezielte UI-Vertragstests für die hier beschriebenen Bereiche liegen insbesondere in
 `test/article-editor-ui.test.cjs`, `test/audiobook-extras-ui.test.cjs`,
 `test/filter-aria-menu.test.cjs` und `test/card-preview.test.cjs`.
@@ -1084,7 +1093,10 @@ npm test --prefix tts
 
 | Variable | Default | Zweck |
 |---|---|---|
-| `PORT` | `3000` | HTTP-Port |
+| `PORT` | `3000` | HTTP-Port (`0` = freier Port, z. B. für Tests) |
+| `WWW_DIR` | `./www` | Artikelarchiv (z. B. das Testarchiv) |
+| `AUDIO_DIR` | `./audio` | Audio und Hörbücher |
+| `CONFIG_FILE` | `./config.json` | Einstellungen (Autoren-Priorität, Dubletten, Hörbücher) |
 | `SESSION_SECRET` | zufällig pro Prozess | Signatur der Session-Cookies; bei `NODE_ENV=production` Pflicht (≥ 32 Zeichen, z. B. `openssl rand -hex 32`). Nur mit festem Wert überstehen Anmeldungen einen Neustart |
 | `SESSIONS_FILE` | `sessions.json` im App-Verzeichnis | Gespeicherte Sitzungen (Rechte 0600, gitignored); abgelaufene werden entfernt |
 | `INDEX_CACHE_FILE` | `index-cache.json` im App-Verzeichnis | Index-Cache (Rechte 0600, gitignored); löschen macht nur den nächsten Start langsamer |

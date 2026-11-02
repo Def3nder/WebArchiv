@@ -13,7 +13,7 @@ const { writeFileAtomic } = require('../lib/atomic-file.cjs');
 const { isPathInside, resolveUnder } = require('../lib/archive-files.cjs');
 const {
   INFOGRAPHICS_AUTHOR, infographicYearsFromMigrations, infographicStemExists, infographicAttachmentStem,
-  validateInfographicHeader, buildInfographicMarkdown,
+  validateInfographicHeader, buildInfographicMarkdown, setInstagramPosterMetadata,
 } = require('../lib/infographics.cjs');
 const { finishDuplicateLinks } = require('../lib/duplicates.cjs');
 
@@ -169,11 +169,15 @@ function createDuplicateAdmin({
           moved.push(mapping);
         }
         const mdTarget = path.join(bundle.dir, bundle.stem + '.md');
+        // Der Kopf kommt vom Blogartikel; die Poster-Markierung gehört aber zur Grafik und zieht mit um
+        // (vorher wurde ein Instagram-Poster beim Verknüpfen zur klassischen Infografik).
+        let markdown = buildInfographicMarkdown(blogContent, bundle.ordinal);
+        if (bundle.sourceArticle.instagramPoster) markdown = setInstagramPosterMetadata(markdown, true);
         if (mdMapping) {
           overwrittenMarkdown.push({ path: mdTarget, content: await fs.promises.readFile(mdTarget) });
-          await writeFileAtomic(mdTarget, buildInfographicMarkdown(blogContent, bundle.ordinal));
+          await writeFileAtomic(mdTarget, markdown);
         } else {
-          await fs.promises.writeFile(mdTarget, buildInfographicMarkdown(blogContent, bundle.ordinal), { flag: 'wx' });
+          await fs.promises.writeFile(mdTarget, markdown, { flag: 'wx' });
           created.push(mdTarget);
         }
       }
