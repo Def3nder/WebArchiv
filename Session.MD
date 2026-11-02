@@ -3003,3 +3003,26 @@ abgelaufen …“, Dienste „Fehler“ mit der Zeile, Knopf öffnet die Zentral
 - Gegenprobe: Ohne Warnung für die bald ablaufende Anmeldung scheitern H42 und H45.
 
 **Geprüft:** `npm test`, `npm run test:browser` 17/17. **Deployment:** keins (nur Tests).
+
+## 89. Aktualisierung 02.11.2026 – Scraper-Zentrale, Abschluss (To-Do)
+
+- `To-Do-Liste.md`: Eintrag „Scraper-Zentrale“ abgehakt, mit Verweis.
+- **Ergebnis der Reihe (Abschnitte 84–88):**
+  - `scrape_all.js` schreibt `scraper/scrape-status.json` (letzte 30 Läufe, je Quelle Ergebnis, Warnungen, neue
+    Dateien, Auslöser Web/Cron/von Hand), kennt `"Aktiv": false` und `--source "<Name>"`.
+  - `scraper/scraper-config.json` ist Laufzeitdatei; Vorlage `scraper/example-scraper-config.json`.
+  - Server: `lib/scraper-sources.cjs` (Prüfen, Cookie-Ablauf ohne Werte, Aktionen, Cron),
+    `modules/scraper-center.cjs` (Routen `/api/scraper/*`, `loginState`, `createLoginReminder`).
+  - Oberfläche: Aktionen → *Scraper-Zentrale* (ersetzt „Neue Beiträge scrapen“ und „Scrape-Log anzeigen“); Läufe und
+    Log im bisherigen Scrape-Fenster.
+  - Health-Check: Facebook-Anmeldung unter Dienste; abgelaufen = Fehler mit täglicher Sprechblase.
+  - Tests: `scraper/test/scrape-status.test.js`, `test/scraper-center*.test.cjs`, Fälle H41–H45 im Testarchiv,
+    Browser-Abläufe für Desktop und Handy.
+- **Bewusst offen:** Cookies über die Oberfläche hochladen (die Zentrale zeigt nur Ablauf und Anleitung); „Jetzt
+  scrapen“ ist nur über Tests mit nachgebildeten Läufen geprüft, nicht gegen die Live-Quellen.
+
+**Deployment der ganzen Reihe:** `scraper/scrape_all.js`, `scraper/run-scrape.sh`, `scraper/example-scraper-config.json`,
+`server.js`, `lib/scraper-sources.cjs`, `modules/scraper-center.cjs`, `modules/scrape.cjs`, `modules/health.cjs`,
+`public/index.html`, `public/scraper-center.js`, `public/css/scraper-center.css`, `public/css/dialogs.css`,
+`public/admin-tasks.js`, `public/app.js`, `public/health.js`, `.gitignore`; Dienst neu starten. Vor `git pull` auf dem
+LXC `scraper/scraper-config.json` sichern, falls sie dort von Hand geändert wurde (Abschnitt 85).

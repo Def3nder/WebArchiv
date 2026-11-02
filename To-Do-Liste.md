@@ -4,7 +4,10 @@ To-Do-Liste (abgehakt, wenn erledigt):
 bitte überprüfe "Scrape-Log anzeigen", "Audio-Auftrag anzeigen"
 * [x] Ich würde gerne bei den Hörbüchern den eBook-Reader auch dadurch schließen können,
 dass ich den Bereich ganz oben klicke und halte und nach unten ziehe - geht das ?
-* [ ] **Scraper-Zentrale:** Zentrale Übersicht über alle Scraper-Quellen mit letztem Lauf, Ergebnis, neu gefundenen Artikeln, Fehlern und notwendigen Aktionen.
+* [x] **Scraper-Zentrale:** Zentrale Übersicht über alle Scraper-Quellen mit letztem Lauf, Ergebnis, neu gefundenen Artikeln, Fehlern und notwendigen Aktionen.
+  Seit 02.11.2026 umgesetzt: Aktionen → *Scraper-Zentrale* (je Quelle letzter Lauf, Ergebnis, neue Artikel, Fehler und
+  notwendige Aktionen; Quellen hinzufügen, bearbeiten, pausieren, entfernen und einzeln scrapen; Facebook-Anmeldung
+  im Health-Check). Siehe Session.MD, Abschnitte 84–89.
 * [ ] **Themen-Dossiers:** Artikel, Infografiken, Hörbücher und eigene Notizen zu einem Thema in einer benannten, frei sortierbaren Sammlung zusammenstellen.
 * [ ] **Qualitäts-Dashboard:** Fehlende Bilder oder Metadaten, ungültige Daten, defekte Links, verwaiste Medien und andere Auffälligkeiten im Archiv anzeigen.
 * [ ] **Einschlaf-Timer für Hörbücher:** Wiedergabe nach einer gewählten Zeit oder am Ende des aktuellen Teils automatisch beenden, möglichst mit sanftem Ausblenden.
