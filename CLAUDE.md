@@ -44,8 +44,11 @@ their graphics, access, audiobooks, the infographic badge (`displayAuthor`) — 
 articles, infographics or duplicates gets a case there. `npm run test:browser` (not part of `npm test`, ~10 s) runs
 `test/browser/smoke.test.cjs` with Playwright/Chromium on the same archive: login, tiles and badges, full-text toggle,
 article keys and gallery, bookmarks, duplicate redirect, dialogs on the layer stack (closed dialogs must be
-invisible), audiobook playback; any console error or CSP violation fails. Run it after frontend changes. There is no
-build.
+invisible), audiobook playback; `test/browser/mobile.test.cjs` adds a Pixel-7 touch profile with real swipes via the
+DevTools protocol (swipes beside/inside dialogs must not reach the page, a self-scrolling dialog still scrolls,
+pull-to-close, 16px inputs, iPhone `maximum-scale`). Any console error or CSP violation fails. Run it after frontend
+changes. Chromium is not iOS Safari: auto-zoom and rubber-banding themselves are only checked on a real iPhone. There
+is no build.
 `duplicates-tool/` is a dev-only app (not deployed) that reuses `lib/article-parser.cjs`, `lib/duplicates.cjs`,
 `lib/html-sanitizer.cjs`, `lib/atomic-file.cjs` and the diff bundle — keep it working when changing those.
 `node server.js` is the only runtime; restart it to

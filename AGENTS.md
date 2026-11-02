@@ -37,8 +37,11 @@ their graphics, access, audiobooks, the infographic badge (`displayAuthor`) — 
 articles, infographics or duplicates gets a case there. `npm run test:browser` (not part of `npm test`, ~10 s) runs
 `test/browser/smoke.test.cjs` with Playwright/Chromium on the same archive: login, tiles and badges, full-text toggle,
 article keys and gallery, bookmarks, duplicate redirect, dialogs on the layer stack (closed dialogs must be
-invisible), audiobook playback; any console error or CSP violation fails. Run it after frontend changes. There is no
-build. `node server.js` is the only runtime; restart it to
+invisible), audiobook playback; `test/browser/mobile.test.cjs` adds a Pixel-7 touch profile with real swipes via the
+DevTools protocol (swipes beside/inside dialogs must not reach the page, a self-scrolling dialog still scrolls,
+pull-to-close, 16px inputs, iPhone `maximum-scale`). Any console error or CSP violation fails. Run it after frontend
+changes. Chromium is not iOS Safari: auto-zoom and rubber-banding themselves are only checked on a real iPhone. There
+is no build. `node server.js` is the only runtime; restart it to
 pick up server-code changes. Article changes under `www/` and `audio/` are picked up automatically by the file watcher
 (`lib/archive-watcher.cjs`: 5 s quiet, then a cached rescan via `archiveLock.whenIdle`; off with `WATCH_ARCHIVE=0`),
 otherwise by `SIGHUP`, the admin reindex button (`POST /api/reindex`, reads fresh) or a restart. Frontend changes (`public/`) only need a browser reload;

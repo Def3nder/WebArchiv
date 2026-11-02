@@ -2855,3 +2855,20 @@ verwerfen?“, bei Abbrechen bleiben Editor und Artikel offen (Artikeldatei unve
   Dialog-Ablauf („health-dialog“ sichtbar).
 
 **Geprüft:** dreimal hintereinander 9/9 (8–10 s); `npm test`. **Deployment:** keins (nur Entwicklung).
+
+## 82. Aktualisierung 02.11.2026 – Qualitätssicherung, Schritt 5: Handy-Ansicht im Browser-Test (Review 3.5)
+
+- `test/browser/mobile.test.cjs` (Teil von `npm run test:browser`): Chromium mit Pixel-7-Profil (Touch, 412 px) auf dem
+  Testarchiv. Wischgesten kommen als echte Touch-Ereignisse über das DevTools-Protokoll; ein Listener auf `window`
+  zeigt, ob `layer-stack.js` das `touchmove` gesperrt hat, dazu bleibt `scrollY` unverändert. Sechs Abläufe:
+  Eingabefelder 16 px, Filter klein, keine waagrechte Verschiebung; Kennwort-Dialog (Wischen darunter und darin
+  gesperrt, Dialog bleibt offen); Benutzerverwaltung (Wischen im 19-px-Rand gesperrt); Einstellungen bei 420 px Höhe,
+  wo der Dialog selbst scrollt (daneben gesperrt, darin scrollt er weiter); Nach-unten-Ziehen schließt Health-Check
+  und Artikel; Viewport mit `maximum-scale=1` nur bei iPhone-Kennung.
+- Beobachtet und als gewollt bestätigt: Nach unten wischen auf dem Hintergrund eines Dialogs schließt ihn
+  (Pull-to-close gilt für die ganze Ebene); der Test wischt deshalb nach oben.
+- Gegenprobe: Ohne die Hintergrund-Regel aus Abschnitt 74 scheitert der Einstellungs-Ablauf.
+- Grenze: Chromium ist nicht Safari. Automatisches Vergrößern und Federn von iOS selbst prüft nur ein echtes iPhone;
+  WebKit (Playwright) ist auf Wunsch nachrüstbar.
+
+**Geprüft:** dreimal 6/6 (ca. 10 s), `npm run test:browser` 15/15, `npm test`. **Deployment:** keins.

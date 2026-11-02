@@ -1101,6 +1101,12 @@ Anmelden über den Dialog, Kacheln mit Gruppen und Badges (auch Telegram-Grafik)
 (geschlossene Dialoge unsichtbar, Klick daneben) und Hörbuch abspielen. Jeder Konsolenfehler und jeder CSP-Verstoß
 lässt den Ablauf scheitern.
 
+Dazu kommt die Handy-Ansicht (Pixel-7-Profil mit Touch, echte Wischgesten über das DevTools-Protokoll): Wischen neben
+und in Dialogen erreicht die Seite nicht (auch neben einem Dialog, der selbst scrollt – in ihm bleibt Scrollen
+erlaubt), Nach-unten-Ziehen schließt Health-Check und Artikel, Eingabefelder haben 16 px, die Filterzeile bleibt
+schmal, und mit iPhone-Kennung steht `maximum-scale=1` in der Viewport-Angabe. Chromium ist nicht Safari: Ob iOS selbst
+noch vergrößert oder die Seite federt, zeigt nur ein echtes iPhone.
+
 Gezielte UI-Vertragstests für die hier beschriebenen Bereiche liegen insbesondere in
 `test/article-editor-ui.test.cjs`, `test/audiobook-extras-ui.test.cjs`,
 `test/filter-aria-menu.test.cjs` und `test/card-preview.test.cjs`.
