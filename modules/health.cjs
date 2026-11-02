@@ -126,7 +126,9 @@ function createHealthService({
     const scrapeFailed = (web && !web.running && (web.error || (web.exitCode !== null && web.exitCode !== 0)))
       || (cron && cron.exitCode !== 0);
     const services = {
-      qwen: { reachable: qwenState.reachable, checkedAt: qwenState.checkedAt, level: qwenState.reachable ? 'ok' : 'warning' },
+      // Qwen läuft auf dem Desktop-Rechner und ist abends aus: „nicht erreichbar“ ist ein erwarteter Zustand,
+      // keine Warnung.
+      qwen: { reachable: qwenState.reachable, checkedAt: qwenState.checkedAt, level: 'ok' },
       scrape: { web, cron, level: scrapeFailed ? 'error' : 'ok' },
     };
 
@@ -168,9 +170,12 @@ function installHealthRoutes(app, { requireAdmin, service, eventLog }) {
   });
   app.get('/api/health/details', requireAdmin,
     jsonRoute(() => service.details(), { label: 'Health-Check', fallback: 'Der Health-Check ist fehlgeschlagen.' }));
-  app.get('/api/health/events', requireAdmin, jsonRoute(req => {
+  // Die minütliche Abfrage der Oberfläche bringt auch mit, ob Qwen erreichbar ist (60 s gemerkt):
+  // Ohne Qwen ist der Menüeintrag „TTS-Einstellungen“ gesperrt.
+  app.get('/api/health/events', requireAdmin, jsonRoute(async req => {
     const after = Math.max(0, Number.parseInt(req.query.after, 10) || 0);
-    return eventLog.summary(after);
+    const qwen = await service.qwen();
+    return { ...eventLog.summary(after), services: { qwen: qwen.reachable } };
   }, { label: 'Meldungen' }));
   app.post('/api/health/events/clear', requireAdmin, jsonRoute(() => {
     eventLog.clear();

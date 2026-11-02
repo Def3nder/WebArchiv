@@ -108,6 +108,16 @@ function hideNotice({ markSeen = false } = {}) {
   }
 }
 
+// „TTS-Einstellungen“ lesen und speichern nur über den Qwen-Server: Ist er nicht erreichbar (Desktop-Rechner aus),
+// ist der Menüeintrag gesperrt. Stand aus der minütlichen Abfrage und dem Health-Check-Dialog.
+const $ttsSettingsItem = document.querySelector('[data-action="tts-settings"]');
+function setQwenReachable(reachable) {
+  if (!$ttsSettingsItem || typeof reachable !== 'boolean') return;
+  $ttsSettingsItem.disabled = !reachable;
+  $ttsSettingsItem.toggleAttribute('data-unavailable', !reachable);
+  $ttsSettingsItem.title = reachable ? '' : 'Der Qwen-TTS-Server ist nicht erreichbar (Desktop-Rechner aus).';
+}
+
 async function poll() {
   if (currentUser?.role !== 'admin' || document.visibilityState !== 'visible') return;
   let seen = seenId();
@@ -115,6 +125,7 @@ async function poll() {
     const r = await apiFetch(`/api/health/events?after=${Number.isFinite(seen) ? seen : 0}`);
     if (!r.ok) return;
     const summary = await r.json();
+    setQwenReachable(summary.services?.qwen);
     // Erstes Mal auf diesem Gerät: Bisheriges gilt als gelesen, sonst meldete sich gleich alte Historie.
     if (!Number.isFinite(seen)) {
       rememberSeen(summary.lastId);
@@ -202,7 +213,8 @@ function renderServices(services) {
   const webFailed = scrape.web && !scrape.web.running && (scrape.web.error || (scrape.web.exitCode !== null && scrape.web.exitCode !== 0));
   const cron = scrape.cron ? `${esc(clock(scrape.cron.at))} · Exit ${esc(scrape.cron.exitCode)}` : 'kein Eintrag';
   return section('Dienste', [qwen.level, scrape.level].includes('error') ? 'error' : [qwen.level, scrape.level].includes('warning') ? 'warning' : 'ok', [
-    row('Qwen-TTS', qwen.reachable ? 'erreichbar' : 'nicht erreichbar', qwen.reachable ? null : 'warning'),
+    // Kein Fehler: Qwen läuft auf dem Desktop-Rechner und ist abends aus.
+    row('Qwen-TTS', qwen.reachable ? 'erreichbar' : 'nicht erreichbar (Desktop-Rechner aus)'),
     row('Scrape (Web-UI)', web, webFailed ? 'error' : null),
     row('Scrape (Cron)', cron, scrape.cron && scrape.cron.exitCode !== 0 ? 'error' : null),
   ].join(''));
@@ -249,6 +261,7 @@ async function loadDetails() {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.error || 'Der Health-Check ist fehlgeschlagen.');
     render(data);
+    setQwenReachable(data.services.qwen.reachable);
     // Wer den Dialog gesehen hat, hat die Fehler bis hierher gelesen.
     rememberSeen(data.events.lastId);
     latestSummary = { ...(latestSummary || {}), lastId: data.events.lastId, newErrors: 0 };

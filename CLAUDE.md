@@ -236,7 +236,9 @@ The ⋯ button of the audiobook extras is an inline disclosure (actions row), no
 `public/layer-stack.js` (`WebArchivLayers.open(dialog, { onEscape, onKey, returnFocus })`, `close`, `top`, `count`,
 `setBase` for the tile view's keys, `float` for elements that must stay usable above a layer such as the mini-player).
 The stack owns keyboard order (element → top layer → base), Escape/`cancel`, focus return and blocks touch swipes that
-cannot scroll anything in the top layer (Safari would scroll the page behind). Whoever handles Escape calls
+cannot scroll anything in the top layer or start on its backdrop (Safari would scroll the page behind); only a zoom
+beyond the base scale (Safari's Aa page zoom reports scale > 1 permanently) lets swipes pan. Text inputs are 16px on
+touch devices and `touch-gestures.js` adds `maximum-scale=1` on iOS, so focusing a field never auto-zooms. Whoever handles Escape calls
 `preventDefault()`, otherwise the browser also closes the next dialog. App layers (article view, image fullscreen,
 eBook reader, extras, login, scrape and TTS windows) carry class `app-layer` and use `.open`, never `.hidden`; the
 article view keeps its history depth in `history.state.articleDepth` and closes via `history.go(-depth)`

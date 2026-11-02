@@ -442,7 +442,9 @@ Nach erfolgreicher Synthese liest der Server nur die Markdown-Datei des
 betroffenen Artikels samt ihrer Medienzuordnung neu ein; `www/` und die
 Hörbuchbibliothek werden dafür nicht vollständig gescannt.
 
-Admins öffnen über das Kopfmenü **TTS-Einstellungen** die Stimmenverwaltung.
+Admins öffnen über das Kopfmenü **TTS-Einstellungen** die Stimmenverwaltung. Ist der Qwen-Server nicht
+erreichbar (Desktop-Rechner aus), ist der Eintrag gesperrt („· Qwen aus“; Stand aus der minütlichen
+Health-Abfrage), und die TTS-Routen antworten mit 503 `tts_unreachable` statt einen Fehler zu protokollieren.
 Die dort ausgewählte Qwen-Stimme gilt global für alle danach gestarteten
 Qwen-TTS-Aufträge; laufende Aufträge behalten ihren beim Start übernommenen
 Stimmen-Snapshot. Der WebArchiv-Node.js-Server speichert nur die Stimmen-ID in
@@ -586,7 +588,7 @@ Repository.
 - **Health-Check** (Admin, Aktionen → *Health-Check*): Gesamtampel und je Bereich eine Stufe – Index
   (Bestand, Dubletten verknüpft/offen, letzter Vollindex mit Dauer, Index-Cache mit übernommenen und neu gelesenen Dateien, Datei-Watcher, laufender Auftrag, nicht lesbare
   Dateien), freier Speicher auf den Volumes `www` und `audio` (Warnung unter 10 GB bzw. 5 %, Fehler unter 2 GB
-  bzw. 2 %), Qwen-TTS erreichbar, letzter Scrape über die Web-UI und per Cron, Server (Laufzeit, Node,
+  bzw. 2 %), Qwen-TTS erreichbar (läuft auf dem Desktop-Rechner; „nicht erreichbar“ ist kein Fehler), letzter Scrape über die Web-UI und per Cron, Server (Laufzeit, Node,
   Arbeitsspeicher, CSP) sowie die gesammelten Meldungen (Fehler und Warnungen aus dem Server-Journal,
   `[ERROR]`-Zeilen aus dem Scrape-Log, fehlgeschlagene Cron-Läufe; gleiche Meldungen zusammengefasst, ein Klick
   zeigt Details, „Liste leeren“ nach Rückfrage). Neue **Fehler** melden sich zusätzlich mit einem schwebenden

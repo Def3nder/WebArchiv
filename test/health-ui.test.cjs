@@ -49,6 +49,13 @@ test('health.js: Dialog am Ebenen-Stapel, sicheres Markup, Einhängen über admi
   assert.match(HEALTH, /const previousUserChanged = adminHooks\.userChanged;[\s\S]*?userChanged: user => \{ previousUserChanged\(user\); startPolling\(\); \}/,
     'die Hooks von admin-tasks.js bleiben erhalten');
   assert.match(HEALTH, /actions: \{ \.\.\.adminHooks\.actions, health: openHealthDialog \}/);
+  // Ohne Qwen (Desktop-Rechner aus) ist „TTS-Einstellungen“ gesperrt; Stand aus Abfrage und Dialog.
+  assert.match(HEALTH, /document\.querySelector\('\[data-action="tts-settings"\]'\)/);
+  assert.match(HEALTH, /\$ttsSettingsItem\.disabled = !reachable;/);
+  assert.match(HEALTH, /setQwenReachable\(summary\.services\?\.qwen\);/);
+  assert.match(HEALTH, /setQwenReachable\(data\.services\.qwen\.reachable\);/);
+  assert.match(HEALTH, /row\('Qwen-TTS', qwen\.reachable \? 'erreichbar' : 'nicht erreichbar \(Desktop-Rechner aus\)'\)/, 'keine Warnstufe');
+  assert.match(CSS, /\.header-menu-item\[data-unavailable\]::after \{/);
   assert.match(HEALTH, /rememberSeen\(data\.events\.lastId\);/, 'Dialog gesehen = gelesen');
   assert.match(HEALTH, /run \? row\('Index-Cache', run\.fresh\s*\? `nicht genutzt · \$\{number\(run\.cacheMisses\)\} neu gelesen`\s*: `\$\{number\(run\.cacheHits\)\} übernommen · \$\{number\(run\.cacheMisses\)\} neu gelesen`\) : ''/,
     'Cache als eigene Zeile, nicht im Vollindex');
@@ -69,5 +76,7 @@ test('health.css: Hinweis oben rechts mit rotem Streifen, Ampelfarben aus den Ap
   assert.match(CSS, /\.health-dot-error \{ background: var\(--red\); \}/);
   assert.match(CSS, /\.health-pill \{[^}]*background: var\(--pill\);[^}]*color: var\(--bg\);/, 'Gesamtstufe als gefüllte Plakette');
   assert.match(CSS, /\.health-pill-ok \{ --pill: var\(--author-1\); \}\s*\.health-pill-ok::before \{ content: '✓'; \}/);
+  // Geschlossen muss der Dialog unsichtbar bleiben: display nur über [open] (account-dialog-wide).
+  assert.doesNotMatch(CSS, /\.health-dialog\s*\{[^}]*display/, 'display am geschlossenen Dialog');
   assert.match(CSS, /\.health-grid \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(260px, 1fr\)\);/);
 });

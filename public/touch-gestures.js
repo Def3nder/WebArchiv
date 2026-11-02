@@ -14,6 +14,17 @@ function pinchZoomed() {
   return (window.visualViewport?.scale ?? 1) > baseViewportScale + 0.05;
 }
 
+// iOS Safari vergrößert die Seite beim Antippen eines Felds unter 16px (Filter, Einstellungen) und bleibt so;
+// dann scrollte die Seite hinter Dialogen mit. maximum-scale=1 unterdrückt nur dieses automatische
+// Vergrößern – Pinch-Zoom bleibt auf iOS erlaubt (Safari ignoriert die Angabe für Gesten). Nur auf
+// Apple-Touchgeräten: Android würde damit auch Pinch-Zoom sperren.
+(function preventIosFieldZoom() {
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (ios && meta && !/maximum-scale/.test(meta.content)) meta.content += ', maximum-scale=1';
+}());
+
 function hasActiveSelection() {
   const sel = window.getSelection();
   return !!(sel && !sel.isCollapsed && sel.toString().trim());

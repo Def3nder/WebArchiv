@@ -2689,3 +2689,34 @@ dem Dialog, Innenabstand; Bedingungen für Pflicht-Änderung und Rückfrage); im
 dem Kennwortfeld und Klick in den Innenabstand lassen den Dialog offen, Klick daneben schließt beide Dialoge.
 
 **Deployment:** `public/user-admin.js`, `public/password.js`; Browser neu laden.
+
+## 74. Aktualisierung 02.11.2026 – Health-Dialog, Scrollen hinter Dialogen auf dem iPhone, Qwen aus
+
+- **Health-Check-Dialog stand dauerhaft am Seitenende:** `.health-dialog { display: flex }` hob das „geschlossen =
+  unsichtbar“ des Browsers auf; der leere Dialog lag unter den Kacheln. Das Flex-Layout kommt jetzt nur über
+  `.account-dialog-wide[open]`. Die Details lädt der Dialog weiterhin erst beim Öffnen; minütlich wird nur die kleine
+  Zusammenfassung für die Sprechblase abgefragt.
+- **iPhone: Seite scrollte hinter Dialogen** (Einstellungen, Benutzerverwaltung, Scrape-Log, Audio-Auftrag) und der
+  Kennwortdialog wanderte mit. Ursachen:
+  - `layer-stack.js` gibt Wischen frei, wenn die Seite vergrößert ist (Ausschnitt verschieben), prüfte aber fest
+    `scale > 1.01`. Safari meldet bei Seitenzoom (Aa) dauerhaft mehr als 1, und das Antippen eines Felds unter 16px
+    vergrößert die Seite dauerhaft. Jetzt zählt nur Vergrößerung über die Grundvergrößerung hinaus (wie
+    `pinchZoomed` in `touch-gestures.js`).
+  - Wischen auf dem abgedunkelten Hintergrund (Ziel = Dialog, Punkt außerhalb) wird immer gesperrt, auch wenn der
+    Dialog selbst scrollen kann.
+  - Kein automatisches Vergrößern mehr: Text-Eingabefelder auf Touch-Geräten 16px (`base.css`); Auswahlfelder
+    behalten ihre Größe (Filterzeile), für sie setzt `touch-gestures.js` auf iPhone/iPad `maximum-scale=1` – Safari
+    erlaubt Pinch-Zoom trotzdem, Android bleibt unverändert.
+- **Qwen nicht erreichbar ist kein Fehler** (läuft auf dem Desktop-Rechner, abends aus): Stufe `ok`, Anzeige „nicht
+  erreichbar (Desktop-Rechner aus)“. Die TTS-Routen antworten bei Verbindungsfehlern mit 503 `tts_unreachable` und
+  protokollieren nichts – vorher erzeugte z. B. das Öffnen der TTS-Einstellungen einen Fehler im Health-Check.
+- **„TTS-Einstellungen“ gesperrt ohne Qwen:** `/api/health/events` liefert `services.qwen` (60 s gemerkt); `health.js`
+  setzt den Menüeintrag auf `disabled` mit Zusatz „· Qwen aus“.
+
+**Geprüft:** Tests (`layer-stack`: Hintergrund, Seitenzoom 115 %; `modal-scroll-lock`: 16px-Regel und iOS-Zeile;
+`health`, `health-ui`, `error-responses`: Qwen-Stufe, `services.qwen`, 503 ohne Log). Im Browser: geschlossener
+Health-Dialog `display: none`, Menüeintrag gesperrt bei simuliertem „Qwen aus“, Handyansicht mit 16px-Feldern und
+unveränderter Filterzeile. Das Wischverhalten selbst ist nur auf einem echten iPhone prüfbar.
+
+**Deployment:** `modules/health.cjs`, `tts/jobs.cjs`, `public/layer-stack.js`, `public/touch-gestures.js`,
+`public/health.js`, `public/css/base.css`, `public/css/health.css`; Dienst neu starten, Browser neu laden.

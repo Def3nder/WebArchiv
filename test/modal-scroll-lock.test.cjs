@@ -87,3 +87,13 @@ test('alle modalen Ebenen sperren den Seiten-Scrollbereich bis zum letzten Schli
   assert.equal(classes.has('modal-open'), false);
   assert.equal(classes.has('overlay-open'), false);
 });
+
+test('Touch-Geräte: Eingabefelder mit 16px, Auswahlfelder per maximum-scale – damit iOS nicht vergrößert', () => {
+  // Vergrößert gibt die Ebenen-Verwaltung Wischgesten frei, und die Seite hinter Dialogen scrollte mit.
+  const rule = /@media \(hover: none\) and \(pointer: coarse\) \{\s*input:not\(\[type="checkbox"\], \[type="radio"\], \[type="range"\][^{]*\),\s*textarea \{\s*font-size: 16px !important;\s*\}\s*\}/;
+  assert.match(css, rule);
+  // Auswahlfelder (Filter) behalten ihre Größe; für sie setzt touch-gestures.js auf iOS maximum-scale=1.
+  const gestures = fs.readFileSync(path.join(root, 'public', 'touch-gestures.js'), 'utf8');
+  assert.match(gestures, /const ios = \/iPhone\|iPad\|iPod\/\.test\(navigator\.userAgent\)/);
+  assert.match(gestures, /if \(ios && meta && !\/maximum-scale\/\.test\(meta\.content\)\) meta\.content \+= ', maximum-scale=1';/);
+});

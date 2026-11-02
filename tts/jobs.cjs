@@ -197,11 +197,25 @@ function createTtsJobs({ root, audioRoot, getArticle, canAccessAuthor, busy, rei
   };
 }
 
+// Qwen läuft auf dem Desktop-Rechner und ist abends aus: Verbindungsfehler sind erwartet, kein Fehler fürs Log
+// (der Health-Check meldete sonst jedes Öffnen der TTS-Einstellungen als neuen Fehler).
+const UNREACHABLE_CODES = new Set(['ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN']);
+function qwenUnreachable(error) {
+  return UNREACHABLE_CODES.has(error?.code) || UNREACHABLE_CODES.has(error?.cause?.code)
+    || error?.name === 'AbortError' || error?.name === 'TimeoutError';
+}
+
 function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./provider-config.cjs').providerInfo, voices = null) {
   const route = handler => async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try { await handler(req, res); }
     catch (error) {
+      if (!error.status && qwenUnreachable(error)) {
+        return res.status(503).json({
+          error: 'Der Qwen-TTS-Server ist nicht erreichbar (läuft auf dem Desktop-Rechner). Bitte später erneut versuchen.',
+          code: 'tts_unreachable',
+        });
+      }
       // Nur eigene Fehler (mit status) gehen an die Oberfläche; unerwartete
       // (z. B. nicht erreichbarer TTS-Dienst) landen mit Details im Dienst-Log.
       if (!error.status) {

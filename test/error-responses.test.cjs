@@ -46,6 +46,31 @@ test('TTS-Routen geben bei unerwarteten Fehlern keine internen Meldungen weiter'
   assert.deepEqual(await known.json(), { error: 'Auftrag nicht gefunden.' });
 });
 
+test('TTS-Routen: nicht erreichbarer Qwen-Server ist 503 mit Code und landet nicht als Fehler im Log', async t => {
+  const ttsApp = express();
+  const allow = (req, _res, next) => { req.session = { user: { role: 'admin', email: 'a@example.test' } }; next(); };
+  const refused = Object.assign(new Error('connect ECONNREFUSED 192.168.1.20:8765'), { code: 'ECONNREFUSED' });
+  const timeout = Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+  let next = refused;
+  const voices = { getSettings: async () => { throw next; } };
+  installTtsRoutes(ttsApp, allow, {}, async () => ({ providers: [] }), voices);
+  const base = await listen(t, ttsApp);
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    for (const error of [refused, timeout]) {
+      next = error;
+      const res = await fetch(`${base}/api/tts/settings`);
+      assert.equal(res.status, 503, error.message);
+      const body = await res.json();
+      assert.equal(body.code, 'tts_unreachable');
+      assert.match(body.error, /Qwen-TTS-Server ist nicht erreichbar/);
+    }
+    assert.equal(logged.length, 0, 'erwarteter Zustand (Desktop-Rechner aus), kein Fehler im Health-Check');
+  } finally { console.error = original; }
+});
+
 test('Anmelde- und Rechtefehler haben deutsche Meldungen und feste Codes', async t => {
   const base = await listen(t, app);
   const anonymous = await fetch(`${base}/api/bookmarks/x`, { method: 'PUT' });

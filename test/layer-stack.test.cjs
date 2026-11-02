@@ -341,3 +341,45 @@ test('Wischen ohne Scrollbereich in der obersten Ebene erreicht die Seite nicht;
   Object.assign(list, { scrollHeight: 300 });
   assert.equal(swipe(row), true, 'Scrollbereich ohne Überlauf zählt nicht');
 });
+
+test('Wischen auf dem Hintergrund neben einem scrollbaren Dialog erreicht die Seite nicht', () => {
+  const { doc, layers, dialog } = setup();
+  const styles = new Map();
+  doc.defaultView = { getComputedStyle: node => styles.get(node) || {}, visualViewport: { scale: 1 } };
+  const swipe = (target, point) => {
+    doc.body.dispatchEvent(Object.assign(new FakeEvent('touchstart'), { touches: [point] }));
+    const event = new FakeEvent('touchmove', { touches: [point], cancelable: true });
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  // Der Dialog selbst scrollt (overflow: auto, Inhalt höher als der Dialog).
+  const users = dialog('user-admin');
+  Object.assign(users, { scrollHeight: 1200, clientHeight: 700 });
+  users.getBoundingClientRect = () => ({ left: 20, right: 355, top: 16, bottom: 796 });
+  styles.set(users, { overflowY: 'auto' });
+  layers.open(users);
+  assert.equal(swipe(users, { clientX: 8, clientY: 400 }), true, 'daneben (Ziel ist der Dialog, Punkt außerhalb)');
+  assert.equal(swipe(users, { clientX: 100, clientY: 400 }), false, 'im Dialog: er scrollt selbst');
+  doc.defaultView.visualViewport.scale = 2;
+  assert.equal(swipe(users, { clientX: 8, clientY: 400 }), false, 'vergrößert: Ausschnitt verschieben bleibt möglich');
+});
+
+test('Seitenzoom in Safari (Aa, Skalierung dauerhaft über 1) gilt nicht als vergrößert', () => {
+  const { doc, layers, dialog } = setup();
+  doc.defaultView = { getComputedStyle: () => ({}), visualViewport: { scale: 1.15 } };
+  const swipe = target => {
+    doc.body.dispatchEvent(new FakeEvent('touchstart'));
+    const event = new FakeEvent('touchmove', { touches: [{}], cancelable: true });
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const settings = dialog('settings');
+  layers.open(settings);
+  const field = new Node('select');
+  settings.append(field);
+  assert.equal(swipe(field), true, 'Grundvergrößerung 115 %: Wischen bleibt gesperrt');
+  doc.defaultView.visualViewport.scale = 1.6;
+  assert.equal(swipe(field), false, 'darüber hinaus gezoomt: Ausschnitt verschieben');
+  doc.defaultView.visualViewport.scale = 1.15;
+  assert.equal(swipe(field), true);
+});

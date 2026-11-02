@@ -138,7 +138,8 @@ test('Details: Qwen 60 s gemerkt, Watcher, nicht lesbare Dateien, Scrape-Fehler,
   setClock(NOW + 61 * 1000);
   state.qwen = false;
   let details = await service.details();
-  assert.deepEqual([state.qwenCalls, details.services.qwen.level], [2, 'warning']);
+  assert.deepEqual([state.qwenCalls, details.services.qwen.reachable, details.services.qwen.level], [2, false, 'ok'],
+    'Qwen aus (Desktop-Rechner) ist erwartet, keine Warnung');
   assert.equal(details.index.level, 'warning', 'Watcher sollte laufen, läuft aber nicht');
   watcherState = { enabled: false, active: false, roots: 0, directories: 0 };
   assert.equal((await service.details()).index.level, 'ok', 'bewusst abgeschaltet');
@@ -180,6 +181,7 @@ test('Routen: öffentlich nur der Status, Details und Meldungen nur für Admins'
   assert.equal((await call(`/api/health/events?after=${seen}`)).status, 403);
   res = await call(`/api/health/events?after=${seen}`, { admin: true });
   assert.deepEqual([res.data.newErrors, res.data.latest.message, res.data.lastId], [1, 'Zweiter Fehler', eventLog.lastId]);
+  assert.deepEqual(res.data.services, { qwen: true }, 'für den Menüeintrag „TTS-Einstellungen“');
   res = await call('/api/health/events?after=abc', { admin: true });
   assert.equal(res.data.newErrors, 2, 'ungültiges after zählt ab 0');
 

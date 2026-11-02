@@ -171,19 +171,42 @@
       return false;
     }
 
+    // Auf dem abgedunkelten Hintergrund (::backdrop) ist das Ziel der Dialog selbst; zählt er als
+    // Scrollbereich, ging das Wischen daneben sonst an die Seite (iPhone: Benutzerverwaltung, Scrape-Log).
+    function onBackdrop(dialog, point) {
+      if (!point || typeof dialog.getBoundingClientRect !== 'function') return false;
+      const rect = dialog.getBoundingClientRect();
+      return point.clientX < rect.left || point.clientX > rect.right || point.clientY < rect.top || point.clientY > rect.bottom;
+    }
+
+    // Vergrößert (Pinch oder Antippen eines kleinen Felds): Der Finger verschiebt den sichtbaren Ausschnitt.
+    // Gemessen ab der Grundvergrößerung: Safari meldet bei Seitenzoom (Aa, z. B. 115 %) dauerhaft eine
+    // Skalierung über 1 – mit festem „> 1“ ging dann jedes Wischen an die Seite hinter dem Dialog.
+    let baseScale = null;
+    function zoomed() {
+      const scale = doc.defaultView?.visualViewport?.scale ?? 1;
+      if (baseScale === null || scale < baseScale) baseScale = scale;
+      return scale > baseScale + 0.05;
+    }
+    doc.defaultView?.visualViewport?.addEventListener?.('resize', zoomed);
+
     let touchBlocked = null;
+    let touchStart = null;
     function onTouchmove(event) {
       if (touchBlocked === null) {
         const entry = entries.length ? top() : null;
         touchBlocked = !!entry && event.touches?.length === 1
-          // Vergrößert: Der Finger verschiebt den sichtbaren Ausschnitt.
-          && !((doc.defaultView?.visualViewport?.scale ?? 1) > 1.01)
+          && !zoomed()
           && event.target?.type !== 'range'
-          && !scrollsWithin(event.target, entry.dialog);
+          && ((event.target === entry.dialog && onBackdrop(entry.dialog, touchStart || event.touches[0]))
+            || !scrollsWithin(event.target, entry.dialog));
       }
       if (touchBlocked && event.cancelable !== false) event.preventDefault();
     }
-    doc.addEventListener('touchstart', () => { touchBlocked = null; }, { passive: true });
+    doc.addEventListener('touchstart', event => {
+      touchBlocked = null;
+      touchStart = event.touches?.[0] || null;
+    }, { passive: true });
     doc.addEventListener('touchmove', onTouchmove, { passive: false });
 
     return {

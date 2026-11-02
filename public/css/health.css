@@ -78,9 +78,17 @@
   text-align: center;
 }
 .health-menu-count[hidden] { display: none; }
+/* „TTS-Einstellungen“ ohne erreichbaren Qwen-Server (health.js setzt disabled und data-unavailable). */
+.header-menu-item[data-unavailable]::after {
+  content: " · Qwen aus";
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
 
 /* ── Dialog ── */
-.health-dialog { width: min(760px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 12px; }
+/* Kein display hier: Das schaltet das "geschlossen = unsichtbar" des Browsers ab, dann stand der leere
+   Dialog am Seitenende. Das Flex-Layout setzt .account-dialog-wide[open]. */
+.health-dialog { width: min(760px, calc(100vw - 32px)); }
 .health-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .health-heading > div { margin-right: auto; }
 .health-checked { font-size: 0.75rem; color: var(--text-muted); }

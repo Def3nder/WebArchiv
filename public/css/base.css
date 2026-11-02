@@ -221,3 +221,16 @@ select { font: inherit; color: inherit; }
   flex-shrink: 0;
 }
 
+
+/* iOS Safari vergrößert die Seite beim Antippen eines Eingabefelds unter 16px und bleibt vergrößert; dann
+   scrollte die Seite hinter Dialogen mit (Suchfeld 0.9rem, Kennwortfelder 0.95rem). Auf Touch-Geräten daher
+   Text-Eingabefelder mit 16px (!important, weil sie ihre Größe mit Klassen und IDs setzen). Auswahlfelder
+   behalten ihre Größe (die Filter passen sonst nicht in die Zeile); für sie unterdrückt touch-gestures.js das
+   automatische Vergrößern auf iOS per maximum-scale. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"],
+    [type="button"], [type="submit"], [type="reset"], [type="image"], [type="hidden"]),
+  textarea {
+    font-size: 16px !important;
+  }
+}
