@@ -2838,3 +2838,20 @@ verwerfen?“, bei Abbrechen bleiben Editor und Artikel offen (Artikeldatei unve
 - Gegenprobe: Mit absichtlich falscher Badge-Logik schlagen G39 und G40 fehl.
 
 **Geprüft:** `npm test`. **Deployment:** keins (nur Tests).
+
+## 81. Aktualisierung 02.11.2026 – Qualitätssicherung, Schritt 4: Browser-Smoke-Test (Review 3.5)
+
+- Neues Entwicklungs-Paket `playwright@1.61.1` (dieselbe Version wie im Scraper, nutzt die vorhandenen Browser; im
+  Lockfile kamen nur `playwright`, `playwright-core` und das macOS-only `fsevents` hinzu).
+- `test/browser/smoke.test.cjs` (`npm run test:browser`, nicht in `npm test`): Desktop-Chromium auf dem Testarchiv
+  (`startFixtureArchive`, CSP erzwungen), neun Abläufe – Gast (nur öffentliche Autoren, Badge „Infografiken“),
+  Anmelden über den Dialog, Kacheln (Gruppe B09 mit drei Bildern, G40-Kachel mit Badge „Telegram“), Volltext-Lupe
+  (Treffer innerhalb eines Worts), Artikelansicht (Galerie, Bild-Tasten scrollen, ←/→, Vollbild, Escape nur oberste
+  Ebene), Lesezeichen setzen und filtern, Direktlink auf die verknüpfte Dublette öffnet den Blog, Dialoge
+  (Einstellungen, Kennwort mit Klick daneben, Benutzerverwaltung, Health-Check; danach leerer Ebenen-Stapel und
+  alle geschlossenen Dialoge unsichtbar), Hörbuch abspielen. Jeder Konsolenfehler/CSP-Verstoß lässt den Ablauf
+  scheitern; jeder Ablauf setzt Suche/Filter selbst und beginnt ohne offene Ebene. Fehlt Chromium: übersprungen.
+- Gegenprobe: Mit dem alten Health-Dialog-Fehler (`display: flex` am geschlossenen Dialog) scheitert der
+  Dialog-Ablauf („health-dialog“ sichtbar).
+
+**Geprüft:** dreimal hintereinander 9/9 (8–10 s); `npm test`. **Deployment:** keins (nur Entwicklung).

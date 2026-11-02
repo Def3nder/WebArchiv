@@ -1088,6 +1088,19 @@ npm run dev:fixture -- --keep  # Ordner nach Strg+C behalten
 
 Die Kennwörter sind Testwerte und gelten nur für den jeweiligen Lauf; jedes Bild trägt seine Fallnummer.
 
+**Browser-Smoke-Test** (nicht Teil von `npm test`, ca. 10 s, braucht Chromium – fehlt es, wird übersprungen;
+nachinstallieren mit `npx playwright install chromium`):
+
+```bash
+npm run test:browser
+```
+
+Playwright öffnet die App in Chromium auf dem Testarchiv (CSP erzwungen) und spielt neun Abläufe durch: Gastansicht,
+Anmelden über den Dialog, Kacheln mit Gruppen und Badges (auch Telegram-Grafik), Volltext-Lupe, Artikelansicht
+(Bild-Tasten, ←/→, Vollbild, Escape), Lesezeichen, Direktlink auf eine verknüpfte Dublette, Dialoge am Ebenen-Stapel
+(geschlossene Dialoge unsichtbar, Klick daneben) und Hörbuch abspielen. Jeder Konsolenfehler und jeder CSP-Verstoß
+lässt den Ablauf scheitern.
+
 Gezielte UI-Vertragstests für die hier beschriebenen Bereiche liegen insbesondere in
 `test/article-editor-ui.test.cjs`, `test/audiobook-extras-ui.test.cjs`,
 `test/filter-aria-menu.test.cjs` und `test/card-preview.test.cjs`.
