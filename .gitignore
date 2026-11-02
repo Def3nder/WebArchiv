@@ -55,6 +55,11 @@ tts-settings.json
 /config.json
 /public-directories.txt
 
+
+# Claude Settings #
+###################
+/.claude/settings.local.json
+
 # temporary files #
 ###################
 /archiv/
