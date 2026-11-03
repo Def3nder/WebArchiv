@@ -218,6 +218,78 @@ describe('Handy-Ansicht (Chromium, Pixel 7, Touch)', () => {
     await waitOpen('scraper-center', false);
   });
 
+  // Zwei Finger von (x ± from) nach (x ± to) auf gleicher Höhe.
+  async function pinch(x, y, from, to, steps = 8) {
+    const points = d => [{ x: x - d, y, id: 1, radiusX: 4, radiusY: 4, force: 1 }, { x: x + d, y, id: 2, radiusX: 4, radiusY: 4, force: 1 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: points(from) });
+    for (let i = 1; i <= steps; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: points(from + ((to - from) * i) / steps) });
+      await page.waitForTimeout(16);
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+  const tap = async (x, y) => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1, radiusX: 4, radiusY: 4, force: 1 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  };
+
+  run('Bild-Extra eines Hörbuchs: Doppeltippen und Pinch zoomen, ein Finger verschiebt, Tippen schließt', async () => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(() => {
+      const select = document.getElementById('filter-author');
+      select.value = 'Hörbücher';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.locator('.card[data-id="Hörbücher/Mit Extras"]').tap();
+    await page.locator('[data-book-extras]').tap();
+    await page.locator('#book-extras .book-extra-card img').tap();
+    await waitOpen('img-fullscreen');
+    await page.waitForFunction(() => document.getElementById('img-fullscreen-img').complete);
+    const zoom = () => page.evaluate(() => {
+      const img = document.getElementById('img-fullscreen-img');
+      const m = img.style.transform.match(/translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)/);
+      return m ? { x: Number(m[1]), y: Number(m[2]), scale: Number(m[3]) } : { x: 0, y: 0, scale: 1 };
+    });
+    const box = await page.locator('#img-fullscreen-img').boundingBox();
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('img-fullscreen')).touchAction), 'pan-y',
+      'Seiten-Zoom des Browsers aus, Zoomen übernimmt die Vollansicht');
+
+    // Doppeltippen links neben der Mitte: vergrößert dort, die Ansicht bleibt offen.
+    await tap(cx - 60, cy);
+    await page.waitForTimeout(80);
+    await tap(cx - 60, cy);
+    await page.waitForTimeout(400);
+    let state = await zoom();
+    assert.equal(state.scale, 2, JSON.stringify(state));
+    assert.ok(state.x > 0, `Stelle unter dem Finger bleibt: ${JSON.stringify(state)}`);
+    assert.equal(await page.evaluate(() => document.getElementById('img-fullscreen').open), true, 'Doppeltippen schließt nicht');
+
+    // Ein Finger verschiebt (nicht blättern, nicht schließen), höchstens bis zum Bildrand.
+    await swipe(cx, cy, cx - 400, cy);
+    state = await zoom();
+    assert.ok(Math.abs(state.x + box.width / 2) < 1, `bis zum rechten Bildrand: ${JSON.stringify(state)}`);
+    assert.equal(await page.evaluate(() => document.getElementById('img-fullscreen').open), true);
+
+    // Doppeltippen zurück, dann stufenlos mit zwei Fingern.
+    await tap(cx, cy);
+    await page.waitForTimeout(80);
+    await tap(cx, cy);
+    await page.waitForTimeout(400);
+    assert.equal((await zoom()).scale, 1);
+    await pinch(cx, cy, 40, 100);
+    state = await zoom();
+    assert.ok(state.scale > 2.2 && state.scale < 2.8, `Pinch ×2,5: ${JSON.stringify(state)}`);
+    await pinch(cx, cy, 100, 20);
+    assert.equal((await zoom()).scale, 1, 'Zusammenziehen geht zurück auf 1');
+
+    // Einfaches Tippen schließt (nach der Wartezeit fürs Doppeltippen).
+    await tap(cx, cy);
+    await waitOpen('img-fullscreen', false);
+    await page.keyboard.press('Escape');
+  });
+
   run('iPhone-Kennung: Viewport mit maximum-scale=1 (kein Auto-Zoom), Android ohne', async () => {
     const meta = target => target.evaluate(() => document.querySelector('meta[name="viewport"]').content);
     assert.doesNotMatch(await meta(page), /maximum-scale/, 'Android: Pinch-Zoom bleibt frei');

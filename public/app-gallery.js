@@ -35,35 +35,59 @@ function resetImageZoom() {
 
 function applyImageZoom() {
   const img = document.getElementById('img-fullscreen-img');
+  // Kein Nachziehen (z. B. vom Nach-unten-Ziehen übrig): Zoom und Verschieben folgen dem Finger direkt.
+  img.style.transition = 'none';
   img.style.transform = `translate(${imageZoom.x}px, ${imageZoom.y}px) scale(${imageZoom.scale})`;
   img.classList.toggle('is-zoomed', imageZoom.scale > 1);
+  document.getElementById('img-fullscreen').classList.toggle('is-zoomed', imageZoom.scale > 1);
 }
 
-function clampImagePan() {
+// Lage des Bilds ohne Zoom (Bildschirmkoordinaten). Auf dem Handy steht es oben in der
+// scrollbaren Vollansicht, auf dem Desktop mittig – deshalb gemessen statt angenommen.
+function imageBaseRect() {
   const img = document.getElementById('img-fullscreen-img');
   const prevTransform = img.style.transform;
   img.style.transform = '';
   const baseRect = img.getBoundingClientRect();
   img.style.transform = prevTransform;
+  return baseRect;
+}
 
-  const scaledWidth = baseRect.width * imageZoom.scale;
-  const scaledHeight = baseRect.height * imageZoom.scale;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  const maxX = Math.max(0, (scaledWidth - viewportWidth) / 2);
-  const maxY = Math.max(0, (scaledHeight - viewportHeight) / 2);
+// Größer als der Bildschirm: kein leerer Rand neben dem Bild. Kleiner: Auf dem Desktop
+// bleibt es mittig, auf dem Handy innerhalb des Bildschirms.
+function clampImageAxis(offset, start, size, viewport, center) {
+  const scaled = size * imageZoom.scale;
+  const middle = start + size / 2;
+  if (scaled <= viewport && center) return viewport / 2 - middle;
+  const a = scaled / 2 - middle;
+  const b = viewport - scaled / 2 - middle;
+  return Math.min(Math.max(a, b), Math.max(Math.min(a, b), offset));
+}
 
-  if (scaledWidth <= viewportWidth) {
-    imageZoom.x = 0;
-  } else {
-    imageZoom.x = Math.min(maxX, Math.max(-maxX, imageZoom.x));
+function clampImagePan() {
+  const baseRect = imageBaseRect();
+  const center = isDesktopPointer();
+  imageZoom.x = clampImageAxis(imageZoom.x, baseRect.left, baseRect.width, window.innerWidth, center);
+  imageZoom.y = clampImageAxis(imageZoom.y, baseRect.top, baseRect.height, window.innerHeight, center);
+}
+
+// Zoomen um einen Bildschirmpunkt: Die Bildstelle unter (clientX, clientY) bleibt dort.
+// from = Zustand bei Gestenbeginn (Pinch: Ausgangsmaßstab und -punkt), sonst der aktuelle.
+function zoomImageAt(nextScale, clientX, clientY, from = { ...imageZoom, clientX, clientY }) {
+  const scale = Math.min(IMAGE_ZOOM_MAX, Math.max(IMAGE_ZOOM_MIN, nextScale));
+  if (scale <= IMAGE_ZOOM_MIN) {
+    resetImageZoom();
+    return;
   }
-
-  if (scaledHeight <= viewportHeight) {
-    imageZoom.y = 0;
-  } else {
-    imageZoom.y = Math.min(maxY, Math.max(-maxY, imageZoom.y));
-  }
+  const baseRect = imageBaseRect();
+  const middleX = baseRect.left + baseRect.width / 2;
+  const middleY = baseRect.top + baseRect.height / 2;
+  const ratio = scale / from.scale;
+  imageZoom.scale = scale;
+  imageZoom.x = clientX - middleX - (from.clientX - middleX - from.x) * ratio;
+  imageZoom.y = clientY - middleY - (from.clientY - middleY - from.y) * ratio;
+  clampImagePan();
+  applyImageZoom();
 }
 
 function zoomImageCentered(nextScale) {

@@ -573,11 +573,15 @@ const CASES = [
   },
   {
     id: 'F38', title: 'Hörbuch mit Extras',
-    files: [sound('audio/Hoerbuecher/Mit Extras/01.mp3'), raw('audio/Hoerbuecher/Mit Extras/extras/Kapitel 1.md', `# Kapitel 1\n\n${text(38, 1)}\n`)],
+    files: [sound('audio/Hoerbuecher/Mit Extras/01.mp3'), raw('audio/Hoerbuecher/Mit Extras/extras/Kapitel 1.md', `# Kapitel 1\n\n${text(38, 1)}\n`),
+      // Bild-Extra: öffnet die Bildvollansicht (Zoomen per Pinch/Doppeltippen im Handy-Browsertest).
+      { path: 'audio/Hoerbuecher/Mit Extras/extras/Karte.png', kind: 'image', label: 'F38 Karte' }],
     async check(ctx) {
       const book = (await ctx.books('member')).find(item => item.title === 'Mit Extras');
       const res = await ctx.as('member').get(`/api/audiobooks/${encodeURI(book.id)}`);
       assert.equal(res.data.hasExtras, true);
+      const extras = await ctx.as('member').get(`/api/audiobook-extras/${book.id.split('/').map(encodeURIComponent).join('/')}`);
+      assert.deepEqual(extras.data.extras.map(extra => extra.type).sort(), ['image', 'markdown']);
     },
   },
 

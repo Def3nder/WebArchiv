@@ -2053,13 +2053,92 @@ const $imgFullscreenImg = document.getElementById('img-fullscreen-img');
 $imgFullscreen.addEventListener('click', e => {
   if (e.target === $imgFullscreen) closeImageFullscreen();
 });
+// Touch: Antippen schließt erst, wenn kein zweites Tippen (Doppeltippen = Zoom) folgt,
+// und nicht, solange das Bild vergrößert ist.
+let imageTapCloseTimer = null;
+const imageTouch = { mode: null, moved: false, start: null, distance: 0, lastTap: null };
+const IMAGE_DOUBLE_TAP_MS = 300;
 $imgFullscreenImg.addEventListener('click', e => {
   if (isDesktopPointer()) {
     e.stopPropagation();
     return;
   }
-  closeImageFullscreen();
+  clearTimeout(imageTapCloseTimer);
+  if (imageZoom.scale > 1 || imageTouch.moved) return;
+  imageTapCloseTimer = setTimeout(() => {
+    if (imageZoom.scale <= 1) closeImageFullscreen();
+  }, IMAGE_DOUBLE_TAP_MS);
 });
+
+// Touch-Zoom in der Vollansicht: zwei Finger zoomen stufenlos um ihre Mitte, Doppeltippen
+// vergrößert an der Stelle (noch einmal: zurück), ein Finger verschiebt das vergrößerte Bild.
+// Der Seiten-Zoom des Browsers ist hier aus (touch-action in detail.css; in der iOS-App sperrt
+// ihn ohnehin maximum-scale=1 aus touch-gestures.js).
+const touchMiddle = (a, b) => ({ clientX: (a.clientX + b.clientX) / 2, clientY: (a.clientY + b.clientY) / 2 });
+$imgFullscreen.addEventListener('touchstart', e => {
+  if (e.target.closest?.('a, label, input')) return;
+  if (e.touches.length === 1) imageTouch.moved = false;
+  if (e.touches.length === 2) {
+    const [a, b] = e.touches;
+    imageTouch.mode = 'pinch';
+    imageTouch.moved = true;
+    imageTouch.distance = touchDistance(a, b) || 1;
+    imageTouch.start = { ...imageZoom, ...touchMiddle(a, b) };
+    clearTimeout(imageTapCloseTimer);
+  } else if (e.touches.length === 1 && imageZoom.scale > 1) {
+    imageTouch.mode = 'pan';
+    imageTouch.start = { ...imageZoom, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+  } else {
+    imageTouch.mode = null;
+  }
+}, { passive: true });
+$imgFullscreen.addEventListener('touchmove', e => {
+  if (!imageTouch.mode) return;
+  if (e.cancelable !== false) e.preventDefault();
+  const start = imageTouch.start;
+  if (imageTouch.mode === 'pinch' && e.touches.length >= 2) {
+    const [a, b] = e.touches;
+    const middle = touchMiddle(a, b);
+    zoomImageAt(start.scale * touchDistance(a, b) / imageTouch.distance, middle.clientX, middle.clientY, start);
+  } else if (imageTouch.mode === 'pan' && e.touches.length === 1) {
+    const dx = e.touches[0].clientX - start.clientX;
+    const dy = e.touches[0].clientY - start.clientY;
+    if (Math.hypot(dx, dy) > 6) imageTouch.moved = true;
+    imageZoom.x = start.x + dx;
+    imageZoom.y = start.y + dy;
+    clampImagePan();
+    applyImageZoom();
+  }
+}, { passive: false });
+$imgFullscreen.addEventListener('touchend', e => {
+  // Nach dem Pinch mit dem verbliebenen Finger weiterschieben.
+  if (e.touches.length === 1 && imageZoom.scale > 1) {
+    imageTouch.mode = 'pan';
+    imageTouch.start = { ...imageZoom, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+    return;
+  }
+  if (e.touches.length) return;
+  imageTouch.mode = null;
+  const touch = e.changedTouches[0];
+  if (imageTouch.moved || !touch || e.target !== $imgFullscreenImg) {
+    imageTouch.lastTap = null;
+    return;
+  }
+  const last = imageTouch.lastTap;
+  const now = Date.now();
+  if (last && now - last.time < IMAGE_DOUBLE_TAP_MS
+      && Math.hypot(touch.clientX - last.clientX, touch.clientY - last.clientY) < 30) {
+    imageTouch.lastTap = null;
+    clearTimeout(imageTapCloseTimer);
+    // Kein zweiter click (würde das Schließen planen) und kein Doppeltipp-Zoom des Browsers.
+    if (e.cancelable !== false) e.preventDefault();
+    if (imageZoom.scale > 1) resetImageZoom();
+    else zoomImageAt(IMAGE_DBLCLICK_ZOOM, touch.clientX, touch.clientY);
+    return;
+  }
+  imageTouch.lastTap = { time: now, clientX: touch.clientX, clientY: touch.clientY };
+}, { passive: false });
+$imgFullscreen.addEventListener('touchcancel', () => { imageTouch.mode = null; }, { passive: true });
 $imgFullscreenImg.addEventListener('wheel', e => {
   if (!isDesktopPointer()) return;
   e.preventDefault();
@@ -2191,7 +2270,8 @@ $imgFs.addEventListener('touchstart', e => {
   fsTouchStartMulti = e.touches.length > 1;
 }, { passive: true });
 $imgFs.addEventListener('touchend', e => {
-  if (fsTouchStartMulti) return;
+  // Vergrößert oder gerade gezoomt: Der Finger verschiebt das Bild, er blättert nicht.
+  if (fsTouchStartMulti || imageZoom.scale > 1 || imageTouch.moved) return;
   if (hasActiveSelection()) return;
   if (Date.now() - fsTouchStartTime > SWIPE_MAX_DURATION) return;
   const dx = e.changedTouches[0].clientX - fsTouchStartX;

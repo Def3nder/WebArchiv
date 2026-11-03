@@ -270,7 +270,11 @@ html.modal-open body {
   overscroll-behavior-y: contain;
   cursor: zoom-out;
   animation: fadeIn .2s ease;
+  /* Zoomen (Pinch, Doppeltippen) übernimmt app.js für das Bild, nicht der Browser für die Seite;
+     Scrollen hoher Infografiken bleibt. Vergrößert verschiebt der Finger nur das Bild. */
+  touch-action: pan-y;
 }
+.img-fullscreen.is-zoomed { touch-action: none; }
 .img-fullscreen img {
   display: block;
   width: 100%;
