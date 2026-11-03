@@ -9,7 +9,7 @@ dass ich den Bereich ganz oben klicke und halte und nach unten ziehe - geht das 
   notwendige Aktionen; Quellen hinzufügen, bearbeiten, pausieren, entfernen und einzeln scrapen; Facebook-Anmeldung
   im Health-Check). Siehe Session.MD, Abschnitte 84–89.
 * [ ] **Themen-Dossiers:** Artikel, Infografiken, Hörbücher und eigene Notizen zu einem Thema in einer benannten, frei sortierbaren Sammlung zusammenstellen.
-* [ ] **Qualitäts-Dashboard:** Fehlende Bilder oder Metadaten, ungültige Daten, defekte Links, verwaiste Medien und andere Auffälligkeiten im Archiv anzeigen.
+* [x] **Qualitäts-Dashboard:** Fehlende Bilder oder Metadaten, ungültige Daten, defekte Links, verwaiste Medien und andere Auffälligkeiten im Archiv anzeigen.
 * [ ] **Einschlaf-Timer für Hörbücher:** Wiedergabe nach einer gewählten Zeit oder am Ende des aktuellen Teils automatisch beenden, möglichst mit sanftem Ausblenden.
 * [ ] **Gesamtdauer und verbleibende Hörzeit eines Buches:** Laufzeiten aller Teile erfassen und im Hörbuch-Player die Gesamtdauer sowie die verbleibende Zeit anzeigen.
 * [x] **Dublettenerkennung für Blog und Facebook:** Gleiche oder sehr ähnliche Artikel aus Blog und Facebook erkennen und gemeinsam anzeigen. Telegram bleibt dabei unberücksichtigt. Für gefundene Dubletten Aktionen wie Prüfen, Verknüpfen oder Ignorieren anbieten.
