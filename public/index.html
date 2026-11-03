@@ -351,11 +351,13 @@
       <span id="tts-activity" class="login-btn-spinner" hidden aria-label="Auftrag läuft"></span>
       <pre id="tts-output" class="scrape-output" tabindex="0"></pre>
       <p class="scrape-status">Schließen lässt den Auftrag weiterlaufen. Bereits angefallene API-Kosten bleiben auch bei Abbruch oder Fehler bestehen.</p>
+      <!-- Fertige MP3 im Dialog anhören: kein neues Fenster (in der Home-Bildschirm-App ohne Weg zurück). -->
+      <audio id="tts-player" class="tts-player" controls preload="metadata" hidden></audio>
       <div class="tts-buttons">
         <button type="button" id="tts-cancel" class="detail-cat-pill" disabled>Auftrag abbrechen</button>
         <button type="button" id="tts-refresh" class="detail-cat-pill">Status aktualisieren</button>
         <button type="button" id="tts-reindex" class="detail-cat-pill" hidden>Archiv neu einlesen</button>
-        <a id="tts-audio" class="detail-cat-pill" target="_blank" rel="noopener" hidden>MP3 anhören / herunterladen</a>
+        <a id="tts-download" class="detail-cat-pill" download hidden>MP3 herunterladen</a>
       </div>
     </div>
   </dialog>

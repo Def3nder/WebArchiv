@@ -25,6 +25,8 @@
 
 /* Scrape-Ergebnis Modal */
 .tts-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.tts-player { display: block; width: 100%; margin-top: 12px; }
+.tts-player[hidden] { display: none; }
 #tts-overlay .scrape-panel { max-height: 94vh; overflow: auto; }
 #tts-output { max-height: 40vh; }
 #tts-article { overflow-wrap: anywhere; margin-bottom: 12px; }

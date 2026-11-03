@@ -253,6 +253,33 @@ describe('Browser-Smoke-Test (Chromium, Testarchiv)', () => {
     assert.deepEqual(await closedDialogsInvisible(), []);
   });
 
+  run('Audio-Auftrag fertig: MP3 im Dialog anhören und herunterladen, Dialog schließt', async () => {
+    // Fertiger Auftrag ohne TTS-Dienst: Status-Antworten vorgeben, die MP3 ist eine echte Datei des Testarchivs.
+    const audioUrl = '/files/Ralf/2026/2026-03-03_audio-daneben.mp3';
+    await page.route('**/api/tts/latest', route => route.fulfill({ json: { jobId: 'smoke-job' } }));
+    await page.route('**/api/tts/smoke-job/status', route => route.fulfill({
+      json: { done: true, status: 'succeeded', title: 'Audio daneben', output: '', audioUrl, articleId: 'Ralf/2026/2026-03-03_audio-daneben' },
+    }));
+    try {
+      await adminAction('tts-job');
+      await page.waitForFunction(() => !document.getElementById('tts-player').hidden);
+      const state = await page.evaluate(() => {
+        const download = document.getElementById('tts-download');
+        return { player: new URL(document.getElementById('tts-player').src).pathname, href: download.getAttribute('href'),
+          download: download.download, target: download.target, hidden: download.hidden };
+      });
+      assert.deepEqual(state, { player: audioUrl, href: audioUrl, download: '2026-03-03_audio-daneben.mp3', target: '', hidden: false });
+      await page.evaluate(() => document.getElementById('tts-player').play());
+      await page.waitForFunction(() => !document.getElementById('tts-player').paused);
+      await page.click('#tts-close');
+      await page.waitForFunction(() => !document.getElementById('tts-overlay').open);
+      assert.equal(await page.evaluate(() => document.getElementById('tts-player').paused), true, 'Schließen hält die Wiedergabe an');
+    } finally {
+      await page.unroute('**/api/tts/latest');
+      await page.unroute('**/api/tts/smoke-job/status');
+    }
+  });
+
   run('Hörbuch öffnen und abspielen', async () => {
     await showList({ author: 'Hörbücher' });
     await page.locator(card('Hörbücher/Testbuch Normal')).click();

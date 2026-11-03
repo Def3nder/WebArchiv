@@ -19,7 +19,8 @@ let ttsReturnFocus = null;
 const $ttsStatus = document.getElementById('tts-status');
 const $ttsOutput = document.getElementById('tts-output');
 const $ttsCancel = document.getElementById('tts-cancel');
-const $ttsAudio = document.getElementById('tts-audio');
+const $ttsPlayer = document.getElementById('tts-player');
+const $ttsDownload = document.getElementById('tts-download');
 const $ttsActivity = document.getElementById('tts-activity');
 const $ttsReindex = document.getElementById('tts-reindex');
 
@@ -36,6 +37,27 @@ function rememberTtsJob(id) {
     else sessionStorage.removeItem('wa-tts-job');
   } catch { /* Status bleibt über den Server wiederauffindbar. */ }
 }
+// Fertige MP3: Player im Dialog und Download-Link (Dateiname aus der URL).
+function showTtsAudio(url) {
+  const name = decodeURIComponent(new URL(url, location.href).pathname.split('/').pop() || 'audio.mp3');
+  if ($ttsPlayer.getAttribute('src') !== url) $ttsPlayer.src = url;
+  $ttsPlayer.hidden = false;
+  $ttsDownload.href = url;
+  $ttsDownload.download = name;
+  $ttsDownload.hidden = false;
+}
+function hideTtsAudio() {
+  $ttsPlayer.pause();
+  $ttsPlayer.removeAttribute('src');
+  $ttsPlayer.load();
+  $ttsPlayer.hidden = true;
+  $ttsDownload.removeAttribute('href');
+  $ttsDownload.hidden = true;
+}
+// Nicht gleichzeitig mit dem Artikel-Audio darunter abspielen.
+$ttsPlayer?.addEventListener('play', () => {
+  document.querySelectorAll('audio, video').forEach(media => { if (media !== $ttsPlayer) media.pause(); });
+});
 function clearTtsUI() {
   ++ttsPollGeneration;
   rememberTtsJob(null);
@@ -44,7 +66,7 @@ function clearTtsUI() {
   if ($ttsOverlay.open) WebArchivLayers.close($ttsOverlay, { restoreFocus: false });
   $ttsOutput.textContent = '';
   $ttsStatus.textContent = '';
-  $ttsAudio.hidden = true;
+  hideTtsAudio();
 }
 // Dialog am Ebenen-Stapel: Escape schließt nur die Anzeige, Tab bleibt im Dialog
 // (nativ), andere Tasten erreichen den Artikel darunter nicht.
@@ -57,7 +79,7 @@ function openTtsModal() {
   document.body.style.overflow = 'hidden';
   $ttsOutput.textContent = '';
   $ttsStatus.textContent = 'Auftrag wird geladen …';
-  $ttsAudio.hidden = true;
+  hideTtsAudio();
   $ttsReindex.hidden = true;
   $ttsCancel.disabled = true;
   $ttsActivity.hidden = false;
@@ -66,6 +88,7 @@ function openTtsModal() {
 }
 function closeTtsModal() {
   ++ttsPollGeneration;
+  $ttsPlayer.pause();
   if ($ttsOverlay.open) WebArchivLayers.close($ttsOverlay, { restoreFocus: false });
   document.body.style.overflow = !$overlay.open ? '' : 'hidden';
   if (ttsReturnFocus?.isConnected) ttsReturnFocus.focus();
@@ -257,8 +280,7 @@ async function watchTts(jobId) {
       $ttsReindex.hidden = !s.indexError;
       if (s.done) {
         if (s.status === 'succeeded' && (s.audioUrl?.startsWith('/files/') || s.audioUrl?.startsWith('/audio-files/'))) {
-          $ttsAudio.href = s.audioUrl;
-          $ttsAudio.hidden = false;
+          showTtsAudio(s.audioUrl);
           try { await refreshTtsArticle(s.articleId); }
           catch {
             if (generation === ttsPollGeneration) $ttsStatus.textContent += ' Die Artikelansicht konnte nicht aktualisiert werden. Bitte neu laden; die MP3 ist fertig.';
