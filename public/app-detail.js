@@ -316,7 +316,7 @@ function renderDetail(article) {
     });
   } else if (article.imageUrl) {
     const openFs = () => openImageFullscreen(article.imageUrl);
-    prepareImageFile(article.imageUrl); // für „Bild herunterladen“ (Teilen-Menü)
+    prepareShareFile(article.imageUrl); // für „Bild herunterladen“ (Teilen-Menü)
     document.getElementById('detail-hero-expand')?.addEventListener('click', e => { e.stopPropagation(); openFs(); });
     document.getElementById('detail-hero-img')?.addEventListener('click', openFs);
   }

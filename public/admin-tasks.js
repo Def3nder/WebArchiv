@@ -45,6 +45,8 @@ function showTtsAudio(url) {
   $ttsDownload.href = url;
   $ttsDownload.download = name;
   $ttsDownload.hidden = false;
+  // iPhone/iPad: „Herunterladen“ öffnet das Teilen-Menü (app-gallery.js), dafür muss die Datei bereitliegen.
+  prepareShareFile(url);
 }
 function hideTtsAudio() {
   $ttsPlayer.pause();

@@ -290,6 +290,40 @@ describe('Handy-Ansicht (Chromium, Pixel 7, Touch)', () => {
     await page.keyboard.press('Escape');
   });
 
+  run('Audio-Auftrag fertig: „MP3 herunterladen“ öffnet das Teilen-Menü statt eines Downloads', async () => {
+    // Teilen-Funktion vorgeben (wie iPhone/iPad) und mitschreiben, was geteilt wird; der TTS-Dienst läuft nicht.
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+      Object.defineProperty(navigator, 'share', {
+        configurable: true,
+        value: async data => { window.__shared = data.files.map(file => ({ name: file.name, type: file.type, size: file.size })); },
+      });
+    });
+    const audioUrl = '/files/Ralf/2026/2026-03-03_audio-daneben.mp3';
+    await page.route('**/api/tts/latest', route => route.fulfill({ json: { jobId: 'mobile-job' } }));
+    await page.route('**/api/tts/mobile-job/status', route => route.fulfill({
+      json: { done: true, status: 'succeeded', title: 'Audio daneben', output: '', audioUrl, articleId: 'Ralf/2026/2026-03-03_audio-daneben' },
+    }));
+    try {
+      await adminAction('tts-job');
+      await page.locator('#tts-download').waitFor({ state: 'visible' });
+      const pages = context.pages().length;
+      await page.tap('#tts-download');
+      await page.waitForFunction(() => window.__shared);
+      const shared = await page.evaluate(() => window.__shared);
+      assert.equal(shared.length, 1);
+      assert.deepEqual({ name: shared[0].name, type: shared[0].type }, { name: '2026-03-03_audio-daneben.mp3', type: 'audio/mpeg' });
+      assert.ok(shared[0].size > 0);
+      assert.equal(context.pages().length, pages, 'kein neues Fenster');
+      assert.equal(await page.evaluate(() => document.getElementById('tts-overlay').open), true, 'Dialog bleibt offen');
+      await page.tap('#tts-close');
+      await waitOpen('tts-overlay', false);
+    } finally {
+      await page.unroute('**/api/tts/latest');
+      await page.unroute('**/api/tts/mobile-job/status');
+    }
+  });
+
   run('iPhone-Kennung: Viewport mit maximum-scale=1 (kein Auto-Zoom), Android ohne', async () => {
     const meta = target => target.evaluate(() => document.querySelector('meta[name="viewport"]').content);
     assert.doesNotMatch(await meta(page), /maximum-scale/, 'Android: Pinch-Zoom bleibt frei');

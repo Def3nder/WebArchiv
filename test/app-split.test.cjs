@@ -8,7 +8,7 @@ const PUBLIC = path.join(__dirname, '..', 'public');
 const read = file => fs.readFileSync(path.join(PUBLIC, file), 'utf8');
 
 const PARTS = {
-  'app-gallery.js': ['showFullscreenImage', 'openGalleryFullscreen', 'closeImageFullscreen', 'stepFullscreen', 'zoomImageCentered', 'prepareImageFile'],
+  'app-gallery.js': ['showFullscreenImage', 'openGalleryFullscreen', 'closeImageFullscreen', 'stepFullscreen', 'zoomImageCentered', 'prepareShareFile'],
   'app-media.js': ['stopAudio', 'renderAudioPlayer', 'renderPdfEmbed', 'setArticleMediaSession', 'wireAudioPlayer'],
   'app-detail.js': ['openArticle', 'closeOverlay', 'toggleBookmark', 'renderDetail'],
 };

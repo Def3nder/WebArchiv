@@ -1,5 +1,6 @@
 /* WebArchiv — Vollbild-Galerie
- * Bildvollansicht mit Blättern, Zoom/Verschieben (Desktop) und Herunterladen/Teilen.
+ * Bildvollansicht mit Blättern, Zoom/Verschieben (Maus und Touch) und Herunterladen/Teilen
+ * (auch der fertigen MP3 im Audio-Dialog).
  * Klassisches Skript vor app.js: Es enthält nur Deklarationen; die Funktionen greifen
  * zur Laufzeit auf den Zustand und die DOM-Referenzen aus app.js zu (gemeinsamer
  * globaler Gültigkeitsbereich der klassischen Skripte). Kein Code, der beim Laden läuft
@@ -142,7 +143,7 @@ function showFullscreenImage(index) {
   } else if ($fullscreenPosterCheckbox) {
     delete $fullscreenPosterCheckbox.dataset.reviewId;
   }
-  prepareImageFile(url);
+  prepareShareFile(url);
   if (fsGallery.articleId && count > 1) {
     history.replaceState(articleHistoryState(articleHistoryDepth()), '', `#/article/${sanitizeForId(fsGallery.articleId)}?bild=${index + 1}`);
   }
@@ -212,53 +213,59 @@ function detailImageUrls(article) {
   return article.imageUrl ? [article.imageUrl] : [];
 }
 
-// ── Bild herunterladen ─────────────────────────────────────────────────────
+// ── Bild oder MP3 herunterladen ────────────────────────────────────────────
 // Auf Touch-Geräten mit Teilen-Funktion (iPhone/iPad) öffnet der Button das System-
-// Teilen-Menü mit dem Bild („Bild sichern“ → Fotos), das sich jederzeit abbrechen
-// lässt; Safaris Abfrage für <a download> hat dort keinen Abbrechen-Knopf. Sonst
-// bleibt es beim normalen Download. Das Bild wird beim Anzeigen schon vorbereitet,
-// weil iOS das Teilen-Menü nur unmittelbar nach dem Tippen öffnet.
-const shareImages = () => typeof navigator.canShare === 'function' && matchMedia('(pointer: coarse)').matches;
-const imageFiles = new Map(); // URL → Promise<File|null>
-const readyImageFiles = new Map(); // URL → File|null (fertig geladen)
-const IMAGE_FILE_CACHE = 3;
+// Teilen-Menü mit der Datei („Bild sichern“ → Fotos, „In Dateien sichern“), das sich
+// jederzeit abbrechen lässt; Safaris Abfrage für <a download> hat dort keinen Abbrechen-
+// Knopf und führt aus der Home-Bildschirm-App nicht zurück. Sonst bleibt es beim normalen
+// Download. Die Datei wird beim Anzeigen schon vorbereitet, weil iOS das Teilen-Menü nur
+// unmittelbar nach dem Tippen öffnet.
+const shareFiles = () => typeof navigator.canShare === 'function' && matchMedia('(pointer: coarse)').matches;
+const shareFileCache = new Map(); // URL → Promise<File|null>
+const readyShareFiles = new Map(); // URL → File|null (fertig geladen)
+const SHARE_FILE_CACHE = 3;
+const SHARE_DOWNLOAD_LINKS = '.detail-hero-download, #img-fullscreen-download, #tts-download';
 
-function prepareImageFile(url) {
-  if (!shareImages() || !url) return Promise.resolve(null);
-  if (imageFiles.has(url)) return imageFiles.get(url);
+function prepareShareFile(url) {
+  if (!shareFiles() || !url) return Promise.resolve(null);
+  if (shareFileCache.has(url)) return shareFileCache.get(url);
   const name = decodeURIComponent(new URL(url, location.href).pathname.split('/').pop() || 'bild.jpg');
+  const fallbackType = /\.mp3$/i.test(name) ? 'audio/mpeg' : 'image/jpeg';
   const promise = fetch(url)
     .then(r => (r.ok ? r.blob() : null))
-    .then(blob => (blob ? new File([blob], name, { type: blob.type || 'image/jpeg' }) : null))
+    .then(blob => (blob ? new File([blob], name, { type: blob.type || fallbackType }) : null))
     .catch(() => null)
-    .then(file => { readyImageFiles.set(url, file); return file; });
-  imageFiles.set(url, promise);
-  // Nur die letzten Bilder behalten.
-  while (imageFiles.size > IMAGE_FILE_CACHE) {
-    const oldest = imageFiles.keys().next().value;
-    imageFiles.delete(oldest);
-    readyImageFiles.delete(oldest);
+    .then(file => { readyShareFiles.set(url, file); return file; });
+  shareFileCache.set(url, promise);
+  // Nur die letzten Dateien behalten.
+  while (shareFileCache.size > SHARE_FILE_CACHE) {
+    const oldest = shareFileCache.keys().next().value;
+    shareFileCache.delete(oldest);
+    readyShareFiles.delete(oldest);
   }
   return promise;
 }
 
 document.addEventListener('click', async e => {
-  const link = e.target.closest?.('.detail-hero-download, #img-fullscreen-download');
-  if (!link || !shareImages()) return;
+  const link = e.target.closest?.(SHARE_DOWNLOAD_LINKS);
+  if (!link || !shareFiles()) return;
   e.preventDefault();
   const url = link.getAttribute('href');
-  const ready = readyImageFiles.has(url);
-  const file = ready ? readyImageFiles.get(url) : await prepareImageFile(url);
+  const isImage = !/\.mp3(?:$|\?)/i.test(url);
+  const ready = readyShareFiles.has(url);
+  const file = ready ? readyShareFiles.get(url) : await prepareShareFile(url);
   if (!file || !navigator.canShare({ files: [file] })) {
     // Teilen mit Datei nicht möglich: Bild in neuem Tab öffnen (dort per langem Druck sichern).
-    window.open(url, '_blank', 'noopener');
+    // Eine MP3 nicht: Das neue Fenster hätte in der Home-Bildschirm-App keinen Weg zurück.
+    if (isImage) window.open(url, '_blank', 'noopener');
+    else alert('Die MP3 lässt sich auf diesem Gerät nicht teilen. Bitte im Browser herunterladen.');
     return;
   }
   try {
     await navigator.share({ files: [file] });
   } catch (err) {
-    // AbortError = abgebrochen. NotAllowedError: Bild war noch nicht geladen und iOS
-    // verlangt ein neues Tippen – jetzt liegt es bereit.
-    if (err.name === 'NotAllowedError' && !ready) alert('Das Bild ist jetzt bereit. Bitte noch einmal tippen.');
+    // AbortError = abgebrochen. NotAllowedError: Datei war noch nicht geladen und iOS
+    // verlangt ein neues Tippen – jetzt liegt sie bereit.
+    if (err.name === 'NotAllowedError' && !ready) alert(`${isImage ? 'Das Bild' : 'Die MP3'} ist jetzt bereit. Bitte noch einmal tippen.`);
   }
 });
