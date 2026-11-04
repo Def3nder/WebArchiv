@@ -128,7 +128,7 @@ const ADMIN_ASSET_PATHS = new Set([
   '/tts-settings.js',
   '/duplicates.js',
   '/css/duplicates.css',
-  '/infographic-new.js',
+  '/article-new.js',
   '/infographic-manager.js',
   '/article-editor.js',
   '/audiobook-extras-manager.js',

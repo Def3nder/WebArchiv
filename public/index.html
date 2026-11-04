@@ -97,7 +97,7 @@
           <button type="button" role="menuitem" class="header-menu-item" data-action="scraper-center" data-admin-only>Scraper-Zentrale</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="tts-job" data-admin-only>Audio-Auftrag anzeigen</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="tts-settings" data-admin-only>TTS-Einstellungen</button>
-          <button type="button" role="menuitem" class="header-menu-item" data-action="new-infographic" data-admin-only>Neue Infografik</button>
+          <button type="button" role="menuitem" class="header-menu-item" data-action="new-article" data-admin-only>Neuer Artikel</button>
           <button type="button" role="menuitem" class="header-menu-item" data-action="review-infographics" data-admin-only>Infografiken prüfen</button>
           <button type="button" role="menuitem" class="header-menu-item duplicate-menu-item" data-action="duplicates" data-admin-only>Dubletten prüfen <span id="duplicate-menu-count" class="duplicate-menu-count" hidden></span></button>
           <button type="button" role="menuitem" class="header-menu-item health-menu-item" data-action="health" data-admin-only>Health-Check <span id="health-menu-count" class="health-menu-count" hidden></span></button>
@@ -473,29 +473,35 @@
       </section>
     </div>
   </dialog>
-  <!-- Neue eigenständige Infografik: Markdown-Vorlage + Grafik in einem Schritt -->
-  <dialog id="infographic-new" aria-labelledby="infographic-new-title">
+  <!-- Neuer Artikel (article-new.js): Typ Infografik (Grafik Pflicht) oder Artikel für Ralf (Bild optional) -->
+  <dialog id="article-new" aria-labelledby="article-new-title">
     <div class="article-editor-heading">
-      <div><p class="article-editor-eyebrow">INFOGRAFIKEN</p><h2 id="infographic-new-title">Neue Infografik</h2></div>
-      <button type="button" id="infographic-new-close" class="detail-cat-pill" aria-label="Dialog schließen">✕</button>
+      <div><p class="article-editor-eyebrow">ARCHIV</p><h2 id="article-new-title">Neuer Artikel</h2></div>
+      <button type="button" id="article-new-close" class="detail-cat-pill" aria-label="Dialog schließen">✕</button>
     </div>
-    <label for="infographic-new-text">Markdown: Titel, Datum und optional eigener Text</label>
-    <textarea id="infographic-new-text" spellcheck="false" aria-describedby="infographic-new-filename"></textarea>
-    <p id="infographic-new-filename"></p>
-    <fieldset class="infographic-new-categories">
-      <legend>Kategorien (werden beim Speichern eingefügt)</legend>
-      <div id="infographic-new-categories"></div>
+    <fieldset class="article-new-type">
+      <legend>Art</legend>
+      <label><input type="radio" name="article-new-type" value="infographic" checked /> Infografik</label>
+      <label><input type="radio" name="article-new-type" value="article" /> Artikel (Ralf)</label>
     </fieldset>
-    <div class="infographic-new-image">
-      <button type="button" id="infographic-new-pick" class="detail-cat-pill">Grafik auswählen</button>
-      <input type="file" id="infographic-new-file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden />
-      <img id="infographic-new-preview" alt="Vorschau der Grafik" hidden />
-      <span id="infographic-new-image-name">PNG oder JPG, höchstens 10 MB</span>
+    <label for="article-new-text" id="article-new-text-label">Markdown: Titel, Datum und optional eigener Text</label>
+    <textarea id="article-new-text" spellcheck="false" aria-describedby="article-new-filename"></textarea>
+    <p id="article-new-filename"></p>
+    <fieldset class="article-new-categories">
+      <legend>Kategorien (werden beim Speichern eingefügt)</legend>
+      <div id="article-new-categories"></div>
+    </fieldset>
+    <div class="article-new-image">
+      <button type="button" id="article-new-pick" class="detail-cat-pill">Grafik auswählen</button>
+      <input type="file" id="article-new-file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden />
+      <img id="article-new-preview" alt="Vorschau des Bildes" hidden />
+      <span id="article-new-image-name">PNG oder JPG, höchstens 10 MB</span>
+      <button type="button" id="article-new-unpick" class="detail-cat-pill" aria-label="Bild entfernen" title="Bild entfernen" hidden>✕</button>
     </div>
-    <p id="infographic-new-status" role="status" aria-live="polite"></p>
+    <p id="article-new-status" role="status" aria-live="polite"></p>
     <div class="article-editor-buttons">
-      <button type="button" id="infographic-new-cancel" class="detail-cat-pill">Abbrechen</button>
-      <button type="button" id="infographic-new-save" class="detail-cat-pill" disabled>Speichern</button>
+      <button type="button" id="article-new-cancel" class="detail-cat-pill">Abbrechen</button>
+      <button type="button" id="article-new-save" class="detail-cat-pill" disabled>Speichern</button>
     </div>
   </dialog>
   <!-- ADMIN_ONLY_END -->
@@ -923,7 +929,7 @@
   <script src="audiobooks.js"></script>
   <script src="book-reader.js"></script>
   <script src="vendor/article-editor.bundle.js" data-admin-asset></script>
-  <script src="infographic-new.js" data-admin-asset></script>
+  <script src="article-new.js" data-admin-asset></script>
   <script src="infographic-manager.js" data-admin-asset></script>
 </body>
 </html>

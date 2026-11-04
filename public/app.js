@@ -2034,10 +2034,9 @@ function closeAdminMenu() {
 }
 function runAdminMenuAction(action) {
   // Reindex, Scrape, Log und Audio-Aufträge stellt admin-tasks.js bereit, den
-  // Prüfmodus „Infografiken prüfen“ infographic-review.js.
+  // Prüfmodus „Infografiken prüfen“ infographic-review.js, „Neuer Artikel“ article-new.js.
   if (adminHooks.actions[action]) adminHooks.actions[action]();
   else if (action === 'tts-settings') openTtsSettingsDialog();
-  else if (action === 'new-infographic') openNewInfographic();
   else if (action === 'duplicates' && typeof openDuplicateReview === 'function') openDuplicateReview();
   else if (action === 'settings') openSettingsDialog();
   else if (action === 'users') openUserAdmin();
@@ -2332,7 +2331,7 @@ const PULL_DIALOGS = [
   ['#article-editor', '#article-editor-close'],
   ['#book-extras-manager', '#book-extras-manager [data-bem-close]'],
   ['#infographic-manager', '#infographic-manager [data-igm-close]'],
-  ['#infographic-new', '#infographic-new-cancel'],
+  ['#article-new', '#article-new-cancel'],
   ['#password-dialog', '#password-cancel'],
   ['#settings-dialog', '#settings-form button[type="submit"]'],
   ['#tts-settings-dialog', '#tts-settings-close'],

@@ -253,6 +253,44 @@ describe('Browser-Smoke-Test (Chromium, Testarchiv)', () => {
     assert.deepEqual(await closedDialogsInvisible(), []);
   });
 
+  run('Neuer Artikel: Typ umschalten, Vorschau des Dateinamens, Ralf-Artikel ohne Bild speichern und öffnen', async () => {
+    await showList();
+    await adminAction('new-article');
+    await page.waitForFunction(() => document.getElementById('article-new').open);
+    const view = () => page.evaluate(() => ({
+      type: document.querySelector('input[name="article-new-type"]:checked').value,
+      file: document.getElementById('article-new-filename').textContent,
+      pick: document.getElementById('article-new-pick').textContent,
+      save: !document.getElementById('article-new-save').disabled,
+    }));
+    assert.equal((await view()).type, 'infographic', 'ohne gemerkte Wahl zuerst Infografik');
+    await page.fill('#article-new-text', '# Smoke: Neuer Artikel\n\nDatum: 2027-03-04\n\n----\n\nErster Absatz.\n');
+    let state = await view();
+    assert.match(state.file, /Infografiken\/2027\/2027-03-04_smoke-neuer-artikel\.md/);
+    assert.deepEqual([state.pick, state.save], ['Grafik auswählen', false], 'Infografik braucht eine Grafik');
+
+    await page.click('.article-new-type label:has(input[value="article"])');
+    state = await view();
+    assert.match(state.file, /Ralf\/2027\/2027-03-04_Smoke - Neuer Artikel\.md/);
+    assert.deepEqual([state.type, state.pick, state.save], ['article', 'Bild auswählen', true], 'Artikel: Bild optional');
+    await page.locator('#article-new-categories input').first().check();
+
+    // Escape mit Eingaben fragt nach; „Abbrechen“ in der Rückfrage lässt den Dialog offen.
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.keyboard.press('Escape');
+    assert.equal(await isOpen('article-new'), true);
+
+    await page.click('#article-new-save');
+    const id = 'Ralf/2027/2027-03-04_Smoke - Neuer Artikel';
+    await page.waitForFunction(articleId => document.getElementById('article-overlay').open
+      && decodeURIComponent(location.hash).includes(articleId)
+      && document.querySelector('#article-overlay .author-badge')?.textContent === 'Ralf', id);
+    assert.equal(await isOpen('article-new'), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem('wa-new-article-type')), 'article', 'Wahl gemerkt');
+    await page.keyboard.press('Escape');
+    assert.deepEqual(await closedDialogsInvisible(), []);
+  });
+
   run('Audio-Auftrag fertig: MP3 im Dialog anhören und herunterladen, Dialog schließt', async () => {
     // Fertiger Auftrag ohne TTS-Dienst: Status-Antworten vorgeben, die MP3 ist eine echte Datei des Testarchivs.
     const audioUrl = '/files/Ralf/2026/2026-03-03_audio-daneben.mp3';

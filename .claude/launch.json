@@ -8,6 +8,12 @@
       "port": 3000
     },
     {
+      "name": "fixture",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/dev-fixture.js"],
+      "port": 3100
+    },
+    {
       "name": "duplicates-tool",
       "runtimeExecutable": "node",
       "runtimeArgs": ["duplicates-tool/server.js"],

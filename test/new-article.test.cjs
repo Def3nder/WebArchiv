@@ -31,6 +31,19 @@ test('Lesbarer Dateiname: verbotene Zeichen, Doppelpunkt, Länge, Ränder', () =
   assert.match(long, /Wort$/, 'an einer Wortgrenze gekürzt');
 });
 
+test('Vorschau im Dialog (public/article-new.js) bildet denselben Dateinamen wie der Server', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'article-new.js'), 'utf8');
+  const match = source.match(/^function readableStem\(title\) \{[\s\S]*?^\}/m);
+  assert.ok(match, 'readableStem in article-new.js');
+  const preview = new Function(`${match[0]}\nreturn readableStem;`)();
+  const samples = [
+    'ChatGPT: Steckbrief Mandy & Ralf', 'Krieg/Frieden\\Mitte|Ende', 'Was? "Wirklich" <so> *gut* #1 100%',
+    '  Zeile\teins\nzwei  ', '...versteckt.', 'Frage: - Antwort', 'Ü'.normalize('NFD'), '???', 'Wort '.repeat(40),
+    `${'x'.repeat(120)} Ende`,
+  ];
+  for (const title of samples) assert.equal(preview(title), readableFileStem(title), JSON.stringify(title));
+});
+
 test('Belegter Dateistamm: Artikel oder Begleitdatei, Groß/Klein egal, fehlender Ordner ist frei', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'new-article-stem-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

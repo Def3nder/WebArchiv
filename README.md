@@ -329,13 +329,19 @@ beide Bereiche sind nur zur Anzeige da. Jeder Lauf prüft die Dateien neu;
 nach einer Teilmigration vor dem nächsten Lauf die neue Vorschau ansehen.
 Die Umstellung wurde nicht automatisch auf das Archiv angewendet.
 
-**Neue eigenständige Infografik** (Admin, Aktionen → *Neue Infografik*): Dialog mit
+**Neuer Artikel** (Admin, Aktionen → *Neuer Artikel*, `public/article-new.js`): ein Dialog
+mit Typwahl oben – **Infografik** oder **Artikel (Ralf)**; das Gerät merkt sich die letzte Wahl.
 Markdown-Vorlage (`# [Titel]`, `Datum: <heute>`, `----`, `[Inhalt]`), Häkchen für die
-Filter-Kategorien und Grafikauswahl (PNG/JPG, max. 10 MB); alles wird in einem Schritt
-gespeichert als `www/Infografiken/<Jahr>/<Datum>_<titel-slug>.md` + Bild
-(Namenskonflikt → `-2`, `-3` …). Angehakte Kategorien fügt der Server beim Speichern
-als `Kategorien:`-Zeile nach dem Datum ein; ein unverändertes `[Inhalt]` wird entfernt.
-Danach Reindex, die neue Infografik öffnet sich.
+Filter-Kategorien und Bildauswahl (PNG/JPG, max. 10 MB); alles wird in einem Schritt gespeichert:
+
+- *Infografik* (Grafik Pflicht): `www/Infografiken/<Jahr>/<Datum>_<titel-slug>.md` + Bild.
+- *Artikel* (Bild optional, sonst `standard.*` des Autors): `www/Ralf/<Jahr>/<Datum>_<lesbarer Titel>.md`
+  wie die vorhandenen Ralf-Dateien – „:“ wird zu „ - “, `/ \ |` zu „-“, `* ? " < > # %` fallen weg,
+  höchstens 100 Zeichen (`lib/new-article.cjs`).
+
+Namenskonflikt → `-2`, `-3` …; die Vorschau im Dialog zeigt den Dateinamen. Angehakte Kategorien fügt
+der Server beim Speichern als `Kategorien:`-Zeile nach dem Datum ein; ein unverändertes `[Inhalt]` wird
+entfernt. Danach wird nur die neue Datei (bzw. der Infografik-Jahrgang) eingelesen, der neue Eintrag öffnet sich.
 
 **Kategorien-Zeile und Filter:** Steht in `Kategorien:` ein Name der festen
 Filter-Kategorien (z. B. „Achtsamkeit“), zählt er für Filter und Suche immer – vor den

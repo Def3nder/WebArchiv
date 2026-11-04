@@ -37,8 +37,8 @@ test('Gast- und Benutzer-Shell enthalten keine Admin-Dialoge oder Admin-Skripte'
   for (const role of [null, 'guest', 'user']) {
     const html = renderIndexForSession({ session: role ? { user: { role } } : {} });
     assert.doesNotMatch(html, /id="(?:scrape-overlay|tts-overlay|article-editor|infographic-manager|tts-settings-dialog|user-admin|duplicate-review)"/);
-    assert.doesNotMatch(html, /data-action="(?:reindex|scrape|log|tts-job|tts-settings|new-infographic|review-infographics|duplicates|users)"/);
-    assert.doesNotMatch(html, /(?:user-admin|tts-settings|duplicates|article-editor\.bundle|infographic-new|infographic-manager)\.js/);
+    assert.doesNotMatch(html, /data-action="(?:reindex|scrape|log|tts-job|tts-settings|new-article|review-infographics|duplicates|users)"/);
+    assert.doesNotMatch(html, /(?:user-admin|tts-settings|duplicates|article-editor\.bundle|article-new|infographic-manager)\.js/);
     assert.doesNotMatch(html, /admin-csrf-token/);
     assert.match(html, /id="password-dialog"/);
     assert.match(html, /password\.js(?:\?v=[a-f0-9]+)?/);
@@ -111,11 +111,13 @@ test('zentrale Admin-Middleware schützt Rolle, Herkunft und CSRF-Token', () => 
 test('Frontend hängt das Admin-CSRF-Token zentral an schreibende API-Aufrufe', () => {
   const app = readApp();
   const editor = fs.readFileSync(path.join(ROOT, 'public', 'article-editor.js'), 'utf8');
-  const infographic = fs.readFileSync(path.join(ROOT, 'public', 'infographic-new.js'), 'utf8');
+  const newArticle = fs.readFileSync(path.join(ROOT, 'public', 'article-new.js'), 'utf8');
   assert.match(app, /meta\[name="admin-csrf-token"\]/);
   assert.match(app, /'X-CSRF-Token': csrf/);
   assert.match(editor, /apiFetch\(`\/api\/article-markdown/);
-  assert.match(infographic, /apiFetch\('\/api\/new-infographic'/);
+  assert.match(newArticle, /apiFetch\(type\.url,/);
+  assert.match(newArticle, /url: '\/api\/new-infographic'/);
+  assert.match(newArticle, /url: '\/api\/new-article'/);
 });
 
 test('Admin-Aufgaben (TTS, Reindex, Scrape) liegen in admin-tasks.js und nur in der Admin-Shell', () => {
