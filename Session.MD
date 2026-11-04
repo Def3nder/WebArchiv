@@ -3026,3 +3026,35 @@ abgelaufen …“, Dienste „Fehler“ mit der Zeile, Knopf öffnet die Zentral
 `public/index.html`, `public/scraper-center.js`, `public/css/scraper-center.css`, `public/css/dialogs.css`,
 `public/admin-tasks.js`, `public/app.js`, `public/health.js`, `.gitignore`; Dienst neu starten. Vor `git pull` auf dem
 LXC `scraper/scraper-config.json` sichern, falls sie dort von Hand geändert wurde (Abschnitt 85).
+
+## 90. Aktualisierung 04.11.2026 – Neuer Artikel: Infografik oder eigener Artikel (Ralf)
+
+Wunsch: Der Menüpunkt „Neue Infografik“ wird zu „Neuer Artikel“; im Dialog wählt man, ob eine Infografik oder ein
+Artikel für den Autor Ralf entsteht. Entscheidungen: lesbarer Dateiname wie bei den vorhandenen Ralf-Dateien, Autor
+fest „Ralf“, Kategorien-Häkchen auch für Artikel, Skript und IDs heißen jetzt `article-new`.
+
+- **Schritt 1 – Server (21e5406):** `POST /api/new-article` (`modules/new-article.cjs`, Hilfen in
+  `lib/new-article.cjs`). Ziel `www/Ralf/<Jahr>/<Datum>_<lesbarer Titel>.md`; „:“ → „ - “, `/ \ |` → „-“,
+  `* ? " < > # %` und Steuerzeichen fallen weg, höchstens 100 Zeichen (Wortgrenze), keine Punkte/Striche am Rand.
+  Belegt ist ein Stamm auch durch eine Begleitdatei (Groß/Klein egal) → `-2`, `-3` …. Bild optional (PNG/JPG, 10 MB,
+  wird zuerst geschrieben und bei Fehlern wieder entfernt), sonst `standard.*` des Autors. Kategorien und `[Inhalt]`
+  wie bei der neuen Infografik (`normalizeNewInfographicMarkdown`). Danach wird nur die neue Datei eingelesen:
+  `refreshScrapedMarkdownFiles` heißt jetzt `refreshMarkdownFiles` und meldet neutral „Artikel“.
+- **Schritt 2 – Oberfläche (2f0a4bd):** Aktionen → *Neuer Artikel*; `public/infographic-new.js` → `public/article-new.js`
+  (gekapselt, hängt sich über `adminHooks.actions['new-article']` ein; der Eintrag in `runAdminMenuAction` entfällt),
+  IDs `#article-new-*`, `ADMIN_ASSET_PATHS` und `PULL_DIALOGS` angepasst. Oben ein Segment-Umschalter aus echten Radios
+  (Tastatur, Vorleser); die letzte Wahl merkt sich das Gerät (`wa-new-article-type`). Je Typ ändern sich Beschriftung,
+  Dateinamen-Vorschau, Bildpflicht und Ziel-Route; Text, Bild und Häkchen bleiben beim Umschalten erhalten. Neu: Bild
+  per ✕ entfernen, Klick daneben schließt (mit Rückfrage bei Eingaben). `.claude/launch.json` hat einen Eintrag
+  „fixture“ für die Vorschau des Testarchivs.
+- **Schritt 3 – Tests (c41e543):** `test/new-article.test.cjs` (Dateinamen, belegte Stämme, Route, Sperre, Rechte,
+  Vorschau im Browser = Server), Testarchiv-Fälle I46/I47, Browser-Ablauf im Smoke-Test, Handy-Test mit echten
+  Wischgesten (Rand daneben gesperrt, Ziehen fragt bei Eingaben nach). Gegenprobe: ohne `PULL_DIALOGS`-Eintrag scheitert
+  der Handy-Test.
+- **Bewusst gleich geblieben:** `/api/new-infographic` und das Speichern von Infografiken. Ein Artikel ohne Text unter
+  der Trennlinie wird angenommen (wie bei Infografiken).
+- **Nicht geprüft:** echtes iPhone (Auto-Zoom, Gummiband).
+
+**Deployment:** `server.js`, `lib/new-article.cjs`, `modules/new-article.cjs`, `public/index.html`,
+`public/article-new.js` (neu; `public/infographic-new.js` entfällt), `public/app.js`, `public/css/dialogs.css`;
+Dienst neu starten.

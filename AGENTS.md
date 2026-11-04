@@ -31,14 +31,14 @@ source by `test/support/browser-globals.cjs` (no hand-kept list); redeclaring on
 (`open`, `close`, `reportError` …) fails. Code inside the esbuild bundles is *not* global — expose what classic
 scripts call via `window.X` (e.g. `window.leaveArticleEditor`). `test/browser-globals.test.cjs` catches dead shared
 names and names declared twice in one shell. `test/fixture-archive.test.cjs` builds the test archive from
-`test/fixtures/smoke-archive.cjs` (~40 cases: media, infographic groups, Instagram posters, duplicates incl. moving
+`test/fixtures/smoke-archive.cjs` (~46 cases: media, infographic groups, Instagram posters, duplicates incl. moving
 their graphics, access, audiobooks, the infographic badge (`displayAuthor`), the scraper center with its own
-`SCRAPER_DIR` data — each with purpose and expected results) in a temp dir and runs the real
+`SCRAPER_DIR` data, new own articles via `/api/new-article` — each with purpose and expected results) in a temp dir and runs the real
 `server.js` on it as a child process (`WWW_DIR`/`AUDIO_DIR`/`CONFIG_FILE`, port 0, CSP enforced); a new combination of
 articles, infographics or duplicates gets a case there. `npm run test:browser` (not part of `npm test`, ~10 s) runs
 `test/browser/smoke.test.cjs` with Playwright/Chromium on the same archive: login, tiles and badges, full-text toggle,
 article keys and gallery, bookmarks, duplicate redirect, dialogs on the layer stack (closed dialogs must be
-invisible), audiobook playback; `test/browser/mobile.test.cjs` adds a Pixel-7 touch profile with real swipes via the
+invisible), the "Neuer Artikel" dialog, audiobook playback; `test/browser/mobile.test.cjs` adds a Pixel-7 touch profile with real swipes via the
 DevTools protocol (swipes beside/inside dialogs must not reach the page, a self-scrolling dialog still scrolls,
 pull-to-close, 16px inputs, iPhone `maximum-scale`). Any console error or CSP violation fails. Run it after frontend
 changes. Chromium is not iOS Safari: auto-zoom and rubber-banding themselves are only checked on a real iPhone. There
@@ -219,7 +219,9 @@ and listed in `ADMIN_ASSET_PATHS` in `server.js`); `public/admin-tasks.js` holds
 log and plugs into `app.js` via `adminHooks` (empty for guests/users). `public/infographic-review.js` holds the
 "Infografiken prüfen" mode and fills the `infographicReview` placeholder in `app.js`. `public/scraper-center.js` holds the
 scraper center dialog (menu "Scraper-Zentrale"; runs and log still use the scrape window from `admin-tasks.js` via
-`adminHooks.actions.scrape`/`scrape-source`/`log`). `public/health.js` holds the
+`adminHooks.actions.scrape`/`scrape-source`/`log`). `public/article-new.js` holds the "Neuer Artikel" dialog (type
+infographic → `/api/new-infographic`, image required; or own article for author `Ralf` → `/api/new-article`, readable
+file name, image optional; the file-name preview mirrors `lib/new-article.cjs`, a test compares both). `public/health.js` holds the
 health check (notice top right under the navigation chrome for new errors, dialog from `/api/health/details`) and chains
 `adminHooks.userChanged`/`actions` instead of replacing them. The markdown editor toolbar
 (`markdown-live-preview.js`, bundled — run `npm run build:editor` after changes) also uses `window.WebArchivAriaMenu`.

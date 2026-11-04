@@ -8,6 +8,9 @@ dass ich den Bereich ganz oben klicke und halte und nach unten ziehe - geht das 
   Seit 02.11.2026 umgesetzt: Aktionen → *Scraper-Zentrale* (je Quelle letzter Lauf, Ergebnis, neue Artikel, Fehler und
   notwendige Aktionen; Quellen hinzufügen, bearbeiten, pausieren, entfernen und einzeln scrapen; Facebook-Anmeldung
   im Health-Check). Siehe Session.MD, Abschnitte 84–89.
+* [x] **Neuer Artikel:** Den Dialog „Neue Infografik“ erweitern, damit auch Artikel für den Autor Ralf angelegt werden können.
+  Seit 04.11.2026 umgesetzt: Aktionen → *Neuer Artikel* mit Typwahl Infografik / Artikel (Ralf); Artikel landen als
+  `www/Ralf/<Jahr>/<Datum>_<Titel>.md`, Bild optional. Siehe Session.MD, Abschnitt 90.
 * [ ] **Themen-Dossiers:** Artikel, Infografiken, Hörbücher und eigene Notizen zu einem Thema in einer benannten, frei sortierbaren Sammlung zusammenstellen.
 * [x] **Qualitäts-Dashboard:** Fehlende Bilder oder Metadaten, ungültige Daten, defekte Links, verwaiste Medien und andere Auffälligkeiten im Archiv anzeigen.
 * [ ] **Einschlaf-Timer für Hörbücher:** Wiedergabe nach einer gewählten Zeit oder am Ende des aktuellen Teils automatisch beenden, möglichst mit sanftem Ausblenden.
