@@ -218,6 +218,50 @@ describe('Handy-Ansicht (Chromium, Pixel 7, Touch)', () => {
     await waitOpen('scraper-center', false);
   });
 
+  run('Neuer Artikel auf dem Handy: passt in die Breite, Wischen daneben gesperrt, Ziehen schließt nur nach Rückfrage', async () => {
+    await adminAction('new-article');
+    await waitOpen('article-new');
+    const layout = await page.evaluate(() => {
+      const dialog = document.getElementById('article-new');
+      const type = document.querySelector('.article-new-type').getBoundingClientRect();
+      return { overflow: dialog.scrollWidth - dialog.clientWidth, page: document.documentElement.scrollWidth - window.innerWidth,
+        typeFits: type.right <= dialog.getBoundingClientRect().right };
+    });
+    assert.deepEqual(layout, { overflow: 0, page: 0, typeFits: true });
+    assert.equal(await fontSize('#article-new-text'), '16px', 'kein Auto-Zoom auf dem iPhone');
+    // Typ per Antippen wechseln (die Radios liegen unsichtbar über den Beschriftungen).
+    await page.tap('.article-new-type label:has(input[value="article"])');
+    assert.equal(await page.evaluate(() => document.querySelector('input[name="article-new-type"]:checked').value), 'article');
+
+    const box = await page.locator('#article-new').boundingBox();
+    assert.ok(box.x >= 4, `Rand neben dem Dialog: ${box.x} px`);
+    const beside = await watchSwipe(box.x / 2, box.y + 500, box.x / 2, box.y + 200);
+    assert.ok(beside.moves > 0 && beside.allBlocked && !beside.pageMoved, `daneben: ${JSON.stringify(beside)}`);
+
+    // Mit Eingaben fragt Ziehen nach unten erst; „Abbrechen“ lässt den Dialog offen und ohne Verschiebung stehen.
+    await page.locator('#article-new-categories input').first().check();
+    const heading = await page.locator('#article-new-title').boundingBox();
+    const pull = () => swipe(heading.x + 20, heading.y + 5, heading.x + 20, heading.y + 260);
+    let asked = 0;
+    page.once('dialog', dialog => { asked++; dialog.dismiss(); });
+    await pull();
+    await page.waitForFunction(() => document.getElementById('article-new').style.transform === '');
+    assert.equal(asked, 1, 'Rückfrage beim Verwerfen');
+    assert.equal(await page.evaluate(() => document.getElementById('article-new').open), true, 'Dialog bleibt offen');
+    page.once('dialog', dialog => { asked++; dialog.accept(); });
+    await pull();
+    await waitOpen('article-new', false);
+    assert.equal(asked, 2);
+
+    // Ohne Eingaben schließt Ziehen sofort.
+    await adminAction('new-article');
+    await waitOpen('article-new');
+    page.on('dialog', dialog => assert.fail(`unerwartete Rückfrage: ${dialog.message()}`));
+    await pull();
+    await waitOpen('article-new', false);
+    page.removeAllListeners('dialog');
+  });
+
   // Zwei Finger von (x ± from) nach (x ± to) auf gleicher Höhe.
   async function pinch(x, y, from, to, steps = 8) {
     const points = d => [{ x: x - d, y, id: 1, radiusX: 4, radiusY: 4, force: 1 }, { x: x + d, y, id: 2, radiusX: 4, radiusY: 4, force: 1 }];
