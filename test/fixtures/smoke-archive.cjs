@@ -720,6 +720,41 @@ const CASES = [
       assert.equal(data.services.scrape.level, 'warning');
     },
   },
+
+  // ── I: Neuer Artikel (Dialog „Neuer Artikel“, Typ „Artikel“) ───────────────
+  {
+    id: 'I46', title: 'Neuer Ralf-Artikel: lesbarer Dateiname, sofort in Liste und Detail, Bild optional',
+    files: [],
+    async check(ctx) {
+      // Eigener Jahrgang 2027, damit die anderen Fälle unberührt bleiben.
+      const admin = ctx.as('admin');
+      const markdown = title => `# ${title}\n\nDatum: 2027-02-03\n\n----\n\n${text(0, 2)}\n`;
+      let res = await admin.post('/api/new-article', { markdown: markdown('I46: Ohne Bild'), categories: ['Psychologie'] });
+      assert.deepEqual([res.status, res.data.id], [200, 'Ralf/2027/2027-02-03_I46 - Ohne Bild']);
+      let detail = await ctx.detail('admin', res.data.id);
+      assert.deepEqual([detail.author, detail.title, detail.date], ['Ralf', 'I46: Ohne Bild', '2027-02-03']);
+      assert.ok(detail.categories.includes('Psychologie'));
+      assert.match(detail.imageUrl, /Ralf\/standard\.jpg/, 'ohne eigenes Bild das Standardbild');
+      assert.ok(ids(await ctx.list('admin', { author: 'Ralf' })).includes(res.data.id), 'ohne Reindex in der Liste');
+
+      const image = (await renderImage('I46', '.png')).toString('base64');
+      res = await admin.post('/api/new-article', { markdown: markdown('I46: Ohne Bild'), image });
+      assert.deepEqual([res.status, res.data.id], [200, 'Ralf/2027/2027-02-03_I46 - Ohne Bild-2'], 'gleicher Titel → -2');
+      detail = await ctx.detail('admin', res.data.id);
+      assert.match(detail.imageUrl, /^\/files\/Ralf\/2027\/2027-02-03_I46 - Ohne Bild-2\.png\?v=/);
+    },
+  },
+  {
+    id: 'I47', title: 'Neuer Artikel nur für Admins',
+    files: [],
+    async check(ctx) {
+      const body = { markdown: '# Fremd\n\nDatum: 2027-02-04\n\n----\n\nText\n' };
+      const guest = await ctx.as('guest').post('/api/new-article', body);
+      assert.deepEqual([guest.status, guest.data.code], [403, 'admin_required']);
+      assert.equal((await ctx.as('member').post('/api/new-article', body)).status, 403);
+      assert.ok(!ids(await ctx.list('admin', { author: 'Ralf' })).some(item => item.includes('Fremd')));
+    },
+  },
 ];
 
 // ── Aufbau ───────────────────────────────────────────────────────────────────

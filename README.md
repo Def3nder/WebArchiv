@@ -779,6 +779,7 @@ Editor- oder Menülogik einbezogen.
 | `POST /api/health/events/clear` | Admin | Meldungsliste leeren |
 | `GET /og-image/*` | – | Auf 1200px/JPEG q80 verkleinertes Vorschaubild (gecacht); `?sq=256|512` liefert einen quadratischen Ausschnitt vom oberen Bildteil (Sperrbildschirm) |
 | `POST /api/new-infographic` | Admin | Neue Infografik `{markdown, image(base64)}` → `{id}` |
+| `POST /api/new-article` | Admin | Neuer Artikel unter `Ralf/<Jahr>/<Datum>_<Titel>.md` `{markdown, image?(base64), categories?}` → `{id}` |
 | `GET/PUT /api/tts/server-settings` | Admin | Qwen-Serverwerte live lesen beziehungsweise in `qwen_http_service_config.json` speichern |
 | `GET /api/prompts` · `GET /api/prompts/:file` | Soft | Prompt-Textbausteine aus `prompts/` (Copy-Menü) |
 | `GET /api/audiobooks` | Auth + Autor | Hörbücher mit `q,sort(recent/added/title/date, Admin zusätzlich private),page,limit` |

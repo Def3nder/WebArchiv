@@ -19,6 +19,7 @@ const {
   INFOGRAPHIC_MAX_BYTES, createInfographicAdmin, installInfographicRoutes,
 } = require('./modules/infographic-admin.cjs');
 const { installArticleRoutes } = require('./modules/articles.cjs');
+const { NEW_ARTICLE_IMAGE_MAX_BYTES, installNewArticleRoutes } = require('./modules/new-article.cjs');
 const { installLinkPreviewRoutes, installPromptRoutes } = require('./modules/link-preview.cjs');
 const { createHealthService, installHealthRoutes } = require('./modules/health.cjs');
 const { providerInfo: ttsProviderInfo } = require('./tts/provider-config.cjs');
@@ -246,7 +247,7 @@ const ttsJobs = createTtsJobs({
 const scrapeJob = createScrapeJob({
   scraperDir: path.join(__dirname, 'scraper'),
   reindex: () => buildIndex(),
-  refreshFiles: files => refreshScrapedMarkdownFiles(files),
+  refreshFiles: files => refreshMarkdownFiles(files),
   reindexRunning: () => reindexState.running,
 });
 // Scraper-Zentrale: Quellen, Stand je Quelle, notwendige Aktionen. SCRAPER_DIR lenkt nur ihre Daten um (Tests);
@@ -363,10 +364,10 @@ function publishArticleIndex(nextSourceArticles) {
   refreshDuplicateState();
 }
 
-// Vom Scraper gemeldete Markdown-Dateien einzeln einlesen und anschließend
+// Einzelne Markdown-Dateien (vom Scraper gemeldet oder neu angelegt) einlesen und anschließend
 // gemeinsam veröffentlichen. Ein gültiges leeres Manifest bedeutet, dass der
 // Scraper nichts geändert hat und gar kein Neuindex nötig ist.
-async function refreshScrapedMarkdownFiles(filenames) {
+async function refreshMarkdownFiles(filenames) {
   const uniqueFiles = [...new Set((filenames || []).map(filename => path.resolve(String(filename))))];
   if (!uniqueFiles.length) return;
   if (!archive.sourceArticles.length) return buildIndex();
@@ -376,21 +377,21 @@ async function refreshScrapedMarkdownFiles(filenames) {
     const replacements = [];
     for (const filename of uniqueFiles) {
       if (path.extname(filename).toLowerCase() !== '.md' || !isPathInside(WWW_DIR, filename)) {
-        throw new Error('Der Scraper hat einen ungültigen Artikelpfad gemeldet.');
+        throw new Error('Ungültiger Artikelpfad zum Neueinlesen.');
       }
       const relative = path.relative(WWW_DIR, filename);
       const segments = relative.split(path.sep);
       const author = segments.shift();
-      if (!author || !segments.length) throw new Error('Der Scraper-Artikel hat keinen gültigen Autorpfad.');
+      if (!author || !segments.length) throw new Error('Der Artikel hat keinen gültigen Autorpfad.');
       const year = yearFromRelativeDir(path.dirname(segments.join(path.sep)));
       const scanned = [];
       await scanDir(path.dirname(filename), author, year, scanned, { strict: true, targetFile: filename });
       const replacement = scanned.find(article => path.resolve(article.filePath) === filename);
-      if (!replacement) throw new Error(`Scraper-Artikel „${relative}“ konnte nicht eingelesen werden.`);
+      if (!replacement) throw new Error(`Artikel „${relative}“ konnte nicht eingelesen werden.`);
       replacements.push(replacement);
     }
     publishArticleIndex(upsertArticleIndexEntries(archive.sourceArticles, replacements));
-    console.log(`[OK] ${replacements.length} Scraper-Artikel gezielt neu eingelesen (${Date.now() - t0}ms)`);
+    console.log(`[OK] ${replacements.length} Artikel gezielt neu eingelesen (${Date.now() - t0}ms)`);
   });
 }
 
@@ -607,6 +608,8 @@ app.use('/api/audiobook-extra-source', express.json({ limit: '2mb' }));
 app.use('/api/audiobook-extra-create', express.json({ limit: '2mb' }));
 // Neue Infografik: Bild base64 in JSON (bis 10 MB Bild → ~14 MB JSON).
 app.use('/api/new-infographic', express.json({ limit: Math.ceil(INFOGRAPHIC_MAX_BYTES * 1.4) + 2 * 1024 * 1024 }));
+// Neuer Artikel: Bild optional, ebenfalls base64 in JSON.
+app.use('/api/new-article', express.json({ limit: Math.ceil(NEW_ARTICLE_IMAGE_MAX_BYTES * 1.4) + 2 * 1024 * 1024 }));
 // Kurze Mikrofonaufnahme als Base64-JSON; die eigentliche Voice-Datei entsteht nur auf dem Qwen-Server.
 app.use('/api/tts/voices', express.json({ limit: Math.ceil(TTS_VOICE_MAX_BYTES * 1.4) + 1024 * 1024 }));
 app.use(express.json());
@@ -802,6 +805,9 @@ installInfographicRoutes(app, {
   requireAdmin: requireAdminAccess, lock: archiveLock, admin: infographicAdmin, archive, wwwDir: WWW_DIR,
   duplicateCanonicalFor, refreshInfographicsForYear, refreshInfographicsForYears,
 });
+installNewArticleRoutes(app, {
+  requireAdmin: requireAdminAccess, lock: archiveLock, wwwDir: WWW_DIR, refreshFiles: refreshMarkdownFiles,
+});
 installUserRoutes(app, {
   store: userStore, requireAuth, requireAdmin: requireAdminAccess, getAuthors: () => archive.meta.authors,
   passwordLimiter: loginLimiter,
@@ -831,6 +837,7 @@ function handleRequestError(err, req, res, next) {
   }
   if (err?.type === 'entity.too.large') {
     const message = req.path.startsWith('/api/infographics/') || req.path.startsWith('/api/new-infographic')
+      || req.path.startsWith('/api/new-article')
       ? 'Die Bilddatei ist größer als 10 MB.'
       : req.path.startsWith('/api/tts/voices')
         ? 'Die Aufnahme ist größer als 10 MB.'

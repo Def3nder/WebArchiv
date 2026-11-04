@@ -80,7 +80,7 @@ must not pin versions.
   `server.js` runs as main module), `http-errors.cjs` (`httpError`, `apiError`, `jsonRoute`, `isCrossSite`,
   `sendApiError` — API errors are `{ error: <German message>, code? }`; the frontend reacts only to `code`, never to
   message text), `atomic-file.cjs` (`writeFileAtomic`, `writeJsonAtomic`, `writeFileAtomicSync`, `createJsonFile`),
-  `share-ids.cjs` (short share ids), `article-scan.cjs` (the scan: `parseArticleContent` depends only on the `.md`
+  `share-ids.cjs` (short share ids), `new-article.cjs` (author and readable file name of a new own article), `article-scan.cjs` (the scan: `parseArticleContent` depends only on the `.md`
   content, `articleMedia` only on directory listings; entries carry an internal `fileSignature`; unreadable files are collected as `scanIssues`
   instead of being dropped silently), `index-cache.cjs`
   (persistent cache of the parse part per file signature in `index-cache.json`, gitignored; its version hashes the parser
@@ -97,7 +97,7 @@ must not pin versions.
   `login-limiter.cjs`, `html-sanitizer.cjs`, `security-headers.cjs`, `duplicates.cjs`, see below).
 - **`modules/`** — feature modules with routes: a `create…` factory for their state plus `install…Routes(app, deps)`
   (`user-store`, `bookmarks`, `audiobooks`, `audiobook-extras`, `article-editor`, `media-files`, `scrape`,
-  `duplicate-admin`, `infographic-admin`, `articles`, `link-preview`, `health`, `scraper-center`). They import from `lib/` (and sibling modules),
+  `duplicate-admin`, `infographic-admin`, `new-article`, `articles`, `link-preview`, `health`, `scraper-center`). They import from `lib/` (and sibling modules),
   get everything from `server.js` as `deps`, and nobody — scripts included — ever `require`s `server.js`.
 - **Routes** use `jsonRoute` (no-store, same-site check for writes, generic message for unexpected errors); no own
   `try/catch` + `sendRouteError` wrappers. `httpError(status, message, extra)` adds fields to the error response,
