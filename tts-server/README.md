@@ -8,7 +8,12 @@ Enthalten sind:
 
 - `qwen_http_service.py` – HTTP-Dienst einschließlich Voice-Verwaltung
 - `qwen_chunk_worker.py` – isolierter Prozess für die Audioerzeugung
-- `start_qwen_tts_service.cmd` – Starthelfer auf dem Qwen-Gerät
+- `qwen_service_dashboard.py` – Konsolen-Dashboard (Status, Ping, laufender
+  Auftrag, Verlauf); Log-Datei `qwen_http_service.log` und Verlauf
+  `qwen_http_service_history.json` entstehen neben dem Dienst
+- `start_qwen_tts_service.cmd` – Starthelfer auf dem Qwen-Gerät (reicht Argumente
+  durch, z. B. `--debug 2` für ausführliche Konsolenausgaben, siehe
+  `QWEN-ANBINDUNG.md` → „Konsolenausgaben und `--debug`“)
 - `Test-QwenServer.ps1` – HTTP-Smoke-Test
 - `test/` – Python-Tests des separaten Dienstes
 - `QWEN-ANBINDUNG.md` – Installation, Konfiguration und Betrieb

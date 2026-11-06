@@ -18,12 +18,16 @@ TTS_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TTS_ROOT))
 from qwen_chunk_worker import ChunkProgressRelay, generate_article
 from http.server import ThreadingHTTPServer
-from qwen_http_service import (GpuCoordinator, Jobs, ServerSettings, VoiceCatalog, VoiceJobs,
+from qwen_http_service import (GpuCoordinator, Jobs, Log, ServerSettings, VoiceCatalog, VoiceJobs,
                                handler, LEASE)
 
 
-class Contract(unittest.TestCase):
+class ServiceFixture(unittest.TestCase):
+    log_level = None
+
     def setUp(self):
+        self.output = io.StringIO()
+        self.log = None if self.log_level is None else Log(self.log_level, stream=self.output)
         self.temp = tempfile.TemporaryDirectory(prefix="qwen-offline-")
         script = Path(self.temp.name) / "fake.py"
         script.write_text('''import sys, time, json
@@ -33,7 +37,9 @@ for line in sys.stdin:
     command = json.loads(line)
     text = Path(command["input"]).read_text(encoding="utf-8")
     if text == "wait": time.sleep(60)
-    if text == "fail": sys.exit(1)
+    if text == "fail":
+        print("RuntimeError: CUDA out of memory", file=sys.stderr, flush=True)
+        sys.exit(1)
     if text == "progress":
         print(json.dumps({"type": "progress", "id": command["id"], "message": "Chunk 1/2: 338/520 characters (boundary: sentence)"}), flush=True)
         print(json.dumps({"type": "progress", "id": command["id"], "message": "Chunk 2/2: 346/520 characters (boundary: paragraph)"}), flush=True)
@@ -43,7 +49,7 @@ for line in sys.stdin:
         self.config = Path(self.temp.name) / "qwen_http_service_config.json"
         self.config.write_text("{}", encoding="utf-8")
         self.settings = ServerSettings(self.config)
-        self.jobs = Jobs(script, self.config, worker=script)
+        self.jobs = Jobs(script, self.config, worker=script, log=self.log)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler(self.jobs, "test-token", settings=self.settings))
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -71,6 +77,17 @@ for line in sys.stdin:
                 return state
             time.sleep(.02)
         self.fail("Generator läuft zu lange")
+
+    def wait_for_log(self, needle):
+        # Der Server protokolliert eine Anfrage erst, nachdem der Client die Antwort hat.
+        for _ in range(100):
+            if needle in self.output.getvalue():
+                break
+            time.sleep(.02)
+        return self.output.getvalue()
+
+
+class Contract(ServiceFixture):
 
     def test_success_auth_idempotence_and_download(self):
         with self.assertRaises(urllib.error.HTTPError) as error:
@@ -155,7 +172,104 @@ for line in sys.stdin:
         ])
 
 
+class ConsoleLogDefault(ServiceFixture):
+    """Ohne --debug: nur neuer Auftrag, fertige MP3 (bzw. Abbruch/Fehler/Ablehnung) und Leerzeile."""
+    log_level = 0
+
+    def lines(self):
+        return [line.split("] ", 1)[-1] for line in self.output.getvalue().splitlines()]
+
+    def test_only_received_and_created_followed_by_blank_line(self):
+        self.request("health")
+        job_id = str(uuid.uuid4())
+        self.request("jobs/" + job_id, "PUT", {"markdown": "# Mein Titel\nDatum: 2026-11-06\nText"})
+        self.assertEqual(self.wait(job_id)["status"], "succeeded")
+        self.request(f"jobs/{job_id}/audio")
+        self.request("jobs/" + job_id, "DELETE")
+        text = self.output.getvalue()
+        self.assertEqual(self.lines(), [
+            f'Neuer Auftrag erhalten [{job_id[:8]}]: "Mein Titel" (35 Zeichen, Standardstimme)',
+            self.lines()[1], "",
+        ], text)
+        self.assertRegex(self.lines()[1], r'^MP3 erstellt \[\w{8}\]: "Mein Titel" \(13 Bytes, Dauer \d+ s\)$')
+        self.assertTrue(text.endswith("\n\n"))
+        self.assertNotIn("test-token", text)
+
+    def test_rejected_job_with_reason(self):
+        running = str(uuid.uuid4())
+        self.request("jobs/" + running, "PUT", {"text": "wait"})
+        with self.assertRaises(urllib.error.HTTPError):
+            self.request("jobs/" + str(uuid.uuid4()), "PUT", {"text": "Hallo"})
+        with self.assertRaises(urllib.error.HTTPError):
+            self.request("jobs/" + str(uuid.uuid4()), "PUT", {"text": "Hallo"}, token="falsch")
+        text = self.output.getvalue()
+        self.assertIn("ABGELEHNT", text)
+        self.assertIn(f"Dienst belegt: Auftrag [{running[:8]}]", text)
+        self.assertIn("-> 401", text)
+        self.assertIn("Token stimmt nicht", text)
+        self.assertNotIn("falsch", text)
+
+    def test_failure_shows_last_worker_message(self):
+        job_id = str(uuid.uuid4())
+        self.request("jobs/" + job_id, "PUT", {"text": "fail"})
+        self.assertEqual(self.wait(job_id)["status"], "failed")
+        text = self.wait_for_log("FEHLER")
+        self.assertIn("FEHLER: Auftrag fehlgeschlagen", text)
+        self.assertIn("Exit 1", text)
+        self.assertIn("Letzte Meldung: RuntimeError: CUDA out of memory", text)
+
+    def test_lease_expiry_is_reported_as_cancel(self):
+        job_id = str(uuid.uuid4())
+        self.request("jobs/" + job_id, "PUT", {"text": "wait"})
+        self.jobs.jobs[job_id]["touched"] -= LEASE + 1
+        self.jobs.sessions[job_id]["touched"] -= LEASE + 1
+        self.jobs.sweep()
+        self.assertIn("Auftrag abgebrochen", self.output.getvalue())
+        self.assertIn("keine Statusabfrage", self.output.getvalue())
+
+
+class ConsoleLogDebug1(ServiceFixture):
+    log_level = 1
+
+    def test_requests_and_steps_without_status_polls(self):
+        self.request("health")
+        job_id = str(uuid.uuid4())
+        self.request("jobs/" + job_id, "PUT", {"text": "progress"})
+        self.wait(job_id)
+        self.request(f"jobs/{job_id}/audio")
+        text = self.wait_for_log("ausgeliefert")
+        self.assertIn("HTTP GET /v1/health von 127.0.0.1 -> 200", text)
+        self.assertIn(f"HTTP PUT /v1/jobs/{job_id} von 127.0.0.1 -> 202", text)
+        self.assertIn("MP3 13 Bytes ausgeliefert", text)
+        self.assertIn("2 Chunks", text)
+        self.assertNotIn(f"HTTP GET /v1/jobs/{job_id} ", text)  # Statusabfragen erst ab Level 2
+        self.assertNotIn("Fortschritt [", text)
+
+
+class ConsoleLogDebug3(ServiceFixture):
+    log_level = 3
+
+    def test_polls_progress_headers_and_commands_without_token(self):
+        job_id = str(uuid.uuid4())
+        self.request("jobs/" + job_id, "PUT", {"text": "progress"})
+        self.wait(job_id)
+        text = self.output.getvalue()
+        self.assertIn(f"HTTP GET /v1/jobs/{job_id} ", text)
+        self.assertIn("Fortschritt [", text)
+        self.assertIn("Authorization: Bearer ***", text)
+        self.assertIn("Worker-Befehl:", text)
+        self.assertNotIn("test-token", text)
+
+
 class OriginalScript(unittest.TestCase):
+    def test_progress_relay_passes_model_messages_only_to_stderr(self):
+        protocol, passthrough = io.StringIO(), io.StringIO()
+        relay = ChunkProgressRelay(protocol, "job-id", passthrough=passthrough)
+        relay.write("Prefill length: 115 tokens\nChunk 1/2: 300/520 characters (boundary: sentence)\n")
+        relay.finish()
+        self.assertEqual(passthrough.getvalue(), "Prefill length: 115 tokens\n")
+        self.assertEqual(len(protocol.getvalue().splitlines()), 1)
+
     def test_progress_relay_discards_everything_except_chunk_starts(self):
         protocol = io.StringIO()
         relay = ChunkProgressRelay(protocol, "job-id")
