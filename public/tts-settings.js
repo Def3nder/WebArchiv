@@ -42,6 +42,22 @@
   const prerollPause = document.getElementById('tts-server-preroll-pause');
   const leadIn = document.getElementById('tts-server-lead-in');
   const silenceThreshold = document.getElementById('tts-server-silence-threshold');
+  const addressInput = document.getElementById('tts-connection-address');
+  const addressTestButton = document.getElementById('tts-connection-test');
+  const addressSaveButton = document.getElementById('tts-connection-save');
+  const addressSource = document.getElementById('tts-connection-source');
+  const addressStatus = document.getElementById('tts-connection-status');
+  const connectionSection = document.getElementById('tts-connection');
+  const connectionToggle = document.getElementById('tts-connection-toggle');
+  const connectionSummary = document.getElementById('tts-connection-summary');
+  const connectionPanel = document.getElementById('tts-connection-panel');
+  // Kurzfassung der Gründe aus checkQwen (tts/provider-config.cjs) für die schmale Zeile.
+  const SHORT_REASONS = {
+    timeout: 'keine Antwort', refused: 'Dienst läuft nicht', unreachable: 'Rechner nicht erreichbar',
+    not_found: 'Rechnername unbekannt', reset: 'Verbindung abgebrochen', unauthorized: 'Token abgelehnt',
+    http_error: 'anderer Dienst auf dem Port', invalid_response: 'anderer Dienst auf dem Port',
+    incompatible: 'Dienst veraltet', token_missing: 'Token fehlt im WebArchiv',
+  };
 
   let data = null;
   let recording = null;
@@ -56,6 +72,8 @@
   let pollGeneration = 0;
   let previewJobId = null;
   let serverSettingsLoaded = false;
+  let connection = null;
+  let connectionTest = 0;
 
   function message(text, error = false) {
     status.textContent = text;
@@ -76,11 +94,171 @@
       try { body = await response.json(); } catch { /* Fehler unten vereinheitlichen. */ }
     }
     if (!response.ok) {
-      const error = new Error(body.error || `Anfrage fehlgeschlagen (${response.status}).`);
+      // 404 ohne JSON-Fehler = Express kennt die Route nicht: neue Oberfläche, aber alter Server-Code.
+      const fallback = response.status === 404 && url.startsWith('/api/')
+        ? 'Der WebArchiv-Server kennt diese Funktion noch nicht: Server-Dateien (tts/) aktualisieren und den Dienst neu starten.'
+        : `Anfrage fehlgeschlagen (${response.status}).`;
+      const error = new Error(body.error || fallback);
       error.status = response.status;
       throw error;
     }
     return body;
+  }
+
+  // ---- Verbindung zum Qwen-TTS-Server ----------------------------------------------------
+  function addressMessage(text, state = '') {
+    addressStatus.textContent = text;
+    addressStatus.classList.toggle('is-error', state === 'error');
+    addressStatus.classList.toggle('is-ok', state === 'ok');
+    addressStatus.hidden = !text;
+  }
+
+  function displayAddress(baseUrl) {
+    // Standardfall http://…:8765 als „IP:Port“ zeigen; alles andere vollständig.
+    try {
+      const url = new URL(baseUrl);
+      return url.protocol === 'http:' ? url.host : url.origin;
+    } catch { return baseUrl || ''; }
+  }
+
+  function renderConnection() {
+    if (!connection) return;
+    const parts = [];
+    if (connection.source === 'webarchiv') {
+      const when = connection.stored?.updatedAt ? new Date(connection.stored.updatedAt).toLocaleString('de-DE') : null;
+      parts.push(`Gespeichert im WebArchiv${when ? ` am ${when}` : ''}${connection.stored?.updatedBy ? ` von ${connection.stored.updatedBy}` : ''}.`);
+      if (connection.environmentBaseUrl) {
+        parts.push(`Ersetzt ${connection.environmentVariable}=${displayAddress(connection.environmentBaseUrl)}; leeres Feld speichern stellt diese wieder her.`);
+      }
+    } else if (connection.source === 'environment') {
+      parts.push(`Aus der Umgebungsvariable ${connection.environmentVariable} des WebArchiv-Servers. Eine hier gespeicherte Adresse hat Vorrang.`);
+    } else if (connection.source === 'config') {
+      parts.push('Aus tts/config.json. Eine hier gespeicherte Adresse hat Vorrang.');
+    } else {
+      parts.push('Noch keine Adresse hinterlegt.');
+    }
+    parts.push(`Ohne Port wird ${connection.defaultPort} verwendet.`);
+    if (!connection.tokenConfigured) parts.push('Achtung: QWEN_TTS_TOKEN fehlt auf dem WebArchiv-Server.');
+    addressSource.textContent = parts.join(' ');
+    addressSaveButton.disabled = !connection.storable;
+  }
+
+  function showTest(result) {
+    addressMessage(result.reason, result.ok ? 'ok' : 'error');
+  }
+
+  // Schmale Zeile: grün = verbunden, rot = Problem, grau = wird geprüft. Details im aufklappbaren Bereich.
+  function setSummary(state, text, detail = text) {
+    connectionSection.dataset.state = state;
+    connectionSummary.textContent = text;
+    connectionToggle.title = detail;
+  }
+
+  function summarize(result) {
+    // Status vorn: Auf schmalen Bildschirmen wird höchstens die Adresse abgeschnitten.
+    const where = displayAddress(result.baseUrl);
+    if (result.ok) setSummary('ok', `verbunden (${result.milliseconds} ms) · ${where}`, result.reason);
+    else setSummary('error', `${SHORT_REASONS[result.code] || 'nicht erreichbar'} · ${where}`, result.reason);
+  }
+
+  function setExpanded(open) {
+    connectionToggle.setAttribute('aria-expanded', String(open));
+    connectionPanel.hidden = !open;
+  }
+
+  // Prüft das Feld die gültige (gespeicherte) Adresse? Nur dann ändert der Test die Zeile.
+  function testsCurrentAddress(value) {
+    return !value.trim() || value.trim() === displayAddress(connection?.baseUrl);
+  }
+
+  async function testAddress(value = addressInput.value) {
+    const generation = ++connectionTest;
+    addressTestButton.disabled = true;
+    addressMessage(`Verbindung zu ${value.trim() || displayAddress(connection?.baseUrl) || 'dem Qwen-Server'} wird geprüft …`);
+    try {
+      const result = await request('/api/tts/connection/test', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ baseUrl: value }),
+      });
+      if (generation === connectionTest) showTest(result);
+      if (generation === connectionTest && result.baseUrl === connection?.baseUrl) summarize(result);
+      // Qwen wieder da (z. B. Rechner hochgefahren) unter der gültigen Adresse: Bereiche nachladen.
+      if (result.ok && result.baseUrl === connection?.baseUrl && !data) {
+        await Promise.all([loadSettings(select.value), loadServerSettings()]);
+      }
+      return result;
+    } catch (error) {
+      if (generation === connectionTest) {
+        addressMessage(error.message, 'error');
+        if (testsCurrentAddress(value)) setSummary('error', `Prüfung fehlgeschlagen · ${value.trim() || 'Adresse'}`, error.message);
+      }
+      return null;
+    } finally {
+      if (generation === connectionTest) addressTestButton.disabled = false;
+    }
+  }
+
+  // Liefert true, wenn die gültige Adresse antwortet; erst dann lohnen Stimmen und Server-Einstellungen.
+  async function loadConnection() {
+    setExpanded(false);
+    setSummary('checking', 'wird geprüft …');
+    try {
+      connection = await request('/api/tts/connection');
+      addressInput.value = connection.baseUrl ? displayAddress(connection.baseUrl) : '';
+      renderConnection();
+      if (connection.error) {
+        addressMessage(connection.error, 'error');
+        setSummary('error', 'Adresse ungültig', connection.error);
+      } else if (connection.baseUrl) {
+        setSummary('checking', `wird geprüft … · ${addressInput.value}`);
+        return !!(await testAddress(addressInput.value))?.ok;
+      } else {
+        addressMessage('Bitte die Adresse des Qwen-TTS-Servers eintragen.', 'error');
+        setSummary('error', 'keine Adresse eingetragen');
+        setExpanded(true); // Ohne Adresse gibt es nichts zusammenzufassen: gleich das Feld zeigen.
+      }
+    } catch (error) {
+      addressMessage(error.message, 'error');
+      setSummary('error', 'Prüfung fehlgeschlagen', error.message);
+    }
+    return false;
+  }
+
+  function showDisconnected() {
+    const hint = 'Wird geladen, sobald die Verbindung zum Qwen-TTS-Server steht (Adresse oben prüfen).';
+    message(hint, true);
+    serverMessage(hint, true);
+    serverSaveButton.disabled = true;
+  }
+
+  async function saveAddress() {
+    addressSaveButton.disabled = true;
+    addressTestButton.disabled = true;
+    connectionTest++;
+    addressMessage('Adresse wird gespeichert und geprüft …');
+    try {
+      connection = await request('/api/tts/connection', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ baseUrl: addressInput.value }),
+      });
+      addressInput.value = connection.baseUrl ? displayAddress(connection.baseUrl) : '';
+      renderConnection();
+      if (connection.test) {
+        addressMessage(`Gespeichert. ${connection.test.reason}`, connection.test.ok ? 'ok' : 'error');
+        summarize(connection.test);
+        if (connection.test.ok) {
+          setExpanded(false); // Erledigt: die grüne Zeile genügt.
+          // Mit neuer Adresse Stimmen und Server-Einstellungen neu laden.
+          await Promise.all([loadSettings(select.value), loadServerSettings()]);
+        }
+      } else {
+        addressMessage(connection.error || 'Gespeicherte Adresse entfernt.', connection.error ? 'error' : '');
+        setSummary('error', connection.error ? 'Adresse ungültig' : 'keine Adresse eingetragen', connection.error || '');
+      }
+    } catch (error) {
+      addressMessage(error.message, 'error');
+    } finally {
+      addressTestButton.disabled = false;
+      renderConnection();
+    }
   }
 
   function selectedVoice() {
@@ -527,7 +705,9 @@
     // Ebenen-Stapel: Escape schließt (close räumt Aufnahme und Vorschau auf).
     if (!dialog.open) WebArchivLayers.open(dialog, { name: 'tts-settings', onEscape: close, returnFocus: false });
     dialog.focus({ preventScroll: true });
-    await Promise.all([loadSettings(), loadServerSettings()]);
+    // Erst die Verbindung: Ohne Qwen sofort ein Hinweis statt 15 s „wird geladen …“ in jedem Bereich.
+    if (await loadConnection()) await Promise.all([loadSettings(), loadServerSettings()]);
+    else showDisconnected();
     const pending = sessionStorage.getItem('wa-tts-voice-job');
     if (pending) {
       cancelJobButton.hidden = false;
@@ -571,6 +751,19 @@
     input.addEventListener('input', updateServerButton);
   }
   serverSaveButton.addEventListener('click', saveServerSettings);
+  connectionToggle.addEventListener('click', () => setExpanded(connectionToggle.getAttribute('aria-expanded') !== 'true'));
+  addressTestButton.addEventListener('click', () => testAddress());
+  addressSaveButton.addEventListener('click', saveAddress);
+  addressInput.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.isComposing) return;
+    event.preventDefault();
+    testAddress();
+  });
+  addressInput.addEventListener('input', () => {
+    connectionTest++;
+    addressTestButton.disabled = false;
+    addressMessage('');
+  });
   closeButton.addEventListener('click', close);
   dialog.addEventListener('click', event => {
     if (event.target !== dialog) return;

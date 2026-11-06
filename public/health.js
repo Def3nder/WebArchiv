@@ -108,14 +108,15 @@ function hideNotice({ markSeen = false } = {}) {
   }
 }
 
-// „TTS-Einstellungen“ lesen und speichern nur über den Qwen-Server: Ist er nicht erreichbar (Desktop-Rechner aus),
-// ist der Menüeintrag gesperrt. Stand aus der minütlichen Abfrage und dem Health-Check-Dialog.
+// Ist der Qwen-Server nicht erreichbar (Desktop-Rechner aus oder neue IP-Adresse), zeigt „TTS-Einstellungen“
+// nur einen Hinweis. Der Eintrag bleibt bedienbar: Dort wird die Adresse geprüft und korrigiert.
+// Stand aus der minütlichen Abfrage und dem Health-Check-Dialog.
 const $ttsSettingsItem = document.querySelector('[data-action="tts-settings"]');
 function setQwenReachable(reachable) {
   if (!$ttsSettingsItem || typeof reachable !== 'boolean') return;
-  $ttsSettingsItem.disabled = !reachable;
   $ttsSettingsItem.toggleAttribute('data-unavailable', !reachable);
-  $ttsSettingsItem.title = reachable ? '' : 'Der Qwen-TTS-Server ist nicht erreichbar (Desktop-Rechner aus).';
+  $ttsSettingsItem.title = reachable ? ''
+    : 'Der Qwen-TTS-Server ist nicht erreichbar (Desktop-Rechner aus oder neue IP-Adresse). Hier die Verbindung prüfen.';
 }
 
 async function poll() {

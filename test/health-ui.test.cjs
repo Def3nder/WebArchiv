@@ -51,9 +51,11 @@ test('health.js: Dialog am Ebenen-Stapel, sicheres Markup, Einhängen über admi
   assert.match(HEALTH, /actions: \{ \.\.\.adminHooks\.actions, health: openHealthDialog \}/);
   // Nach unten wischen schließt wie × (gemeinsame Liste in app.js; fehlt das Markup, wird der Eintrag übersprungen).
   assert.match(read('public/app.js'), /const PULL_DIALOGS = \[[\s\S]*?\['#health-dialog', '#health-close'\],[\s\S]*?\];/);
-  // Ohne Qwen (Desktop-Rechner aus) ist „TTS-Einstellungen“ gesperrt; Stand aus Abfrage und Dialog.
+  // Ohne Qwen (Desktop-Rechner aus, neue IP) bekommt „TTS-Einstellungen“ nur einen Hinweis und bleibt
+  // bedienbar: Dort wird die Adresse korrigiert. Gesperrt käme man nie wieder hinein.
   assert.match(HEALTH, /document\.querySelector\('\[data-action="tts-settings"\]'\)/);
-  assert.match(HEALTH, /\$ttsSettingsItem\.disabled = !reachable;/);
+  assert.match(HEALTH, /\$ttsSettingsItem\.toggleAttribute\('data-unavailable', !reachable\);/);
+  assert.doesNotMatch(HEALTH, /\$ttsSettingsItem\.disabled/);
   assert.match(HEALTH, /setQwenReachable\(summary\.services\?\.qwen\);/);
   assert.match(HEALTH, /setQwenReachable\(data\.services\.qwen\.reachable\);/);
   assert.match(HEALTH, /row\('Qwen-TTS', qwen\.reachable \? 'erreichbar' : 'nicht erreichbar \(Desktop-Rechner aus\)'\)/, 'keine Warnstufe');

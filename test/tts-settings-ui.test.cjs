@@ -48,6 +48,41 @@ test('Server-Einstellungen stehen unter den vorhandenen Bereichen und bilden all
   assert.match(css, /\.tts-chunk-range[\s\S]*--chunk-target/);
 });
 
+test('Verbindung zum Qwen-Server steht oben: Adressfeld, Testen und Speichern über Admin-APIs', () => {
+  const html = read('public/index.html');
+  const source = read('public/tts-settings.js');
+  const css = readStyles();
+  assert.ok(html.indexOf('id="tts-connection-title"') > html.indexOf('id="tts-settings-dialog"'));
+  assert.ok(html.indexOf('id="tts-connection-title"') < html.indexOf('id="tts-settings-active-title"'));
+  assert.match(html, /<label class="login-label" for="tts-connection-address">IP-Adresse/);
+  assert.match(html, /id="tts-connection-address" class="login-input" type="text" inputmode="url"[^>]*aria-describedby="tts-connection-source"/);
+  assert.match(html, /id="tts-connection-test"[^>]*>Verbindung testen</);
+  assert.match(html, /id="tts-connection-save"[^>]*>Speichern</);
+  assert.match(html, /id="tts-connection-status" class="tts-settings-status" role="status" aria-live="polite"/);
+  assert.match(source, /request\('\/api\/tts\/connection\/test', \{\s*method: 'POST'/);
+  assert.match(source, /request\('\/api\/tts\/connection', \{\s*method: 'PUT'/);
+  // Ohne Qwen: Dialog öffnet trotzdem, erst die Verbindung, dann (nur wenn sie steht) Stimmen und Server-Werte.
+  assert.match(source, /if \(await loadConnection\(\)\) await Promise\.all\(\[loadSettings\(\), loadServerSettings\(\)\]\);\s*else showDisconnected\(\);/);
+  assert.ok(source.indexOf("WebArchivLayers.open(dialog") < source.indexOf('if (await loadConnection())'),
+    'der Dialog ist schon offen, bevor auf Qwen gewartet wird');
+  // Enter im Feld testet die Verbindung (Taste am Element, kein globaler Handler).
+  assert.match(source, /addressInput\.addEventListener\('keydown'[\s\S]*event\.key !== 'Enter'[\s\S]*testAddress\(\)/);
+  // Neue Oberfläche, alter Server-Code: Express antwortet 404 ohne JSON → verständlicher Hinweis statt „(404)“.
+  assert.match(source, /response\.status === 404 && url\.startsWith\('\/api\/'\)[\s\S]*Server-Dateien \(tts\/\) aktualisieren und den Dienst neu starten/);
+  // Schmale Zeile (grün/rot), die per Button aufklappt; kein <details> (Projektregel für Menüs/Disclosures).
+  assert.match(html, /<section id="tts-connection" class="tts-settings-section tts-connection" data-state="checking"/);
+  assert.match(html, /<button type="button" id="tts-connection-toggle" class="tts-connection-toggle" aria-expanded="false" aria-controls="tts-connection-panel">/);
+  assert.match(html, /<div id="tts-connection-panel" class="tts-connection-panel" hidden>[\s\S]*id="tts-connection-address"[\s\S]*id="tts-connection-save"/);
+  assert.doesNotMatch(html, /<details[^>]*tts-connection/);
+  assert.match(css, /\.tts-connection\[data-state="ok"\] \{ --connection-color: var\(--success, #2f9e5b\); \}/);
+  assert.match(css, /\.tts-connection\[data-state="error"\] \{ --connection-color: var\(--danger, #c44747\); \}/);
+  assert.match(css, /\.tts-connection-toggle\[aria-expanded="true"\] \.tts-connection-chevron/);
+  assert.match(source, /function setExpanded\(open\) \{\s*connectionToggle\.setAttribute\('aria-expanded', String\(open\)\);\s*connectionPanel\.hidden = !open;/);
+  assert.match(source, /if \(result\.ok\) setSummary\('ok'/);
+  assert.match(css, /\.tts-settings-status\.is-ok \{/);
+  assert.match(css, /\.tts-connection-row \{[^}]*grid-template-columns/);
+});
+
 test('Die Stimmenauswahl verwendet das gemeinsame ARIA-Menü mit nativem Touch-Fallback', () => {
   const html = read('public/index.html');
   const source = read('public/tts-settings.js');

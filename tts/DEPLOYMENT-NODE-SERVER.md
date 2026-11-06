@@ -119,6 +119,10 @@ OPENAI_API_KEY=DEIN_OPENAI_SCHLUESSEL
 ```
 
 - Das Qwen-Token muss mit dem Token des Qwen-Dienstes übereinstimmen.
+- `QWEN_TTS_BASE_URL` ist nur der Startwert: Eine unter „TTS-Einstellungen“ →
+  „Verbindung zum Qwen-TTS-Server“ gespeicherte Adresse (Datei
+  `/opt/nodeapp/tts-connection.json`, optional `TTS_CONNECTION_FILE`) hat Vorrang
+  und gilt ohne Neustart.
 - `TTS_SETTINGS_FILE` liegt auf Gerät A und enthält nur die global ausgewählte
   Stimmen-ID, niemals eine `.pt`-Datei oder Aufnahme.
 - `TTS_VOICE_PREVIEW_DIR` liegt ebenfalls auf Gerät A. Dort speichert WebArchiv

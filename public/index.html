@@ -540,6 +540,26 @@
       <div><p class="article-editor-eyebrow">QWEN-TTS</p><h2 id="tts-settings-title">TTS-Einstellungen</h2></div>
       <button type="button" id="tts-settings-close" class="detail-cat-pill" aria-label="TTS-Einstellungen schließen">✕</button>
     </div>
+    <section id="tts-connection" class="tts-settings-section tts-connection" data-state="checking" aria-labelledby="tts-connection-title">
+      <h3 class="tts-connection-heading">
+        <button type="button" id="tts-connection-toggle" class="tts-connection-toggle" aria-expanded="false" aria-controls="tts-connection-panel">
+          <span class="tts-connection-dot" aria-hidden="true"></span>
+          <span id="tts-connection-title" class="tts-connection-name">Qwen<span class="tts-connection-name-long">-TTS-Server</span></span>
+          <span id="tts-connection-summary" class="tts-connection-summary" aria-live="polite">wird geprüft …</span>
+          <span class="tts-connection-chevron" aria-hidden="true"></span>
+        </button>
+      </h3>
+      <div id="tts-connection-panel" class="tts-connection-panel" hidden>
+        <label class="login-label" for="tts-connection-address">IP-Adresse oder Rechnername (optional mit Port)</label>
+        <div class="tts-connection-row">
+          <input id="tts-connection-address" class="login-input" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="192.168.1.200:8765" aria-describedby="tts-connection-source">
+          <button type="button" id="tts-connection-test" class="detail-cat-pill">Verbindung testen</button>
+          <button type="button" id="tts-connection-save" class="detail-cat-pill account-primary">Speichern</button>
+        </div>
+        <p id="tts-connection-source" class="account-hint"></p>
+        <p id="tts-connection-status" class="tts-settings-status" role="status" aria-live="polite" hidden></p>
+      </div>
+    </section>
     <section class="tts-settings-section" aria-labelledby="tts-settings-active-title">
       <h3 id="tts-settings-active-title">Stimme für alle TTS-Aufträge</h3>
       <label class="login-label" id="tts-settings-voice-label" for="tts-settings-voice">Verfügbare Stimme</label>

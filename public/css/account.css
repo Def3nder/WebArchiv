@@ -75,6 +75,47 @@
 .tts-settings-status { margin: 10px 0 0; color: var(--text-muted); }
 .tts-settings-status[hidden], .tts-settings-status:empty { display: none; }
 .tts-settings-status.is-error { color: var(--danger, #c44747); }
+.tts-settings-status.is-ok { color: var(--success, #2f9e5b); }
+/* Verbindung zum Qwen-Server: eine schmale Zeile (grün = verbunden, rot = Problem), aufklappbar zum Ändern. */
+/* Zwei Klassen: schlägt die später folgende .tts-settings-section (Innenabstand, Rahmen, Hintergrund). */
+.tts-settings-section.tts-connection {
+  --connection-color: var(--text-muted);
+  /* flex: none – der Dialog ist ein Flex-Container fester Höhe; sonst würde die Zeile zusammengedrückt. */
+  flex: none; padding: 0;
+  border-color: color-mix(in srgb, var(--connection-color) 45%, var(--border));
+  background: color-mix(in srgb, var(--connection-color) 14%, var(--surface, transparent));
+}
+.tts-connection[data-state="ok"] { --connection-color: var(--success, #2f9e5b); }
+.tts-connection[data-state="error"] { --connection-color: var(--danger, #c44747); }
+.tts-connection h3.tts-connection-heading { margin: 0; font-size: inherit; }
+.tts-connection-toggle {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 14px;
+  border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.tts-connection-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tts-connection-dot {
+  flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--connection-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--connection-color) 25%, transparent);
+}
+.tts-connection[data-state="checking"] .tts-connection-dot { animation: tts-connection-pulse 1s ease-in-out infinite; }
+@keyframes tts-connection-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .tts-connection[data-state="checking"] .tts-connection-dot { animation: none; } }
+.tts-connection-name { flex: none; font-family: var(--font-head); font-weight: 600; }
+.tts-connection-summary {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--connection-color); font-size: .9rem; font-variant-numeric: tabular-nums;
+}
+.tts-connection[data-state="checking"] .tts-connection-summary { color: var(--text-muted); }
+.tts-connection-chevron {
+  flex: none; width: 8px; height: 8px; margin: 0 2px 4px; border: solid var(--text-muted); border-width: 0 2px 2px 0;
+  transform: rotate(45deg); transition: transform .15s;
+}
+.tts-connection-toggle[aria-expanded="true"] .tts-connection-chevron { transform: rotate(-135deg); margin-bottom: -2px; }
+.tts-connection-panel { padding: 4px 14px 14px; border-top: 1px solid color-mix(in srgb, var(--connection-color) 30%, var(--border)); }
+.tts-connection-panel[hidden] { display: none; }
+.tts-connection-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+.tts-connection-row input { min-width: 0; font-variant-numeric: tabular-nums; }
+#tts-connection-source { margin-top: 6px; }
 .tts-settings-section {
   border: 1px solid var(--border); border-radius: 12px; padding: 14px;
   background: var(--surface, transparent); margin-top: 12px;
@@ -149,6 +190,11 @@
   #tts-settings-dialog { width: calc(100vw - 12px); }
   .tts-settings-section { padding: 12px; }
   .tts-settings-name-row { grid-template-columns: 1fr; gap: 4px; }
+  .tts-connection-toggle { padding: 8px 12px; gap: 8px; }
+  .tts-connection-name-long { display: none; } /* „Qwen“ genügt; Platz für Status und Adresse */
+  .tts-connection-panel { padding: 4px 12px 12px; }
+  .tts-connection-row { grid-template-columns: 1fr 1fr; }
+  .tts-connection-row input { grid-column: 1 / -1; }
   .tts-server-settings-heading { display: grid; }
   .tts-server-settings-file { width: fit-content; }
   .tts-server-number-grid { grid-template-columns: 1fr; }

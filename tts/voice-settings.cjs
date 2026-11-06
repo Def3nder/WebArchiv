@@ -1,7 +1,9 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { providerSettings } = require('./provider-config.cjs');
+const {
+  providerSettings, checkQwen, qwenBaseUrl, normalizeBaseUrl, connectionFile, readStoredConnection, DEFAULT_QWEN_PORT,
+} = require('./provider-config.cjs');
 
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
@@ -87,9 +89,62 @@ function createTtsVoiceSettings({
     }
   }
 
+  async function readConfig() {
+    return JSON.parse(await io.readFile(configFile, 'utf8'));
+  }
+
   async function connection() {
-    const config = JSON.parse(await io.readFile(configFile, 'utf8'));
+    const config = await readConfig();
     return providerSettings({ ...config, tts: { ...config.tts, provider: 'qwen' } }, env);
+  }
+
+  // ---- Adresse des Qwen-TTS-Servers (Dialog „TTS-Einstellungen“) ----------------------------
+  async function connectionStatus() {
+    const config = await readConfig();
+    const q = config.qwen || {};
+    const result = {
+      baseUrl: null, source: null, stored: null, error: null, defaultPort: DEFAULT_QWEN_PORT,
+      environmentVariable: q.base_url_environment_variable || null,
+      environmentBaseUrl: (q.base_url_environment_variable && env[q.base_url_environment_variable]) || null,
+      tokenConfigured: !!env[q.token_environment_variable]?.trim(),
+      storable: !!connectionFile(config, env),
+    };
+    try { result.stored = readStoredConnection(connectionFile(config, env)); }
+    catch (error) { result.error = error.message; }
+    try { Object.assign(result, (({ baseUrl, source }) => ({ baseUrl, source }))(qwenBaseUrl(config, env))); }
+    catch (error) { result.error ||= error.message; }
+    return result;
+  }
+
+  async function testConnection(value) {
+    const config = await readConfig();
+    let baseUrl;
+    try {
+      baseUrl = String(value ?? '').trim()
+        ? normalizeBaseUrl(value, { defaultPort: DEFAULT_QWEN_PORT })
+        : qwenBaseUrl(config, env).baseUrl;
+    } catch (error) { throw fail(error.message); }
+    const token = env[config.qwen?.token_environment_variable]?.trim();
+    return checkQwen({ baseUrl, token, request, timeoutMs: 5000 });
+  }
+
+  async function saveConnection(value, user) {
+    const config = await readConfig();
+    const target = connectionFile(config, env);
+    if (!target) throw fail('Für die Qwen-Adresse ist keine Datei konfiguriert (qwen.base_url_file in tts/config.json).', 500);
+    if (String(value ?? '').trim()) {
+      let baseUrl;
+      try { baseUrl = normalizeBaseUrl(value, { defaultPort: DEFAULT_QWEN_PORT }); }
+      catch (error) { throw fail(error.message); }
+      const stored = { qwenBaseUrl: baseUrl, updatedAt: new Date().toISOString(), updatedBy: user?.email || null };
+      writeQueue = writeQueue.catch(() => {}).then(() => atomicJson(target, stored, io));
+    } else {
+      // Leeres Feld: gespeicherte Adresse entfernen, dann gilt wieder die Umgebungsvariable.
+      writeQueue = writeQueue.catch(() => {}).then(() => io.rm(target, { force: true }));
+    }
+    await writeQueue;
+    const status = await connectionStatus();
+    return { ...status, test: status.baseUrl ? await testConnection() : null };
   }
 
   async function send(endpoint, options = {}, timeoutMs = 15000) {
@@ -258,7 +313,7 @@ function createTtsVoiceSettings({
   return {
     getSettings, select, selectedVoice, createVoice, voiceJob, cancelVoiceJob,
     renameVoice, trashVoice, startPreview, previewStatus, cancelPreview, previewAudio, cachedPreviewAudio,
-    serverSettings, saveServerSettings,
+    serverSettings, saveServerSettings, connectionStatus, testConnection, saveConnection,
   };
 }
 

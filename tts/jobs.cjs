@@ -212,7 +212,8 @@ function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./pro
     catch (error) {
       if (!error.status && qwenUnreachable(error)) {
         return res.status(503).json({
-          error: 'Der Qwen-TTS-Server ist nicht erreichbar (läuft auf dem Desktop-Rechner). Bitte später erneut versuchen.',
+          error: 'Der Qwen-TTS-Server ist nicht erreichbar: Desktop-Rechner aus oder Adresse falsch '
+            + '(„TTS-Einstellungen“ → „Verbindung testen“).',
           code: 'tts_unreachable',
         });
       }
@@ -250,6 +251,13 @@ function installTtsRoutes(app, requireAdmin, jobs, providerInfo = require('./pro
     app.get('/api/tts/settings', requireAdmin, route(async (_req, res) => res.json(await voices.getSettings())));
     app.put('/api/tts/settings', requireAdmin, route(async (req, res) => {
       res.json(await voices.select(req.body?.voiceId, req.session.user));
+    }));
+    app.get('/api/tts/connection', requireAdmin, route(async (_req, res) => res.json(await voices.connectionStatus())));
+    app.put('/api/tts/connection', requireAdmin, route(async (req, res) => {
+      res.json(await voices.saveConnection(req.body?.baseUrl, req.session.user));
+    }));
+    app.post('/api/tts/connection/test', requireAdmin, route(async (req, res) => {
+      res.json(await voices.testConnection(req.body?.baseUrl));
     }));
     app.get('/api/tts/server-settings', requireAdmin, route(async (_req, res) => {
       res.json(await voices.serverSettings());

@@ -78,7 +78,8 @@
   text-align: center;
 }
 .health-menu-count[hidden] { display: none; }
-/* „TTS-Einstellungen“ ohne erreichbaren Qwen-Server (health.js setzt disabled und data-unavailable). */
+/* „TTS-Einstellungen“ ohne erreichbaren Qwen-Server (health.js setzt data-unavailable; der Eintrag bleibt
+   bedienbar, damit die Adresse dort korrigiert werden kann). */
 .header-menu-item[data-unavailable]::after {
   content: " · Qwen aus";
   color: var(--text-muted);

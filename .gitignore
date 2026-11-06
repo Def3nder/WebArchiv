@@ -47,6 +47,7 @@ index-cache.json
 health-events.json
 duplicate-decisions.json
 tts-settings.json
+tts-connection.json
 /tts-voice-previews/
 /scraper/cookies.txt
 /scraper/Abonenten-URL.txt
@@ -116,3 +117,7 @@ Thumbs.db
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Qwen-TTS-Dienst: rotierte Logs und Auftragsverlauf (Laufzeitdateien)
+*.log.[0-9]
+tts-server/qwen_http_service_history.json

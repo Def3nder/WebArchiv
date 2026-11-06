@@ -104,8 +104,9 @@ Zwischen Artikeln wird der Worker beendet und der GPU-Speicher freigegeben.
 ## Update beider Geräte
 
 1. **Gerät B – Qwen-TTS-Server:** Wenn kein Auftrag läuft, die Repository-Dateien
-   `tts-server/qwen_http_service.py` und `tts-server/qwen_chunk_worker.py` auf
-   Gerät B kopieren und dort nebeneinander ablegen. Der Worker behält seinen bisherigen
+   `tts-server/qwen_http_service.py`, `tts-server/qwen_chunk_worker.py` und
+   `tts-server/qwen_service_dashboard.py` auf Gerät B kopieren und dort
+   nebeneinander ablegen. Der Worker behält seinen bisherigen
    Dateinamen, verarbeitet jetzt aber vollständige Artikel.
 2. **Weiter auf Gerät B:** Den Python-HTTP-Dienst mit den Argumenten
    `--script`, `--config`, `--voices-dir`,
@@ -130,7 +131,7 @@ Artikel über die normale Bestätigung im Archiv testen.
 
 ## Gerät B: Qwen-TTS-Dienst starten und konfigurieren
 
-Die folgenden Schritte werden ausschließlich auf Gerät B ausgeführt. Beide
+Die folgenden Schritte werden ausschließlich auf Gerät B ausgeführt. Die drei
 Python-Dateien liegen dort im selben Verzeichnis.
 Den Python-Interpreter der funktionierenden Qwen-Umgebung verwenden.
 Die HTTP-Brücke und der Launcher selbst benötigen nur die Standardbibliothek;
@@ -154,7 +155,68 @@ Hugging-Face-Modell. `--ffmpeg` und `--voice-device` können bei Bedarf explizit
 gesetzt werden; die Defaults sind `ffmpeg` und `cuda:0`.
 Das Repository-Script `tts-server/start_qwen_tts_service.cmd` enthält die
 passende Windows-Startzeile für diese Pfade und wird ausschließlich auf Gerät B
-verwendet.
+verwendet. Zusätzliche Argumente werden durchgereicht, z. B.
+`start_qwen_tts_service.cmd --debug 2`.
+
+### Dashboard, Log-Datei und `--debug`
+
+In einer Konsole zeigt der Dienst ein **stehendes Dashboard** (Vollbild, scrollt
+nicht; Strg+C beendet den Dienst und stellt die Konsole wieder her):
+
+- **Kopf:** Status, Adresse/Port, Protokoll, Laufzeit, PID, Debug-Level, Log-Datei.
+  Bei `--host 0.0.0.0` steht dort die tatsächliche IP-Adresse des Rechners
+  (Schnittstelle der Standardroute, z. B. `192.168.1.65:8765 (alle Schnittstellen)`):
+  genau diese Adresse gehört im WebArchiv in „TTS-Einstellungen“. Alle 30 s prüft
+  der Dienst, ob sie sich geändert hat (z. B. Wechsel WLAN ↔ Ethernet), und meldet
+  dann `Netzwerkadresse geändert: alt -> neu` mit der neu einzutragenden Adresse.
+- **Verbindung:** `PING` blitzt grün bei jedem Health-Check des WebArchivs (rot bei
+  Fehler, z. B. 401), `ANFRAGE` blitzt bei jeder HTTP-Anfrage; dazu Zähler, letzte
+  Anfrage mit Absender und Ergebnis sowie fehlgeschlagene Anmeldungen mit Grund.
+- **GPU:** frei oder belegt (Artikel bzw. Stimmerzeugung).
+- **Aktueller Auftrag:** Titel, Stimme, Zeichen, Laufzeit, Alter der letzten
+  Statusabfrage (rot ab 30 s; nach 90 s ohne Abfrage bricht der Dienst ab),
+  Fortschrittsbalken `Chunk x/y` mit geschätzter Restzeit, letzte Generator-Ausgabe.
+- **Verlauf:** neueste Aufträge zuerst mit Ergebnis `OK`, `FEHLER` (mit Ursache,
+  z. B. `CUDA out of memory`), `ABBRUCH` oder `ABGELEHNT` (HTTP-Status und Grund),
+  Dauer, Größe, Chunks, ob die MP3 abgeholt wurde; Tageszusammenfassung im Titel.
+  Der Verlauf (letzte 200) steht in `qwen_http_service_history.json` neben dem Log
+  und bleibt über Neustarts erhalten.
+- **Ereignisse:** die neuesten Log-Zeilen.
+
+Alles landet zusätzlich in der **Log-Datei** `qwen_http_service.log` neben
+`qwen_http_service.py` (anderer Ort mit `--log-file <Pfad>`, ausschalten mit
+`--log-file ""`). Sie rotiert bei 5 MB und behält drei alte Dateien
+(`.log.1` … `.log.3`). Log und Dashboard enthalten mindestens Level 1.
+
+Mit `--no-dashboard` – oder automatisch, wenn die Ausgabe nicht auf eine Konsole
+geht (z. B. Dienst/Umleitung) – erscheinen stattdessen fortlaufende Zeilen. Ohne
+`--debug` sind das je Artikel nur zwei Zeilen und danach eine Leerzeile:
+
+```text
+[2026-11-06 08:48:07] Neuer Auftrag erhalten [f45e96fe]: "Ein Testartikel" (4.210 Zeichen, Stimme Mandy)
+[2026-11-06 08:51:44] MP3 erstellt [f45e96fe]: "Ein Testartikel" (3.4 MB, Dauer 3 min 37 s, 14 Chunks)
+```
+
+Statt der zweiten Zeile erscheint bei einem Problem `FEHLER: Auftrag
+fehlgeschlagen …` mit der letzten Meldung des Generators (z. B. `CUDA out of
+memory`), `Auftrag abgebrochen …` (WebArchiv hat abgebrochen oder seit 90 s nicht
+mehr nach dem Status gefragt) oder – schon beim Eingang –
+`Neuer Auftrag erhalten, aber ABGELEHNT …` mit HTTP-Status und Grund (falsches
+Token, Dienst belegt, unbekannte Stimme …). Kommt **gar keine** Zeile an, hat
+die Anfrage den Dienst nicht erreicht: Adresse/Port auf Gerät A, Firewall und
+`--host 0.0.0.0` prüfen; im Dashboard bleibt dann auch `PING` dunkel.
+
+`--debug` legt fest, wie ausführlich Log-Datei, Ereignisliste und (mit
+`--no-dashboard`) die Konsole sind:
+
+| Option | zusätzlich |
+|---|---|
+| `--debug` bzw. `--debug 1` | jede HTTP-Anfrage mit Absender-IP, Status, Dauer und Fehlergrund (ohne die häufigen Statusabfragen), Worker-Start/-Bereitschaft, MP3-Abholung, Aufräumen; Pfade beim Start; bei Fehlern die letzten 40 Worker-Ausgaben |
+| `--debug 2` | Statusabfragen, Chunk-Fortschritt, jede Worker-Protokollnachricht, Größe/Stimme des Auftrags |
+| `--debug 3` | alle Ausgaben von Worker und Generator live (Modellladen, Tracebacks), Befehlszeilen, Temp-Pfade, Request-Header |
+
+Das Token erscheint auf keinem Level (`Authorization: Bearer ***`); vom
+Artikeltext wird nur die Titelzeile ausgegeben.
 
 ## Gerät A: Verbindung zum Qwen-Gerät konfigurieren
 
@@ -174,6 +236,36 @@ nach einem Health-Test gegen Gerät B. Das Script ändert weder den Qwen-Dienst
 auf Gerät B noch den produktiven Debian-Dienst auf Gerät A. Für Gerät A die
 geschützte `/etc/nodeapp/tts.env` bearbeiten und anschließend ausschließlich
 den Dienst `nodeapp` neu starten.
+
+### Adresse im WebArchiv ändern (z. B. nach Wechsel WLAN → Ethernet)
+
+Ändert sich die IP-Adresse von Gerät B, muss nichts in `/etc/nodeapp/tts.env`
+geändert und kein Dienst neu gestartet werden: Menü „Aktionen“ →
+**TTS-Einstellungen** → „Verbindung zum Qwen-TTS-Server“. Dort die IP-Adresse
+oder den Rechnernamen eintragen (`192.168.1.200` genügt; ohne Port gilt 8765).
+**Verbindung testen** prüft die Adresse, ohne sie zu speichern (auch mit Enter
+im Feld); **Speichern** übernimmt sie sofort für alle neuen Aufträge, Stimmen und
+Server-Einstellungen.
+
+Der Test nennt den konkreten Grund, z. B. keine Antwort (falsche IP, Rechner
+aus, Firewall), Port geschlossen (Dienst nicht gestartet), Token abgelehnt oder
+veralteter Dienst. Derselbe Grund erscheint im Dialog „Audio erzeugen“.
+
+Die gespeicherte Adresse steht in `tts-connection.json` (Laufzeitdatei im
+App-Verzeichnis, gitignored; anderer Ort mit `TTS_CONNECTION_FILE`) und hat
+Vorrang vor `QWEN_TTS_BASE_URL`. Feld leeren und speichern entfernt sie wieder;
+dann gilt die Umgebungsvariable.
+
+**Firewall auf Gerät B:** Windows erlaubt eingehende Verbindungen pro Programmpfad.
+Startet der Dienst mit einem anderen Python-Pfad (z. B. nach einem uv-Update
+`…\uv\python\cpython-3.10-windows-x86_64-none\python.exe` statt
+`…\cpython-3.10.20-…`), greift die alte Freigabe nicht mehr: Zugriffe vom
+Rechner selbst funktionieren, das WebArchiv bekommt aber keine Antwort. Robuster
+ist eine Freigabe für den Port (PowerShell als Administrator):
+
+```powershell
+New-NetFirewallRule -DisplayName 'Qwen-TTS-Dienst (TCP 8765)' -Direction Inbound -Protocol TCP -LocalPort 8765 -Action Allow -Profile Private
+```
 
 `QWEN_TTS_TOKEN` ist die einzige Konfiguration, die auf beiden Geräten mit
 identischem Wert vorhanden sein muss: auf Gerät A als Client-Zugang und auf

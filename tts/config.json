@@ -50,6 +50,7 @@
   },
   "qwen": {
     "base_url_environment_variable": "QWEN_TTS_BASE_URL",
+    "base_url_file": "../tts-connection.json",
     "token_environment_variable": "QWEN_TTS_TOKEN"
   },
   "prefill": {
